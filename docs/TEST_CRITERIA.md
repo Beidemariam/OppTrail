@@ -55,19 +55,22 @@ Retest:
 
 ## Phase 0 - Scaffolding
 
-- [ ] Docker image builds successfully.
-- [ ] Container starts FastAPI and serves the built NextJS static site at `/`.
-- [ ] `/api/health` or equivalent health endpoint returns success.
-- [ ] SQLite database file is created automatically when missing.
-- [ ] Migrations or schema initialization can run from a clean database.
-- [ ] Start/stop scripts work on the current development machine.
-- [ ] `.env.example` documents required variables without real secrets.
-- [ ] `.env` is ignored by Git.
+- [x] Docker image builds successfully.
+- [x] Container starts FastAPI and serves the built NextJS static site at `/`.
+- [x] `/api/health` or equivalent health endpoint returns success.
+- [x] SQLite database file is created automatically when missing.
+- [x] Migrations or schema initialization can run from a clean database.
+- [x] Start/stop scripts work on the current development machine.
+- [x] `.env.example` documents required variables without real secrets.
+- [x] `.env` is ignored by Git.
 
 Acceptance gate: the container builds and serves an empty NextJS page through
 FastAPI.
 
-Decision: Review | Accept | Reject
+Decision: Review
+Reviewer:
+Date: 2026-09-02
+Notes: Phase 0 scaffold is ready for user review.
 
 ## Phase 1 - Auth, Opportunities, Dashboard
 

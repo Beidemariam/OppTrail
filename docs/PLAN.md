@@ -125,10 +125,10 @@ Permissions Model from AGENTS.md server-side (not just hidden in the UI).
 ## Build Phases
 
 **Phase 0 — Scaffolding**
-- [ ] Repo structure per AGENTS.md, Dockerfile, uv-managed backend, NextJS
+- [x] Repo structure per AGENTS.md, Dockerfile, uv-managed backend, NextJS
       frontend skeleton
-- [ ] Start/stop scripts for Mac, PC, Linux
-- [ ] SQLite schema + migrations, `.env.example`
+- [x] Start/stop scripts for Mac, PC, Linux
+- [x] SQLite schema + migrations, `.env.example`
 - Acceptance: container builds and serves an empty NextJS page through FastAPI
 
 **Phase 1 — Auth, Opportunities, Dashboard**

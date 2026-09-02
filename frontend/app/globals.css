@@ -1,0 +1,28 @@
+:root {
+  --navy: #0b2540;
+  --teal: #0f9d8c;
+  --amber: #f2a93b;
+  --slate: #6b7280;
+  --background: #f7f9fb;
+  --surface: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  background: var(--background);
+  color: var(--navy);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+a {
+  color: inherit;
+}

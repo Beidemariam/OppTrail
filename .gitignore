@@ -13,6 +13,7 @@ __pycache__/
 node_modules/
 .next/
 out/
+tsconfig.tsbuildinfo
 
 # Local data and logs
 *.db
