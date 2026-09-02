@@ -174,8 +174,7 @@ Permissions Model from AGENTS.md server-side (not just hidden in the UI).
 
 **Phase 7 — Polish**
 - [ ] Apply color scheme, responsive layout, empty states, loading states
-- [ ] Light test pass: pytest for backend permission/business logic, manual
-      click-through for frontend flows
+- [ ] Complete the phase gates in `docs/TEST_CRITERIA.md`
 - Acceptance: full walkthrough (signup -> create opportunity -> log entries ->
   share -> AI question -> PDF export) works end to end in the Docker container
 

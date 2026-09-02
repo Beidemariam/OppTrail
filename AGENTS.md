@@ -146,6 +146,13 @@ Dockerfile
 7. The AI agent's tool surface is read-only by construction — never give it a
    write-capable tool, even behind a confirmation step
 
+## Change Review Workflow
+- After every file change, provide a concise diff summary in chat.
+- Ask for an explicit decision: Review, Accept, or Reject.
+- Do not commit or push changes until the user accepts them.
+- If the user rejects a change, identify the issue, adjust the files, and
+  provide a new concise diff summary.
+
 ## Working documentation
 All documents for planning and executing this project will be in the docs/
 directory. Please review the docs/PLAN.md document before proceeding.
