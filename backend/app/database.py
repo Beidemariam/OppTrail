@@ -1,3 +1,5 @@
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 import sqlite3
 
@@ -12,12 +14,28 @@ def sqlite_path_from_url(database_url: str) -> Path:
     return Path(raw_path).expanduser()
 
 
+def get_connection() -> sqlite3.Connection:
+    database_path = sqlite_path_from_url(settings.database_url)
+    connection = sqlite3.connect(database_path)
+    connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys = ON")
+    return connection
+
+
+@contextmanager
+def db_connection() -> Iterator[sqlite3.Connection]:
+    connection = get_connection()
+    try:
+        yield connection
+    finally:
+        connection.close()
+
+
 def initialize_database() -> None:
     database_path = sqlite_path_from_url(settings.database_url)
     if database_path.parent != Path("."):
         database_path.parent.mkdir(parents=True, exist_ok=True)
 
     schema_path = Path(__file__).resolve().parent / "schema.sql"
-    with sqlite3.connect(database_path) as connection:
-        connection.execute("PRAGMA foreign_keys = ON")
+    with db_connection() as connection:
         connection.executescript(schema_path.read_text(encoding="utf-8"))

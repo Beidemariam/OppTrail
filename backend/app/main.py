@@ -6,6 +6,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .database import initialize_database
+from .routes_auth import router as auth_router
+from .routes_opportunities import router as opportunities_router
 from .settings import settings
 
 
@@ -16,6 +18,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="OppTrail API", version="0.1.0", lifespan=lifespan)
+app.include_router(auth_router)
+app.include_router(opportunities_router)
 
 
 @app.get("/api/health")

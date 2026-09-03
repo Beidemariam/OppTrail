@@ -74,22 +74,25 @@ Notes: Phase 0 scaffold is ready for user review.
 
 ## Phase 1 - Auth, Opportunities, Dashboard
 
-- [ ] User can sign up with email, name, and password.
-- [ ] Duplicate email signup is rejected cleanly.
-- [ ] User can log in and receives an HttpOnly session cookie.
-- [ ] User can log out and the session no longer authenticates.
-- [ ] Unauthenticated users cannot access protected endpoints.
-- [ ] Authenticated user can create an opportunity.
-- [ ] Owner can view and update their own opportunity.
-- [ ] Owner can soft-delete their own opportunity.
-- [ ] Dashboard lists owned opportunities grouped by fixed sales stage.
-- [ ] Backend tests cover auth/session and opportunity ownership rules.
-- [ ] Backend coverage is at least 80% for implemented business/API modules.
+- [x] User can sign up with email, name, and password.
+- [x] Duplicate email signup is rejected cleanly.
+- [x] User can log in and receives an HttpOnly session cookie.
+- [x] User can log out and the session no longer authenticates.
+- [x] Unauthenticated users cannot access protected endpoints.
+- [x] Authenticated user can create an opportunity.
+- [x] Owner can view and update their own opportunity.
+- [x] Owner can soft-delete their own opportunity.
+- [x] Dashboard lists owned opportunities grouped by fixed sales stage.
+- [x] Backend tests cover auth/session and opportunity ownership rules.
+- [x] Backend coverage is at least 80% for implemented business/API modules.
 
 Acceptance gate: a user can sign up, create an opportunity, and see it on the
 dashboard.
 
-Decision: Review | Accept | Reject
+Decision: Review
+Reviewer:
+Date: 2026-09-02
+Notes: Phase 1 auth, opportunity CRUD, and dashboard grouping are ready for user review.
 
 ## Phase 2 - Timeline Tree
 

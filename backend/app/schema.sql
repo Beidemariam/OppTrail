@@ -6,6 +6,13 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS sessions (
+    id TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS opportunities (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -110,6 +117,8 @@ CREATE TABLE IF NOT EXISTS audit_log_entries (
 );
 
 CREATE INDEX IF NOT EXISTS idx_opportunities_owner_id ON opportunities(owner_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_opportunity_shares_user_id ON opportunity_shares(user_id);
 CREATE INDEX IF NOT EXISTS idx_timeline_entries_opportunity_id ON timeline_entries(opportunity_id);
 CREATE INDEX IF NOT EXISTS idx_notes_entry_id ON notes(entry_id);

@@ -1,0 +1,84 @@
+from datetime import UTC, datetime, timedelta
+import secrets
+import sqlite3
+
+from fastapi import Cookie, HTTPException, Response, status
+from passlib.context import CryptContext
+
+from .database import db_connection
+
+
+SESSION_COOKIE_NAME = "opptrail_session"
+SESSION_DAYS = 7
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def normalize_email(email: str) -> str:
+    return email.strip().lower()
+
+
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
+
+
+def verify_password(password: str, password_hash: str) -> bool:
+    return pwd_context.verify(password, password_hash)
+
+
+def create_session(response: Response, user_id: int) -> None:
+    session_id = secrets.token_urlsafe(32)
+    expires_at = datetime.now(UTC) + timedelta(days=SESSION_DAYS)
+
+    with db_connection() as connection:
+        connection.execute(
+            "INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)",
+            (session_id, user_id, expires_at.isoformat()),
+        )
+        connection.commit()
+
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=session_id,
+        httponly=True,
+        samesite="lax",
+        max_age=SESSION_DAYS * 24 * 60 * 60,
+    )
+
+
+def clear_session(response: Response, session_id: str | None) -> None:
+    if session_id:
+        with db_connection() as connection:
+            connection.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+            connection.commit()
+
+    response.delete_cookie(key=SESSION_COOKIE_NAME, httponly=True, samesite="lax")
+
+
+def get_current_user(
+    session_id: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+) -> sqlite3.Row:
+    if not session_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+
+    now = datetime.now(UTC).isoformat()
+    with db_connection() as connection:
+        user = connection.execute(
+            """
+            SELECT users.id, users.email, users.name, users.created_at
+            FROM sessions
+            JOIN users ON users.id = sessions.user_id
+            WHERE sessions.id = ? AND sessions.expires_at > ?
+            """,
+            (session_id, now),
+        ).fetchone()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+
+    return user

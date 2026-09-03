@@ -20,6 +20,8 @@ tsconfig.tsbuildinfo
 *.sqlite
 *.sqlite3
 *.log
+.coverage
+.pytest_cache/
 
 # OS/editor
 .DS_Store

@@ -132,8 +132,8 @@ Permissions Model from AGENTS.md server-side (not just hidden in the UI).
 - Acceptance: container builds and serves an empty NextJS page through FastAPI
 
 **Phase 1 — Auth, Opportunities, Dashboard**
-- [ ] Signup/login/logout, session cookie
-- [ ] Opportunity CRUD, dashboard list grouped by stage
+- [x] Signup/login/logout, session cookie
+- [x] Opportunity CRUD, dashboard list grouped by stage
 - Acceptance: a user can sign up, create an opportunity, see it on the dashboard
 
 **Phase 2 — Timeline Tree**
