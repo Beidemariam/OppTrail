@@ -14,6 +14,7 @@ each phase, check off the relevant items before moving on.
 - A phase can pass with small cosmetic issues, but not with known data-loss,
   security, permission, migration, or broken acceptance-flow issues.
 - Each phase must include a quick manual walkthrough of its acceptance scenario.
+- Each phase summary must include user test steps the user can run in the app.
 - Each phase ends with an explicit decision: Review, Accept, or Reject.
 
 ## Phase Decision
@@ -96,27 +97,58 @@ Notes: Phase 1 auth, opportunity CRUD, and dashboard grouping are ready for user
 
 ## Phase 2 - Timeline Tree
 
-- [ ] Owner/Editor can create timeline entries.
-- [ ] Viewer cannot create, edit, or delete entries, notes, or comments.
-- [ ] Notes can be added to any existing entry after entry creation.
-- [ ] Comments can be added to any existing note.
-- [ ] Notes can be edited and set `edited = true`.
-- [ ] Note create/edit appends `NoteVersion` rows in order.
-- [ ] Comments are not editable after posting.
-- [ ] Deletes for entries, notes, and comments are soft deletes.
-- [ ] Stage changes create traceable system timeline entries.
-- [ ] Opportunity creation creates a traceable system timeline entry.
-- [ ] Timeline filters work for keyword, entry type, date range, and author.
-- [ ] Timeline returns entries, notes, and comments in expected chronological
+- [x] Owner/Editor can create timeline entries.
+- [x] Viewer cannot create, edit, or delete entries, notes, or comments.
+- [x] Notes can be added to any existing entry after entry creation.
+- [x] Comments can be added to any existing note.
+- [x] Notes can be edited and set `edited = true`.
+- [x] Note create/edit appends `NoteVersion` rows in order.
+- [x] Comments are not editable after posting.
+- [x] Deletes for entries, notes, and comments are soft deletes.
+- [x] Stage changes create traceable system timeline entries.
+- [x] Opportunity creation creates a traceable system timeline entry.
+- [x] Timeline filters work for keyword, entry type, date range, and author.
+- [x] Timeline returns entries, notes, and comments in expected chronological
       structure.
-- [ ] Backend tests cover tree creation, permissions, soft deletes, version
+- [x] Backend tests cover tree creation, permissions, soft deletes, version
       history, system entries, and filters.
-- [ ] Backend coverage is at least 80% for implemented business/API modules.
+- [x] Backend coverage is at least 80% for implemented business/API modules.
 
 Acceptance gate: a full entry -> note -> comment chain can be created, edited
 where allowed, searched/filtered, and a Viewer is blocked from writing.
 
-Decision: Review | Accept | Reject
+User test steps:
+1. Open `http://localhost:8000` and sign up or sign in.
+2. Create an opportunity from the left form, then select `Timeline` on its card.
+3. Confirm the timeline shows the system-generated `Opportunity created` entry.
+4. Add a manual entry with a unique keyword in the body, such as `pricing-risk`.
+5. Add a note under that entry, then add a comment under that note.
+6. Edit the note and confirm it shows the `edited` indicator.
+7. Edit the manual entry title or type and confirm the timeline updates.
+8. Use the keyword filter with `pricing-risk` and confirm only the matching entry
+   remains visible.
+9. Use the entry type filter and confirm entries are narrowed by type.
+10. Change the opportunity stage, reopen or refresh the timeline, and confirm a
+    system `Stage changed to ...` entry appears.
+11. Delete the comment, note, and manual entry, then refresh and confirm the
+    deleted items no longer appear.
+12. Permission checks for Viewer write blocking are covered by automated backend
+    tests until the Phase 3 sharing UI exists.
+
+Decision: Review
+Reviewer:
+Date: 2026-09-03
+Notes: Phase 2 timeline APIs, UI workflow, filters, permissions, system entries, and backend coverage gate are ready for user review.
+
+Issue: Two timeline tests failed after initial implementation.
+Root cause: The tests assumed fixed list positions even though timeline results are intentionally sorted by event timestamp and system entries use the real creation timestamp.
+Fix: Updated tests to find entries by ID/title and use a date range that intentionally excludes the system creation entry.
+Retest: Focused failing tests passed; full backend suite passed with 94% coverage.
+
+Issue: User review found the creation system entry missing for an existing opportunity, cramped card buttons, and related timeline data remaining after parent deletion.
+Root cause: Existing opportunities created before Phase 2 had no backfilled system entry; action buttons were forced into three narrow columns; delete paths only marked the immediate parent record.
+Fix: Added an idempotent creation-entry backfill, responsive auto-wrapping buttons, tighter layout styling, and cascading soft deletes from opportunity -> entries -> notes -> comments and entry -> notes -> comments.
+Retest: Focused regression tests passed; full backend suite passed with 94% coverage; frontend lint, typecheck, and build passed.
 
 ## Phase 3 - Sharing
 

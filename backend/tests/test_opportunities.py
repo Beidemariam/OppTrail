@@ -1,5 +1,7 @@
 from fastapi.testclient import TestClient
 
+from app.database import db_connection, initialize_database
+
 
 def signup(client: TestClient, email: str, name: str) -> None:
     response = client.post(
@@ -60,11 +62,73 @@ def test_owner_can_create_list_get_update_and_delete_opportunity(
     assert updated.json()["stage"] == "Qualification"
     assert updated.json()["value"] == "30000"
 
+    timeline = client.get(f"/api/opportunities/{opportunity['id']}/timeline")
+    assert timeline.status_code == 200
+    system_entries = timeline.json()["entries"]
+    assert [entry["title"] for entry in system_entries] == [
+        "Opportunity created",
+        "Stage changed to Qualification",
+    ]
+    assert all(entry["system_generated"] for entry in system_entries)
+    assert client.delete(f"/api/timeline/{system_entries[0]['id']}").status_code == 403
+
     deleted = client.delete(f"/api/opportunities/{opportunity['id']}")
     assert deleted.status_code == 204
+    with db_connection() as connection:
+        active_timeline_rows = connection.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM timeline_entries
+            WHERE opportunity_id = ? AND deleted_at IS NULL
+            """,
+            (opportunity["id"],),
+        ).fetchone()["count"]
+    assert active_timeline_rows == 0
 
     missing = client.get(f"/api/opportunities/{opportunity['id']}")
     assert missing.status_code == 404
+
+
+def test_schema_init_backfills_created_system_entries(client: TestClient) -> None:
+    with db_connection() as connection:
+        user = connection.execute(
+            """
+            INSERT INTO users (email, password_hash, name)
+            VALUES ('legacy@example.com', 'hash', 'Legacy Owner')
+            """
+        )
+        opportunity = connection.execute(
+            """
+            INSERT INTO opportunities (
+                name,
+                account_name,
+                value,
+                currency,
+                stage,
+                owner_id
+            )
+            VALUES ('Legacy Deal', 'Legacy Account', '1', 'USD', 'Prospecting', ?)
+            """,
+            (user.lastrowid,),
+        )
+        opportunity_id = int(opportunity.lastrowid)
+        connection.commit()
+
+    initialize_database()
+    initialize_database()
+
+    with db_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT title, system_generated
+            FROM timeline_entries
+            WHERE opportunity_id = ? AND deleted_at IS NULL
+            """,
+            (opportunity_id,),
+        ).fetchall()
+
+    assert [row["title"] for row in rows] == ["Opportunity created"]
+    assert rows[0]["system_generated"] == 1
 
 
 def test_non_owner_cannot_view_or_mutate_opportunity(client: TestClient) -> None:

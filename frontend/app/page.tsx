@@ -12,6 +12,19 @@ const stages = [
   "Closed Lost",
 ] as const;
 
+const entryTypes = [
+  { value: "call", label: "Call" },
+  { value: "email", label: "Email" },
+  { value: "meeting", label: "Meeting" },
+  { value: "demo", label: "Demo" },
+  { value: "proposal", label: "Proposal" },
+  { value: "contract", label: "Contract" },
+  { value: "stage_change", label: "Stage Change" },
+  { value: "other", label: "Other" },
+] as const;
+
+type EntryType = (typeof entryTypes)[number]["value"];
+
 type User = {
   id: number;
   email: string;
@@ -30,6 +43,42 @@ type Opportunity = {
   stalled: boolean;
 };
 
+type TimelineComment = {
+  id: number;
+  note_id: number;
+  body: string;
+  created_by: number;
+  author_name: string;
+  created_at: string;
+};
+
+type TimelineNote = {
+  id: number;
+  entry_id: number;
+  body: string;
+  created_by: number;
+  author_name: string;
+  created_at: string;
+  updated_at: string;
+  edited: boolean;
+  comments: TimelineComment[];
+};
+
+type TimelineEntry = {
+  id: number;
+  opportunity_id: number;
+  type: EntryType;
+  title: string;
+  body: string;
+  event_timestamp: string;
+  follow_up_date: string | null;
+  created_by: number | null;
+  author_name: string | null;
+  system_generated: boolean;
+  created_at: string;
+  notes: TimelineNote[];
+};
+
 type OpportunityForm = {
   name: string;
   account_name: string;
@@ -37,6 +86,22 @@ type OpportunityForm = {
   currency: string;
   stage: string;
   expected_close_date: string;
+};
+
+type TimelineEntryForm = {
+  type: EntryType;
+  title: string;
+  body: string;
+  event_timestamp: string;
+  follow_up_date: string;
+};
+
+type TimelineFilters = {
+  q: string;
+  type: string;
+  from: string;
+  to: string;
+  author_id: string;
 };
 
 const emptyOpportunityForm: OpportunityForm = {
@@ -47,6 +112,32 @@ const emptyOpportunityForm: OpportunityForm = {
   stage: "Prospecting",
   expected_close_date: "",
 };
+
+const emptyEntryForm: TimelineEntryForm = {
+  type: "call",
+  title: "",
+  body: "",
+  event_timestamp: "",
+  follow_up_date: "",
+};
+
+const emptyFilters: TimelineFilters = {
+  q: "",
+  type: "",
+  from: "",
+  to: "",
+  author_id: "",
+};
+
+function toDateTimeInput(value: string) {
+  return value.replace(" ", "T").slice(0, 16);
+}
+
+function nowDateTimeInput() {
+  const now = new Date();
+  const offsetMs = now.getTimezoneOffset() * 60 * 1000;
+  return new Date(now.getTime() - offsetMs).toISOString().slice(0, 16);
+}
 
 async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
@@ -82,8 +173,29 @@ export default function Home() {
   const [opportunityForm, setOpportunityForm] =
     useState<OpportunityForm>(emptyOpportunityForm);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [selectedOpportunityId, setSelectedOpportunityId] = useState<number | null>(
+    null,
+  );
+  const [timelineEntries, setTimelineEntries] = useState<TimelineEntry[]>([]);
+  const [entryForm, setEntryForm] = useState<TimelineEntryForm>({
+    ...emptyEntryForm,
+    event_timestamp: nowDateTimeInput(),
+  });
+  const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
+  const [timelineFilters, setTimelineFilters] =
+    useState<TimelineFilters>(emptyFilters);
+  const [noteForms, setNoteForms] = useState<Record<number, string>>({});
+  const [editingNotes, setEditingNotes] = useState<Record<number, string>>({});
+  const [commentForms, setCommentForms] = useState<Record<number, string>>({});
   const [error, setError] = useState("");
   const [status, setStatus] = useState("Loading...");
+
+  const selectedOpportunity = useMemo(
+    () =>
+      opportunities.find((opportunity) => opportunity.id === selectedOpportunityId) ??
+      null,
+    [opportunities, selectedOpportunityId],
+  );
 
   useEffect(() => {
     apiRequest<{ user: User }>("/api/auth/me")
@@ -112,6 +224,25 @@ export default function Home() {
       opportunities: Opportunity[];
     }>("/api/opportunities");
     setOpportunities(data.opportunities);
+  }
+
+  async function loadTimeline(opportunityId = selectedOpportunityId) {
+    if (!opportunityId) {
+      return;
+    }
+
+    const params = new URLSearchParams();
+    Object.entries(timelineFilters).forEach(([key, value]) => {
+      if (value.trim()) {
+        params.set(key, value.trim());
+      }
+    });
+
+    const suffix = params.toString() ? `?${params.toString()}` : "";
+    const data = await apiRequest<{ entries: TimelineEntry[] }>(
+      `/api/opportunities/${opportunityId}/timeline${suffix}`,
+    );
+    setTimelineEntries(data.entries);
   }
 
   async function submitAuth(event: FormEvent<HTMLFormElement>) {
@@ -143,6 +274,8 @@ export default function Home() {
     await apiRequest("/api/auth/logout", { method: "POST" });
     setUser(null);
     setOpportunities([]);
+    setTimelineEntries([]);
+    setSelectedOpportunityId(null);
     setOpportunityForm(emptyOpportunityForm);
     setEditingId(null);
   }
@@ -173,6 +306,9 @@ export default function Home() {
       setEditingId(null);
       setStatus("");
       await loadOpportunities();
+      if (selectedOpportunityId) {
+        await loadTimeline(selectedOpportunityId);
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not save opportunity");
       setStatus("");
@@ -202,9 +338,242 @@ export default function Home() {
         setEditingId(null);
         setOpportunityForm(emptyOpportunityForm);
       }
+      if (selectedOpportunityId === opportunityId) {
+        setSelectedOpportunityId(null);
+        setTimelineEntries([]);
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not delete opportunity");
       setStatus("");
+    }
+  }
+
+  async function openTimeline(opportunity: Opportunity) {
+    setSelectedOpportunityId(opportunity.id);
+    setTimelineEntries([]);
+    setTimelineFilters(emptyFilters);
+    setEditingEntryId(null);
+    setEntryForm({ ...emptyEntryForm, event_timestamp: nowDateTimeInput() });
+    setStatus("Loading timeline...");
+    setError("");
+
+    try {
+      const data = await apiRequest<{ entries: TimelineEntry[] }>(
+        `/api/opportunities/${opportunity.id}/timeline`,
+      );
+      setTimelineEntries(data.entries);
+      setStatus("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not load timeline");
+      setStatus("");
+    }
+  }
+
+  async function submitTimelineEntry(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedOpportunityId) {
+      return;
+    }
+
+    setError("");
+    setStatus(editingEntryId ? "Updating entry..." : "Adding entry...");
+    const payload = {
+      ...entryForm,
+      follow_up_date: entryForm.follow_up_date || null,
+    };
+
+    try {
+      if (editingEntryId) {
+        await apiRequest(`/api/timeline/${editingEntryId}`, {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        });
+      } else {
+        await apiRequest(`/api/opportunities/${selectedOpportunityId}/timeline`, {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+      }
+      setEntryForm({ ...emptyEntryForm, event_timestamp: nowDateTimeInput() });
+      setEditingEntryId(null);
+      setStatus("");
+      await loadTimeline(selectedOpportunityId);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not save entry");
+      setStatus("");
+    }
+  }
+
+  function editTimelineEntry(entry: TimelineEntry) {
+    setEditingEntryId(entry.id);
+    setEntryForm({
+      type: entry.type,
+      title: entry.title,
+      body: entry.body,
+      event_timestamp: toDateTimeInput(entry.event_timestamp),
+      follow_up_date: entry.follow_up_date ?? "",
+    });
+  }
+
+  async function deleteTimelineEntry(entryId: number) {
+    if (!selectedOpportunityId) {
+      return;
+    }
+
+    setError("");
+    setStatus("Deleting entry...");
+    try {
+      await apiRequest(`/api/timeline/${entryId}`, { method: "DELETE" });
+      setStatus("");
+      await loadTimeline(selectedOpportunityId);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not delete entry");
+      setStatus("");
+    }
+  }
+
+  async function addNote(entryId: number) {
+    if (!selectedOpportunityId) {
+      return;
+    }
+
+    const body = (noteForms[entryId] ?? "").trim();
+    if (!body) {
+      return;
+    }
+
+    setError("");
+    setStatus("Adding note...");
+    try {
+      await apiRequest(`/api/timeline/${entryId}/notes`, {
+        method: "POST",
+        body: JSON.stringify({ body }),
+      });
+      setNoteForms({ ...noteForms, [entryId]: "" });
+      setStatus("");
+      await loadTimeline(selectedOpportunityId);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not add note");
+      setStatus("");
+    }
+  }
+
+  async function saveNote(noteId: number) {
+    if (!selectedOpportunityId) {
+      return;
+    }
+
+    const body = (editingNotes[noteId] ?? "").trim();
+    if (!body) {
+      return;
+    }
+
+    setError("");
+    setStatus("Saving note...");
+    try {
+      await apiRequest(`/api/notes/${noteId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ body }),
+      });
+      const nextEditingNotes = { ...editingNotes };
+      delete nextEditingNotes[noteId];
+      setEditingNotes(nextEditingNotes);
+      setStatus("");
+      await loadTimeline(selectedOpportunityId);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not save note");
+      setStatus("");
+    }
+  }
+
+  async function deleteNote(noteId: number) {
+    if (!selectedOpportunityId) {
+      return;
+    }
+
+    setError("");
+    setStatus("Deleting note...");
+    try {
+      await apiRequest(`/api/notes/${noteId}`, { method: "DELETE" });
+      setStatus("");
+      await loadTimeline(selectedOpportunityId);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not delete note");
+      setStatus("");
+    }
+  }
+
+  async function addComment(noteId: number) {
+    if (!selectedOpportunityId) {
+      return;
+    }
+
+    const body = (commentForms[noteId] ?? "").trim();
+    if (!body) {
+      return;
+    }
+
+    setError("");
+    setStatus("Adding comment...");
+    try {
+      await apiRequest(`/api/notes/${noteId}/comments`, {
+        method: "POST",
+        body: JSON.stringify({ body }),
+      });
+      setCommentForms({ ...commentForms, [noteId]: "" });
+      setStatus("");
+      await loadTimeline(selectedOpportunityId);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not add comment");
+      setStatus("");
+    }
+  }
+
+  async function deleteComment(commentId: number) {
+    if (!selectedOpportunityId) {
+      return;
+    }
+
+    setError("");
+    setStatus("Deleting comment...");
+    try {
+      await apiRequest(`/api/comments/${commentId}`, { method: "DELETE" });
+      setStatus("");
+      await loadTimeline(selectedOpportunityId);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not delete comment");
+      setStatus("");
+    }
+  }
+
+  async function applyTimelineFilters(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setStatus("Filtering timeline...");
+    try {
+      await loadTimeline();
+      setStatus("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not filter timeline");
+      setStatus("");
+    }
+  }
+
+  async function clearTimelineFilters() {
+    setTimelineFilters(emptyFilters);
+    setError("");
+    if (selectedOpportunityId) {
+      setStatus("Clearing filters...");
+      try {
+        const data = await apiRequest<{ entries: TimelineEntry[] }>(
+          `/api/opportunities/${selectedOpportunityId}/timeline`,
+        );
+        setTimelineEntries(data.entries);
+        setStatus("");
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "Could not clear filters");
+        setStatus("");
+      }
     }
   }
 
@@ -216,8 +585,7 @@ export default function Home() {
             <p className="eyebrow">OppTrail</p>
             <h1>Track every sales opportunity from first touch to close.</h1>
             <p className="lede">
-              Sign in to manage your opportunity dashboard and keep the timeline
-              work ready for the next phase.
+              Sign in to manage your opportunity dashboard and timeline notes.
             </p>
           </div>
 
@@ -408,62 +776,435 @@ export default function Home() {
           {error && <p className="error">{error}</p>}
         </form>
 
-        <section className="stage-board" aria-label="Opportunities grouped by stage">
-          {groupedOpportunities.map(({ stage, items }) => (
-            <div className="stage-column" key={stage}>
-              <div className="stage-header">
-                <h2>{stage}</h2>
-                <span>{items.length}</span>
+        <section className="workspace">
+          <section className="stage-board" aria-label="Opportunities grouped by stage">
+            {groupedOpportunities.map(({ stage, items }) => (
+              <div className="stage-column" key={stage}>
+                <div className="stage-header">
+                  <h2>{stage}</h2>
+                  <span>{items.length}</span>
+                </div>
+
+                {items.length === 0 ? (
+                  <p className="empty-state">No opportunities</p>
+                ) : (
+                  <div className="opportunity-list">
+                    {items.map((opportunity) => (
+                      <article
+                        className={
+                          selectedOpportunityId === opportunity.id
+                            ? "opportunity-card selected"
+                            : "opportunity-card"
+                        }
+                        key={opportunity.id}
+                      >
+                        <div>
+                          <h3>{opportunity.name}</h3>
+                          <p>{opportunity.account_name}</p>
+                        </div>
+                        <dl>
+                          <div>
+                            <dt>Value</dt>
+                            <dd>
+                              {opportunity.currency} {opportunity.value}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Owner</dt>
+                            <dd>{opportunity.owner_name}</dd>
+                          </div>
+                          <div>
+                            <dt>Close</dt>
+                            <dd>{opportunity.expected_close_date ?? "Not set"}</dd>
+                          </div>
+                        </dl>
+                        <div className="card-actions">
+                          <button
+                            type="button"
+                            className="primary-button"
+                            onClick={() => void openTimeline(opportunity)}
+                          >
+                            Timeline
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() => editOpportunity(opportunity)}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="danger-button"
+                            onClick={() => deleteOpportunity(opportunity.id)}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </section>
+
+          {selectedOpportunity ? (
+            <section className="timeline-panel">
+              <div className="timeline-heading">
+                <div>
+                  <p className="eyebrow">{selectedOpportunity.account_name}</p>
+                  <h2>{selectedOpportunity.name}</h2>
+                </div>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => void loadTimeline(selectedOpportunity.id)}
+                >
+                  Refresh
+                </button>
               </div>
 
-              {items.length === 0 ? (
-                <p className="empty-state">No opportunities</p>
+              <form className="filter-bar" onSubmit={applyTimelineFilters}>
+                <input
+                  placeholder="Keyword"
+                  value={timelineFilters.q}
+                  onChange={(event) =>
+                    setTimelineFilters({ ...timelineFilters, q: event.target.value })
+                  }
+                />
+                <select
+                  value={timelineFilters.type}
+                  onChange={(event) =>
+                    setTimelineFilters({ ...timelineFilters, type: event.target.value })
+                  }
+                >
+                  <option value="">All types</option>
+                  {entryTypes.map((entryType) => (
+                    <option key={entryType.value} value={entryType.value}>
+                      {entryType.label}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="datetime-local"
+                  value={timelineFilters.from}
+                  onChange={(event) =>
+                    setTimelineFilters({ ...timelineFilters, from: event.target.value })
+                  }
+                />
+                <input
+                  type="datetime-local"
+                  value={timelineFilters.to}
+                  onChange={(event) =>
+                    setTimelineFilters({ ...timelineFilters, to: event.target.value })
+                  }
+                />
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="Author ID"
+                  value={timelineFilters.author_id}
+                  onChange={(event) =>
+                    setTimelineFilters({
+                      ...timelineFilters,
+                      author_id: event.target.value,
+                    })
+                  }
+                />
+                <button className="primary-button" type="submit">
+                  Filter
+                </button>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={clearTimelineFilters}
+                >
+                  Clear
+                </button>
+              </form>
+
+              <form className="timeline-form" onSubmit={submitTimelineEntry}>
+                <div className="timeline-form-grid">
+                  <label>
+                    Type
+                    <select
+                      value={entryForm.type}
+                      onChange={(event) =>
+                        setEntryForm({
+                          ...entryForm,
+                          type: event.target.value as EntryType,
+                        })
+                      }
+                    >
+                      {entryTypes.map((entryType) => (
+                        <option key={entryType.value} value={entryType.value}>
+                          {entryType.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Event time
+                    <input
+                      type="datetime-local"
+                      value={entryForm.event_timestamp}
+                      onChange={(event) =>
+                        setEntryForm({
+                          ...entryForm,
+                          event_timestamp: event.target.value,
+                        })
+                      }
+                      required
+                    />
+                  </label>
+                  <label>
+                    Follow up
+                    <input
+                      type="date"
+                      value={entryForm.follow_up_date}
+                      onChange={(event) =>
+                        setEntryForm({
+                          ...entryForm,
+                          follow_up_date: event.target.value,
+                        })
+                      }
+                    />
+                  </label>
+                </div>
+                <label>
+                  Title
+                  <input
+                    value={entryForm.title}
+                    onChange={(event) =>
+                      setEntryForm({ ...entryForm, title: event.target.value })
+                    }
+                    required
+                  />
+                </label>
+                <label>
+                  Body
+                  <textarea
+                    value={entryForm.body}
+                    onChange={(event) =>
+                      setEntryForm({ ...entryForm, body: event.target.value })
+                    }
+                    rows={3}
+                  />
+                </label>
+                <div className="inline-actions">
+                  <button className="primary-button" type="submit">
+                    {editingEntryId ? "Save Entry" : "Add Entry"}
+                  </button>
+                  {editingEntryId && (
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => {
+                        setEditingEntryId(null);
+                        setEntryForm({
+                          ...emptyEntryForm,
+                          event_timestamp: nowDateTimeInput(),
+                        });
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </form>
+
+              {timelineEntries.length === 0 ? (
+                <p className="empty-state">No timeline entries match this view.</p>
               ) : (
-                <div className="opportunity-list">
-                  {items.map((opportunity) => (
-                    <article className="opportunity-card" key={opportunity.id}>
-                      <div>
-                        <h3>{opportunity.name}</h3>
-                        <p>{opportunity.account_name}</p>
-                      </div>
-                      <dl>
-                        <div>
-                          <dt>Value</dt>
-                          <dd>
-                            {opportunity.currency} {opportunity.value}
-                          </dd>
+                <div className="timeline-list">
+                  {timelineEntries.map((entry) => (
+                    <article className="timeline-entry" key={entry.id}>
+                      <div className={`timeline-marker ${entry.type}`} />
+                      <div className="timeline-entry-body">
+                        <div className="timeline-entry-header">
+                          <div>
+                            <div className="meta-row">
+                              <span className={`type-badge ${entry.type}`}>
+                                {
+                                  entryTypes.find(
+                                    (entryType) => entryType.value === entry.type,
+                                  )?.label
+                                }
+                              </span>
+                              {entry.system_generated && (
+                                <span className="system-badge">System</span>
+                              )}
+                              <span>{toDateTimeInput(entry.event_timestamp)}</span>
+                            </div>
+                            <h3>{entry.title}</h3>
+                            <p className="timeline-copy">{entry.body || "No details"}</p>
+                          </div>
+                          {!entry.system_generated && (
+                            <div className="inline-actions">
+                              <button
+                                type="button"
+                                className="secondary-button"
+                                onClick={() => editTimelineEntry(entry)}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                className="danger-button"
+                                onClick={() => deleteTimelineEntry(entry.id)}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          )}
                         </div>
-                        <div>
-                          <dt>Owner</dt>
-                          <dd>{opportunity.owner_name}</dd>
+                        <p className="meta-row">
+                          By {entry.author_name ?? "System"}
+                          {entry.follow_up_date
+                            ? ` | Follow up ${entry.follow_up_date}`
+                            : ""}
+                        </p>
+
+                        <div className="notes-list">
+                          {entry.notes.map((note) => (
+                            <section className="note-block" key={note.id}>
+                              <div className="note-header">
+                                <p>
+                                  {note.author_name}
+                                  {note.edited ? " | edited" : ""}
+                                </p>
+                                <div className="inline-actions">
+                                  <button
+                                    type="button"
+                                    className="secondary-button"
+                                    onClick={() =>
+                                      setEditingNotes({
+                                        ...editingNotes,
+                                        [note.id]: note.body,
+                                      })
+                                    }
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="danger-button"
+                                    onClick={() => deleteNote(note.id)}
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </div>
+
+                              {editingNotes[note.id] !== undefined ? (
+                                <div className="stacked-form">
+                                  <textarea
+                                    value={editingNotes[note.id]}
+                                    onChange={(event) =>
+                                      setEditingNotes({
+                                        ...editingNotes,
+                                        [note.id]: event.target.value,
+                                      })
+                                    }
+                                    rows={3}
+                                  />
+                                  <div className="inline-actions">
+                                    <button
+                                      type="button"
+                                      className="primary-button"
+                                      onClick={() => saveNote(note.id)}
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="secondary-button"
+                                      onClick={() => {
+                                        const nextEditingNotes = { ...editingNotes };
+                                        delete nextEditingNotes[note.id];
+                                        setEditingNotes(nextEditingNotes);
+                                      }}
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="timeline-copy">{note.body}</p>
+                              )}
+
+                              <div className="comment-list">
+                                {note.comments.map((comment) => (
+                                  <div className="comment-row" key={comment.id}>
+                                    <p>
+                                      <strong>{comment.author_name}</strong>{" "}
+                                      {comment.body}
+                                    </p>
+                                    <button
+                                      type="button"
+                                      className="danger-button compact"
+                                      onClick={() => deleteComment(comment.id)}
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+
+                              <div className="inline-compose">
+                                <input
+                                  placeholder="Add comment"
+                                  value={commentForms[note.id] ?? ""}
+                                  onChange={(event) =>
+                                    setCommentForms({
+                                      ...commentForms,
+                                      [note.id]: event.target.value,
+                                    })
+                                  }
+                                />
+                                <button
+                                  type="button"
+                                  className="secondary-button"
+                                  onClick={() => addComment(note.id)}
+                                >
+                                  Post
+                                </button>
+                              </div>
+                            </section>
+                          ))}
+
+                          <div className="inline-compose">
+                            <input
+                              placeholder="Add note"
+                              value={noteForms[entry.id] ?? ""}
+                              onChange={(event) =>
+                                setNoteForms({
+                                  ...noteForms,
+                                  [entry.id]: event.target.value,
+                                })
+                              }
+                            />
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              onClick={() => addNote(entry.id)}
+                            >
+                              Add Note
+                            </button>
+                          </div>
                         </div>
-                        <div>
-                          <dt>Close</dt>
-                          <dd>{opportunity.expected_close_date ?? "Not set"}</dd>
-                        </div>
-                      </dl>
-                      <div className="card-actions">
-                        <button
-                          type="button"
-                          className="secondary-button"
-                          onClick={() => editOpportunity(opportunity)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          className="danger-button"
-                          onClick={() => deleteOpportunity(opportunity.id)}
-                        >
-                          Delete
-                        </button>
                       </div>
                     </article>
                   ))}
                 </div>
               )}
-            </div>
-          ))}
+            </section>
+          ) : (
+            <section className="timeline-panel empty-panel">
+              <h2>Select an opportunity to open its timeline.</h2>
+            </section>
+          )}
         </section>
       </section>
     </main>

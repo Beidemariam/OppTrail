@@ -129,3 +129,118 @@ class OpportunityPublic(BaseModel):
 class OpportunityListResponse(BaseModel):
     stages: list[str]
     opportunities: list[OpportunityPublic]
+
+
+EntryType = Literal[
+    "call",
+    "email",
+    "meeting",
+    "demo",
+    "proposal",
+    "contract",
+    "stage_change",
+    "other",
+]
+
+
+class TimelineEntryCreate(BaseModel):
+    type: EntryType = "other"
+    title: str = Field(min_length=1)
+    body: str = ""
+    event_timestamp: str
+    follow_up_date: str | None = None
+
+    @field_validator("title")
+    @classmethod
+    def strip_title(cls, value: str) -> str:
+        return value.strip()
+
+
+class TimelineEntryUpdate(BaseModel):
+    type: EntryType | None = None
+    title: str | None = Field(default=None, min_length=1)
+    body: str | None = None
+    event_timestamp: str | None = None
+    follow_up_date: str | None = None
+
+    @field_validator("title")
+    @classmethod
+    def strip_optional_title(cls, value: str | None) -> str | None:
+        return value.strip() if value is not None else value
+
+
+class CommentPublic(BaseModel):
+    id: int
+    note_id: int
+    body: str
+    created_by: int
+    author_name: str
+    created_at: str
+
+
+class NotePublic(BaseModel):
+    id: int
+    entry_id: int
+    body: str
+    created_by: int
+    author_name: str
+    created_at: str
+    updated_at: str
+    edited: bool
+    comments: list[CommentPublic]
+
+
+class TimelineEntryPublic(BaseModel):
+    id: int
+    opportunity_id: int
+    type: str
+    title: str
+    body: str
+    event_timestamp: str
+    follow_up_date: str | None
+    created_by: int | None
+    author_name: str | None
+    system_generated: bool
+    created_at: str
+    notes: list[NotePublic]
+
+
+class TimelineResponse(BaseModel):
+    entries: list[TimelineEntryPublic]
+
+
+class NoteCreate(BaseModel):
+    body: str = Field(min_length=1)
+
+    @field_validator("body")
+    @classmethod
+    def strip_body(cls, value: str) -> str:
+        return value.strip()
+
+
+class NoteUpdate(BaseModel):
+    body: str = Field(min_length=1)
+
+    @field_validator("body")
+    @classmethod
+    def strip_body(cls, value: str) -> str:
+        return value.strip()
+
+
+class NoteVersionPublic(BaseModel):
+    id: int
+    note_id: int
+    version_number: int
+    body: str
+    edited_by: int
+    editor_name: str
+    created_at: str
+
+
+class CommentCreate(BaseModel):
+    body: str = Field(min_length=1)
+
+    @field_validator("body")
+    @classmethod
+    def strip_body(cls, value: str) -> str:
+        return value.strip()

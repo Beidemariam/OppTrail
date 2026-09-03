@@ -148,6 +148,7 @@ Dockerfile
 
 ## Change Review Workflow
 - After every file change, provide a concise diff summary in chat.
+- With each phase summary, include user test steps for the current phase.
 - Ask for an explicit decision: Review, Accept, or Reject.
 - Do not commit or push changes until the user accepts them.
 - If the user rejects a change, identify the issue, adjust the files, and

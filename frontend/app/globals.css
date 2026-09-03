@@ -27,7 +27,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -56,7 +57,7 @@ button {
 }
 
 .app-shell {
-  padding: 24px;
+  padding: 18px;
 }
 
 .topbar {
@@ -64,7 +65,7 @@ button {
   display: flex;
   gap: 24px;
   justify-content: space-between;
-  margin: 0 auto 24px;
+  margin: 0 auto 16px;
   max-width: 1440px;
 }
 
@@ -105,7 +106,7 @@ button {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 8px;
-  box-shadow: 0 16px 40px rgba(11, 37, 64, 0.08);
+  box-shadow: 0 12px 30px rgba(11, 37, 64, 0.06);
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -127,13 +128,25 @@ button {
 }
 
 .form input,
-.form select {
+.form select,
+.form textarea,
+.filter-bar input,
+.filter-bar select,
+.timeline-form input,
+.timeline-form select,
+.timeline-form textarea,
+.inline-compose input,
+.stacked-form textarea {
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 6px;
   color: var(--navy);
   min-height: 42px;
   padding: 9px 11px;
+}
+
+textarea {
+  resize: vertical;
 }
 
 .form-grid {
@@ -168,10 +181,18 @@ button {
 .primary-button,
 .secondary-button,
 .danger-button {
+  align-items: center;
   border-radius: 6px;
+  display: inline-flex;
   font-weight: 700;
-  min-height: 40px;
-  padding: 9px 12px;
+  justify-content: center;
+  line-height: 1.15;
+  min-height: 44px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 9px 14px;
+  text-align: center;
+  white-space: normal;
 }
 
 .primary-button {
@@ -218,7 +239,7 @@ button {
   align-items: start;
   display: grid;
   gap: 20px;
-  grid-template-columns: 340px minmax(0, 1fr);
+  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
   margin: 0 auto;
   max-width: 1440px;
 }
@@ -230,17 +251,23 @@ button {
 
 .stage-board {
   display: grid;
-  gap: 14px;
-  grid-template-columns: repeat(7, minmax(220px, 1fr));
+  gap: 12px;
+  grid-template-columns: repeat(7, minmax(260px, 1fr));
   overflow-x: auto;
   padding-bottom: 12px;
+}
+
+.workspace {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
 }
 
 .stage-column {
   background: #eef4f6;
   border: 1px solid var(--line);
   border-radius: 8px;
-  min-height: 460px;
+  min-height: 360px;
   padding: 12px;
 }
 
@@ -286,13 +313,20 @@ button {
   border-radius: 8px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   padding: 14px;
 }
 
+.opportunity-card.selected {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 2px rgba(15, 157, 140, 0.14);
+}
+
 .opportunity-card h3 {
-  font-size: 17px;
+  font-size: 18px;
+  line-height: 1.2;
   margin: 0 0 4px;
+  overflow-wrap: anywhere;
 }
 
 .opportunity-card p {
@@ -320,7 +354,239 @@ button {
 .card-actions {
   display: grid;
   gap: 8px;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+}
+
+.card-actions button {
+  width: 100%;
+}
+
+.timeline-panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(11, 37, 64, 0.04);
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+}
+
+.empty-panel {
+  min-height: 140px;
+}
+
+.empty-panel h2,
+.timeline-heading h2 {
+  margin: 0;
+}
+
+.timeline-heading,
+.timeline-entry-header,
+.note-header,
+.inline-actions,
+.inline-compose {
+  align-items: flex-start;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.filter-bar,
+.timeline-form,
+.stacked-form {
+  display: grid;
+  gap: 12px;
+}
+
+.filter-bar {
+  align-items: end;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.timeline-form {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 18px;
+}
+
+.timeline-form label {
+  color: var(--navy);
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 8px;
+}
+
+.timeline-form-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.timeline-list,
+.notes-list,
+.comment-list {
+  display: grid;
+  gap: 14px;
+}
+
+.timeline-entry {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 16px minmax(0, 1fr);
+  position: relative;
+}
+
+.timeline-entry:not(:last-child)::before {
+  background: var(--line);
+  bottom: -14px;
+  content: "";
+  left: 7px;
+  position: absolute;
+  top: 20px;
+  width: 2px;
+}
+
+.timeline-marker {
+  background: var(--teal);
+  border: 3px solid #d9f3ee;
+  border-radius: 999px;
+  height: 16px;
+  margin-top: 6px;
+  position: relative;
+  width: 16px;
+  z-index: 1;
+}
+
+.timeline-marker.email,
+.type-badge.email {
+  background: #2f6fed;
+}
+
+.timeline-marker.meeting,
+.type-badge.meeting {
+  background: #6d5bd0;
+}
+
+.timeline-marker.demo,
+.type-badge.demo {
+  background: #0f9d8c;
+}
+
+.timeline-marker.proposal,
+.type-badge.proposal {
+  background: var(--amber);
+  color: #2f2300;
+}
+
+.timeline-marker.contract,
+.type-badge.contract {
+  background: #2fa84f;
+}
+
+.timeline-marker.stage_change,
+.type-badge.stage_change {
+  background: var(--navy);
+}
+
+.timeline-marker.other,
+.type-badge.other {
+  background: var(--slate);
+}
+
+.timeline-entry-body {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.timeline-entry-body h3 {
+  font-size: 18px;
+  margin: 8px 0;
+}
+
+.timeline-copy {
+  color: #24364a;
+  line-height: 1.5;
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.meta-row {
+  align-items: center;
+  color: var(--slate);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 13px;
+  gap: 8px;
+  margin: 0;
+}
+
+.type-badge,
+.system-badge {
+  border-radius: 999px;
+  color: #fff;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 8px;
+}
+
+.type-badge.call {
+  background: var(--teal);
+}
+
+.system-badge {
+  background: #eef4f6;
+  color: var(--navy);
+}
+
+.note-block {
+  background: #f7f9fb;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.note-header p,
+.comment-row p {
+  margin: 0;
+}
+
+.comment-row {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #e8eef4;
+  border-radius: 6px;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 10px;
+}
+
+.comment-row p {
+  color: #24364a;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.inline-compose {
+  align-items: stretch;
+}
+
+.inline-compose input {
+  flex: 1;
+  min-width: 0;
+}
+
+.compact {
+  min-height: 32px;
+  padding: 5px 8px;
 }
 
 @media (max-width: 900px) {
@@ -340,5 +606,21 @@ button {
 
   .sidebar-form {
     position: static;
+  }
+
+  .filter-bar,
+  .timeline-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .timeline-heading,
+  .timeline-entry-header,
+  .note-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .card-actions {
+    grid-template-columns: 1fr;
   }
 }

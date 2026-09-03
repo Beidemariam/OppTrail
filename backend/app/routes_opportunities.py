@@ -12,6 +12,7 @@ from .schemas import (
     OpportunityPublic,
     OpportunityUpdate,
 )
+from .timeline_utils import create_system_timeline_entry
 
 
 router = APIRouter(prefix="/api/opportunities", tags=["opportunities"])
@@ -133,8 +134,17 @@ def create_opportunity(
                 payload.expected_close_date,
             ),
         )
+        opportunity_id = int(cursor.lastrowid)
+        create_system_timeline_entry(
+            connection=connection,
+            opportunity_id=opportunity_id,
+            created_by=int(user["id"]),
+            entry_type="other",
+            title="Opportunity created",
+            body=f"{payload.name} was created for {payload.account_name}.",
+        )
         connection.commit()
-        row = fetch_owned_opportunity(connection, int(cursor.lastrowid), int(user["id"]))
+        row = fetch_owned_opportunity(connection, opportunity_id, int(user["id"]))
 
     return opportunity_from_row(row)
 
@@ -181,6 +191,7 @@ def update_opportunity(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Opportunity not found",
             )
+        previous_stage = row["stage"]
 
         connection.execute(
             f"""
@@ -190,6 +201,15 @@ def update_opportunity(
             """,
             values,
         )
+        if updates.get("stage") and updates["stage"] != previous_stage:
+            create_system_timeline_entry(
+                connection=connection,
+                opportunity_id=opportunity_id,
+                created_by=int(user["id"]),
+                entry_type="stage_change",
+                title=f"Stage changed to {updates['stage']}",
+                body=f"Stage changed from {previous_stage} to {updates['stage']}.",
+            )
         connection.commit()
         updated = fetch_owned_opportunity(connection, opportunity_id, int(user["id"]))
 
@@ -209,6 +229,41 @@ def delete_opportunity(
                 detail="Opportunity not found",
             )
 
+        connection.execute(
+            """
+            UPDATE comments
+            SET deleted_at = CURRENT_TIMESTAMP
+            WHERE deleted_at IS NULL
+                AND note_id IN (
+                    SELECT notes.id
+                    FROM notes
+                    JOIN timeline_entries ON timeline_entries.id = notes.entry_id
+                    WHERE timeline_entries.opportunity_id = ?
+                )
+            """,
+            (opportunity_id,),
+        )
+        connection.execute(
+            """
+            UPDATE notes
+            SET deleted_at = CURRENT_TIMESTAMP
+            WHERE deleted_at IS NULL
+                AND entry_id IN (
+                    SELECT id
+                    FROM timeline_entries
+                    WHERE opportunity_id = ?
+                )
+            """,
+            (opportunity_id,),
+        )
+        connection.execute(
+            """
+            UPDATE timeline_entries
+            SET deleted_at = CURRENT_TIMESTAMP
+            WHERE opportunity_id = ? AND deleted_at IS NULL
+            """,
+            (opportunity_id,),
+        )
         connection.execute(
             """
             UPDATE opportunities

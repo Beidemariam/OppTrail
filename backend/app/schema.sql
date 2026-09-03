@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS timeline_entries (
     event_timestamp TEXT NOT NULL,
     follow_up_date TEXT,
     created_by INTEGER REFERENCES users(id),
+    system_generated INTEGER NOT NULL DEFAULT 0 CHECK (system_generated IN (0, 1)),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at TEXT
 );

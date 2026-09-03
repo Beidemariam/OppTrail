@@ -137,11 +137,11 @@ Permissions Model from AGENTS.md server-side (not just hidden in the UI).
 - Acceptance: a user can sign up, create an opportunity, see it on the dashboard
 
 **Phase 2 — Timeline Tree**
-- [ ] TimelineEntry CRUD, Note CRUD (addable to any entry at any time), Comment
+- [x] TimelineEntry CRUD, Note CRUD (addable to any entry at any time), Comment
       CRUD (addable to any note)
-- [ ] Permission checks enforced server-side for Viewer/Editor/Owner
-- [ ] Auto-logged system entries for stage changes and opportunity creation
-- [ ] Timeline search/filter (keyword, type, date range, author)
+- [x] Permission checks enforced server-side for Viewer/Editor/Owner
+- [x] Auto-logged system entries for stage changes and opportunity creation
+- [x] Timeline search/filter (keyword, type, date range, author)
 - Acceptance: a full entry -> note -> comment chain can be created, edited where
   allowed, searched/filtered, and a Viewer is blocked from writing
 
