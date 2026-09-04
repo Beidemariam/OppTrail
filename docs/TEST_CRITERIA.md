@@ -152,26 +152,53 @@ Retest: Focused regression tests passed; full backend suite passed with 94% cove
 
 ## Phase 3 - Sharing
 
-- [ ] Owner can share an opportunity with an existing user by email.
-- [ ] Sharing with a nonexistent email returns a clear error.
-- [ ] Owner can assign Viewer or Editor role.
-- [ ] Owner can change a shared user's role.
-- [ ] Owner can remove a share.
-- [ ] Non-owner cannot manage sharing.
-- [ ] Shared user sees the opportunity on their dashboard.
-- [ ] Viewer and Editor permissions are enforced server-side.
-- [ ] Share add/change/remove creates audit log entries.
-- [ ] Share add/change/remove creates system timeline entries.
-- [ ] Owner can view the opportunity audit log.
-- [ ] Non-owner cannot view the audit log.
-- [ ] Backend tests cover sharing permissions, role changes, audit log, and
+- [x] Owner can share an opportunity with an existing user by email.
+- [x] Sharing with a nonexistent email returns a clear error.
+- [x] Owner can assign Viewer or Editor role.
+- [x] Owner can change a shared user's role.
+- [x] Owner can remove a share.
+- [x] Non-owner cannot manage sharing.
+- [x] Shared user sees the opportunity on their dashboard.
+- [x] Viewer and Editor permissions are enforced server-side.
+- [x] Share add/change/remove creates audit log entries.
+- [x] Share add/change/remove creates system timeline entries.
+- [x] Owner can view the opportunity audit log.
+- [x] Non-owner cannot view the audit log.
+- [x] Backend tests cover sharing permissions, role changes, audit log, and
       system timeline entries.
-- [ ] Backend coverage is at least 80% for implemented business/API modules.
+- [x] Backend coverage is at least 80% for implemented business/API modules.
 
 Acceptance gate: Owner shares with a second test user, who sees the opportunity
 with the correct permissions.
 
-Decision: Review | Accept | Reject
+User test steps:
+1. Open `http://localhost:8000` in one browser or profile and sign in as the
+   opportunity Owner.
+2. In a second browser or private window, sign up a colleague account, then sign
+   out.
+3. Return to the Owner session, open an opportunity timeline, and use the
+   Sharing panel to add the colleague email as Viewer.
+4. Confirm the colleague appears in the share list and the timeline shows a
+   `Shared with ...` system entry.
+5. Open the Audit Log and confirm a `share_added` row appears.
+6. Sign in as the colleague and confirm the shared opportunity appears on the
+   dashboard with role `viewer`.
+7. Open the timeline as the Viewer and confirm timeline write controls are not
+   shown.
+8. Sign back in as Owner, change the colleague role to Editor, and confirm the
+   timeline shows `Role changed for ...` and Audit Log shows
+   `share_role_changed`.
+9. Sign in as the colleague again and confirm entry/note/comment write controls
+   are available.
+10. Return as Owner, remove the share, and confirm Audit Log shows
+    `share_removed`.
+11. Sign in as the colleague and confirm the opportunity no longer appears on
+    their dashboard.
+
+Decision: Review
+Reviewer:
+Date: 2026-09-04
+Notes: Phase 3 sharing APIs, owner UI, role enforcement, audit log, system timeline entries, and backend coverage gate are ready for user review.
 
 ## Phase 4 - AI Agent
 

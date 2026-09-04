@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from .database import initialize_database
 from .routes_auth import router as auth_router
 from .routes_opportunities import router as opportunities_router
+from .routes_sharing import router as sharing_router
 from .routes_timeline import router as timeline_router
 from .settings import settings
 
@@ -21,6 +22,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="OppTrail API", version="0.1.0", lifespan=lifespan)
 app.include_router(auth_router)
 app.include_router(opportunities_router)
+app.include_router(sharing_router)
 app.include_router(timeline_router)
 
 

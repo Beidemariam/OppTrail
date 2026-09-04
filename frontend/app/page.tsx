@@ -41,6 +41,27 @@ type Opportunity = {
   owner_name: string;
   expected_close_date: string | null;
   stalled: boolean;
+  current_user_role: "owner" | "editor" | "viewer";
+};
+
+type OpportunityShare = {
+  user_id: number;
+  email: string;
+  name: string;
+  role: "viewer" | "editor";
+  invited_by: number;
+  invited_by_name: string;
+  created_at: string;
+};
+
+type AuditLogEntry = {
+  id: number;
+  opportunity_id: number;
+  actor_id: number | null;
+  actor_name: string | null;
+  action: string;
+  detail: string;
+  created_at: string;
 };
 
 type TimelineComment = {
@@ -104,6 +125,11 @@ type TimelineFilters = {
   author_id: string;
 };
 
+type ShareForm = {
+  email: string;
+  role: "viewer" | "editor";
+};
+
 const emptyOpportunityForm: OpportunityForm = {
   name: "",
   account_name: "",
@@ -127,6 +153,11 @@ const emptyFilters: TimelineFilters = {
   from: "",
   to: "",
   author_id: "",
+};
+
+const emptyShareForm: ShareForm = {
+  email: "",
+  role: "viewer",
 };
 
 function toDateTimeInput(value: string) {
@@ -184,6 +215,9 @@ export default function Home() {
   const [editingEntryId, setEditingEntryId] = useState<number | null>(null);
   const [timelineFilters, setTimelineFilters] =
     useState<TimelineFilters>(emptyFilters);
+  const [shareForm, setShareForm] = useState<ShareForm>(emptyShareForm);
+  const [shares, setShares] = useState<OpportunityShare[]>([]);
+  const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
   const [noteForms, setNoteForms] = useState<Record<number, string>>({});
   const [editingNotes, setEditingNotes] = useState<Record<number, string>>({});
   const [commentForms, setCommentForms] = useState<Record<number, string>>({});
@@ -196,6 +230,11 @@ export default function Home() {
       null,
     [opportunities, selectedOpportunityId],
   );
+  const canManageSelectedOpportunity =
+    selectedOpportunity?.current_user_role === "owner";
+  const canWriteSelectedTimeline =
+    selectedOpportunity?.current_user_role === "owner" ||
+    selectedOpportunity?.current_user_role === "editor";
 
   useEffect(() => {
     apiRequest<{ user: User }>("/api/auth/me")
@@ -245,6 +284,23 @@ export default function Home() {
     setTimelineEntries(data.entries);
   }
 
+  async function loadSharingData(opportunityId: number, role: string) {
+    if (role !== "owner") {
+      setShares([]);
+      setAuditLog([]);
+      return;
+    }
+
+    const [shareData, auditData] = await Promise.all([
+      apiRequest<{ shares: OpportunityShare[] }>(
+        `/api/opportunities/${opportunityId}/shares`,
+      ),
+      apiRequest<AuditLogEntry[]>(`/api/opportunities/${opportunityId}/audit-log`),
+    ]);
+    setShares(shareData.shares);
+    setAuditLog(auditData);
+  }
+
   async function submitAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -275,6 +331,8 @@ export default function Home() {
     setUser(null);
     setOpportunities([]);
     setTimelineEntries([]);
+    setShares([]);
+    setAuditLog([]);
     setSelectedOpportunityId(null);
     setOpportunityForm(emptyOpportunityForm);
     setEditingId(null);
@@ -341,6 +399,8 @@ export default function Home() {
       if (selectedOpportunityId === opportunityId) {
         setSelectedOpportunityId(null);
         setTimelineEntries([]);
+        setShares([]);
+        setAuditLog([]);
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not delete opportunity");
@@ -362,6 +422,7 @@ export default function Home() {
         `/api/opportunities/${opportunity.id}/timeline`,
       );
       setTimelineEntries(data.entries);
+      await loadSharingData(opportunity.id, opportunity.current_user_role);
       setStatus("");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not load timeline");
@@ -400,6 +461,83 @@ export default function Home() {
       await loadTimeline(selectedOpportunityId);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not save entry");
+      setStatus("");
+    }
+  }
+
+  async function submitShare(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedOpportunity) {
+      return;
+    }
+
+    setError("");
+    setStatus("Sharing opportunity...");
+    try {
+      await apiRequest(`/api/opportunities/${selectedOpportunity.id}/shares`, {
+        method: "POST",
+        body: JSON.stringify(shareForm),
+      });
+      setShareForm(emptyShareForm);
+      await loadSharingData(
+        selectedOpportunity.id,
+        selectedOpportunity.current_user_role,
+      );
+      await loadTimeline(selectedOpportunity.id);
+      setStatus("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not share opportunity");
+      setStatus("");
+    }
+  }
+
+  async function updateShareRole(userId: number, role: "viewer" | "editor") {
+    if (!selectedOpportunity) {
+      return;
+    }
+
+    setError("");
+    setStatus("Updating share...");
+    try {
+      await apiRequest(
+        `/api/opportunities/${selectedOpportunity.id}/shares/${userId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ role }),
+        },
+      );
+      await loadSharingData(
+        selectedOpportunity.id,
+        selectedOpportunity.current_user_role,
+      );
+      await loadTimeline(selectedOpportunity.id);
+      setStatus("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not update share");
+      setStatus("");
+    }
+  }
+
+  async function removeShare(userId: number) {
+    if (!selectedOpportunity) {
+      return;
+    }
+
+    setError("");
+    setStatus("Removing share...");
+    try {
+      await apiRequest(
+        `/api/opportunities/${selectedOpportunity.id}/shares/${userId}`,
+        { method: "DELETE" },
+      );
+      await loadSharingData(
+        selectedOpportunity.id,
+        selectedOpportunity.current_user_role,
+      );
+      await loadTimeline(selectedOpportunity.id);
+      setStatus("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not remove share");
       setStatus("");
     }
   }
@@ -814,6 +952,10 @@ export default function Home() {
                             <dd>{opportunity.owner_name}</dd>
                           </div>
                           <div>
+                            <dt>Your role</dt>
+                            <dd>{opportunity.current_user_role}</dd>
+                          </div>
+                          <div>
                             <dt>Close</dt>
                             <dd>{opportunity.expected_close_date ?? "Not set"}</dd>
                           </div>
@@ -826,20 +968,24 @@ export default function Home() {
                           >
                             Timeline
                           </button>
-                          <button
-                            type="button"
-                            className="secondary-button"
-                            onClick={() => editOpportunity(opportunity)}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            className="danger-button"
-                            onClick={() => deleteOpportunity(opportunity.id)}
-                          >
-                            Delete
-                          </button>
+                          {opportunity.current_user_role === "owner" && (
+                            <>
+                              <button
+                                type="button"
+                                className="secondary-button"
+                                onClick={() => editOpportunity(opportunity)}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                className="danger-button"
+                                onClick={() => deleteOpportunity(opportunity.id)}
+                              >
+                                Delete
+                              </button>
+                            </>
+                          )}
                         </div>
                       </article>
                     ))}
@@ -855,6 +1001,9 @@ export default function Home() {
                 <div>
                   <p className="eyebrow">{selectedOpportunity.account_name}</p>
                   <h2>{selectedOpportunity.name}</h2>
+                  <p className="meta-row">
+                    Your role: {selectedOpportunity.current_user_role}
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -864,6 +1013,94 @@ export default function Home() {
                   Refresh
                 </button>
               </div>
+
+              {canManageSelectedOpportunity && (
+                <section className="sharing-panel">
+                  <div className="section-heading">
+                    <h3>Sharing</h3>
+                    <span>{shares.length} shared</span>
+                  </div>
+
+                  <form className="share-form" onSubmit={submitShare}>
+                    <input
+                      type="email"
+                      placeholder="Colleague email"
+                      value={shareForm.email}
+                      onChange={(event) =>
+                        setShareForm({ ...shareForm, email: event.target.value })
+                      }
+                      required
+                    />
+                    <select
+                      value={shareForm.role}
+                      onChange={(event) =>
+                        setShareForm({
+                          ...shareForm,
+                          role: event.target.value as "viewer" | "editor",
+                        })
+                      }
+                    >
+                      <option value="viewer">Viewer</option>
+                      <option value="editor">Editor</option>
+                    </select>
+                    <button className="primary-button" type="submit">
+                      Share
+                    </button>
+                  </form>
+
+                  {shares.length === 0 ? (
+                    <p className="empty-state">No shared colleagues</p>
+                  ) : (
+                    <div className="share-list">
+                      {shares.map((share) => (
+                        <div className="share-row" key={share.user_id}>
+                          <div>
+                            <strong>{share.name}</strong>
+                            <p>{share.email}</p>
+                          </div>
+                          <select
+                            value={share.role}
+                            onChange={(event) =>
+                              updateShareRole(
+                                share.user_id,
+                                event.target.value as "viewer" | "editor",
+                              )
+                            }
+                          >
+                            <option value="viewer">Viewer</option>
+                            <option value="editor">Editor</option>
+                          </select>
+                          <button
+                            type="button"
+                            className="danger-button"
+                            onClick={() => removeShare(share.user_id)}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <details className="audit-panel">
+                    <summary>Audit Log</summary>
+                    {auditLog.length === 0 ? (
+                      <p className="empty-state">No audit events yet</p>
+                    ) : (
+                      <div className="audit-list">
+                        {auditLog.map((item) => (
+                          <div className="audit-row" key={item.id}>
+                            <strong>{item.action}</strong>
+                            <span>{toDateTimeInput(item.created_at)}</span>
+                            <p>{item.actor_name ?? "System"}</p>
+                            <code>{item.detail}</code>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </details>
+                </section>
+              )}
 
               <form className="filter-bar" onSubmit={applyTimelineFilters}>
                 <input
@@ -924,95 +1161,97 @@ export default function Home() {
                 </button>
               </form>
 
-              <form className="timeline-form" onSubmit={submitTimelineEntry}>
-                <div className="timeline-form-grid">
+              {canWriteSelectedTimeline && (
+                <form className="timeline-form" onSubmit={submitTimelineEntry}>
+                  <div className="timeline-form-grid">
+                    <label>
+                      Type
+                      <select
+                        value={entryForm.type}
+                        onChange={(event) =>
+                          setEntryForm({
+                            ...entryForm,
+                            type: event.target.value as EntryType,
+                          })
+                        }
+                      >
+                        {entryTypes.map((entryType) => (
+                          <option key={entryType.value} value={entryType.value}>
+                            {entryType.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Event time
+                      <input
+                        type="datetime-local"
+                        value={entryForm.event_timestamp}
+                        onChange={(event) =>
+                          setEntryForm({
+                            ...entryForm,
+                            event_timestamp: event.target.value,
+                          })
+                        }
+                        required
+                      />
+                    </label>
+                    <label>
+                      Follow up
+                      <input
+                        type="date"
+                        value={entryForm.follow_up_date}
+                        onChange={(event) =>
+                          setEntryForm({
+                            ...entryForm,
+                            follow_up_date: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                  </div>
                   <label>
-                    Type
-                    <select
-                      value={entryForm.type}
-                      onChange={(event) =>
-                        setEntryForm({
-                          ...entryForm,
-                          type: event.target.value as EntryType,
-                        })
-                      }
-                    >
-                      {entryTypes.map((entryType) => (
-                        <option key={entryType.value} value={entryType.value}>
-                          {entryType.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Event time
+                    Title
                     <input
-                      type="datetime-local"
-                      value={entryForm.event_timestamp}
+                      value={entryForm.title}
                       onChange={(event) =>
-                        setEntryForm({
-                          ...entryForm,
-                          event_timestamp: event.target.value,
-                        })
+                        setEntryForm({ ...entryForm, title: event.target.value })
                       }
                       required
                     />
                   </label>
                   <label>
-                    Follow up
-                    <input
-                      type="date"
-                      value={entryForm.follow_up_date}
+                    Body
+                    <textarea
+                      value={entryForm.body}
                       onChange={(event) =>
-                        setEntryForm({
-                          ...entryForm,
-                          follow_up_date: event.target.value,
-                        })
+                        setEntryForm({ ...entryForm, body: event.target.value })
                       }
+                      rows={3}
                     />
                   </label>
-                </div>
-                <label>
-                  Title
-                  <input
-                    value={entryForm.title}
-                    onChange={(event) =>
-                      setEntryForm({ ...entryForm, title: event.target.value })
-                    }
-                    required
-                  />
-                </label>
-                <label>
-                  Body
-                  <textarea
-                    value={entryForm.body}
-                    onChange={(event) =>
-                      setEntryForm({ ...entryForm, body: event.target.value })
-                    }
-                    rows={3}
-                  />
-                </label>
-                <div className="inline-actions">
-                  <button className="primary-button" type="submit">
-                    {editingEntryId ? "Save Entry" : "Add Entry"}
-                  </button>
-                  {editingEntryId && (
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      onClick={() => {
-                        setEditingEntryId(null);
-                        setEntryForm({
-                          ...emptyEntryForm,
-                          event_timestamp: nowDateTimeInput(),
-                        });
-                      }}
-                    >
-                      Cancel
+                  <div className="inline-actions">
+                    <button className="primary-button" type="submit">
+                      {editingEntryId ? "Save Entry" : "Add Entry"}
                     </button>
-                  )}
-                </div>
-              </form>
+                    {editingEntryId && (
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        onClick={() => {
+                          setEditingEntryId(null);
+                          setEntryForm({
+                            ...emptyEntryForm,
+                            event_timestamp: nowDateTimeInput(),
+                          });
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                </form>
+              )}
 
               {timelineEntries.length === 0 ? (
                 <p className="empty-state">No timeline entries match this view.</p>
@@ -1040,7 +1279,7 @@ export default function Home() {
                             <h3>{entry.title}</h3>
                             <p className="timeline-copy">{entry.body || "No details"}</p>
                           </div>
-                          {!entry.system_generated && (
+                          {canWriteSelectedTimeline && !entry.system_generated && (
                             <div className="inline-actions">
                               <button
                                 type="button"
@@ -1074,27 +1313,29 @@ export default function Home() {
                                   {note.author_name}
                                   {note.edited ? " | edited" : ""}
                                 </p>
-                                <div className="inline-actions">
-                                  <button
-                                    type="button"
-                                    className="secondary-button"
-                                    onClick={() =>
-                                      setEditingNotes({
-                                        ...editingNotes,
-                                        [note.id]: note.body,
-                                      })
-                                    }
-                                  >
-                                    Edit
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="danger-button"
-                                    onClick={() => deleteNote(note.id)}
-                                  >
-                                    Delete
-                                  </button>
-                                </div>
+                                {canWriteSelectedTimeline && (
+                                  <div className="inline-actions">
+                                    <button
+                                      type="button"
+                                      className="secondary-button"
+                                      onClick={() =>
+                                        setEditingNotes({
+                                          ...editingNotes,
+                                          [note.id]: note.body,
+                                        })
+                                      }
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="danger-button"
+                                      onClick={() => deleteNote(note.id)}
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
+                                )}
                               </div>
 
                               {editingNotes[note.id] !== undefined ? (
@@ -1141,58 +1382,64 @@ export default function Home() {
                                       <strong>{comment.author_name}</strong>{" "}
                                       {comment.body}
                                     </p>
-                                    <button
-                                      type="button"
-                                      className="danger-button compact"
-                                      onClick={() => deleteComment(comment.id)}
-                                    >
-                                      Delete
-                                    </button>
+                                    {canWriteSelectedTimeline && (
+                                      <button
+                                        type="button"
+                                        className="danger-button compact"
+                                        onClick={() => deleteComment(comment.id)}
+                                      >
+                                        Delete
+                                      </button>
+                                    )}
                                   </div>
                                 ))}
                               </div>
 
-                              <div className="inline-compose">
-                                <input
-                                  placeholder="Add comment"
-                                  value={commentForms[note.id] ?? ""}
-                                  onChange={(event) =>
-                                    setCommentForms({
-                                      ...commentForms,
-                                      [note.id]: event.target.value,
-                                    })
-                                  }
-                                />
-                                <button
-                                  type="button"
-                                  className="secondary-button"
-                                  onClick={() => addComment(note.id)}
-                                >
-                                  Post
-                                </button>
-                              </div>
+                              {canWriteSelectedTimeline && (
+                                <div className="inline-compose">
+                                  <input
+                                    placeholder="Add comment"
+                                    value={commentForms[note.id] ?? ""}
+                                    onChange={(event) =>
+                                      setCommentForms({
+                                        ...commentForms,
+                                        [note.id]: event.target.value,
+                                      })
+                                    }
+                                  />
+                                  <button
+                                    type="button"
+                                    className="secondary-button"
+                                    onClick={() => addComment(note.id)}
+                                  >
+                                    Post
+                                  </button>
+                                </div>
+                              )}
                             </section>
                           ))}
 
-                          <div className="inline-compose">
-                            <input
-                              placeholder="Add note"
-                              value={noteForms[entry.id] ?? ""}
-                              onChange={(event) =>
-                                setNoteForms({
-                                  ...noteForms,
-                                  [entry.id]: event.target.value,
-                                })
-                              }
-                            />
-                            <button
-                              type="button"
-                              className="secondary-button"
-                              onClick={() => addNote(entry.id)}
-                            >
-                              Add Note
-                            </button>
-                          </div>
+                          {canWriteSelectedTimeline && (
+                            <div className="inline-compose">
+                              <input
+                                placeholder="Add note"
+                                value={noteForms[entry.id] ?? ""}
+                                onChange={(event) =>
+                                  setNoteForms({
+                                    ...noteForms,
+                                    [entry.id]: event.target.value,
+                                  })
+                                }
+                              />
+                              <button
+                                type="button"
+                                className="secondary-button"
+                                onClick={() => addNote(entry.id)}
+                              >
+                                Add Note
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </article>

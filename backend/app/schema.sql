@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS opportunity_shares (
     role TEXT NOT NULL CHECK (role IN ('viewer', 'editor')),
     invited_by INTEGER NOT NULL REFERENCES users(id),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TEXT,
     UNIQUE (opportunity_id, user_id)
 );
 

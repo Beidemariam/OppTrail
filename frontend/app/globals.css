@@ -132,6 +132,9 @@ button {
 .form textarea,
 .filter-bar input,
 .filter-bar select,
+.share-form input,
+.share-form select,
+.share-row select,
 .timeline-form input,
 .timeline-form select,
 .timeline-form textarea,
@@ -382,6 +385,7 @@ textarea {
 
 .timeline-heading,
 .timeline-entry-header,
+.section-heading,
 .note-header,
 .inline-actions,
 .inline-compose {
@@ -392,10 +396,94 @@ textarea {
 }
 
 .filter-bar,
+.share-form,
 .timeline-form,
 .stacked-form {
   display: grid;
   gap: 12px;
+}
+
+.sharing-panel {
+  background: #f7f9fb;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.section-heading h3 {
+  font-size: 18px;
+  margin: 0;
+}
+
+.section-heading span {
+  color: var(--slate);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.share-form {
+  grid-template-columns: minmax(220px, 1fr) 150px auto;
+}
+
+.share-list,
+.audit-list {
+  display: grid;
+  gap: 8px;
+}
+
+.share-row {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #e8eef4;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(180px, 1fr) 150px auto;
+  padding: 10px;
+}
+
+.share-row p,
+.audit-row p {
+  color: var(--slate);
+  font-size: 13px;
+  margin: 3px 0 0;
+}
+
+.audit-panel {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.audit-panel summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.audit-list {
+  margin-top: 10px;
+}
+
+.audit-row {
+  background: #fff;
+  border: 1px solid #e8eef4;
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+}
+
+.audit-row span {
+  color: var(--slate);
+  font-size: 12px;
+}
+
+.audit-row code {
+  color: #24364a;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .filter-bar {
@@ -609,12 +697,15 @@ textarea {
   }
 
   .filter-bar,
+  .share-form,
+  .share-row,
   .timeline-form-grid {
     grid-template-columns: 1fr;
   }
 
   .timeline-heading,
   .timeline-entry-header,
+  .section-heading,
   .note-header {
     align-items: stretch;
     flex-direction: column;

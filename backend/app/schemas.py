@@ -14,6 +14,8 @@ Stage = Literal[
     "Closed Lost",
 ]
 
+ShareRole = Literal["viewer", "editor"]
+
 STAGES: list[str] = [
     "Prospecting",
     "Qualification",
@@ -120,6 +122,7 @@ class OpportunityPublic(BaseModel):
     created_at: str
     updated_at: str
     stalled: bool = False
+    current_user_role: str = "owner"
 
     @field_serializer("value")
     def serialize_value(self, value: Decimal) -> str:
@@ -244,3 +247,41 @@ class CommentCreate(BaseModel):
     @classmethod
     def strip_body(cls, value: str) -> str:
         return value.strip()
+
+
+class ShareCreate(BaseModel):
+    email: str
+    role: ShareRole
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        return value.strip().lower()
+
+
+class ShareUpdate(BaseModel):
+    role: ShareRole
+
+
+class SharePublic(BaseModel):
+    user_id: int
+    email: str
+    name: str
+    role: str
+    invited_by: int
+    invited_by_name: str
+    created_at: str
+
+
+class ShareListResponse(BaseModel):
+    shares: list[SharePublic]
+
+
+class AuditLogEntryPublic(BaseModel):
+    id: int
+    opportunity_id: int
+    actor_id: int | None
+    actor_name: str | None
+    action: str
+    detail: str
+    created_at: str

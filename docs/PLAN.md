@@ -146,9 +146,9 @@ Permissions Model from AGENTS.md server-side (not just hidden in the UI).
   allowed, searched/filtered, and a Viewer is blocked from writing
 
 **Phase 3 — Sharing**
-- [ ] Invite by email, assign/change/remove role
-- [ ] Audit log entries for share/role changes
-- [ ] Auto-logged system timeline entries for share/role changes
+- [x] Invite by email, assign/change/remove role
+- [x] Audit log entries for share/role changes
+- [x] Auto-logged system timeline entries for share/role changes
 - Acceptance: Owner shares with a second test user, who sees the opportunity
   with the correct permissions
 

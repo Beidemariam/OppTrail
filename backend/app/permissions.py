@@ -19,6 +19,7 @@ def get_opportunity_role(
         LEFT JOIN opportunity_shares
             ON opportunity_shares.opportunity_id = opportunities.id
             AND opportunity_shares.user_id = ?
+            AND opportunity_shares.deleted_at IS NULL
         WHERE opportunities.id = ?
             AND opportunities.deleted_at IS NULL
             AND (
@@ -62,3 +63,16 @@ def require_timeline_write(
             detail="Viewer cannot edit this opportunity",
         )
     return role
+
+
+def require_opportunity_owner(
+    connection: sqlite3.Connection,
+    opportunity_id: int,
+    user_id: int,
+) -> None:
+    role = require_opportunity_access(connection, opportunity_id, user_id)
+    if role != "owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the owner can manage this opportunity",
+        )

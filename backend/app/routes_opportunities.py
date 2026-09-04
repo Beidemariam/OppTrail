@@ -32,6 +32,7 @@ def opportunity_from_row(row: sqlite3.Row) -> OpportunityPublic:
         created_at=row["created_at"],
         updated_at=row["updated_at"],
         stalled=False,
+        current_user_role=row["current_user_role"],
     )
 
 
@@ -42,12 +43,19 @@ def fetch_accessible_opportunity(
 ) -> sqlite3.Row | None:
     return connection.execute(
         """
-        SELECT opportunities.*, users.name AS owner_name
+        SELECT
+            opportunities.*,
+            users.name AS owner_name,
+            CASE
+                WHEN opportunities.owner_id = ? THEN 'owner'
+                ELSE opportunity_shares.role
+            END AS current_user_role
         FROM opportunities
         JOIN users ON users.id = opportunities.owner_id
         LEFT JOIN opportunity_shares
             ON opportunity_shares.opportunity_id = opportunities.id
             AND opportunity_shares.user_id = ?
+            AND opportunity_shares.deleted_at IS NULL
         WHERE opportunities.id = ?
             AND opportunities.deleted_at IS NULL
             AND (
@@ -55,7 +63,7 @@ def fetch_accessible_opportunity(
                 OR opportunity_shares.user_id IS NOT NULL
             )
         """,
-        (user_id, opportunity_id, user_id),
+        (user_id, user_id, opportunity_id, user_id),
     ).fetchone()
 
 
@@ -66,7 +74,7 @@ def fetch_owned_opportunity(
 ) -> sqlite3.Row | None:
     return connection.execute(
         """
-        SELECT opportunities.*, users.name AS owner_name
+        SELECT opportunities.*, users.name AS owner_name, 'owner' AS current_user_role
         FROM opportunities
         JOIN users ON users.id = opportunities.owner_id
         WHERE opportunities.id = ?
@@ -84,11 +92,18 @@ def list_opportunities(
     with db_connection() as connection:
         rows = connection.execute(
             """
-            SELECT DISTINCT opportunities.*, users.name AS owner_name
+            SELECT DISTINCT
+                opportunities.*,
+                users.name AS owner_name,
+                CASE
+                    WHEN opportunities.owner_id = ? THEN 'owner'
+                    ELSE opportunity_shares.role
+                END AS current_user_role
             FROM opportunities
             JOIN users ON users.id = opportunities.owner_id
             LEFT JOIN opportunity_shares
                 ON opportunity_shares.opportunity_id = opportunities.id
+                AND opportunity_shares.deleted_at IS NULL
             WHERE opportunities.deleted_at IS NULL
                 AND (
                     opportunities.owner_id = ?
@@ -96,7 +111,7 @@ def list_opportunities(
                 )
             ORDER BY opportunities.updated_at DESC, opportunities.id DESC
             """,
-            (user["id"], user["id"]),
+            (user["id"], user["id"], user["id"]),
         ).fetchall()
 
     return OpportunityListResponse(
@@ -259,6 +274,14 @@ def delete_opportunity(
         connection.execute(
             """
             UPDATE timeline_entries
+            SET deleted_at = CURRENT_TIMESTAMP
+            WHERE opportunity_id = ? AND deleted_at IS NULL
+            """,
+            (opportunity_id,),
+        )
+        connection.execute(
+            """
+            UPDATE opportunity_shares
             SET deleted_at = CURRENT_TIMESTAMP
             WHERE opportunity_id = ? AND deleted_at IS NULL
             """,

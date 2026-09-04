@@ -60,6 +60,13 @@ def run_migrations(connection: sqlite3.Connection) -> None:
             ADD COLUMN system_generated INTEGER NOT NULL DEFAULT 0
             """
         )
+    if not column_exists(connection, "opportunity_shares", "deleted_at"):
+        connection.execute(
+            """
+            ALTER TABLE opportunity_shares
+            ADD COLUMN deleted_at TEXT
+            """
+        )
     backfill_opportunity_created_entries(connection)
 
 
