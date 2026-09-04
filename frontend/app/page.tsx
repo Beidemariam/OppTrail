@@ -1087,13 +1087,33 @@ export default function Home() {
                     Your role: {selectedOpportunity.current_user_role}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={() => void loadTimeline(selectedOpportunity.id)}
-                >
-                  Refresh
-                </button>
+                <div className="export-actions">
+                  <a
+                    className="secondary-button"
+                    href={`/api/opportunities/${selectedOpportunity.id}/export/pdf`}
+                  >
+                    PDF
+                  </a>
+                  <a
+                    className="secondary-button"
+                    href={`/api/opportunities/${selectedOpportunity.id}/export/csv`}
+                  >
+                    CSV
+                  </a>
+                  <a
+                    className="secondary-button"
+                    href={`/api/opportunities/${selectedOpportunity.id}/export/json`}
+                  >
+                    JSON
+                  </a>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => void loadTimeline(selectedOpportunity.id)}
+                  >
+                    Refresh
+                  </button>
+                </div>
               </div>
 
               {canManageSelectedOpportunity && (

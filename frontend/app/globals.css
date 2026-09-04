@@ -207,6 +207,12 @@ textarea {
   white-space: normal;
 }
 
+a.primary-button,
+a.secondary-button,
+a.danger-button {
+  text-decoration: none;
+}
+
 .primary-button {
   background: var(--teal);
   border: 1px solid var(--teal);
@@ -403,6 +409,20 @@ textarea {
 .empty-panel h2,
 .timeline-heading h2 {
   margin: 0;
+}
+
+.export-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.export-actions .secondary-button {
+  min-height: 40px;
+  min-width: 64px;
+  padding: 8px 12px;
 }
 
 .timeline-heading,
@@ -805,6 +825,14 @@ textarea {
   .note-header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .export-actions {
+    justify-content: stretch;
+  }
+
+  .export-actions .secondary-button {
+    flex: 1 1 96px;
   }
 
   .card-actions {

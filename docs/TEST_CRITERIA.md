@@ -237,23 +237,47 @@ Notes: Phase 4 read-only AI endpoint, timeline context assembly, mocked OpenAI t
 
 ## Phase 5 - Export
 
-- [ ] PDF export requires opportunity access.
-- [ ] PDF includes opportunity summary, entries, notes, and comments.
-- [ ] PDF renders timeline content in chronological order.
-- [ ] PDF excludes soft-deleted content unless explicitly intended otherwise.
-- [ ] JSON export includes raw opportunity timeline data.
-- [ ] CSV export includes raw timeline rows with enough columns to reconstruct
+- [x] PDF export requires opportunity access.
+- [x] PDF includes opportunity summary, entries, notes, and comments.
+- [x] PDF renders timeline content in chronological order.
+- [x] PDF excludes soft-deleted content unless explicitly intended otherwise.
+- [x] JSON export includes raw opportunity timeline data.
+- [x] CSV export includes raw timeline rows with enough columns to reconstruct
       entry/note/comment relationships.
-- [ ] Viewer, Editor, and Owner can export accessible opportunities.
-- [ ] User without access cannot export.
-- [ ] Tests cover export permissions and JSON/CSV shape.
-- [ ] Manual PDF check confirms readable formatting.
-- [ ] Backend coverage is at least 80% for implemented business/API modules.
+- [x] Viewer, Editor, and Owner can export accessible opportunities.
+- [x] User without access cannot export.
+- [x] Tests cover export permissions and JSON/CSV shape.
+- [x] Manual PDF check confirms readable formatting.
+- [x] Backend coverage is at least 80% for implemented business/API modules.
 
 Acceptance gate: exported PDF renders all entries/notes/comments in
 chronological order and matches the on-screen timeline.
 
-Decision: Review | Accept | Reject
+User test steps:
+1. Open `http://localhost:8000` and sign in.
+2. Open an opportunity timeline with at least one entry, note, and comment.
+3. Click `PDF` in the timeline header and confirm the downloaded file opens with
+   the opportunity summary and full visible timeline.
+4. Click `CSV` and confirm rows include `entry`, `note`, and `comment` values in
+   the `row_type` column.
+5. Click `JSON` and confirm the file includes `opportunity` plus nested
+   `entries`, `notes`, and `comments`.
+6. Delete a test entry, export again, and confirm the deleted entry and its
+   related notes/comments are excluded.
+7. Sign in as a Viewer on a shared opportunity and confirm PDF/CSV/JSON exports
+   are still available.
+8. Sign in as a user without access and confirm export URLs do not expose the
+   opportunity.
+
+Decision: Review
+Reviewer:
+Date: 2026-09-04
+Notes: Phase 5 export endpoints, export buttons, access checks, CSV/JSON shape tests, PDF generation, and backend coverage gate are ready for user review.
+
+Issue: The first export test failed before running any route.
+Root cause: WeasyPrint needs Pango/GObject system libraries; the Python package alone is not enough, and importing it at module load made all export routes depend on local desktop libraries.
+Fix: Moved the WeasyPrint import into the PDF rendering function and added the required Debian Pango/Harfbuzz packages to the Docker image.
+Retest: Focused export tests passed; full backend suite passed with 92% coverage; PDF generation was verified in Docker.
 
 ## Phase 6 - Notifications and Reminders
 

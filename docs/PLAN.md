@@ -159,8 +159,8 @@ Permissions Model from AGENTS.md server-side (not just hidden in the UI).
   referencing actual entries
 
 **Phase 5 — Export**
-- [ ] PDF export via WeasyPrint (opportunity summary + full timeline)
-- [ ] CSV and JSON export of raw data
+- [x] PDF export via WeasyPrint (opportunity summary + full timeline)
+- [x] CSV and JSON export of raw data
 - Acceptance: exported PDF renders all entries/notes/comments in chronological
   order and matches the on-screen timeline
 

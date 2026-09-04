@@ -13,6 +13,13 @@ ENV DATABASE_URL=sqlite:////data/app.db \
     PATH="/app/backend/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libharfbuzz-subset0 \
+        libpango-1.0-0 \
+        libpangoft2-1.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app/backend
 COPY backend/pyproject.toml backend/uv.lock ./
 RUN uv sync --locked --no-dev --no-cache
