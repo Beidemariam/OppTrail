@@ -153,8 +153,8 @@ Permissions Model from AGENTS.md server-side (not just hidden in the UI).
   with the correct permissions
 
 **Phase 4 — AI Agent**
-- [ ] Backend assembles chronological timeline text, calls OpenAI
-- [ ] Sidebar chat UI, per-opportunity conversation
+- [x] Backend assembles chronological timeline text, calls OpenAI
+- [x] Sidebar chat UI, per-opportunity conversation
 - Acceptance: asking "summarize this opportunity" returns a grounded answer
   referencing actual entries
 

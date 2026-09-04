@@ -202,20 +202,38 @@ Notes: Phase 3 sharing APIs, owner UI, role enforcement, audit log, system timel
 
 ## Phase 4 - AI Agent
 
-- [ ] AI endpoint requires a valid session.
-- [ ] Viewer, Editor, and Owner can ask read-only timeline questions.
-- [ ] User without access to the opportunity cannot ask questions.
-- [ ] Backend assembles full chronological timeline context.
-- [ ] Prompt and API code expose no database write tool or write path.
-- [ ] AI answer references actual timeline entries or dates where possible.
-- [ ] OpenAI API errors return a helpful non-crashing response.
-- [ ] Tests mock OpenAI and verify context assembly and access control.
-- [ ] Backend coverage is at least 80% for implemented business/API modules.
+- [x] AI endpoint requires a valid session.
+- [x] Viewer, Editor, and Owner can ask read-only timeline questions.
+- [x] User without access to the opportunity cannot ask questions.
+- [x] Backend assembles full chronological timeline context.
+- [x] Prompt and API code expose no database write tool or write path.
+- [x] AI answer references actual timeline entries or dates where possible.
+- [x] OpenAI API errors return a helpful non-crashing response.
+- [x] Tests mock OpenAI and verify context assembly and access control.
+- [x] Backend coverage is at least 80% for implemented business/API modules.
 
 Acceptance gate: asking "summarize this opportunity" returns a grounded answer
 referencing actual entries.
 
-Decision: Review | Accept | Reject
+User test steps:
+1. Confirm `.env` has a valid `OPENAI_API_KEY`. `OPENAI_MODEL` can be omitted to
+   use the default.
+2. Open `http://localhost:8000` and sign in.
+3. Open an opportunity timeline that has at least one manual entry and note.
+4. In the AI Agent sidebar, ask `Summarize this opportunity`.
+5. Confirm the response discusses actual timeline content and cites entries such
+   as `[Entry #id, date]`.
+6. Ask `What objections came up?` and confirm the answer stays grounded in the
+   timeline.
+7. Sign in as a Viewer on a shared opportunity and confirm the AI Agent can
+   answer while timeline write controls remain hidden.
+8. Temporarily remove or blank `OPENAI_API_KEY`, restart the app, ask the AI
+   Agent, and confirm a clear configuration error appears instead of a crash.
+
+Decision: Review
+Reviewer:
+Date: 2026-09-04
+Notes: Phase 4 read-only AI endpoint, timeline context assembly, mocked OpenAI tests, sidebar chat UI, and backend coverage gate are ready for user review.
 
 ## Phase 5 - Export
 

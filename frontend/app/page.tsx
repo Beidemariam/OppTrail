@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 const stages = [
   "Prospecting",
@@ -62,6 +62,12 @@ type AuditLogEntry = {
   action: string;
   detail: string;
   created_at: string;
+};
+
+type AiChatMessage = {
+  role: "user" | "assistant";
+  body: string;
+  referenced_entry_ids?: number[];
 };
 
 type TimelineComment = {
@@ -218,6 +224,13 @@ export default function Home() {
   const [shareForm, setShareForm] = useState<ShareForm>(emptyShareForm);
   const [shares, setShares] = useState<OpportunityShare[]>([]);
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
+  const [aiQuestion, setAiQuestion] = useState("");
+  const [aiConversations, setAiConversations] = useState<
+    Record<number, AiChatMessage[]>
+  >({});
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState("");
+  const aiChatRef = useRef<HTMLDivElement | null>(null);
   const [noteForms, setNoteForms] = useState<Record<number, string>>({});
   const [editingNotes, setEditingNotes] = useState<Record<number, string>>({});
   const [commentForms, setCommentForms] = useState<Record<number, string>>({});
@@ -235,6 +248,13 @@ export default function Home() {
   const canWriteSelectedTimeline =
     selectedOpportunity?.current_user_role === "owner" ||
     selectedOpportunity?.current_user_role === "editor";
+  const aiMessages = useMemo(
+    () =>
+      selectedOpportunityId
+        ? (aiConversations[selectedOpportunityId] ?? [])
+        : [],
+    [aiConversations, selectedOpportunityId],
+  );
 
   useEffect(() => {
     apiRequest<{ user: User }>("/api/auth/me")
@@ -247,6 +267,14 @@ export default function Home() {
         setStatus("");
       });
   }, []);
+
+  useEffect(() => {
+    const chat = aiChatRef.current;
+    if (!chat) {
+      return;
+    }
+    chat.scrollTop = chat.scrollHeight;
+  }, [aiMessages, aiLoading, aiError, selectedOpportunityId]);
 
   const groupedOpportunities = useMemo(
     () =>
@@ -333,6 +361,9 @@ export default function Home() {
     setTimelineEntries([]);
     setShares([]);
     setAuditLog([]);
+    setAiConversations({});
+    setAiQuestion("");
+    setAiError("");
     setSelectedOpportunityId(null);
     setOpportunityForm(emptyOpportunityForm);
     setEditingId(null);
@@ -414,6 +445,8 @@ export default function Home() {
     setTimelineFilters(emptyFilters);
     setEditingEntryId(null);
     setEntryForm({ ...emptyEntryForm, event_timestamp: nowDateTimeInput() });
+    setAiQuestion("");
+    setAiError("");
     setStatus("Loading timeline...");
     setError("");
 
@@ -712,6 +745,55 @@ export default function Home() {
         setError(caught instanceof Error ? caught.message : "Could not clear filters");
         setStatus("");
       }
+    }
+  }
+
+  async function submitAiQuestion(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedOpportunityId) {
+      return;
+    }
+
+    const question = aiQuestion.trim();
+    if (!question || aiLoading) {
+      return;
+    }
+
+    const userMessage: AiChatMessage = { role: "user", body: question };
+    setAiQuestion("");
+    setAiError("");
+    setAiLoading(true);
+    setAiConversations((current) => ({
+      ...current,
+      [selectedOpportunityId]: [
+        ...(current[selectedOpportunityId] ?? []),
+        userMessage,
+      ],
+    }));
+
+    try {
+      const response = await apiRequest<{
+        answer: string;
+        referenced_entry_ids: number[];
+      }>(`/api/opportunities/${selectedOpportunityId}/ai/ask`, {
+        method: "POST",
+        body: JSON.stringify({ question }),
+      });
+      setAiConversations((current) => ({
+        ...current,
+        [selectedOpportunityId]: [
+          ...(current[selectedOpportunityId] ?? []),
+          {
+            role: "assistant",
+            body: response.answer,
+            referenced_entry_ids: response.referenced_entry_ids,
+          },
+        ],
+      }));
+    } catch (caught) {
+      setAiError(caught instanceof Error ? caught.message : "AI request failed");
+    } finally {
+      setAiLoading(false);
     }
   }
 
@@ -1446,6 +1528,49 @@ export default function Home() {
                   ))}
                 </div>
               )}
+              <aside className="ai-sidebar">
+                <div className="section-heading">
+                  <h3>AI Agent</h3>
+                  <span>Read-only</span>
+                </div>
+
+                <div className="ai-chat" ref={aiChatRef}>
+                  {aiMessages.length === 0 ? (
+                    <p className="empty-state">Ask a timeline question.</p>
+                  ) : (
+                    aiMessages.map((message, index) => (
+                      <div className={`ai-message ${message.role}`} key={index}>
+                        <p>{message.body}</p>
+                        {message.referenced_entry_ids &&
+                          message.referenced_entry_ids.length > 0 && (
+                            <span>
+                              Entries: {message.referenced_entry_ids.join(", ")}
+                            </span>
+                          )}
+                      </div>
+                    ))
+                  )}
+                  {aiLoading && <p className="status">Thinking...</p>}
+                  {aiError && <p className="error">{aiError}</p>}
+                </div>
+
+                <form className="ai-form" onSubmit={submitAiQuestion}>
+                  <textarea
+                    value={aiQuestion}
+                    onChange={(event) => setAiQuestion(event.target.value)}
+                    placeholder="Where do we stand?"
+                    rows={3}
+                    required
+                  />
+                  <button
+                    type="submit"
+                    className="primary-button"
+                    disabled={aiLoading}
+                  >
+                    Ask
+                  </button>
+                </form>
+              </aside>
             </section>
           ) : (
             <section className="timeline-panel empty-panel">

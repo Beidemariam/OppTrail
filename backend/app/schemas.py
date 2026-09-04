@@ -285,3 +285,17 @@ class AuditLogEntryPublic(BaseModel):
     action: str
     detail: str
     created_at: str
+
+
+class AiAskRequest(BaseModel):
+    question: str = Field(min_length=1)
+
+    @field_validator("question")
+    @classmethod
+    def strip_question(cls, value: str) -> str:
+        return value.strip()
+
+
+class AiAskResponse(BaseModel):
+    answer: str
+    referenced_entry_ids: list[int]

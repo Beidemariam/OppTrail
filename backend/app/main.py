@@ -6,6 +6,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .database import initialize_database
+from .routes_ai import router as ai_router
 from .routes_auth import router as auth_router
 from .routes_opportunities import router as opportunities_router
 from .routes_sharing import router as sharing_router
@@ -24,6 +25,7 @@ app.include_router(auth_router)
 app.include_router(opportunities_router)
 app.include_router(sharing_router)
 app.include_router(timeline_router)
+app.include_router(ai_router)
 
 
 @app.get("/api/health")
