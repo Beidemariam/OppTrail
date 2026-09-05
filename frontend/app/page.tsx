@@ -70,6 +70,14 @@ type AiChatMessage = {
   referenced_entry_ids?: number[];
 };
 
+type AppNotification = {
+  id: number;
+  type: string;
+  payload: Record<string, unknown>;
+  read: boolean;
+  created_at: string;
+};
+
 type TimelineComment = {
   id: number;
   note_id: number;
@@ -231,6 +239,8 @@ export default function Home() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
   const aiChatRef = useRef<HTMLDivElement | null>(null);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [noteForms, setNoteForms] = useState<Record<number, string>>({});
   const [editingNotes, setEditingNotes] = useState<Record<number, string>>({});
   const [commentForms, setCommentForms] = useState<Record<number, string>>({});
@@ -261,7 +271,7 @@ export default function Home() {
       .then((data) => {
         setUser(data.user);
         setStatus("");
-        return loadOpportunities();
+        return Promise.all([loadOpportunities(), loadNotifications()]);
       })
       .catch(() => {
         setStatus("");
@@ -291,6 +301,30 @@ export default function Home() {
       opportunities: Opportunity[];
     }>("/api/opportunities");
     setOpportunities(data.opportunities);
+  }
+
+  async function loadNotifications() {
+    const data = await apiRequest<{ notifications: AppNotification[] }>(
+      "/api/notifications",
+    );
+    setNotifications(data.notifications);
+  }
+
+  function notificationText(notification: AppNotification) {
+    const title =
+      typeof notification.payload.title === "string"
+        ? notification.payload.title
+        : "";
+    if (notification.type === "mention") {
+      return "You were mentioned in a timeline update.";
+    }
+    if (notification.type === "comment") {
+      return "New comment on your note.";
+    }
+    if (notification.type === "shared_activity") {
+      return title || "New activity on a shared opportunity.";
+    }
+    return "New notification.";
   }
 
   async function loadTimeline(opportunityId = selectedOpportunityId) {
@@ -346,7 +380,7 @@ export default function Home() {
       setUser(data.user);
       setAuthPassword("");
       setStatus("");
-      await loadOpportunities();
+      await Promise.all([loadOpportunities(), loadNotifications()]);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Authentication failed");
       setStatus("");
@@ -361,6 +395,8 @@ export default function Home() {
     setTimelineEntries([]);
     setShares([]);
     setAuditLog([]);
+    setNotifications([]);
+    setShowNotifications(false);
     setAiConversations({});
     setAiQuestion("");
     setAiError("");
@@ -492,6 +528,8 @@ export default function Home() {
       setEditingEntryId(null);
       setStatus("");
       await loadTimeline(selectedOpportunityId);
+      await loadOpportunities();
+      await loadOpportunities();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not save entry");
       setStatus("");
@@ -597,6 +635,8 @@ export default function Home() {
       await apiRequest(`/api/timeline/${entryId}`, { method: "DELETE" });
       setStatus("");
       await loadTimeline(selectedOpportunityId);
+      await loadOpportunities();
+      await loadOpportunities();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not delete entry");
       setStatus("");
@@ -623,6 +663,8 @@ export default function Home() {
       setNoteForms({ ...noteForms, [entryId]: "" });
       setStatus("");
       await loadTimeline(selectedOpportunityId);
+      await loadOpportunities();
+      await loadOpportunities();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not add note");
       setStatus("");
@@ -651,6 +693,7 @@ export default function Home() {
       setEditingNotes(nextEditingNotes);
       setStatus("");
       await loadTimeline(selectedOpportunityId);
+      await loadOpportunities();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not save note");
       setStatus("");
@@ -714,6 +757,20 @@ export default function Home() {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not delete comment");
       setStatus("");
+    }
+  }
+
+  async function markNotificationRead(notificationId: number) {
+    setError("");
+    try {
+      await apiRequest(`/api/notifications/${notificationId}/read`, {
+        method: "PATCH",
+      });
+      await loadNotifications();
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Could not update notification",
+      );
     }
   }
 
@@ -878,6 +935,54 @@ export default function Home() {
           <h1>Opportunities</h1>
         </div>
         <div className="user-block">
+          <div className="notification-menu">
+            <button
+              type="button"
+              className="secondary-button notification-button"
+              onClick={() => {
+                setShowNotifications(!showNotifications);
+                void loadNotifications();
+              }}
+            >
+              Notifications
+              {notifications.length > 0 && <span>{notifications.length}</span>}
+            </button>
+            {showNotifications && (
+              <div className="notification-panel">
+                <div className="section-heading">
+                  <h3>Notifications</h3>
+                  <button
+                    type="button"
+                    className="secondary-button compact-button"
+                    onClick={() => void loadNotifications()}
+                  >
+                    Refresh
+                  </button>
+                </div>
+                {notifications.length === 0 ? (
+                  <p className="empty-state">No unread notifications</p>
+                ) : (
+                  <div className="notification-list">
+                    {notifications.map((notification) => (
+                      <article className="notification-row" key={notification.id}>
+                        <div>
+                          <strong>{notificationText(notification)}</strong>
+                          <span>{toDateTimeInput(notification.created_at)}</span>
+                        </div>
+                        <button
+                          type="button"
+                          className="secondary-button compact-button"
+                          onClick={() => void markNotificationRead(notification.id)}
+                        >
+                          Mark read
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           <span>{user.name}</span>
           <button type="button" className="secondary-button" onClick={logout}>
             Sign out
@@ -1019,7 +1124,12 @@ export default function Home() {
                         key={opportunity.id}
                       >
                         <div>
-                          <h3>{opportunity.name}</h3>
+                          <div className="card-title-row">
+                            <h3>{opportunity.name}</h3>
+                            {opportunity.stalled && (
+                              <span className="stalled-badge">Stalled</span>
+                            )}
+                          </div>
                           <p>{opportunity.account_name}</p>
                         </div>
                         <dl>

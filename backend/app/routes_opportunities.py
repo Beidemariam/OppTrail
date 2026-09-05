@@ -1,4 +1,5 @@
 import sqlite3
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -18,7 +19,46 @@ from .timeline_utils import create_system_timeline_entry
 router = APIRouter(prefix="/api/opportunities", tags=["opportunities"])
 
 
-def opportunity_from_row(row: sqlite3.Row) -> OpportunityPublic:
+def parse_activity_timestamp(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace(" ", "T")).replace(tzinfo=UTC)
+
+
+def is_opportunity_stalled(
+    connection: sqlite3.Connection,
+    opportunity_id: int,
+) -> bool:
+    rows = connection.execute(
+        """
+        SELECT event_timestamp AS activity_at
+        FROM timeline_entries
+        WHERE opportunity_id = ? AND deleted_at IS NULL
+        UNION ALL
+        SELECT notes.created_at AS activity_at
+        FROM notes
+        JOIN timeline_entries ON timeline_entries.id = notes.entry_id
+        WHERE timeline_entries.opportunity_id = ?
+            AND timeline_entries.deleted_at IS NULL
+            AND notes.deleted_at IS NULL
+        UNION ALL
+        SELECT comments.created_at AS activity_at
+        FROM comments
+        JOIN notes ON notes.id = comments.note_id
+        JOIN timeline_entries ON timeline_entries.id = notes.entry_id
+        WHERE timeline_entries.opportunity_id = ?
+            AND timeline_entries.deleted_at IS NULL
+            AND notes.deleted_at IS NULL
+            AND comments.deleted_at IS NULL
+        """,
+        (opportunity_id, opportunity_id, opportunity_id),
+    ).fetchall()
+    if not rows:
+        return False
+
+    latest_activity = max(parse_activity_timestamp(row["activity_at"]) for row in rows)
+    return latest_activity < datetime.now(UTC) - timedelta(days=14)
+
+
+def opportunity_from_row(row: sqlite3.Row, stalled: bool = False) -> OpportunityPublic:
     return OpportunityPublic(
         id=row["id"],
         name=row["name"],
@@ -31,7 +71,7 @@ def opportunity_from_row(row: sqlite3.Row) -> OpportunityPublic:
         expected_close_date=row["expected_close_date"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
-        stalled=False,
+        stalled=stalled,
         current_user_role=row["current_user_role"],
     )
 
@@ -114,10 +154,12 @@ def list_opportunities(
             (user["id"], user["id"], user["id"]),
         ).fetchall()
 
-    return OpportunityListResponse(
-        stages=STAGES,
-        opportunities=[opportunity_from_row(row) for row in rows],
-    )
+        opportunities = [
+            opportunity_from_row(row, is_opportunity_stalled(connection, row["id"]))
+            for row in rows
+        ]
+
+    return OpportunityListResponse(stages=STAGES, opportunities=opportunities)
 
 
 @router.post("", response_model=OpportunityPublic, status_code=status.HTTP_201_CREATED)
@@ -160,8 +202,9 @@ def create_opportunity(
         )
         connection.commit()
         row = fetch_owned_opportunity(connection, opportunity_id, int(user["id"]))
+        stalled = is_opportunity_stalled(connection, opportunity_id)
 
-    return opportunity_from_row(row)
+    return opportunity_from_row(row, stalled)
 
 
 @router.get("/{opportunity_id}", response_model=OpportunityPublic)
@@ -175,7 +218,10 @@ def get_opportunity(
     if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Opportunity not found")
 
-    return opportunity_from_row(row)
+    with db_connection() as connection:
+        stalled = is_opportunity_stalled(connection, opportunity_id)
+
+    return opportunity_from_row(row, stalled)
 
 
 @router.patch("/{opportunity_id}", response_model=OpportunityPublic)
@@ -188,12 +234,13 @@ def update_opportunity(
     if not updates:
         with db_connection() as connection:
             row = fetch_owned_opportunity(connection, opportunity_id, int(user["id"]))
+            stalled = is_opportunity_stalled(connection, opportunity_id)
         if not row:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Opportunity not found",
             )
-        return opportunity_from_row(row)
+        return opportunity_from_row(row, stalled)
 
     assignments = [f"{field} = ?" for field in updates]
     values = [str(value) if isinstance(value, Decimal) else value for value in updates.values()]
@@ -227,8 +274,9 @@ def update_opportunity(
             )
         connection.commit()
         updated = fetch_owned_opportunity(connection, opportunity_id, int(user["id"]))
+        stalled = is_opportunity_stalled(connection, opportunity_id)
 
-    return opportunity_from_row(updated)
+    return opportunity_from_row(updated, stalled)
 
 
 @router.delete("/{opportunity_id}", status_code=status.HTTP_204_NO_CONTENT)

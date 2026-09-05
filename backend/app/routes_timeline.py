@@ -4,6 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from .auth import get_current_user
 from .database import db_connection
+from .notification_service import (
+    notify_mentions,
+    notify_note_comment,
+    notify_shared_activity,
+)
 from .permissions import require_opportunity_access, require_timeline_write
 from .schemas import (
     CommentCreate,
@@ -303,6 +308,15 @@ def create_timeline_entry(
                 user["id"],
             ),
         )
+        entry_id = int(cursor.lastrowid)
+        notify_shared_activity(
+            connection,
+            opportunity_id,
+            int(user["id"]),
+            "entry",
+            entry_id,
+            payload.title,
+        )
         connection.commit()
         row = connection.execute(
             """
@@ -311,7 +325,7 @@ def create_timeline_entry(
             LEFT JOIN users ON users.id = timeline_entries.created_by
             WHERE timeline_entries.id = ?
             """,
-            (cursor.lastrowid,),
+            (entry_id,),
         ).fetchone()
 
     return entry_from_row(row, [])
@@ -442,6 +456,22 @@ def create_note(
             """,
             (note_id, payload.body, user["id"]),
         )
+        notify_mentions(
+            connection,
+            entry["opportunity_id"],
+            int(user["id"]),
+            payload.body,
+            "note",
+            note_id,
+        )
+        notify_shared_activity(
+            connection,
+            entry["opportunity_id"],
+            int(user["id"]),
+            "note",
+            note_id,
+            "New note",
+        )
         connection.commit()
 
         row = connection.execute(
@@ -492,6 +522,22 @@ def update_note(
             VALUES (?, ?, ?, ?)
             """,
             (note_id, next_version, payload.body, user["id"]),
+        )
+        notify_mentions(
+            connection,
+            note["opportunity_id"],
+            int(user["id"]),
+            payload.body,
+            "note",
+            note_id,
+        )
+        notify_shared_activity(
+            connection,
+            note["opportunity_id"],
+            int(user["id"]),
+            "note",
+            note_id,
+            "Note updated",
         )
         connection.commit()
 
@@ -600,6 +646,30 @@ def create_comment(
             """,
             (note_id, payload.body, user["id"]),
         )
+        comment_id = int(cursor.lastrowid)
+        notify_note_comment(
+            connection,
+            int(note["created_by"]),
+            int(user["id"]),
+            note["opportunity_id"],
+            comment_id,
+        )
+        notify_mentions(
+            connection,
+            note["opportunity_id"],
+            int(user["id"]),
+            payload.body,
+            "comment",
+            comment_id,
+        )
+        notify_shared_activity(
+            connection,
+            note["opportunity_id"],
+            int(user["id"]),
+            "comment",
+            comment_id,
+            "New comment",
+        )
         connection.commit()
         row = connection.execute(
             """
@@ -608,7 +678,7 @@ def create_comment(
             JOIN users ON users.id = comments.created_by
             WHERE comments.id = ?
             """,
-            (cursor.lastrowid,),
+            (comment_id,),
         ).fetchone()
 
     return comment_from_row(row)

@@ -251,6 +251,73 @@ a.danger-button {
   align-items: center;
   display: flex;
   gap: 12px;
+  position: relative;
+}
+
+.notification-menu {
+  position: relative;
+}
+
+.notification-button {
+  gap: 8px;
+}
+
+.notification-button span {
+  background: var(--red);
+  border-radius: 999px;
+  color: #fff;
+  font-size: 12px;
+  min-width: 22px;
+  padding: 3px 7px;
+}
+
+.notification-panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 16px 40px rgba(11, 37, 64, 0.14);
+  display: grid;
+  gap: 12px;
+  max-height: 420px;
+  overflow: auto;
+  padding: 14px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  width: min(360px, 88vw);
+  z-index: 10;
+}
+
+.notification-list {
+  display: grid;
+  gap: 10px;
+}
+
+.notification-row {
+  border: 1px solid #e8eef4;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+}
+
+.notification-row strong {
+  display: block;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.notification-row span {
+  color: var(--slate);
+  display: block;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.compact-button {
+  font-size: 13px;
+  min-height: 34px;
+  padding: 7px 10px;
 }
 
 .dashboard-layout {
@@ -343,8 +410,28 @@ a.danger-button {
 .opportunity-card h3 {
   font-size: 18px;
   line-height: 1.2;
-  margin: 0 0 4px;
+  margin: 0;
   overflow-wrap: anywhere;
+}
+
+.card-title-row {
+  align-items: start;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  margin: 0 0 4px;
+}
+
+.stalled-badge {
+  background: rgba(242, 169, 59, 0.18);
+  border: 1px solid rgba(242, 169, 59, 0.5);
+  border-radius: 999px;
+  color: #7a4d05;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 5px 7px;
 }
 
 .opportunity-card p {

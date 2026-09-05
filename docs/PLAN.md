@@ -165,10 +165,10 @@ Permissions Model from AGENTS.md server-side (not just hidden in the UI).
   order and matches the on-screen timeline
 
 **Phase 6 — Notifications and Reminders**
-- [ ] @mentions -> Notification rows, notification bell UI
-- [ ] Stalled-opportunity flag using 14 days since latest non-deleted timeline
+- [x] @mentions -> Notification rows, notification bell UI
+- [x] Stalled-opportunity flag using 14 days since latest non-deleted timeline
       activity
-- [ ] Follow-up reminder field on entries
+- [x] Follow-up reminder field on entries
 - Acceptance: mentioning a colleague creates a notification they can see and
   dismiss
 

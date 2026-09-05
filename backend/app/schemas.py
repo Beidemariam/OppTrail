@@ -1,4 +1,5 @@
 from decimal import Decimal
+from typing import Any
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_serializer, field_validator
@@ -299,3 +300,15 @@ class AiAskRequest(BaseModel):
 class AiAskResponse(BaseModel):
     answer: str
     referenced_entry_ids: list[int]
+
+
+class NotificationPublic(BaseModel):
+    id: int
+    type: str
+    payload: dict[str, Any]
+    read: bool
+    created_at: str
+
+
+class NotificationListResponse(BaseModel):
+    notifications: list[NotificationPublic]

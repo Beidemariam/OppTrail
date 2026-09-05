@@ -281,26 +281,53 @@ Retest: Focused export tests passed; full backend suite passed with 92% coverage
 
 ## Phase 6 - Notifications and Reminders
 
-- [ ] Mentions in notes create notification rows for mentioned colleagues.
-- [ ] Mentions in comments create notification rows for mentioned colleagues.
-- [ ] New comments on a user's notes create notification rows.
-- [ ] Activity on shared opportunities creates expected notifications.
-- [ ] Notification bell shows unread notifications.
-- [ ] User can mark a notification as read.
-- [ ] Users cannot read or update another user's notifications.
-- [ ] Follow-up date can be set on a timeline entry by Owner/Editor.
-- [ ] Viewer cannot set follow-up dates.
-- [ ] Dashboard flags opportunities stalled after 14 days without non-deleted
+- [x] Mentions in notes create notification rows for mentioned colleagues.
+- [x] Mentions in comments create notification rows for mentioned colleagues.
+- [x] New comments on a user's notes create notification rows.
+- [x] Activity on shared opportunities creates expected notifications.
+- [x] Notification bell shows unread notifications.
+- [x] User can mark a notification as read.
+- [x] Users cannot read or update another user's notifications.
+- [x] Follow-up date can be set on a timeline entry by Owner/Editor.
+- [x] Viewer cannot set follow-up dates.
+- [x] Dashboard flags opportunities stalled after 14 days without non-deleted
       entry, note, or comment activity.
-- [ ] Recent non-deleted activity clears the stalled flag.
-- [ ] Tests cover mention parsing, notification permissions, reminder updates,
+- [x] Recent non-deleted activity clears the stalled flag.
+- [x] Tests cover mention parsing, notification permissions, reminder updates,
       and stalled calculations.
-- [ ] Backend coverage is at least 80% for implemented business/API modules.
+- [x] Backend coverage is at least 80% for implemented business/API modules.
 
 Acceptance gate: mentioning a colleague creates a notification they can see and
 dismiss.
 
-Decision: Review | Accept | Reject
+User test steps:
+1. Open `http://localhost:8000` and sign in as the opportunity Owner.
+2. Share an opportunity with a colleague account as Editor.
+3. Add or edit a note containing the colleague email as a mention, for example
+   `@colleague@example.com`.
+4. Sign in as the colleague and confirm the `Notifications` button shows an
+   unread count.
+5. Open `Notifications` and confirm the mention appears.
+6. Click `Mark read` and confirm the notification disappears from the unread
+   list.
+7. As the colleague Editor, comment on one of the Owner's notes.
+8. Sign back in as the Owner and confirm a new comment notification appears.
+9. Set a follow-up date on a timeline entry as Owner or Editor and confirm it
+   appears on the timeline.
+10. Sign in as a Viewer and confirm entry editing/follow-up updates are not
+    available.
+11. Check the dashboard for any `Stalled` badges on opportunities with no recent
+    activity.
+
+Decision: Review
+Reviewer:
+Date: 2026-09-04
+Notes: Phase 6 mention notifications, comment/shared-activity notifications, notification bell, mark-read API, follow-up permission coverage, stalled dashboard flag, and backend coverage gate are ready for user review.
+
+Issue: Focused notification tests initially passed with deprecation warnings.
+Root cause: Stalled calculation used `datetime.utcnow()`, which is deprecated in the current Python runtime.
+Fix: Switched stalled comparison to timezone-aware UTC while preserving compatibility with existing SQLite timestamp strings.
+Retest: Focused notification tests passed without warnings; full backend suite passed with 93% coverage.
 
 ## Phase 7 - Polish
 
