@@ -1,6 +1,13 @@
+from datetime import UTC, datetime, timedelta
+
 from fastapi.testclient import TestClient
 
 from app.database import db_connection
+
+
+def days_ago(days: int) -> str:
+    """Timestamp relative to now, so no assertion depends on today's date."""
+    return (datetime.now(UTC) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def signup(client: TestClient, email: str, name: str) -> dict:
@@ -127,13 +134,15 @@ def test_entry_note_comment_crud_and_note_versions(client: TestClient) -> None:
 def test_timeline_filters_keyword_type_date_and_author(client: TestClient) -> None:
     owner = signup(client, "owner@example.com", "Owner")
     opportunity = create_opportunity(client)
+    # The auto-generated "Opportunity created" entry is stamped with the current
+    # time, so every window here is anchored to now rather than a fixed date.
     call = create_entry(
         client,
         opportunity["id"],
         title="Discovery call",
         body="Budget approved",
         entry_type="call",
-        event_timestamp="2026-09-01T10:00:00",
+        event_timestamp=days_ago(60),
     )
     create_entry(
         client,
@@ -141,7 +150,7 @@ def test_timeline_filters_keyword_type_date_and_author(client: TestClient) -> No
         title="Proposal email",
         body="Sent standard proposal",
         entry_type="email",
-        event_timestamp="2026-09-10T10:00:00",
+        event_timestamp=days_ago(30),
     )
     note = client.post(
         f"/api/timeline/{call['id']}/notes",
@@ -157,7 +166,7 @@ def test_timeline_filters_keyword_type_date_and_author(client: TestClient) -> No
 
     date_range = client.get(
         f"/api/opportunities/{opportunity['id']}/timeline"
-        "?from=2026-09-05T00:00:00&to=2026-09-30T23:59:59"
+        f"?from={days_ago(45)}&to={days_ago(15)}"
     )
     assert [entry["title"] for entry in date_range.json()["entries"]] == [
         "Proposal email"
@@ -284,3 +293,151 @@ def test_comment_delete_is_author_or_owner_only(client: TestClient) -> None:
     login(client, "owner@example.com")
     deleted = client.delete(f"/api/comments/{comment['id']}")
     assert deleted.status_code == 204
+
+
+def test_editor_cannot_delete_another_users_note_or_entry(client: TestClient) -> None:
+    owner = signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    entry = create_entry(client, opportunity["id"], title="Owner call")
+    note = client.post(
+        f"/api/timeline/{entry['id']}/notes",
+        json={"body": "Owner note"},
+    ).json()
+    client.post("/api/auth/logout")
+
+    editor = signup(client, "editor@example.com", "Editor")
+    client.post("/api/auth/logout")
+    share_opportunity(opportunity["id"], editor["id"], owner["id"], "editor")
+
+    login(client, "editor@example.com")
+    assert client.delete(f"/api/notes/{note['id']}").status_code == 403
+    assert client.delete(f"/api/timeline/{entry['id']}").status_code == 403
+
+    # An editor still edits freely, and still owns what they create themselves.
+    assert (
+        client.patch(f"/api/notes/{note['id']}", json={"body": "Editor edit"}).status_code
+        == 200
+    )
+    own_entry = create_entry(client, opportunity["id"], title="Editor call")
+    assert client.delete(f"/api/timeline/{own_entry['id']}").status_code == 204
+    client.post("/api/auth/logout")
+
+    # The owner can remove anything on their own opportunity.
+    login(client, "owner@example.com")
+    assert client.delete(f"/api/notes/{note['id']}").status_code == 204
+    assert client.delete(f"/api/timeline/{entry['id']}").status_code == 204
+
+
+def test_deletions_are_recorded_in_the_audit_log(client: TestClient) -> None:
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    entry = create_entry(client, opportunity["id"])
+    note = client.post(
+        f"/api/timeline/{entry['id']}/notes",
+        json={"body": "Owner note"},
+    ).json()
+    comment = client.post(
+        f"/api/notes/{note['id']}/comments",
+        json={"body": "Owner comment"},
+    ).json()
+
+    assert client.delete(f"/api/comments/{comment['id']}").status_code == 204
+    assert client.delete(f"/api/notes/{note['id']}").status_code == 204
+    assert client.delete(f"/api/timeline/{entry['id']}").status_code == 204
+
+    audit = client.get(f"/api/opportunities/{opportunity['id']}/audit-log")
+    assert audit.status_code == 200
+    actions = [row["action"] for row in audit.json()]
+    assert actions == ["comment_deleted", "note_deleted", "timeline_entry_deleted"]
+    assert str(entry["id"]) in next(
+        row["detail"] for row in audit.json() if row["action"] == "timeline_entry_deleted"
+    )
+
+    assert client.delete(f"/api/opportunities/{opportunity['id']}").status_code == 204
+    with db_connection() as connection:
+        deleted = connection.execute(
+            """
+            SELECT action FROM audit_log_entries
+            WHERE opportunity_id = ? AND action = 'opportunity_deleted'
+            """,
+            (opportunity["id"],),
+        ).fetchone()
+    assert deleted is not None
+
+
+def test_timestamps_are_canonical_utc_and_sort_chronologically(
+    client: TestClient,
+) -> None:
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+
+    # The "Opportunity created" system entry is stamped now; this user entry is
+    # earlier on the same day, so it must sort first.
+    earlier_today = (datetime.now(UTC) - timedelta(hours=2)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+    create_entry(client, opportunity["id"], title="Earlier today", event_timestamp=earlier_today)
+
+    entries = client.get(
+        f"/api/opportunities/{opportunity['id']}/timeline"
+    ).json()["entries"]
+    stamps = [entry["event_timestamp"] for entry in entries]
+    assert all(len(stamp) == 20 and stamp.endswith("Z") for stamp in stamps)
+    assert stamps == sorted(stamps)
+    assert [entry["title"] for entry in entries] == [
+        "Earlier today",
+        "Opportunity created",
+    ]
+
+    # A filter from the start of today must include the system entry, which the
+    # old space-separated format sorted below any "T"-separated bound.
+    start_of_day = datetime.now(UTC).strftime("%Y-%m-%dT00:00:00Z")
+    filtered = client.get(
+        f"/api/opportunities/{opportunity['id']}/timeline?from={start_of_day}"
+    ).json()["entries"]
+    assert "Opportunity created" in [entry["title"] for entry in filtered]
+
+
+def test_client_timestamps_are_normalized_to_utc(client: TestClient) -> None:
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+
+    naive = create_entry(
+        client, opportunity["id"], title="No seconds", event_timestamp="2026-09-01T10:00"
+    )
+    assert naive["event_timestamp"] == "2026-09-01T10:00:00Z"
+
+    offset = create_entry(
+        client,
+        opportunity["id"],
+        title="With offset",
+        event_timestamp="2026-09-01T12:00:00+02:00",
+    )
+    assert offset["event_timestamp"] == "2026-09-01T10:00:00Z"
+
+
+def test_invalid_timestamps_are_rejected_and_the_dashboard_stays_up(
+    client: TestClient,
+) -> None:
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+
+    rejected = client.post(
+        f"/api/opportunities/{opportunity['id']}/timeline",
+        json={"type": "call", "title": "Bad", "event_timestamp": "not-a-timestamp"},
+    )
+    assert rejected.status_code == 422
+
+    rejected_date = client.post(
+        f"/api/opportunities/{opportunity['id']}/timeline",
+        json={
+            "type": "call",
+            "title": "Bad follow up",
+            "event_timestamp": "2026-09-01T10:00:00Z",
+            "follow_up_date": "31-12-2026",
+        },
+    )
+    assert rejected_date.status_code == 422
+
+    # A rejected write must not be able to take the dashboard down for anyone.
+    assert client.get("/api/opportunities").status_code == 200

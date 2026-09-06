@@ -1,8 +1,32 @@
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_serializer, field_validator
+
+from .time_utils import to_canonical
+
+
+def canonical_timestamp(value: str) -> str:
+    """Normalize a client timestamp to fixed-width UTC ISO-8601.
+
+    Rejecting bad input here keeps every stored timestamp comparable and
+    sortable; an unparsed value would otherwise surface as a 500 much later,
+    when the dashboard tries to read it back.
+    """
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace(" ", "T"))
+    except ValueError as exc:
+        raise ValueError("Enter a valid ISO-8601 timestamp") from exc
+    return to_canonical(parsed)
+
+
+def canonical_date(value: str) -> str:
+    try:
+        return date.fromisoformat(value.strip()).isoformat()
+    except ValueError as exc:
+        raise ValueError("Enter a valid date as YYYY-MM-DD") from exc
 
 
 Stage = Literal[
@@ -86,6 +110,11 @@ class OpportunityBase(BaseModel):
     def normalize_currency(cls, value: str) -> str:
         return value.strip().upper()
 
+    @field_validator("expected_close_date")
+    @classmethod
+    def validate_expected_close_date(cls, value: str | None) -> str | None:
+        return canonical_date(value) if value else None
+
 
 class OpportunityCreate(OpportunityBase):
     pass
@@ -108,6 +137,11 @@ class OpportunityUpdate(BaseModel):
     @classmethod
     def normalize_optional_currency(cls, value: str | None) -> str | None:
         return value.strip().upper() if value is not None else value
+
+    @field_validator("expected_close_date")
+    @classmethod
+    def validate_expected_close_date(cls, value: str | None) -> str | None:
+        return canonical_date(value) if value else None
 
 
 class OpportunityPublic(BaseModel):
@@ -159,6 +193,16 @@ class TimelineEntryCreate(BaseModel):
     def strip_title(cls, value: str) -> str:
         return value.strip()
 
+    @field_validator("event_timestamp")
+    @classmethod
+    def validate_event_timestamp(cls, value: str) -> str:
+        return canonical_timestamp(value)
+
+    @field_validator("follow_up_date")
+    @classmethod
+    def validate_follow_up_date(cls, value: str | None) -> str | None:
+        return canonical_date(value) if value else None
+
 
 class TimelineEntryUpdate(BaseModel):
     type: EntryType | None = None
@@ -171,6 +215,16 @@ class TimelineEntryUpdate(BaseModel):
     @classmethod
     def strip_optional_title(cls, value: str | None) -> str | None:
         return value.strip() if value is not None else value
+
+    @field_validator("event_timestamp")
+    @classmethod
+    def validate_event_timestamp(cls, value: str | None) -> str | None:
+        return canonical_timestamp(value) if value is not None else value
+
+    @field_validator("follow_up_date")
+    @classmethod
+    def validate_follow_up_date(cls, value: str | None) -> str | None:
+        return canonical_date(value) if value else None
 
 
 class CommentPublic(BaseModel):

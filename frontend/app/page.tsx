@@ -195,14 +195,38 @@ const markdownSanitizeSchema = {
   },
 };
 
+// The API stores and returns fixed-width UTC ISO-8601 ("2026-09-06T14:30:00Z").
+// Browser datetime-local inputs are always local wall-clock time, so every value
+// is converted at the boundary rather than passed through.
+function parseTimestamp(value: string) {
+  const normalized = value.replace(" ", "T");
+  const hasZone = /(Z|[+-]\d{2}:?\d{2})$/.test(normalized);
+  return new Date(hasZone ? normalized : `${normalized}Z`);
+}
+
+function toLocalInput(date: Date) {
+  const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
 function toDateTimeInput(value: string) {
-  return value.replace(" ", "T").slice(0, 16);
+  return toLocalInput(parseTimestamp(value));
 }
 
 function nowDateTimeInput() {
-  const now = new Date();
-  const offsetMs = now.getTimezoneOffset() * 60 * 1000;
-  return new Date(now.getTime() - offsetMs).toISOString().slice(0, 16);
+  return toLocalInput(new Date());
+}
+
+function localInputToUtc(value: string) {
+  return `${new Date(value).toISOString().slice(0, 19)}Z`;
+}
+
+function formatTimestamp(value: string) {
+  return parseTimestamp(value).toLocaleString();
+}
+
+function confirmDelete(description: string) {
+  return window.confirm(`Delete ${description}? This cannot be undone here.`);
 }
 
 async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -299,6 +323,11 @@ export default function Home() {
   const canWriteSelectedTimeline =
     selectedOpportunity?.current_user_role === "owner" ||
     selectedOpportunity?.current_user_role === "editor";
+  // The API allows deletes only for the author of an item or the opportunity
+  // owner, so the buttons follow the same rule instead of offering a dead end.
+  const canDelete = (authorId: number | null) =>
+    canWriteSelectedTimeline &&
+    (canManageSelectedOpportunity || authorId === user?.id);
   const aiMessages = useMemo(
     () =>
       selectedOpportunityId
@@ -384,9 +413,14 @@ export default function Home() {
 
     const params = new URLSearchParams();
     Object.entries(timelineFilters).forEach(([key, value]) => {
-      if (value.trim()) {
-        params.set(key, value.trim());
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return;
       }
+      params.set(
+        key,
+        key === "from" || key === "to" ? localInputToUtc(trimmed) : trimmed,
+      );
     });
 
     const suffix = params.toString() ? `?${params.toString()}` : "";
@@ -503,6 +537,15 @@ export default function Home() {
   }
 
   async function deleteOpportunity(opportunityId: number) {
+    const opportunity = opportunities.find((item) => item.id === opportunityId);
+    if (
+      !confirmDelete(
+        `"${opportunity?.name ?? "this opportunity"}" and its entire timeline`,
+      )
+    ) {
+      return;
+    }
+
     setError("");
     setStatus("Deleting opportunity...");
     try {
@@ -559,6 +602,7 @@ export default function Home() {
     setStatus(editingEntryId ? "Updating entry..." : "Adding entry...");
     const payload = {
       ...entryForm,
+      event_timestamp: localInputToUtc(entryForm.event_timestamp),
       follow_up_date: entryForm.follow_up_date || null,
     };
 
@@ -644,6 +688,11 @@ export default function Home() {
       return;
     }
 
+    const share = shares.find((item) => item.user_id === userId);
+    if (!confirmDelete(`access for ${share?.name ?? "this colleague"}`)) {
+      return;
+    }
+
     setError("");
     setStatus("Removing share...");
     try {
@@ -676,6 +725,10 @@ export default function Home() {
 
   async function deleteTimelineEntry(entryId: number) {
     if (!selectedOpportunityId) {
+      return;
+    }
+
+    if (!confirmDelete("this timeline entry, with its notes and comments")) {
       return;
     }
 
@@ -755,6 +808,10 @@ export default function Home() {
       return;
     }
 
+    if (!confirmDelete("this note and its comments")) {
+      return;
+    }
+
     setError("");
     setStatus("Deleting note...");
     try {
@@ -795,6 +852,10 @@ export default function Home() {
 
   async function deleteComment(commentId: number) {
     if (!selectedOpportunityId) {
+      return;
+    }
+
+    if (!confirmDelete("this comment")) {
       return;
     }
 
@@ -1017,7 +1078,7 @@ export default function Home() {
                       <article className="notification-row" key={notification.id}>
                         <div>
                           <strong>{notificationText(notification)}</strong>
-                          <span>{toDateTimeInput(notification.created_at)}</span>
+                          <span>{formatTimestamp(notification.created_at)}</span>
                         </div>
                         <button
                           type="button"
@@ -1353,7 +1414,7 @@ export default function Home() {
                         {auditLog.map((item) => (
                           <div className="audit-row" key={item.id}>
                             <strong>{item.action}</strong>
-                            <span>{toDateTimeInput(item.created_at)}</span>
+                            <span>{formatTimestamp(item.created_at)}</span>
                             <p>{item.actor_name ?? "System"}</p>
                             <code>{item.detail}</code>
                           </div>
@@ -1536,7 +1597,7 @@ export default function Home() {
                               {entry.system_generated && (
                                 <span className="system-badge">System</span>
                               )}
-                              <span>{toDateTimeInput(entry.event_timestamp)}</span>
+                              <span>{formatTimestamp(entry.event_timestamp)}</span>
                             </div>
                             <h3>{entry.title}</h3>
                             <p className="timeline-copy">{entry.body || "No details"}</p>
@@ -1550,13 +1611,15 @@ export default function Home() {
                               >
                                 Edit
                               </button>
-                              <button
-                                type="button"
-                                className="danger-button"
-                                onClick={() => deleteTimelineEntry(entry.id)}
-                              >
-                                Delete
-                              </button>
+                              {canDelete(entry.created_by) && (
+                                <button
+                                  type="button"
+                                  className="danger-button"
+                                  onClick={() => deleteTimelineEntry(entry.id)}
+                                >
+                                  Delete
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>
@@ -1589,13 +1652,15 @@ export default function Home() {
                                     >
                                       Edit
                                     </button>
-                                    <button
-                                      type="button"
-                                      className="danger-button"
-                                      onClick={() => deleteNote(note.id)}
-                                    >
-                                      Delete
-                                    </button>
+                                    {canDelete(note.created_by) && (
+                                      <button
+                                        type="button"
+                                        className="danger-button"
+                                        onClick={() => deleteNote(note.id)}
+                                      >
+                                        Delete
+                                      </button>
+                                    )}
                                   </div>
                                 )}
                               </div>
@@ -1644,7 +1709,7 @@ export default function Home() {
                                       <strong>{comment.author_name}</strong>
                                       <MarkdownText content={comment.body} />
                                     </div>
-                                    {canWriteSelectedTimeline && (
+                                    {canDelete(comment.created_by) && (
                                       <button
                                         type="button"
                                         className="danger-button compact"

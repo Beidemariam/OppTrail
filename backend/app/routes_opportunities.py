@@ -1,9 +1,9 @@
 import sqlite3
-from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from .audit_utils import create_audit_log_entry
 from .auth import get_current_user
 from .database import db_connection
 from .schemas import (
@@ -13,49 +13,56 @@ from .schemas import (
     OpportunityPublic,
     OpportunityUpdate,
 )
+from .time_utils import utc_days_ago
 from .timeline_utils import create_system_timeline_entry
 
 
 router = APIRouter(prefix="/api/opportunities", tags=["opportunities"])
 
 
-def parse_activity_timestamp(value: str) -> datetime:
-    return datetime.fromisoformat(value.replace(" ", "T")).replace(tzinfo=UTC)
+STALLED_AFTER_DAYS = 14
 
 
 def is_opportunity_stalled(
     connection: sqlite3.Connection,
     opportunity_id: int,
 ) -> bool:
-    rows = connection.execute(
+    """True when nothing has happened on the opportunity for 14 days.
+
+    Every timestamp is stored as fixed-width UTC ISO-8601, so SQLite can pick
+    the latest activity and compare it to the cutoff as a plain string.
+    """
+    latest_activity = connection.execute(
         """
-        SELECT event_timestamp AS activity_at
-        FROM timeline_entries
-        WHERE opportunity_id = ? AND deleted_at IS NULL
-        UNION ALL
-        SELECT notes.created_at AS activity_at
-        FROM notes
-        JOIN timeline_entries ON timeline_entries.id = notes.entry_id
-        WHERE timeline_entries.opportunity_id = ?
-            AND timeline_entries.deleted_at IS NULL
-            AND notes.deleted_at IS NULL
-        UNION ALL
-        SELECT comments.created_at AS activity_at
-        FROM comments
-        JOIN notes ON notes.id = comments.note_id
-        JOIN timeline_entries ON timeline_entries.id = notes.entry_id
-        WHERE timeline_entries.opportunity_id = ?
-            AND timeline_entries.deleted_at IS NULL
-            AND notes.deleted_at IS NULL
-            AND comments.deleted_at IS NULL
+        SELECT MAX(activity_at) AS latest_activity
+        FROM (
+            SELECT event_timestamp AS activity_at
+            FROM timeline_entries
+            WHERE opportunity_id = ? AND deleted_at IS NULL
+            UNION ALL
+            SELECT notes.created_at AS activity_at
+            FROM notes
+            JOIN timeline_entries ON timeline_entries.id = notes.entry_id
+            WHERE timeline_entries.opportunity_id = ?
+                AND timeline_entries.deleted_at IS NULL
+                AND notes.deleted_at IS NULL
+            UNION ALL
+            SELECT comments.created_at AS activity_at
+            FROM comments
+            JOIN notes ON notes.id = comments.note_id
+            JOIN timeline_entries ON timeline_entries.id = notes.entry_id
+            WHERE timeline_entries.opportunity_id = ?
+                AND timeline_entries.deleted_at IS NULL
+                AND notes.deleted_at IS NULL
+                AND comments.deleted_at IS NULL
+        )
         """,
         (opportunity_id, opportunity_id, opportunity_id),
-    ).fetchall()
-    if not rows:
-        return False
+    ).fetchone()["latest_activity"]
 
-    latest_activity = max(parse_activity_timestamp(row["activity_at"]) for row in rows)
-    return latest_activity < datetime.now(UTC) - timedelta(days=14)
+    if latest_activity is None:
+        return False
+    return latest_activity < utc_days_ago(STALLED_AFTER_DAYS)
 
 
 def opportunity_from_row(row: sqlite3.Row, stalled: bool = False) -> OpportunityPublic:
@@ -258,7 +265,7 @@ def update_opportunity(
         connection.execute(
             f"""
             UPDATE opportunities
-            SET {", ".join(assignments)}, updated_at = CURRENT_TIMESTAMP
+            SET {", ".join(assignments)}, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
             WHERE id = ? AND owner_id = ? AND deleted_at IS NULL
             """,
             values,
@@ -295,7 +302,7 @@ def delete_opportunity(
         connection.execute(
             """
             UPDATE comments
-            SET deleted_at = CURRENT_TIMESTAMP
+            SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
             WHERE deleted_at IS NULL
                 AND note_id IN (
                     SELECT notes.id
@@ -309,7 +316,7 @@ def delete_opportunity(
         connection.execute(
             """
             UPDATE notes
-            SET deleted_at = CURRENT_TIMESTAMP
+            SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
             WHERE deleted_at IS NULL
                 AND entry_id IN (
                     SELECT id
@@ -322,7 +329,7 @@ def delete_opportunity(
         connection.execute(
             """
             UPDATE timeline_entries
-            SET deleted_at = CURRENT_TIMESTAMP
+            SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
             WHERE opportunity_id = ? AND deleted_at IS NULL
             """,
             (opportunity_id,),
@@ -330,7 +337,7 @@ def delete_opportunity(
         connection.execute(
             """
             UPDATE opportunity_shares
-            SET deleted_at = CURRENT_TIMESTAMP
+            SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
             WHERE opportunity_id = ? AND deleted_at IS NULL
             """,
             (opportunity_id,),
@@ -338,9 +345,20 @@ def delete_opportunity(
         connection.execute(
             """
             UPDATE opportunities
-            SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+            SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
             WHERE id = ? AND owner_id = ? AND deleted_at IS NULL
             """,
             (opportunity_id, user["id"]),
+        )
+        create_audit_log_entry(
+            connection=connection,
+            opportunity_id=opportunity_id,
+            actor_id=int(user["id"]),
+            action="opportunity_deleted",
+            detail={
+                "name": row["name"],
+                "account_name": row["account_name"],
+                "stage": row["stage"],
+            },
         )
         connection.commit()

@@ -117,7 +117,7 @@ def create_share(
                 UPDATE opportunity_shares
                 SET role = ?,
                     invited_by = ?,
-                    created_at = CURRENT_TIMESTAMP,
+                    created_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
                     deleted_at = NULL
                 WHERE opportunity_id = ? AND user_id = ?
                 """,
@@ -272,7 +272,7 @@ def delete_share(
         connection.execute(
             """
             UPDATE opportunity_shares
-            SET deleted_at = CURRENT_TIMESTAMP
+            SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
             WHERE opportunity_id = ? AND user_id = ? AND deleted_at IS NULL
             """,
             (opportunity_id, user_id),

@@ -55,8 +55,11 @@ def api_not_found(path: str) -> JSONResponse:
 
 @app.get("/{path:path}", include_in_schema=False)
 def serve_frontend(path: str):
-    requested_path = frontend_dir / path
-    if requested_path.is_file():
+    # `path` is attacker-controlled and arrives percent-decoded, so it can carry
+    # ".." segments. Resolve first and serve only what stays inside the build.
+    static_root = frontend_dir.resolve()
+    requested_path = (static_root / path).resolve()
+    if requested_path.is_relative_to(static_root) and requested_path.is_file():
         return FileResponse(requested_path)
 
     index_path = frontend_dir / "index.html"

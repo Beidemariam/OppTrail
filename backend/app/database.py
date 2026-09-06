@@ -67,7 +67,41 @@ def run_migrations(connection: sqlite3.Connection) -> None:
             ADD COLUMN deleted_at TEXT
             """
         )
+    normalize_legacy_timestamps(connection)
     backfill_opportunity_created_entries(connection)
+
+
+# Columns written before timestamps were canonicalized hold a mix of
+# "YYYY-MM-DD HH:MM:SS" (SQLite CURRENT_TIMESTAMP) and "YYYY-MM-DDTHH:MM"
+# (browser datetime-local) values, which sort and compare incorrectly against
+# each other. Rewrite them to fixed-width UTC ISO-8601.
+LEGACY_TIMESTAMP_COLUMNS = [
+    ("timeline_entries", "event_timestamp"),
+    ("timeline_entries", "created_at"),
+    ("notes", "created_at"),
+    ("notes", "updated_at"),
+    ("comments", "created_at"),
+    ("opportunities", "created_at"),
+    ("opportunities", "updated_at"),
+    ("note_versions", "created_at"),
+    ("audit_log_entries", "created_at"),
+    ("notifications", "created_at"),
+]
+
+
+def normalize_legacy_timestamps(connection: sqlite3.Connection) -> None:
+    for table_name, column_name in LEGACY_TIMESTAMP_COLUMNS:
+        # strftime returns NULL for values it cannot parse, so unreadable rows
+        # are left untouched rather than replaced with NULL.
+        connection.execute(
+            f"""
+            UPDATE {table_name}
+            SET {column_name} = strftime('%Y-%m-%dT%H:%M:%SZ', {column_name})
+            WHERE {column_name} IS NOT NULL
+                AND strftime('%Y-%m-%dT%H:%M:%SZ', {column_name}) IS NOT NULL
+                AND {column_name} <> strftime('%Y-%m-%dT%H:%M:%SZ', {column_name})
+            """
+        )
 
 
 def backfill_opportunity_created_entries(connection: sqlite3.Connection) -> None:

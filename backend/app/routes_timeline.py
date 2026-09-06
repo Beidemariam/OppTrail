@@ -2,6 +2,7 @@ import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from .audit_utils import create_audit_log_entry
 from .auth import get_current_user
 from .database import db_connection
 from .notification_service import (
@@ -9,7 +10,11 @@ from .notification_service import (
     notify_note_comment,
     notify_shared_activity,
 )
-from .permissions import require_opportunity_access, require_timeline_write
+from .permissions import (
+    require_delete_permission,
+    require_opportunity_access,
+    require_timeline_write,
+)
 from .schemas import (
     CommentCreate,
     CommentPublic,
@@ -390,16 +395,22 @@ def delete_timeline_entry(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Timeline entry not found",
             )
-        require_timeline_write(connection, entry["opportunity_id"], int(user["id"]))
         if entry["system_generated"]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="System timeline entries cannot be deleted",
             )
+        require_delete_permission(
+            connection,
+            entry["opportunity_id"],
+            int(user["id"]),
+            entry["created_by"],
+            "Only the author or owner can delete this timeline entry",
+        )
         connection.execute(
             """
             UPDATE comments
-            SET deleted_at = CURRENT_TIMESTAMP
+            SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
             WHERE deleted_at IS NULL
                 AND note_id IN (
                     SELECT id FROM notes WHERE entry_id = ?
@@ -410,14 +421,26 @@ def delete_timeline_entry(
         connection.execute(
             """
             UPDATE notes
-            SET deleted_at = CURRENT_TIMESTAMP
+            SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
             WHERE entry_id = ? AND deleted_at IS NULL
             """,
             (entry_id,),
         )
         connection.execute(
-            "UPDATE timeline_entries SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?",
+            "UPDATE timeline_entries SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?",
             (entry_id,),
+        )
+        create_audit_log_entry(
+            connection=connection,
+            opportunity_id=entry["opportunity_id"],
+            actor_id=int(user["id"]),
+            action="timeline_entry_deleted",
+            detail={
+                "entry_id": entry_id,
+                "type": entry["type"],
+                "title": entry["title"],
+                "author_id": entry["created_by"],
+            },
         )
         connection.commit()
 
@@ -511,7 +534,7 @@ def update_note(
         connection.execute(
             """
             UPDATE notes
-            SET body = ?, updated_at = CURRENT_TIMESTAMP, edited = 1
+            SET body = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), edited = 1
             WHERE id = ? AND deleted_at IS NULL
             """,
             (payload.body, note_id),
@@ -604,18 +627,35 @@ def delete_note(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Note not found",
             )
-        require_timeline_write(connection, note["opportunity_id"], int(user["id"]))
+        require_delete_permission(
+            connection,
+            note["opportunity_id"],
+            int(user["id"]),
+            note["created_by"],
+            "Only the author or owner can delete this note",
+        )
         connection.execute(
             """
             UPDATE comments
-            SET deleted_at = CURRENT_TIMESTAMP
+            SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
             WHERE note_id = ? AND deleted_at IS NULL
             """,
             (note_id,),
         )
         connection.execute(
-            "UPDATE notes SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?",
+            "UPDATE notes SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?",
             (note_id,),
+        )
+        create_audit_log_entry(
+            connection=connection,
+            opportunity_id=note["opportunity_id"],
+            actor_id=int(user["id"]),
+            action="note_deleted",
+            detail={
+                "note_id": note_id,
+                "entry_id": note["entry_id"],
+                "author_id": note["created_by"],
+            },
         )
         connection.commit()
 
@@ -696,19 +736,26 @@ def delete_comment(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Comment not found",
             )
-        role = require_opportunity_access(
+        require_delete_permission(
             connection,
             comment["opportunity_id"],
             int(user["id"]),
+            comment["created_by"],
+            "Only the author or owner can delete this comment",
         )
-        if role != "owner" and comment["created_by"] != user["id"]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only the author or owner can delete this comment",
-            )
-
         connection.execute(
-            "UPDATE comments SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?",
+            "UPDATE comments SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?",
             (comment_id,),
+        )
+        create_audit_log_entry(
+            connection=connection,
+            opportunity_id=comment["opportunity_id"],
+            actor_id=int(user["id"]),
+            action="comment_deleted",
+            detail={
+                "comment_id": comment_id,
+                "note_id": comment["note_id"],
+                "author_id": comment["created_by"],
+            },
         )
         connection.commit()

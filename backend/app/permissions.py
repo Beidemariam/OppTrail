@@ -65,6 +65,24 @@ def require_timeline_write(
     return role
 
 
+def require_delete_permission(
+    connection: sqlite3.Connection,
+    opportunity_id: int,
+    user_id: int,
+    author_id: int | None,
+    detail: str,
+) -> Role:
+    """Deleting is limited to the author of the item or the opportunity owner.
+
+    Editors may add and edit freely, but removing a colleague's record on a
+    shared opportunity is reserved to its author and the owner.
+    """
+    role = require_timeline_write(connection, opportunity_id, user_id)
+    if role != "owner" and author_id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+    return role
+
+
 def require_opportunity_owner(
     connection: sqlite3.Connection,
     opportunity_id: int,

@@ -2,6 +2,7 @@ import csv
 from io import StringIO
 
 from fastapi.testclient import TestClient
+import pytest
 
 from app.database import db_connection
 
@@ -172,3 +173,65 @@ def test_shared_users_can_export_and_unshared_user_cannot(
     assert client.get(f"/api/opportunities/{opportunity['id']}/export/json").status_code == 404
     assert client.get(f"/api/opportunities/{opportunity['id']}/export/csv").status_code == 404
     assert client.get(f"/api/opportunities/{opportunity['id']}/export/pdf").status_code == 404
+
+
+def test_csv_export_neutralizes_spreadsheet_formulas(client: TestClient) -> None:
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    entry = create_entry(client, opportunity["id"], "Discovery", "2026-09-01T09:00:00")
+    client.post(
+        f"/api/timeline/{entry['id']}/notes",
+        json={"body": '=HYPERLINK("https://attacker.example","Click")'},
+    )
+
+    response = client.get(f"/api/opportunities/{opportunity['id']}/export/csv")
+    assert response.status_code == 200
+    rows = list(csv.DictReader(StringIO(response.text)))
+    note_row = next(row for row in rows if row["row_type"] == "note")
+    assert note_row["body"].startswith("'=")
+
+    for row in rows:
+        for value in row.values():
+            assert not (value or "").startswith(("=", "+", "@"))
+
+
+def test_pdf_html_renders_timeline_in_order_and_escapes_bodies(
+    client: TestClient,
+) -> None:
+    from app.export_service import fetch_export_data, render_export_html
+
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    create_entry(client, opportunity["id"], "Second call", "2026-09-04T13:00:00")
+    first = create_entry(client, opportunity["id"], "First call", "2026-09-01T09:00:00")
+    client.post(
+        f"/api/timeline/{first['id']}/notes",
+        json={"body": "<script>alert(1)</script> follow up"},
+    )
+
+    with db_connection() as connection:
+        data = fetch_export_data(connection, opportunity["id"])
+    html = render_export_html(data)
+
+    assert html.index("First call") < html.index("Second call")
+    assert "<script>alert(1)</script>" not in html
+    assert "&lt;script&gt;" in html
+    assert "Expansion" in html and "Acme" in html
+
+
+def test_pdf_export_produces_a_real_pdf(client: TestClient) -> None:
+    # WeasyPrint needs native libraries that are only installed in the container;
+    # missing them surfaces as an OSError from cffi, not an ImportError.
+    try:
+        import weasyprint  # noqa: F401
+    except (ImportError, OSError) as exc:
+        pytest.skip(f"WeasyPrint native libraries unavailable: {exc}")
+
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    create_entry(client, opportunity["id"], "Discovery", "2026-09-01T09:00:00")
+
+    response = client.get(f"/api/opportunities/{opportunity['id']}/export/pdf")
+    assert response.status_code == 200
+    assert response.content.startswith(b"%PDF")
+    assert len(response.content) > 1000

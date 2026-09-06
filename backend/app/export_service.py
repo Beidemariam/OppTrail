@@ -5,6 +5,18 @@ import re
 import sqlite3
 
 
+# Excel, LibreOffice and Google Sheets evaluate a cell that opens with one of
+# these characters as a formula, so a note body is a live injection vector once
+# the export is opened.
+CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def escape_csv_value(value: object) -> object:
+    if isinstance(value, str) and value.startswith(CSV_FORMULA_PREFIXES):
+        return f"'{value}"
+    return value
+
+
 def safe_export_filename(name: str, extension: str) -> str:
     slug = re.sub(r"[^A-Za-z0-9]+", "-", name).strip("-").lower()
     return f"{slug or 'opportunity'}-timeline.{extension}"
@@ -157,6 +169,9 @@ def export_data_to_csv(data: dict) -> str:
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     writer.writeheader()
 
+    def write_row(row: dict) -> None:
+        writer.writerow({key: escape_csv_value(value) for key, value in row.items()})
+
     opportunity = data["opportunity"]
     for entry in data["entries"]:
         base = {
@@ -164,7 +179,7 @@ def export_data_to_csv(data: dict) -> str:
             "opportunity_name": opportunity["name"],
             "account_name": opportunity["account_name"],
         }
-        writer.writerow(
+        write_row(
             {
                 **base,
                 "row_type": "entry",
@@ -181,7 +196,7 @@ def export_data_to_csv(data: dict) -> str:
             }
         )
         for note in entry["notes"]:
-            writer.writerow(
+            write_row(
                 {
                     **base,
                     "row_type": "note",
@@ -197,7 +212,7 @@ def export_data_to_csv(data: dict) -> str:
                 }
             )
             for comment in note["comments"]:
-                writer.writerow(
+                write_row(
                     {
                         **base,
                         "row_type": "comment",
@@ -294,7 +309,7 @@ def render_export_html(data: dict) -> str:
           @page {{ margin: 24mm 18mm; }}
           body {{
             color: #0b2540;
-            font-family: Arial, sans-serif;
+            font-family: Arial, "DejaVu Sans", sans-serif;
             font-size: 12px;
             line-height: 1.5;
           }}

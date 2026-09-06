@@ -1,5 +1,7 @@
 import sqlite3
 
+from .time_utils import utc_now
+
 
 def create_system_timeline_entry(
     connection: sqlite3.Connection,
@@ -20,7 +22,7 @@ def create_system_timeline_entry(
             created_by,
             system_generated
         )
-        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?, 1)
+        VALUES (?, ?, ?, ?, ?, ?, 1)
         """,
-        (opportunity_id, entry_type, title, body, created_by),
+        (opportunity_id, entry_type, title, body, utc_now(), created_by),
     )
