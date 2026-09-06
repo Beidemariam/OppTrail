@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from .audit_utils import create_audit_log_entry
 from .auth import get_current_user
 from .database import db_connection
+from .notification_service import create_notification
 from .permissions import require_opportunity_owner
 from .schemas import (
     AuditLogEntryPublic,
@@ -149,6 +150,16 @@ def create_share(
                 "role": payload.role,
             },
         )
+        create_notification(
+            connection,
+            int(invited_user["id"]),
+            "share_added",
+            {
+                "opportunity_id": opportunity_id,
+                "actor_id": int(user["id"]),
+                "role": payload.role,
+            },
+        )
         connection.commit()
         row = next(
             share
@@ -214,6 +225,17 @@ def update_share(
                     "to_role": payload.role,
                 },
             )
+            create_notification(
+                connection,
+                user_id,
+                "share_role_changed",
+                {
+                    "opportunity_id": opportunity_id,
+                    "actor_id": int(user["id"]),
+                    "from_role": share["role"],
+                    "to_role": payload.role,
+                },
+            )
             connection.commit()
 
         rows = fetch_share_rows(connection, opportunity_id)
@@ -271,6 +293,16 @@ def delete_share(
             detail={
                 "user_id": user_id,
                 "email": share["email"],
+                "role": share["role"],
+            },
+        )
+        create_notification(
+            connection,
+            user_id,
+            "share_removed",
+            {
+                "opportunity_id": opportunity_id,
+                "actor_id": int(user["id"]),
                 "role": share["role"],
             },
         )

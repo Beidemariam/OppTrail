@@ -787,6 +787,28 @@ a.danger-button {
   white-space: pre-wrap;
 }
 
+.markdown-content {
+  color: #24364a;
+  display: grid;
+  gap: 6px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.markdown-content p,
+.markdown-content ul {
+  margin: 0;
+}
+
+.markdown-content ul {
+  padding-left: 18px;
+}
+
+.markdown-content a {
+  color: var(--teal);
+  font-weight: 700;
+}
+
 .meta-row {
   align-items: center;
   color: var(--slate);
@@ -826,7 +848,8 @@ a.danger-button {
 }
 
 .note-header p,
-.comment-row p {
+.comment-row p,
+.comment-row .markdown-content {
   margin: 0;
 }
 
@@ -839,6 +862,12 @@ a.danger-button {
   gap: 10px;
   justify-content: space-between;
   padding: 10px;
+}
+
+.comment-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
 }
 
 .comment-row p {

@@ -1,6 +1,9 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+import remarkGfm from "remark-gfm";
 
 const stages = [
   "Prospecting",
@@ -174,6 +177,24 @@ const emptyShareForm: ShareForm = {
   role: "viewer",
 };
 
+const markdownSanitizeSchema = {
+  ...defaultSchema,
+  attributes: {
+    ...defaultSchema.attributes,
+    a: [
+      ...(defaultSchema.attributes?.a ?? []),
+      "href",
+      "title",
+      "target",
+      "rel",
+    ],
+  },
+  protocols: {
+    ...defaultSchema.protocols,
+    href: ["http", "https", "mailto"],
+  },
+};
+
 function toDateTimeInput(value: string) {
   return value.replace(" ", "T").slice(0, 16);
 }
@@ -206,6 +227,26 @@ async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T
   }
 
   return response.json() as Promise<T>;
+}
+
+function MarkdownText({ content }: { content: string }) {
+  return (
+    <div className="markdown-content">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[[rehypeSanitize, markdownSanitizeSchema]]}
+        components={{
+          a: ({ children, href }) => (
+            <a href={href} rel="noreferrer" target="_blank">
+              {children}
+            </a>
+          ),
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
 }
 
 export default function Home() {
@@ -323,6 +364,15 @@ export default function Home() {
     }
     if (notification.type === "shared_activity") {
       return title || "New activity on a shared opportunity.";
+    }
+    if (notification.type === "share_added") {
+      return "An opportunity was shared with you.";
+    }
+    if (notification.type === "share_role_changed") {
+      return "Your access role changed.";
+    }
+    if (notification.type === "share_removed") {
+      return "Your opportunity access was removed.";
     }
     return "New notification.";
   }
@@ -1584,16 +1634,16 @@ export default function Home() {
                                   </div>
                                 </div>
                               ) : (
-                                <p className="timeline-copy">{note.body}</p>
+                                <MarkdownText content={note.body} />
                               )}
 
                               <div className="comment-list">
                                 {note.comments.map((comment) => (
                                   <div className="comment-row" key={comment.id}>
-                                    <p>
-                                      <strong>{comment.author_name}</strong>{" "}
-                                      {comment.body}
-                                    </p>
+                                    <div>
+                                      <strong>{comment.author_name}</strong>
+                                      <MarkdownText content={comment.body} />
+                                    </div>
                                     {canWriteSelectedTimeline && (
                                       <button
                                         type="button"

@@ -171,6 +171,43 @@ def test_user_can_mark_only_own_notification_read(client: TestClient) -> None:
     assert owner["id"] == opportunity["owner_id"]
 
 
+def test_share_changes_create_notifications_for_shared_user(client: TestClient) -> None:
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    client.post("/api/auth/logout")
+
+    viewer = signup(client, "viewer@example.com", "Viewer")
+    client.post("/api/auth/logout")
+
+    login(client, "owner@example.com")
+    added = client.post(
+        f"/api/opportunities/{opportunity['id']}/shares",
+        json={"email": viewer["email"], "role": "viewer"},
+    )
+    assert added.status_code == 201
+    changed = client.patch(
+        f"/api/opportunities/{opportunity['id']}/shares/{viewer['id']}",
+        json={"role": "editor"},
+    )
+    assert changed.status_code == 200
+    removed = client.delete(
+        f"/api/opportunities/{opportunity['id']}/shares/{viewer['id']}"
+    )
+    assert removed.status_code == 204
+    client.post("/api/auth/logout")
+
+    login(client, "viewer@example.com")
+    notification_types = {
+        notification["type"]
+        for notification in client.get("/api/notifications").json()["notifications"]
+    }
+    assert notification_types >= {
+        "share_added",
+        "share_role_changed",
+        "share_removed",
+    }
+
+
 def test_follow_up_permissions_and_stalled_calculation(client: TestClient) -> None:
     owner = signup(client, "owner@example.com", "Owner")
     opportunity = create_opportunity(client)
