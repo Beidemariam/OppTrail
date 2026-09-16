@@ -202,3 +202,12 @@ the `-600` text variants for anything that carries type.
 ## Working documentation
 All planning and execution documents live in `docs/`. Review `docs/ROADMAP.md` for
 what to build next and `docs/ARCHITECTURE.md` for the standards that apply to it.
+
+## Autopilot (phase-gated)
+
+When running under `docs/autopilot-brief.md`:
+- Commits are permitted on `autopilot/phase-<ID>` branches only. Nothing is committed to `main` by the agent.
+- The Review / Accept / Reject decision happens at the end of each phase, using the review packet in `docs/autopilot/reviews/`.
+- Accept = the human runs `scripts/autopilot-accept.sh <ID>` (fast-forwards `main`, tags `phase-<ID>-accepted`).
+- Reject = the human runs `scripts/autopilot-reject.sh <ID> <feedback.md>`; the agent reworks on the same branch.
+- The agent never merges, pushes, or creates acceptance tags.
