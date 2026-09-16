@@ -211,3 +211,4 @@ When running under `docs/autopilot-brief.md`:
 - Accept = the human runs `scripts/autopilot-accept.sh <ID>` (fast-forwards `main`, tags `phase-<ID>-accepted`).
 - Reject = the human runs `scripts/autopilot-reject.sh <ID> <feedback.md>`; the agent reworks on the same branch.
 - The agent never merges, pushes, or creates acceptance tags.
+- Autopilot runs inside the sandbox in `sandbox/` (`sandbox/run.sh`), which mounts only this repo. See `sandbox/README.md` for the boundary and its documented limits.
