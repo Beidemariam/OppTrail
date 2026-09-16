@@ -16,7 +16,7 @@ The MVP's historical "Phase 0" is complete and accepted. Do not redo it. The pha
 
 Each phase runs on its own branch, ends at a green quality gate, and stops for human review. **Nothing reaches `main` except through the human Accept step.**
 
-**Stack (change only via an accepted ADR):** Next.js + TypeScript (App Router) · Python FastAPI (also serves the static frontend) · SQLite · session auth with bcrypt and HttpOnly cookies · OpenRouter-backed read-only AI agent · WeasyPrint PDF export · single Docker container with `uv`.
+**Stack (change only via an accepted ADR):** Next.js + TypeScript (App Router) · Python FastAPI (also serves the static frontend) · SQLite · session auth with bcrypt and HttpOnly cookies · OpenAI-backed read-only AI agent · WeasyPrint PDF export · single Docker container with `uv`.
 
 ---
 
@@ -28,10 +28,10 @@ Read everything below that exists before acting. Higher items win conflicts; rec
 2. `AGENTS.md` (including its Autopilot section) and `PLAN.md`
 3. ADRs
 4. `docs/ROADMAP.md`
-5. `docs/v2-review-brief.md` and the planning outputs it produced
+5. `docs/v2_review_brief.md` and the planning outputs it produced
 6. This brief
 
-Known stale item: `docs/v2-review-brief.md` references the model `gpt-oss-20b`, which contradicts the code and ADRs. Code/ADRs are correct. Fix the reference during Phase F.
+Known stale item: `docs/v2_review_brief.md` references the model `gpt-oss-20b`, which contradicts the code and ADRs. Code/ADRs are correct. Fix the reference during Phase F.
 
 Any claim about existing code in a planning or review document must cite a file path. Do not describe code you have not opened.
 
@@ -158,7 +158,7 @@ Branch: `autopilot/phase-F`. No new user-facing features in this phase.
 - Read-only DB access plus zero write tools, both asserted by tests.
 - Agent inherits the requesting user's permissions; cross-opportunity leakage tests.
 - Prompt-injection tests using hostile content in notes and attachments.
-- Single OpenRouter client wrapper with timeouts, retries, and graceful failure; always mocked in tests.
+- Single OpenAI client wrapper with timeouts, retries, and graceful failure; always mocked in tests.
 
 ### 4.7 Test infrastructure
 Stand up every layer in §6, the authorization matrix, the invariant tests, seed data, and the Docker smoke test, so Phases 1–6 only add tests rather than build infrastructure.
@@ -260,7 +260,7 @@ The Phase R review packet doubles as the release sign-off.
 Never:
 - Touch anything outside the repository.
 - Read, print, or commit secrets; `.env*` (except `.env.example`) stays ignored. Log any committed secret in BLOCKERS.md; do not rewrite history.
-- Call OpenRouter or any paid external API.
+- Call OpenAI or any paid external API.
 - Delete `.git`, tags, user data, or anything you didn't create.
 - Weaken tests, linters, type checks, audits, or coverage floors.
 - Commit to `main`, merge, tag acceptance, push, force-push, rewrite history, or use `--no-verify`.
