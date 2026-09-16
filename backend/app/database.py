@@ -3,7 +3,19 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from alembic.config import Config
+
+from alembic import command
+
 from .settings import settings
+
+BASELINE_REVISION = "0001_baseline"
+
+# WAL lets readers proceed while a write is in flight, which is the only
+# contention this deployment generates (ADR 0001). It is a property of the
+# database file, so re-asserting it per connection is a no-op after the first.
+# The busy timeout is per connection and must be set every time.
+SQLITE_BUSY_TIMEOUT_MS = 5000
 
 
 def sqlite_path_from_url(database_url: str) -> Path:
@@ -14,11 +26,23 @@ def sqlite_path_from_url(database_url: str) -> Path:
     return Path(raw_path).expanduser()
 
 
+def sqlalchemy_url() -> str:
+    """The configured database as a SQLAlchemy URL, for Alembic's engine.
+
+    Alembic and the application must resolve to the same file, so this is
+    derived from the same `settings.database_url` the raw `sqlite3` connections
+    use rather than configured separately in `alembic.ini`.
+    """
+    return f"sqlite:///{sqlite_path_from_url(settings.database_url)}"
+
+
 def get_connection() -> sqlite3.Connection:
     database_path = sqlite_path_from_url(settings.database_url)
     connection = sqlite3.connect(database_path)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
+    connection.execute("PRAGMA journal_mode = WAL")
+    connection.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}")
     return connection
 
 
@@ -31,16 +55,47 @@ def db_connection() -> Iterator[sqlite3.Connection]:
         connection.close()
 
 
+def alembic_config() -> Config:
+    """Alembic configuration built without depending on the process's cwd.
+
+    The application starts from whatever directory uvicorn was launched in, so
+    `script_location` is resolved from this file rather than from `alembic.ini`.
+    """
+    backend_dir = Path(__file__).resolve().parent.parent
+    config = Config(backend_dir / "alembic.ini")
+    config.set_main_option("script_location", str(backend_dir / "alembic"))
+    return config
+
+
 def initialize_database() -> None:
+    """Bring the configured database to the latest revision.
+
+    New installs get the whole schema from the baseline revision, so there is
+    still no setup step. Databases that predate Alembic are repaired once and
+    stamped (see `bridge_pre_alembic_database`).
+    """
     database_path = sqlite_path_from_url(settings.database_url)
     if database_path.parent != Path("."):
         database_path.parent.mkdir(parents=True, exist_ok=True)
 
-    schema_path = Path(__file__).resolve().parent / "schema.sql"
+    config = alembic_config()
     with db_connection() as connection:
-        connection.executescript(schema_path.read_text(encoding="utf-8"))
-        run_migrations(connection)
-        connection.commit()
+        needs_stamp = _is_pre_alembic_database(connection)
+        if needs_stamp:
+            bridge_pre_alembic_database(connection)
+            connection.commit()
+
+    if needs_stamp:
+        command.stamp(config, BASELINE_REVISION)
+    command.upgrade(config, "head")
+
+
+def table_exists(connection: sqlite3.Connection, table_name: str) -> bool:
+    row = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        (table_name,),
+    ).fetchone()
+    return row is not None
 
 
 def column_exists(
@@ -52,7 +107,19 @@ def column_exists(
     return any(column["name"] == column_name for column in columns)
 
 
-def run_migrations(connection: sqlite3.Connection) -> None:
+def _is_pre_alembic_database(connection: sqlite3.Connection) -> bool:
+    """True for a populated database that Alembic has never versioned."""
+    return table_exists(connection, "users") and not table_exists(connection, "alembic_version")
+
+
+def bridge_pre_alembic_database(connection: sqlite3.Connection) -> None:
+    """One-time repair of a database created before Alembic existed.
+
+    Everything here used to run on every startup, scanning every row each boot
+    (ADR 0002). It only ever had work to do on a database written by the
+    pre-canonical MVP code, so it now runs once, immediately before the database
+    is stamped at the baseline revision, and never again.
+    """
     if not column_exists(connection, "timeline_entries", "system_generated"):
         connection.execute(
             """
@@ -72,10 +139,15 @@ def run_migrations(connection: sqlite3.Connection) -> None:
 
 
 # Columns written before timestamps were canonicalized hold a mix of
-# "YYYY-MM-DD HH:MM:SS" (SQLite CURRENT_TIMESTAMP) and "YYYY-MM-DDTHH:MM"
-# (browser datetime-local) values, which sort and compare incorrectly against
-# each other. Rewrite them to fixed-width UTC ISO-8601.
+# "YYYY-MM-DD HH:MM:SS" (SQLite CURRENT_TIMESTAMP), "YYYY-MM-DDTHH:MM" (browser
+# datetime-local) and offset-suffixed values, which sort and compare incorrectly
+# against each other. Rewrite them to fixed-width UTC ISO-8601. `users` and
+# `sessions` are included because the repair now runs once instead of on every
+# boot, so a row left alone here stays non-canonical for good.
 LEGACY_TIMESTAMP_COLUMNS = [
+    ("users", "created_at"),
+    ("sessions", "created_at"),
+    ("sessions", "expires_at"),
     ("timeline_entries", "event_timestamp"),
     ("timeline_entries", "created_at"),
     ("notes", "created_at"),

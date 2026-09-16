@@ -63,9 +63,9 @@ to that build, so FastAPI serves the app and the API from one origin.
 PDF rendering needs native libraries that are not present on macOS hosts. Importing
 `weasyprint` there raises `OSError` from cffi, not `ImportError` — so
 `pytest.importorskip` does not catch it (see the guard in
-`tests/test_export.py::test_pdf_export_produces_a_real_pdf`). The full suite is
-39 passed in the container, 38 passed + 1 skipped on a laptop. Verify PDF changes in
-Docker.
+`tests/test_export.py::test_pdf_export_produces_a_real_pdf`). The full suite runs
+one test fewer on a laptop than in the container — that single skip is this one.
+Verify PDF changes in Docker.
 
 ## Architecture
 
@@ -83,17 +83,32 @@ rather than a service layer: `permissions.py`, `time_utils.py`, `audit_utils.py`
 `timeline_utils.py`, `notification_service.py`, `ai_service.py`, `export_service.py`.
 
 `database.py` opens a fresh connection per operation via the `db_connection()`
-context manager, with `PRAGMA foreign_keys = ON`. There is no connection pool and no
-request-scoped session — routes open a connection, do their work, `commit()`, and
-close.
+context manager, which sets `PRAGMA foreign_keys = ON`, `journal_mode = WAL`, and a
+5s `busy_timeout` on every connection (`tests/test_database.py` guards all three).
+There is no connection pool and no request-scoped session — routes open a
+connection, do their work, `commit()`, and close.
 
 ### Migrations
 
-`initialize_database()` runs on every startup: `executescript(schema.sql)` (all
-tables use `CREATE TABLE IF NOT EXISTS`), then `run_migrations()`, then
-`backfill_opportunity_created_entries()`. Migrations are idempotent, additive, and
-guarded by `column_exists()` — there is no version table. Schema changes must be
-written so they can run repeatedly against an existing database.
+Alembic owns the schema (ADR 0002). `initialize_database()` runs on every startup
+and calls `alembic upgrade head`, so a new install still needs no setup step: the
+baseline revision (`alembic/versions/20260916_0001_baseline.py`) creates the whole
+schema. `make migrate` applies revisions by hand. There is no `schema.sql`.
+
+A database written before Alembic existed has tables but no `alembic_version`.
+`bridge_pre_alembic_database()` repairs it once — the two guarded `ALTER TABLE`s
+that used to live in `run_migrations()`, plus `normalize_legacy_timestamps()` and
+`backfill_opportunity_created_entries()` — and it is then stamped at the baseline
+rather than re-running it. That repair is a one-shot, not a per-boot scan, which is
+why application code now supplies every timestamp explicitly instead of relying on
+a column default: a bridged legacy database keeps its old `CURRENT_TIMESTAMP`
+defaults (`ALTER TABLE` cannot rewrite one) and nothing normalizes a row after the
+bridge has run. See `tests/test_migrations.py`.
+
+New revisions go in `alembic/versions/` as explicit SQL — no ORM, `target_metadata`
+stays `None`. A revision that changes the schema must also update
+`tests/data/expected_schema.sql`, which the upgrade-from-empty test compares
+against.
 
 ### Timestamps
 
@@ -146,10 +161,17 @@ any new delete path needs an audit row.
 
 ### Soft deletes
 
-Nothing is hard-deleted. `deleted_at` is set and cascaded manually down the
-opportunity → entry → note → comment tree, and every read query filters
-`deleted_at IS NULL` at each level. Note edits additionally append to
-`note_versions` rather than overwriting.
+Nothing is hard-deleted. `soft_delete.py` is the only place user data is deleted:
+it stamps `deleted_at` and cascades it down the opportunity → entry → note →
+comment tree, and every read query filters `deleted_at IS NULL` at each level.
+Routes call those helpers rather than writing their own `UPDATE ... SET
+deleted_at`, so a new delete path cannot quietly forget a level of the tree. Note
+edits additionally append to `note_versions` rather than overwriting.
+
+`tests/test_soft_delete.py` fails the build if any module in `app/` contains a
+`DELETE FROM` against a table in `soft_delete.USER_DATA_TABLES`. `sessions` is
+deliberately not in that list — a session is ephemeral authentication state, not
+user content, and logging out really does delete the row.
 
 ### AI agent
 

@@ -13,6 +13,7 @@ from .auth import (
 )
 from .database import db_connection
 from .schemas import AuthResponse, LoginRequest, SignupRequest, UserPublic
+from .time_utils import utc_now
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -33,10 +34,10 @@ def signup(payload: SignupRequest, response: Response) -> AuthResponse:
         try:
             cursor = connection.execute(
                 """
-                INSERT INTO users (email, password_hash, name)
-                VALUES (?, ?, ?)
+                INSERT INTO users (email, password_hash, name, created_at)
+                VALUES (?, ?, ?, ?)
                 """,
-                (email, hash_password(payload.password), payload.name),
+                (email, hash_password(payload.password), payload.name, utc_now()),
             )
             connection.commit()
         except sqlite3.IntegrityError as exc:

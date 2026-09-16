@@ -4,6 +4,7 @@ import sqlite3
 from typing import cast
 
 from .schemas import NOTIFICATION_PAYLOAD_MODELS, NotificationPayload
+from .time_utils import utc_now
 
 MENTION_RE = re.compile(r"@([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})")
 
@@ -25,10 +26,10 @@ def create_notification(
 ) -> None:
     connection.execute(
         """
-        INSERT INTO notifications (user_id, type, payload)
-        VALUES (?, ?, ?)
+        INSERT INTO notifications (user_id, type, payload, created_at)
+        VALUES (?, ?, ?, ?)
         """,
-        (user_id, notification_type, json.dumps(payload, sort_keys=True)),
+        (user_id, notification_type, json.dumps(payload, sort_keys=True), utc_now()),
     )
 
 

@@ -3,6 +3,7 @@ import sqlite3
 from typing import cast
 
 from .schemas import AUDIT_DETAIL_MODELS, AuditDetail
+from .time_utils import utc_now
 
 
 def create_audit_log_entry(
@@ -14,10 +15,10 @@ def create_audit_log_entry(
 ) -> None:
     connection.execute(
         """
-        INSERT INTO audit_log_entries (opportunity_id, actor_id, action, detail)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO audit_log_entries (opportunity_id, actor_id, action, detail, created_at)
+        VALUES (?, ?, ?, ?, ?)
         """,
-        (opportunity_id, actor_id, action, json.dumps(detail, sort_keys=True)),
+        (opportunity_id, actor_id, action, json.dumps(detail, sort_keys=True), utc_now()),
     )
 
 

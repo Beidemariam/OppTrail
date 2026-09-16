@@ -17,6 +17,9 @@ tsconfig.tsbuildinfo
 
 # Local data and logs
 *.db
+# WAL puts the journal and shared-memory files alongside the database.
+*.db-wal
+*.db-shm
 *.sqlite
 *.sqlite3
 *.log

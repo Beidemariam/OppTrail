@@ -14,6 +14,8 @@ from .schemas import (
     SharePublic,
     ShareUpdate,
 )
+from .soft_delete import soft_delete_share
+from .time_utils import utc_now
 from .timeline_utils import create_system_timeline_entry
 
 router = APIRouter(prefix="/api/opportunities", tags=["sharing"])
@@ -125,10 +127,12 @@ def create_share(
         else:
             connection.execute(
                 """
-                INSERT INTO opportunity_shares (opportunity_id, user_id, role, invited_by)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO opportunity_shares (
+                    opportunity_id, user_id, role, invited_by, created_at
+                )
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (opportunity_id, invited_user["id"], payload.role, user["id"]),
+                (opportunity_id, invited_user["id"], payload.role, user["id"], utc_now()),
             )
         create_system_timeline_entry(
             connection=connection,
@@ -268,14 +272,7 @@ def delete_share(
                 detail="Share not found",
             )
 
-        connection.execute(
-            """
-            UPDATE opportunity_shares
-            SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-            WHERE opportunity_id = ? AND user_id = ? AND deleted_at IS NULL
-            """,
-            (opportunity_id, user_id),
-        )
+        soft_delete_share(connection, opportunity_id, user_id)
         create_system_timeline_entry(
             connection=connection,
             opportunity_id=opportunity_id,

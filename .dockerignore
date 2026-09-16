@@ -11,6 +11,8 @@ __pycache__
 .venv
 **/.venv
 *.db
+*.db-wal
+*.db-shm
 *.sqlite
 *.sqlite3
 node_modules

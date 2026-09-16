@@ -39,7 +39,6 @@ check: check-fast
 	cd backend && uv run pip-audit
 	cd frontend && npm audit
 	@echo "Frontend unit/component tests: deferred to milestone F.7 (no Vitest config yet)."
-	@echo "Migration tests: deferred to milestone F.4 (no Alembic yet)."
 	@$(MAKE) e2e
 	@echo "Docker build + smoke test: deferred to the host — this sandbox has no"
 	@echo "Docker socket (sandbox/README.md). Run scripts/autopilot-gate.sh <phase>."
@@ -56,6 +55,7 @@ docker:
 seed:
 	@echo "Seed data script: deferred to milestone F.7."
 
+# The application also runs this on startup, so a normal boot needs no manual
+# step; this target is for inspecting or applying revisions by hand.
 migrate:
-	@echo "Migrations: deferred to milestone F.4 (Alembic not yet introduced;"
-	@echo "database.py's run_migrations() currently runs automatically on startup)."
+	cd backend && uv run alembic upgrade head

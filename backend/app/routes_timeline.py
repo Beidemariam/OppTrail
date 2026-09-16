@@ -27,6 +27,12 @@ from .schemas import (
     TimelineEntryUpdate,
     TimelineResponse,
 )
+from .soft_delete import (
+    soft_delete_comment,
+    soft_delete_note,
+    soft_delete_timeline_entry,
+)
+from .time_utils import utc_now
 
 router = APIRouter(tags=["timeline"])
 
@@ -298,9 +304,10 @@ def create_timeline_entry(
                 body,
                 event_timestamp,
                 follow_up_date,
-                created_by
+                created_by,
+                created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 opportunity_id,
@@ -310,6 +317,7 @@ def create_timeline_entry(
                 payload.event_timestamp,
                 payload.follow_up_date,
                 user["id"],
+                utc_now(),
             ),
         )
         assert cursor.lastrowid is not None
@@ -407,33 +415,7 @@ def delete_timeline_entry(
             entry["created_by"],
             "Only the author or owner can delete this timeline entry",
         )
-        connection.execute(
-            """
-            UPDATE comments
-            SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-            WHERE deleted_at IS NULL
-                AND note_id IN (
-                    SELECT id FROM notes WHERE entry_id = ?
-                )
-            """,
-            (entry_id,),
-        )
-        connection.execute(
-            """
-            UPDATE notes
-            SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-            WHERE entry_id = ? AND deleted_at IS NULL
-            """,
-            (entry_id,),
-        )
-        connection.execute(
-            """
-            UPDATE timeline_entries
-            SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-            WHERE id = ?
-            """,
-            (entry_id,),
-        )
+        soft_delete_timeline_entry(connection, entry_id)
         create_audit_log_entry(
             connection=connection,
             opportunity_id=entry["opportunity_id"],
@@ -468,21 +450,22 @@ def create_note(
             )
         require_timeline_write(connection, entry["opportunity_id"], int(user["id"]))
 
+        created_at = utc_now()
         cursor = connection.execute(
             """
-            INSERT INTO notes (entry_id, body, created_by)
-            VALUES (?, ?, ?)
+            INSERT INTO notes (entry_id, body, created_by, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (entry_id, payload.body, user["id"]),
+            (entry_id, payload.body, user["id"], created_at, created_at),
         )
         assert cursor.lastrowid is not None
         note_id = int(cursor.lastrowid)
         connection.execute(
             """
-            INSERT INTO note_versions (note_id, version_number, body, edited_by)
-            VALUES (?, 1, ?, ?)
+            INSERT INTO note_versions (note_id, version_number, body, edited_by, created_at)
+            VALUES (?, 1, ?, ?, ?)
             """,
-            (note_id, payload.body, user["id"]),
+            (note_id, payload.body, user["id"], created_at),
         )
         notify_mentions(
             connection,
@@ -540,20 +523,21 @@ def update_note(
         ).fetchone()["version_number"]
         next_version = int(latest_version) + 1
 
+        updated_at = utc_now()
         connection.execute(
             """
             UPDATE notes
-            SET body = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), edited = 1
+            SET body = ?, updated_at = ?, edited = 1
             WHERE id = ? AND deleted_at IS NULL
             """,
-            (payload.body, note_id),
+            (payload.body, updated_at, note_id),
         )
         connection.execute(
             """
-            INSERT INTO note_versions (note_id, version_number, body, edited_by)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO note_versions (note_id, version_number, body, edited_by, created_at)
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (note_id, next_version, payload.body, user["id"]),
+            (note_id, next_version, payload.body, user["id"], updated_at),
         )
         notify_mentions(
             connection,
@@ -643,18 +627,7 @@ def delete_note(
             note["created_by"],
             "Only the author or owner can delete this note",
         )
-        connection.execute(
-            """
-            UPDATE comments
-            SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-            WHERE note_id = ? AND deleted_at IS NULL
-            """,
-            (note_id,),
-        )
-        connection.execute(
-            "UPDATE notes SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?",
-            (note_id,),
-        )
+        soft_delete_note(connection, note_id)
         create_audit_log_entry(
             connection=connection,
             opportunity_id=note["opportunity_id"],
@@ -690,10 +663,10 @@ def create_comment(
 
         cursor = connection.execute(
             """
-            INSERT INTO comments (note_id, body, created_by)
-            VALUES (?, ?, ?)
+            INSERT INTO comments (note_id, body, created_by, created_at)
+            VALUES (?, ?, ?, ?)
             """,
-            (note_id, payload.body, user["id"]),
+            (note_id, payload.body, user["id"], utc_now()),
         )
         assert cursor.lastrowid is not None
         comment_id = int(cursor.lastrowid)
@@ -753,10 +726,7 @@ def delete_comment(
             comment["created_by"],
             "Only the author or owner can delete this comment",
         )
-        connection.execute(
-            "UPDATE comments SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?",
-            (comment_id,),
-        )
+        soft_delete_comment(connection, comment_id)
         create_audit_log_entry(
             connection=connection,
             opportunity_id=comment["opportunity_id"],

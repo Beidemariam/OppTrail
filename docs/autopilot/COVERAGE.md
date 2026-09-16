@@ -144,3 +144,53 @@ Frontend: still 0% (no test runner) — unchanged from baseline; F.7's scope.
 generated `frontend/lib/api-types.ts` and the `page.tsx` types now sourced
 from it — these are compile-time checks, not a substitute for F.7's Vitest
 component-test floor.
+
+## Phase F — after milestone F.4 (database), 2026-09-16
+
+Command: `cd backend && uv run pytest -q --cov=app --cov-branch --cov-report=term-missing --cov-fail-under=90`
+(via `make check-fast`), run inside the sandbox.
+
+```
+60 passed in 17.21s
+TOTAL: 1261 stmts, 42 miss, 178 branches, 35 partial, 95% combined line+branch coverage
+Required test coverage of 90% reached. Total coverage: 94.65%
+```
+
+60 tests, up from 48: +13 new, -1 relocated.
+
+- `tests/test_migrations.py` (+6) — upgrade from empty, idempotence, upgrade
+  from an MVP-era database, the backfill running once, the legacy repair *not*
+  running on every startup, and canonical timestamps written into a bridged
+  legacy database. Brief §6.1's migration layer; `make check` no longer prints
+  a deferral for it.
+- `tests/test_soft_delete.py` (+4) — the hard-delete source scan, the scanner's
+  own self-check against a file that does contain one, the `sessions` exclusion,
+  and a behavioral check that deleting a populated opportunity retains every row
+  across five tables.
+- `tests/test_database.py` (+3) — WAL, `foreign_keys`, and the busy timeout,
+  each confirmed to fail with the corresponding pragma removed from
+  `get_connection()`.
+- `tests/test_opportunities.py` (-1) — `test_schema_init_backfills_created_system_entries`
+  removed; the same guarantee is now asserted by
+  `test_mvp_backfill_creates_one_system_entry_per_opportunity` against a real
+  pre-Alembic database instead of a hand-built row. Justified in DECISIONS.md
+  D-016, per brief §6.5's rule on removed tests.
+
+Coverage moved 94.29% → 94.65% on a larger codebase (1210 → 1261 statements).
+
+| Module | Combined line+branch % | Notes |
+|---|---|---|
+| `soft_delete.py` | 100% | new module; every cascade helper is exercised through the API by `test_invariant_deleting_an_opportunity_retains_every_row` and the existing delete tests |
+| `database.py` | 94% | new module content (Alembic wiring, the bridge, `table_exists`). The four uncovered branches are the bridge's two `column_exists` guards in their already-migrated direction (a legacy database that happens to have one of the two columns), plus the non-sqlite `ValueError` that `settings.py`'s validator forecloses |
+| `auth.py` | 100% | unchanged floor; touched by D-014's explicit-timestamp writes |
+| `audit_utils.py` | 100% | unchanged |
+| `notification_service.py` | 97% | unchanged |
+| `timeline_utils.py` | 100% | unchanged |
+| `routes_timeline.py` | 91% | ~60 lines of cascade SQL replaced by `soft_delete` calls; uncovered lines unchanged from F.3 |
+
+Brief §6.2's ≥95% branch floor for critical modules: `auth.py`, `permissions.py`
+and `soft_delete.py` are at 100%; `audit_utils.py` 100%. `ai_service.py` stays
+at 79% and remains knowingly deferred to F.6, which owns the timeout/retry
+wrapper that makes its error branches testable without a live API call.
+
+Frontend: still 0% (no test runner) — unchanged; F.7's scope.

@@ -14,7 +14,8 @@ from .schemas import (
     OpportunityPublic,
     OpportunityUpdate,
 )
-from .time_utils import utc_days_ago
+from .soft_delete import soft_delete_opportunity
+from .time_utils import utc_days_ago, utc_now
 from .timeline_utils import create_system_timeline_entry
 
 router = APIRouter(prefix="/api/opportunities", tags=["opportunities"])
@@ -144,6 +145,7 @@ def create_opportunity(
     payload: OpportunityCreate,
     user: sqlite3.Row = Depends(get_current_user),
 ) -> OpportunityPublic:
+    created_at = utc_now()
     with db_connection() as connection:
         cursor = connection.execute(
             """
@@ -154,9 +156,11 @@ def create_opportunity(
                 currency,
                 stage,
                 owner_id,
-                expected_close_date
+                expected_close_date,
+                created_at,
+                updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 payload.name,
@@ -166,6 +170,8 @@ def create_opportunity(
                 payload.stage,
                 user["id"],
                 payload.expected_close_date,
+                created_at,
+                created_at,
             ),
         )
         assert cursor.lastrowid is not None
@@ -260,58 +266,7 @@ def delete_opportunity(
         row = fetch_opportunity_row(connection, opportunity_id)
         assert row is not None
 
-        connection.execute(
-            """
-            UPDATE comments
-            SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-            WHERE deleted_at IS NULL
-                AND note_id IN (
-                    SELECT notes.id
-                    FROM notes
-                    JOIN timeline_entries ON timeline_entries.id = notes.entry_id
-                    WHERE timeline_entries.opportunity_id = ?
-                )
-            """,
-            (opportunity_id,),
-        )
-        connection.execute(
-            """
-            UPDATE notes
-            SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-            WHERE deleted_at IS NULL
-                AND entry_id IN (
-                    SELECT id
-                    FROM timeline_entries
-                    WHERE opportunity_id = ?
-                )
-            """,
-            (opportunity_id,),
-        )
-        connection.execute(
-            """
-            UPDATE timeline_entries
-            SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-            WHERE opportunity_id = ? AND deleted_at IS NULL
-            """,
-            (opportunity_id,),
-        )
-        connection.execute(
-            """
-            UPDATE opportunity_shares
-            SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-            WHERE opportunity_id = ? AND deleted_at IS NULL
-            """,
-            (opportunity_id,),
-        )
-        connection.execute(
-            """
-            UPDATE opportunities
-            SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
-                updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-            WHERE id = ? AND owner_id = ? AND deleted_at IS NULL
-            """,
-            (opportunity_id, user["id"]),
-        )
+        soft_delete_opportunity(connection, opportunity_id)
         create_audit_log_entry(
             connection=connection,
             opportunity_id=opportunity_id,

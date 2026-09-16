@@ -207,31 +207,111 @@ contract check passes); `make check` also run and green (`pip-audit`/`npm
 audit` both 0 vulnerabilities); Docker portion still deferred to the host
 per the unchanged split-gate note.
 
-### F.4 — Database (§4.4)
+### F.4 — Database (§4.4) — **DONE**
 
-Run this milestone on Opus (`MODEL=opus sandbox/run.sh autopilot`), per
-`scripts/autopilot.sh:11-14`: the Alembic baseline is one of the two things in
-the plan that is hardest to recover from if it lands wrong. The run header now
-records the model in the log file, so the resulting commit is attributable.
+Run on Opus (`MODEL=opus sandbox/run.sh autopilot`), per `scripts/autopilot.sh:11-14`:
+the Alembic baseline is one of the two things in the plan that is hardest to
+recover from if it lands wrong. The run header records the model in the log file,
+so the resulting commit is attributable.
 
-- [ ] Introduce Alembic with the current schema as the baseline revision;
-      convert `run_migrations()` (`database.py:55-71`) into real revisions.
-      Preserve zero-setup for new installs (a fresh DB still gets a fully
-      migrated schema with no manual step).
-- [ ] SQLite: enable WAL, confirm `PRAGMA foreign_keys = ON` (already set,
-      `database.py:21`), set a busy timeout (not currently set).
+- [x] Alembic introduced with the current schema as the baseline revision.
+      `app/schema.sql` is deleted; `alembic/versions/20260916_0001_baseline.py`
+      carries its DDL verbatim (`IF NOT EXISTS` dropped — a revision runs once).
+      `initialize_database()` now calls `command.upgrade(config, "head")`, so
+      zero-setup for new installs is preserved: a fresh database gets the whole
+      schema with no manual step, and `make migrate` exists for applying
+      revisions by hand. `alembic/env.py` takes its URL from
+      `database.sqlalchemy_url()` — derived from the same `settings.database_url`
+      the raw `sqlite3` connections use — so the CLI and the startup migration
+      can never target different files; `alembic.ini` deliberately sets no URL
+      and no logging config (the latter would replace F.2's JSON formatter
+      mid-boot). `target_metadata` stays `None`: Alembic is adopted for the
+      version table, ordering and batch rebuilds, not as an ORM (ADR 0002).
+- [x] `run_migrations()` converted. Not into revisions — see **D-013**: ADR 0002's
+      own step 3 (stamp the legacy database at the baseline) and step 4 (convert
+      the ALTERs into revisions) contradict each other, because a database
+      stamped at the baseline is already past them. The two guarded `ALTER
+      TABLE`s, `normalize_legacy_timestamps()` and
+      `backfill_opportunity_created_entries()` now live in
+      `bridge_pre_alembic_database()`, which runs **once**, against a database
+      that has tables but no `alembic_version`, immediately before the stamp.
+      ADR 0002's stated goal ("startup stops doing repeated full-table scans")
+      is met literally, and
+      `test_legacy_repair_runs_once_rather_than_on_every_startup` proves it.
+- [x] Consequence of the above, found while testing it rather than predicted:
+      **D-014**. Once the repair stops running every boot, a bridged legacy
+      database — which keeps its old `DEFAULT CURRENT_TIMESTAMP` columns,
+      because SQLite's `ALTER TABLE` cannot rewrite a default — writes
+      `"YYYY-MM-DD HH:MM:SS"` values that nothing ever normalizes again. That is
+      the exact mixed-format corruption CLAUDE.md's Timestamps section warns
+      about. Every `INSERT`/`UPDATE` across `auth.py`, `audit_utils.py`,
+      `notification_service.py`, `routes_auth.py`, `routes_opportunities.py`,
+      `routes_sharing.py`, `routes_timeline.py` and `timeline_utils.py` now
+      supplies its timestamps explicitly via `utc_now()`; column defaults remain
+      only as a backstop. `test_writes_to_a_bridged_legacy_database_are_canonical`
+      drives the real API against a bridged MVP database and checks all 14
+      written timestamp columns; confirmed to fail against the pre-fix code.
+- [x] Migration tests (brief §6.1's "upgrade from empty and from an MVP-era
+      snapshot with realistic data") — `tests/test_migrations.py`, 6 tests.
+      `tests/data/mvp_schema.sql` is the real pre-Alembic schema (commit
+      acac885), populated with `CURRENT_TIMESTAMP`-format rows and with
+      `system_generated` dropped to match that era. Upgrade-from-empty is
+      compared against `tests/data/expected_schema.sql`, so a revision that
+      changes the schema has to update that snapshot deliberately.
+      `make check`'s "Migration tests: deferred to milestone F.4" note is
+      removed, and `make migrate` now runs `alembic upgrade head` instead of
+      printing a deferral.
+- [x] SQLite: WAL enabled, `PRAGMA foreign_keys = ON` confirmed, busy timeout
+      set to 5s — all three in `get_connection()`, all three guarded by the new
+      `tests/test_database.py` (3 tests, each confirmed to fail with the pragmas
+      removed). Foreign keys are checked by provoking a real `IntegrityError`,
+      not just by reading the pragma back. `.gitignore`/`.dockerignore` gained
+      `*.db-wal` / `*.db-shm`, which WAL creates alongside the database and
+      which `*.db` does not match.
 - [x] ADR: SQLite fitness for v2. **Dropped — already satisfied, see D-012**
       (human-accepted 2026-09-16). `docs/adr/0001-keep-sqlite.md` (Accepted,
       benchmarked at the confirmed 800k-row scale) answers it and already
-      prescribes the WAL + busy-timeout work in the bullet above; ADR 0003
-      covers the real-time half and ADR 0011 the single-container half. Do not
-      write a new ADR here.
-- [ ] Central soft-delete implementation with a test that fails on hard
-      deletes of user data (a real regression test, run against the unfixed
-      state first per brief §6.5's "guard test" rule — there is currently no
-      hard-delete path to guard against, so this test should assert the
-      *absence* of any `DELETE FROM` on the four user-data tables, e.g. by
-      grepping the codebase or by a runtime assertion).
+      prescribes the WAL + busy-timeout work above; ADR 0003 covers the
+      real-time half and ADR 0011 the single-container half.
+- [x] Central soft-delete implementation: `app/soft_delete.py` is now the only
+      place user data is deleted. It owns the `deleted_at` cascade down the
+      opportunity → entry → note → comment tree (plus shares), and
+      `routes_opportunities.py`, `routes_sharing.py` and `routes_timeline.py`
+      call its five helpers instead of writing their own `UPDATE ... SET
+      deleted_at` — about 100 lines of duplicated cascade SQL removed, and the
+      cascade defined once so a new delete path cannot forget a level.
+- [x] Test that fails on hard deletes of user data: `tests/test_soft_delete.py`.
+      A source scan rather than a runtime check, deliberately — a `DELETE FROM
+      notes` on a path no test exercises would still ship. Per brief §6.5 the
+      guard is itself guarded: `test_the_guard_detects_a_hard_delete` runs the
+      scanner over a file that does contain one, and
+      `test_the_guard_allows_session_cleanup` pins the one intentional exclusion
+      (`sessions` is ephemeral auth state, not user content, and logout really
+      does delete the row). A behavioral companion,
+      `test_invariant_deleting_an_opportunity_retains_every_row`, deletes a fully
+      populated opportunity through the API and asserts every row across five
+      tables survives with `deleted_at` set.
+
+Work log: single session (Opus). Backend diff: `app/database.py` (Alembic wiring,
+WAL/busy-timeout pragmas, the bridge, `table_exists`), new `app/soft_delete.py`,
+new `backend/alembic.ini` + `backend/alembic/` (env, `script.py.mako`, baseline
+revision), deleted `app/schema.sql`, explicit-timestamp edits across 8 `app/`
+modules, `pyproject.toml`/`uv.lock` (+`alembic`). Tests: new
+`tests/test_migrations.py`, `tests/test_soft_delete.py`, `tests/test_database.py`,
+new `tests/data/{mvp_schema,expected_schema}.sql`; one test removed from
+`tests/test_opportunities.py` and relocated (**D-016**, justified there — the
+same guarantee is now asserted against a real MVP-era database rather than a
+hand-built row). Tooling/docs: `Makefile` (`migrate` target, dropped deferral
+note), `.gitignore`, `.dockerignore`, `CLAUDE.md` (Migrations, connection
+pragmas, and Soft deletes sections rewritten — they document the code, so they
+change in this commit). Decisions: **D-013** (bridge instead of revisions),
+**D-014** (explicit timestamps), **D-015** (keep `column_exists()` against ADR
+0002 step 6), **D-016** (relocated test). None flagged needs-human-review.
+Gate: `make check-fast` green — ruff, `ruff format --check`, `mypy --strict`,
+frontend typecheck/lint, API-contract check, and 60 backend tests at 94.65%
+combined coverage against the 90% floor. `make check` also green (`pip-audit`
+and `npm audit` both 0 vulnerabilities). Docker build + smoke test remains
+deferred to the host per the split gate (brief §3.4), unchanged.
 
 ### F.5 — Security (§4.5)
 

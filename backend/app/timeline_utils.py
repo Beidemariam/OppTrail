@@ -11,6 +11,7 @@ def create_system_timeline_entry(
     title: str,
     body: str,
 ) -> None:
+    now = utc_now()
     connection.execute(
         """
         INSERT INTO timeline_entries (
@@ -20,9 +21,10 @@ def create_system_timeline_entry(
             body,
             event_timestamp,
             created_by,
-            system_generated
+            system_generated,
+            created_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, 1)
+        VALUES (?, ?, ?, ?, ?, ?, 1, ?)
         """,
-        (opportunity_id, entry_type, title, body, utc_now(), created_by),
+        (opportunity_id, entry_type, title, body, now, created_by, now),
     )

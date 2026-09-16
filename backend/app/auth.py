@@ -6,6 +6,7 @@ from fastapi import Cookie, HTTPException, Response, status
 from passlib.context import CryptContext
 
 from .database import db_connection
+from .time_utils import to_canonical, utc_now
 
 SESSION_COOKIE_NAME = "opptrail_session"
 SESSION_DAYS = 7
@@ -32,8 +33,11 @@ def create_session(response: Response, user_id: int) -> None:
 
     with db_connection() as connection:
         connection.execute(
-            "INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)",
-            (session_id, user_id, expires_at.isoformat()),
+            """
+            INSERT INTO sessions (id, user_id, created_at, expires_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (session_id, user_id, utc_now(), to_canonical(expires_at)),
         )
         connection.commit()
 
@@ -64,7 +68,7 @@ def get_current_user(
             detail="Authentication required",
         )
 
-    now = datetime.now(UTC).isoformat()
+    now = utc_now()
     with db_connection() as connection:
         user: sqlite3.Row | None = connection.execute(
             """
