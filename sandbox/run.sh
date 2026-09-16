@@ -134,6 +134,19 @@ case "${1:-}" in
     ;;
 
   login)
+    # docker run -it needs a real terminal. Running this through a wrapper that
+    # pipes stdin (Claude Code's ! prefix, CI, `| tee`) fails with an opaque
+    # Docker error, so say what to do instead.
+    if [ ! -t 0 ] || [ ! -t 1 ]; then
+      echo "sandbox/run.sh login needs a real terminal for the sign-in prompts." >&2
+      echo >&2
+      echo "Open a terminal window and run:" >&2
+      echo "  cd ${REPO_ROOT} && sandbox/run.sh login" >&2
+      echo >&2
+      echo "Or skip the interactive login by exporting an API key instead:" >&2
+      echo "  ANTHROPIC_API_KEY=sk-... sandbox/run.sh autopilot" >&2
+      exit 1
+    fi
     ensure_image
     echo "Signing in inside the sandbox. Credentials persist in the '${HOME_VOLUME}'"
     echo "Docker volume and are separate from your host login."
