@@ -24,6 +24,21 @@ if [ "$status" != "STATUS: AWAITING_REVIEW phase=${PHASE}" ]; then
   read -r -p "Accept anyway? [y/N] " ans; [ "${ans:-N}" = "y" ] || exit 1
 fi
 
+# The sandbox has no Docker socket, so the agent cannot run the "Docker build +
+# smoke test" half of the gate (brief 3.4). scripts/autopilot-gate.sh runs it on
+# the host and leaves a receipt keyed to the commit, in a directory that is never
+# mounted into the sandbox -- so this cannot be satisfied by the agent.
+GATE_DIR="${AUTOPILOT_GATE_DIR:-${HOME}/.opptrail-autopilot/gate}"
+SHA="$(git rev-parse "${BRANCH}")"
+if [ ! -f "${GATE_DIR}/${SHA}" ]; then
+  echo "No host-gate receipt for ${BRANCH} at ${SHA:0:12}."
+  echo "Run: scripts/autopilot-gate.sh ${PHASE}"
+  exit 1
+fi
+echo "Host gate receipt found:"
+sed 's/^/  /' "${GATE_DIR}/${SHA}"
+echo
+
 echo "Commits to be accepted into main:"
 git log --oneline "main..${BRANCH}"
 read -r -p "Fast-forward main to ${BRANCH} and tag ${TAG}? [y/N] " ans

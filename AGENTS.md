@@ -208,7 +208,7 @@ what to build next and `docs/ARCHITECTURE.md` for the standards that apply to it
 When running under `docs/autopilot-brief.md`:
 - Commits are permitted on `autopilot/phase-<ID>` branches only. Nothing is committed to `main` by the agent.
 - The Review / Accept / Reject decision happens at the end of each phase, using the review packet in `docs/autopilot/reviews/`.
-- Accept = the human runs `scripts/autopilot-accept.sh <ID>` (fast-forwards `main`, tags `phase-<ID>-accepted`).
+- Accept = the human runs `scripts/autopilot-gate.sh <ID>` (host-side Docker build and smoke test), then `scripts/autopilot-accept.sh <ID>` (fast-forwards `main`, tags `phase-<ID>-accepted`). Accept refuses without a gate receipt for that commit.
 - Reject = the human runs `scripts/autopilot-reject.sh <ID> <feedback.md>`; the agent reworks on the same branch.
 - The agent never merges, pushes, or creates acceptance tags.
 - Autopilot runs inside the sandbox in `sandbox/` (`sandbox/run.sh`), which mounts only this repo. See `sandbox/README.md` for the boundary and its documented limits.

@@ -103,6 +103,23 @@ If the same failure repeats three times with no new information, log it in BLOCK
 
 `make check-fast` may skip E2E, Docker, and audits during inner-loop work. **Milestone commits require `make check-fast`; `AWAITING_REVIEW` requires full `make check`.**
 
+**Split gate.** You run inside the sandbox (`sandbox/README.md`), which has no
+Docker socket -- mounting one would grant root on the host and void the
+containment. So the gate is split:
+
+- **Yours, in the sandbox:** every item above except the final one. `make check`
+  must run and pass all of them. Where the Docker build and smoke test would run,
+  print that they are deferred to the host gate; do not skip them silently, and
+  do not weaken `make check` to make them disappear.
+- **The human's, on the host:** `scripts/autopilot-gate.sh <ID>` builds the
+  application image from your phase branch and smoke-tests it. It writes a
+  receipt keyed to the branch commit, which `scripts/autopilot-accept.sh`
+  requires. A phase cannot be accepted without it.
+
+This means `AWAITING_REVIEW` is legitimate once your half is green. State in the
+review packet (3.5, section 4) that the host gate is outstanding, and name the
+commit it must be run against.
+
 ### 3.5 Review packet
 At the end of each phase, write `docs/autopilot/reviews/phase-<ID>-summary.md`, designed for a human to review in 20–30 minutes:
 1. **What changed** — features and fixes in plain language, mapped to roadmap items
