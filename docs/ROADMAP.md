@@ -118,6 +118,10 @@ sidebar; ⌘K to jump anywhere.
 - Every action in the keyboard map works without a mouse, board drag included.
 - View switch < 150 ms with data cached; `axe` clean in CI.
 - Timeline load stays within 400 ms at seeded scale.
+- Light and dark themes both ship, and both pass `axe` contrast checks on every
+  component delivered in this phase. `DESIGN-SYSTEM.md` commits to parity from
+  the start because retrofitting a dark palette after the token system lands is
+  the expensive path.
 
 **Effort:** 8 sessions — the largest phase, and worth keeping large rather than
 splitting the decomposition into an invisible phase of its own.

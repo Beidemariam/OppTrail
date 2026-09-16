@@ -109,6 +109,32 @@ is vacuously satisfied by "the untouched test suite still passes."
       finding 10); generic auth errors (already true, `routes_auth.py:66-70`).
 - [ ] Finish the permission-check consolidation from F.2/D-004 across every
       service method touching an opportunity.
+
+**F.5a — Editors may edit only their own content (D-005, overruled by the
+human 2026-09-16).** Edit permission must mirror delete exactly: author or
+opportunity owner. This closes `docs/code_review.md` finding 4a the way it
+asked.
+
+- [ ] Add the edit-side counterpart to `permissions.require_delete_permission`
+      (`permissions.py:68-82`) rather than a second inline rule, so both paths
+      resolve through one helper.
+- [ ] Apply it to timeline entry edit (`routes_timeline.py:340-383`) and note
+      edit (`routes_timeline.py:513-577`). Comments stay immutable to everyone
+      (invariant §2.2) — no edit route is to be added.
+- [ ] Update `test_editor_can_write_and_viewer_is_read_only`
+      (`test_timeline.py:225`). **This assertion change is authorised by the
+      human ruling in DECISIONS.md D-005** and is therefore not a weakened test
+      under brief §6.5; cite D-005 in the commit.
+- [ ] Add tests: an editor editing a colleague's entry and note gets 403; the
+      author and the opportunity owner both still succeed.
+- [ ] Add the endpoints to the authorization matrix (§6.4) with the tightened
+      expectations.
+- [ ] Frontend: add a `canEdit(authorId)` helper mirroring the existing
+      `canDelete(authorId)`, so the UI never offers an edit the API will
+      reject.
+- [ ] Update `CLAUDE.md`'s Permissions section, which still describes the old
+      "editors add and edit freely" behaviour — it documents the code, so it
+      changes when the code does, in this milestone's commit.
 - [ ] Upload hardening (size limits, content sniffing, randomized stored
       names, safe paths, forced download disposition, traversal tests) — no
       attachments exist yet (Phase 4 feature); stand up the framework here so
@@ -257,9 +283,10 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
       undo toasts.
 - [ ] 2.5 Design tokens from `DESIGN-SYSTEM.md`, including the three
       corrected contrast values; Radix primitives; real dialogs replacing
-      `window.confirm` (`page.tsx:229`). **Apply D-003 here if accepted at the
-      Phase F gate**: dark-theme parity with an explicit axe-contrast
-      acceptance criterion.
+      `window.confirm` (`page.tsx:229`). **D-003 ACCEPTED by the human
+      2026-09-16 — this is now phase scope, not a proposal:** ship light and
+      dark themes together, with dark-theme parity asserted by axe contrast
+      checks on every component delivered in Phase 2.
 - [ ] 2.6 Three new entry types with icons. Schema: `timeline_entries.type`
       CHECK extended.
 - [ ] 2.7 Board view (drag to change stage, auto-logs a system entry) and list
@@ -275,6 +302,8 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
 - Every action in the keyboard map works without a mouse, board drag included.
 - View switch < 150 ms with data cached; `axe` clean in CI (2.2 AA per D-002).
 - Timeline load stays within 400 ms at seeded scale.
+- Light and dark themes both ship, and both pass axe contrast checks on every
+  component delivered in this phase (D-003, accepted 2026-09-16).
 
 ---
 

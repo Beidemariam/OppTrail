@@ -142,10 +142,14 @@ Reasoning in `docs/adr/`. Do not change these without an argued ADR.
 
 ## Permissions Model
 
-- **Owner** — full control: opportunity, timeline, sharing, deletion
-- **Editor** — add and edit entries, notes, comments
+- **Owner** — full control: opportunity, timeline, sharing, editing, deletion
+- **Editor** — add entries, notes and comments freely; **edit and delete only
+  their own** content
 - **Viewer** — read-only, including the AI agent (may ask, may not write)
-- **Deleting** an entry, note or comment is limited to its author or the owner
+- **Editing and deleting** an entry, note or comment is limited to its author or
+  the opportunity owner. The two rules are deliberately identical: an editor who
+  may not remove a colleague's record may not rewrite it either
+- Comments remain immutable to everyone once posted
 - Absence of access returns **404, not 403**, so existence does not leak
 
 ## Quality Bar
