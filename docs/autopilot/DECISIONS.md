@@ -1,0 +1,46 @@
+# Decisions Log
+
+Format: `D-### | date | question | options | choice | reason | reversible (Y/N) | needs human review (Y/N)`
+
+---
+
+**D-001** | 2026-09-16 | `docs/v2_review_brief.md:14` says "OpenRouter (`gpt-oss-20b`)"; the code (`backend/app/ai_service.py:4,124-137`, `settings.py:7-8`), `AGENTS.md` ("OpenAI for AI calls"), and ADR 0012 all say OpenAI. | (a) leave the stale line, (b) fix it to match code/ADRs | (b) — replaced the line with "OpenAI (`OPENAI_API_KEY` / `OPENAI_MODEL`) for the AI agent" | Brief §1's source-of-truth hierarchy ranks code and ADRs above `v2_review_brief.md`; the brief's own §1 explicitly names this as a known stale item to fix in Phase F (§4.1.6). Already resolved once in `docs/OPEN-QUESTIONS.md` Q1. | Y | N — mechanical application of an already-settled hierarchy and an explicit brief instruction |
+
+**D-002** | 2026-09-16 | WCAG version conflict: brief §7's capability list and §8 Phase R say "WCAG 2.1 AA"; `AGENTS.md`'s Quality Bar says "WCAG 2.2 AA, enforced by axe in Playwright"; `docs/ROADMAP.md` Phase 2 acceptance says "axe clean in CI" without naming a version. | (a) target 2.1 AA per the brief, (b) target 2.2 AA per `AGENTS.md` | (b) — treat 2.2 AA as the bar for every accessibility acceptance criterion in Phases 2 and R | Source-of-truth hierarchy (brief §1) ranks `AGENTS.md` above this brief. 2.2 AA is also a strict superset of 2.1 AA's success criteria, so targeting it never produces a criterion that fails a 2.1 audit. | Y | N — resolving a version conflict per the hierarchy the brief itself defines; no scope or architecture changes |
+
+**D-003** | 2026-09-16 | Scope cross-check (brief §4.1.4): §7's capability list includes "design system with light/dark themes." `docs/DESIGN-SYSTEM.md:101-107` commits to "full parity from the start" for dark mode, but no phase in `docs/ROADMAP.md` states a dark-theme acceptance criterion — Phase 2's technical work only says "design tokens from DESIGN-SYSTEM.md, including the three corrected contrast values," which could be satisfied by tokens alone with no dark palette shipped. | (a) leave implicit inside "design tokens" work, (b) add an explicit dark-theme acceptance criterion, and pick a phase | Proposal only, per §4.1.4 — **not added to the plan.** Recommend adding to Phase 2 (where the token system and Radix primitives land, and where `DESIGN-SYSTEM.md` says retrofitting is expensive), with an explicit acceptance criterion: "light and dark themes both pass axe contrast checks on every shipped component." | `DESIGN-SYSTEM.md` treats retrofitting as the risk to avoid, so the phase that introduces the token system is the natural owner. Deferring it to Phase R risks exactly the two-pass audit `DESIGN-SYSTEM.md` warns against. | Y (adds a phase acceptance criterion) | **Y** |
+
+**D-004** | 2026-09-16 | Reconnaissance found `backend/app/routes_opportunities.py` (`fetch_accessible_opportunity`, `fetch_owned_opportunity`, lines 86-132) re-implements role resolution inline instead of calling `permissions.py`'s `require_opportunity_access` / `require_opportunity_owner`, even though behavior currently matches (`test_opportunities.py:134` passes either way). Brief §4.5 explicitly asks for "one central permission-check function used by every service method touching an opportunity." | (a) leave the duplication since behavior is currently correct, (b) consolidate onto `permissions.py` as a Phase F milestone | (b) | This is exactly the gap §4.5 names, not a new judgment call — implementing it is in-scope for Phase F regardless. Logged here so the "why" survives into the milestone rather than being rediscovered. | Y | N — directly specified by the brief; no architecture change, just deduplication |
+
+**D-005** | 2026-09-16 | `docs/code_review.md` finding 4a identified that editors could edit (not just fail to be blocked from deleting) any colleague's timeline entry or note, and recommended the reviewer "pick one and apply it consistently." Only the delete side was tightened (`require_delete_permission`, author-or-owner) — edit was left permissive. `AGENTS.md`'s permissions model states editors "add and edit freely" and is silent on restricting edits of others' content, while explicitly reserving deletion to the author or owner. Current code (`routes_timeline.py:340-383` for entries, `:513-577` for notes) matches this reading. | (a) tighten edit to author-or-owner to match delete, (b) keep edit permissive, matching the literal `AGENTS.md` wording and existing passing tests | (b) — keep current behavior; treat this as a deliberate, now-explicit reading of an ambiguous spec rather than an unresolved defect | `AGENTS.md` positively states editors edit freely; it does not say "except other people's items." Changing it would contradict `test_editor_can_write_and_viewer_is_read_only` (`test_timeline.py:225`) and would be scope the brief didn't ask for (brief §9: "no unnecessary defensive branches," and changing tested behavior needs a justified reason, not just discomfort with an old review comment). | Y | **Y** — a human should confirm this reading before Phase 2's UI work bakes in delete-only restrictions for "canDelete" but not "canEdit" |
+
+**D-006** | 2026-09-16 | How to structure Phase F's own milestone list, since §4.1 items 1-6 (inventory, baseline, roadmap conversion, scope cross-check, gap analysis, stale-reference fix) are tightly coupled and none alone produces an independently gate-able artifact. | (a) one milestone per numbered §4.1 bullet, (b) bundle all of §4.1 as milestone F.1 ("Reconnaissance"), with gap-analysis findings becoming their own later Phase F milestones per §4.1.5's instruction | (b) | §4.1.5 already says gap-analysis items "each become a Phase F milestone" — implying §4.1's other five items are the input to that split, not milestones in themselves. Splitting inventory from baseline-running from roadmap-conversion would produce milestones with no independent acceptance criterion. | Y | N — a session-planning choice, not a product or architecture decision |
+
+---
+
+## Scope cross-check summary (brief §4.1.4)
+
+Walked every item in brief §7 against `docs/ROADMAP.md` Phases 1-6:
+
+| §7 capability | Roadmap coverage | Gap? |
+|---|---|---|
+| System-generated timeline entries | Shipped (v1) | No |
+| Entry type tags with color/icon | Color shipped (v1); icons for 3 new types in Phase 2 | No (existing 8 types keep color-only; acceptable minor scope reading, not logged as a gap) |
+| Note edit history | Shipped (v1, `note_versions`) | No |
+| Audit log | Shipped (v1) | No |
+| @mentions and in-app notifications | Shipped (v1) + reworked inbox in Phase 1 | No |
+| Stalled flags and follow-up reminders | Stalled flag shipped (v1); Phase 6's automation acceptance criterion ("no-activity-for-14-days rule fires... creates a task... logs a system entry") is the reminder mechanism | No — confirmed this maps to journey §6.3 #9, not a separate unbuilt feature |
+| CSV/JSON export (PDF retained) | Shipped (v1) | No |
+| Rich text | Phase 3 (TipTap) | No |
+| Custom fields | Phase 6 | No |
+| Table/board/calendar views | Phase 2 (board, list guaranteed; table/calendar may slip to Phase 3 per the roadmap's own stated risk) | No — already an acknowledged, not hidden, risk |
+| Saved and shareable filtered views | Phase 2 (`saved_views`) | No |
+| Dashboards | Phase 6 | No |
+| Real-time collaboration | Phase 3 (SSE, ADR 0003) | No |
+| Opportunity-scoped automations | Phase 6 | No |
+| Keyboard-first navigation and command palette | Phase 2 | No |
+| Design system with light/dark themes | Tokens land in Phase 2; no explicit dark-theme acceptance criterion anywhere | **Yes — D-003** |
+| WCAG 2.1 AA | Phase 2 + Phase R axe checks, version conflict with `AGENTS.md` | **Yes — D-002 (resolved by hierarchy, not a scope gap)** |
+
+One proposal follows from this table (D-003); everything else is already covered
+by name in the roadmap or resolved by the source-of-truth hierarchy.

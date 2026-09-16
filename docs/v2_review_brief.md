@@ -11,7 +11,7 @@ Current stack (do not change without an explicit, argued ADR):
 - Python FastAPI backend, also serving the static frontend
 - SQLite, auto-created on startup
 - Session auth: bcrypt + HttpOnly cookies
-- OpenRouter (`gpt-oss-20b`) for the AI agent
+- OpenAI (`OPENAI_API_KEY` / `OPENAI_MODEL`) for the AI agent
 - WeasyPrint for server-side PDF
 - Single Docker container, `uv` for Python packaging
 
