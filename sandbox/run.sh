@@ -137,7 +137,12 @@ case "${1:-}" in
     ensure_image
     echo "Signing in inside the sandbox. Credentials persist in the '${HOME_VOLUME}'"
     echo "Docker volume and are separate from your host login."
-    docker run -it "${common_args[@]}" "$IMAGE" claude /login
+    echo
+    echo "Claude Code will open below. Type:  /login"
+    echo "Then follow the prompts, and /exit when it reports you are signed in."
+    echo "The container has no browser, so it will print a URL to open on the host."
+    echo
+    docker run -it "${common_args[@]}" "$IMAGE" claude
     ;;
 
   verify)
