@@ -5,7 +5,7 @@
 # --dangerously-skip-permissions, per the note in scripts/autopilot.sh:6.
 #
 # It carries everything the quality gate in docs/autopilot-brief.md 3.4 needs,
-# except Docker itself -- see sandbox/README.md for why, and what covers it.
+# except Docker itself -- see sandbox/README.md and scripts/autopilot-gate.sh.
 
 FROM node:22-bookworm-slim
 
@@ -24,9 +24,14 @@ ENV DEBIAN_FRONTEND=noninteractive \
     # backend/.venv is macOS aarch64 / Python 3.14; a container `uv sync` would
     # overwrite it with Linux binaries and break `uv run pytest` on the host.
     UV_PROJECT_ENVIRONMENT=/work/venv \
+    PLAYWRIGHT_BROWSERS_PATH=/work/pw-browsers \
+    # The root filesystem is mounted read-only at runtime, so the CLI must not
+    # try to rewrite its own installation.
+    DISABLE_AUTOUPDATER=1 \
     PYTHONUNBUFFERED=1 \
     npm_config_update_notifier=false
 
+# No sudo, and no other route to root: see sandbox/README.md.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -37,7 +42,6 @@ RUN apt-get update \
         make \
         procps \
         ripgrep \
-        sudo \
         build-essential \
         libffi-dev \
         # WeasyPrint runtime libraries, matching the application image. These are
@@ -60,7 +64,13 @@ RUN uv python install 3.13 \
 
 RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
 
-# The node image already has a uid 1000 'node' user; reuse or re-map it.
+# Playwright's system libraries, installed now as root so the agent never needs
+# root later. Browser binaries are NOT baked in: they are version-specific, and
+# Phase F pins the Playwright version in package.json. The agent installs them
+# unprivileged into PLAYWRIGHT_BROWSERS_PATH, which run.sh backs with a volume.
+RUN npx --yes playwright@latest install-deps chromium \
+    && rm -rf /var/lib/apt/lists/* /root/.npm
+
 # Tolerates IDs that already exist in the base image -- a macOS host's staff
 # group is gid 20, which Debian already uses for dialout.
 RUN set -eu; \
@@ -71,20 +81,16 @@ RUN set -eu; \
     if [ "${UID}" != "$(id -u node)" ] && ! getent passwd "${UID}" >/dev/null; then \
         usermod -u "${UID}" node; \
     fi; \
-    mkdir -p /work/repo /work/opptrail-autopilot-logs /home/node/.claude /work/venv; \
+    mkdir -p /work/repo /work/opptrail-autopilot-logs /home/node/.claude \
+        /work/venv /work/pw-browsers; \
     chown -R node:"${GID}" /work /home/node
 
-# Passwordless apt only. Phase F (brief 4.7) must install Playwright's system
-# libraries, which needs root; everything else runs unprivileged.
-RUN printf '%s\n' \
-    'node ALL=(root) NOPASSWD: /usr/bin/apt-get, /usr/bin/apt, /usr/local/bin/npx' \
-    > /etc/sudoers.d/autopilot \
-    && chmod 0440 /etc/sudoers.d/autopilot
-
 # Structural guard: refuse commits on main from inside the sandbox. The brief
-# forbids them (3.1, 9); this makes ignoring that instruction fail rather than
-# succeed silently. Owned by root and outside the repo, so the agent cannot edit
-# it without deliberately escalating. Limits are documented in README.md.
+# forbids them (3.1, 9); this makes an accidental commit fail rather than
+# succeed silently. Root-owned and outside the repo, on a read-only root
+# filesystem. It is defence in depth, not a seal -- git has no mandatory hooks,
+# so --no-verify and -c core.hooksPath= bypass it. The host-side tripwire in
+# sandbox/run.sh catches that case. See sandbox/README.md.
 RUN mkdir -p /opt/autopilot-hooks \
     && printf '%s\n' \
         '#!/bin/sh' \
@@ -101,15 +107,18 @@ RUN mkdir -p /opt/autopilot-hooks \
     && chmod 0555 /opt/autopilot-hooks/pre-commit \
     && chmod 0555 /opt/autopilot-hooks
 
+# System-level git config, written as root onto the read-only root filesystem.
+# This deliberately is NOT ~/.gitconfig: the agent's home is a writable volume,
+# so a --global setting could simply be edited. The repo's own .git/config lives
+# in the bind mount and is never touched from here.
+RUN git config --system core.hooksPath /opt/autopilot-hooks \
+    && git config --system --add safe.directory /work/repo \
+    && git config --system advice.detachedHead false \
+    && git config --system user.name "OppTrail Autopilot" \
+    && git config --system user.email "autopilot@localhost" \
+    && chmod 0444 /etc/gitconfig
+
 USER node
 WORKDIR /work/repo
-
-# Container-global git config only. The repo's .git/config is inside the bind
-# mount and shared with the host, so it is never modified from here.
-RUN git config --global user.name "OppTrail Autopilot" \
-    && git config --global user.email "autopilot@localhost" \
-    && git config --global core.hooksPath /opt/autopilot-hooks \
-    && git config --global --add safe.directory /work/repo \
-    && git config --global advice.detachedHead false
 
 CMD ["bash"]

@@ -15,6 +15,7 @@ sandbox/run.sh login       # one-time Claude Code sign-in inside the sandbox
 sandbox/run.sh verify      # print what the sandbox can and cannot reach
 MAX_RUNS=1 sandbox/run.sh autopilot   # one supervised run
 sandbox/run.sh autopilot   # unattended, up to MAX_RUNS milestones
+sandbox/run.sh proxy-log   # what egress was requested, and what was refused
 ```
 
 `sandbox/run.sh shell` gives an interactive shell in the same environment, which
@@ -47,18 +48,48 @@ Containment comes from what `run.sh` mounts, not from instructions in the brief.
 | `/var/run/docker.sock` | socket access is root-equivalent on the host and would make this sandbox decorative |
 | `~/.claude` | your other projects stay invisible |
 | `$HOME`, `/tmp`, every other host path | the repo is the whole blast radius |
+| `sudo`, and any setuid path to root | the image ships no `sudo`; `--cap-drop ALL` plus `no-new-privileges` means a setuid binary cannot elevate either |
+| a route to the internet | the sandbox sits alone on an `--internal` Docker network whose only other member is the egress proxy |
 
-Three further properties, each verified by `run.sh verify`:
+Further properties, each verified by `run.sh verify`:
 
 - **Runs unprivileged** as `node`, remapped to your UID/GID so files written into
-  the bind mount stay yours.
+  the bind mount stay yours, with all capabilities dropped.
+- **Read-only root filesystem.** Only `/work/repo`, the log directory, the agent's
+  home, the venv and the browser cache are writable, so the agent cannot rewrite
+  its own toolchain, the commit hook, or `/etc/gitconfig`.
+- **Egress is allowlisted.** Everything the sandbox reaches goes through
+  `sandbox/proxy`, which permits only the hostnames in `proxy/allowlist.conf` and
+  logs every request, allowed or refused. `api.openai.com` and general hosts such
+  as `pastebin.com` are refused, which is brief §9 enforced by routing rather than
+  by instruction. Read the trail with `sandbox/run.sh proxy-log`.
 - **Commits are attributed to `OppTrail Autopilot <autopilot@localhost>`** via
   `GIT_AUTHOR_*` / `GIT_COMMITTER_*`. The bind-mounted `.git/config` carries your
   identity and outranks the image's `--global` config, so without the env vars
   every autopilot commit would look like yours. `.git/config` is never modified.
-- **Commits to `main` are refused** by a root-owned `pre-commit` hook at
-  `/opt/autopilot-hooks`, outside the repo. `main` moves only when you run
-  `scripts/autopilot-accept.sh` on the host.
+
+### The `main` guard, and why it is not a seal
+
+A root-owned `pre-commit` hook at `/opt/autopilot-hooks` refuses commits on
+`main`. It stops the accident. It does **not** stop a determined agent: git has
+no mandatory hooks, and `git commit --no-verify`, `git -c core.hooksPath=` and a
+`--global` override each bypass it. This was tested rather than assumed; all
+three bypasses succeed.
+
+So the real control is on the host. `sandbox/run.sh autopilot` records `main`'s
+SHA before launching the container and checks it afterwards. If `main` moved, it
+prints what happened, how to inspect it and how to undo it, then exits non-zero.
+That check runs outside the sandbox, where the agent cannot reach it.
+
+Note the distinction: host isolation, credentials and egress are *boundaries*.
+The `main` rule is a *workflow* control, and a local commit to `main` is a
+visible, recoverable process violation rather than an escape — it cannot reach
+the remote and cannot create an acceptance tag.
+
+If you want `main` sealed by construction too, the change is to mount a clone
+rather than this repo, with the real repository bind-mounted read-only as its
+`origin`, and have `scripts/autopilot-accept.sh` fetch from the clone instead of
+merging a local branch. That is a workflow change, so it is not done here.
 
 Container builds are also kept off your host toolchain. `UV_PROJECT_ENVIRONMENT`
 points at `/work/venv`, and `frontend/node_modules`, `.next` and `out` are
@@ -75,28 +106,36 @@ PDF export (see `CLAUDE.md`), so PDF changes are genuinely exercised here.
 
 **No Docker inside the sandbox.** The quality gate in
 `docs/autopilot-brief.md` §3.4 ends with "Docker build + smoke test", and the
-agent cannot run it from here. Mounting the Docker socket would hand the
-container root on the host and defeat the point. This is unresolved by design and
-needs a decision: the brief already requires only `make check-fast` for milestone
-commits and reserves full `make check` for `AWAITING_REVIEW`, so the natural split
-is for the agent to run everything it can and for the Docker build, smoke test
-and `npm audit` to run on the host at review time — which is also when you are
-reading the review packet anyway.
+agent cannot run it from here; mounting the Docker socket would hand the
+container root on the host. This is settled rather than open: the gate is split.
+The agent runs every other item, and you run `scripts/autopilot-gate.sh <ID>` on
+the host, which builds the application image from the phase branch and smoke
+tests health, sign-up, opportunity creation, PDF export and frontend serving. It
+writes a receipt keyed to the branch commit into a directory that is never
+mounted here, and `scripts/autopilot-accept.sh` refuses to accept a phase
+without one. Brief §3.4 documents this and forbids quietly dropping the deferred
+step from `make check`.
 
-**Network egress is open.** The agent needs it for the Claude API and package
-installs, so it is not filtered. Brief §9 forbids calling OpenAI and §6.5
-requires tests to mock it, but nothing structural stops an outbound call.
-Closing this would need an egress proxy with an allowlist.
+**DNS resolution still answers for names outside the allowlist**, because
+Docker's embedded resolver replies regardless of routing. Nothing can be fetched
+over those names — there is no route, and the proxy refuses them — but a
+determined agent could in principle signal small amounts of data through DNS
+queries. Closing that means running a filtering resolver beside the proxy.
 
-**`sudo` is limited to `apt-get`/`apt`/`npx`**, because Phase F (§4.7) must
-install Playwright's system libraries. An agent could therefore install
-arbitrary packages. That does not widen the boundary — there are still no
-credentials, no Docker socket, and nothing but the repo mounted — but it is not a
-sealed container either.
+**Allowlisted hosts are trusted.** `registry.npmjs.org`, `pypi.org` and
+`github.com` have to be reachable for the agent to install anything, and they
+serve arbitrary user-published content. The allowlist bounds *where* traffic can
+go, not what those hosts return. Keep `proxy/allowlist.conf` minimal; every
+addition widens this.
 
-**The `main` guard raises the bar rather than sealing it.** `git commit
---no-verify` bypasses hooks, and `sudo` could overwrite the hook. Both are
-forbidden by brief §9. The guard turns a silent slip into a deliberate act.
+**Playwright browsers are not baked in.** The system libraries are, but the
+browser binaries are version-specific and Phase F pins the Playwright version in
+`package.json`, so the agent installs them unprivileged into
+`PLAYWRIGHT_BROWSERS_PATH`. Chromium will need `--no-sandbox` in its launch
+options, which is standard in containers — do not add capabilities to work
+around it.
 
-The honest summary: this is solid containment against an agent that makes
-mistakes, and partial containment against one that actively tries to escape.
+The honest summary: host isolation, credentials, privilege and egress are sealed
+and tested. The `main` rule is enforced by detection rather than prevention, and
+the holes left open on purpose are DNS names and whatever the allowlisted
+package registries choose to serve.
