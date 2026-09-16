@@ -81,3 +81,22 @@ Two operational rulings, for the record:
   `scripts/autopilot-gate.sh <ID>` on the host, and
   `scripts/autopilot-accept.sh` refuses a phase without its receipt. See brief
   §3.4 and `sandbox/README.md`.
+
+---
+
+## Human note — 2026-09-16 (F.2 review)
+
+`make check-fast` assumes `frontend/node_modules` is already installed and fails
+with `sh: 1: tsc: not found` when it is not. The sandbox gives the container its
+own `node_modules` volume (so a container `npm ci` cannot overwrite the host's
+native `@next/swc` and `sharp` builds), and that volume starts empty, so a clean
+sandbox cannot run the gate at all.
+
+**Action for a later F milestone (F.3 or the Phase R CI work, your choice):**
+make the frontend targets install dependencies when they are missing — an
+`npm ci` guarded on `node_modules` being absent, or a `deps` prerequisite — so
+`make check-fast` and `make check` are runnable from a clean checkout. The Phase R
+CI workflow will hit exactly this on its first run otherwise.
+
+Not treated as an F.2 defect: the milestone's own gate genuinely passed, and this
+was only exposed by a sandbox fix made after that run.
