@@ -15,6 +15,8 @@
 #
 # Environment:
 #   MAX_RUNS, MAX_TURNS   Passed through to scripts/autopilot.sh
+#   MODEL                 Model for the agent session (opus/sonnet/haiku or a
+#                         full model id). Unset uses the CLI default.
 #   ANTHROPIC_API_KEY     Optional; if set, used instead of the stored login
 #   CPUS, MEMORY          Resource caps (default 4 CPUs, 8g)
 set -euo pipefail
@@ -109,6 +111,7 @@ common_args=(
   --env "GIT_COMMITTER_EMAIL=autopilot@localhost"
 )
 [ -n "${ANTHROPIC_API_KEY:-}" ] && common_args+=(--env "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}")
+[ -n "${MODEL:-}" ] && common_args+=(--env "MODEL=${MODEL}")
 
 image_exists() { docker image inspect "$IMAGE" >/dev/null 2>&1; }
 

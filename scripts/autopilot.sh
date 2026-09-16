@@ -8,6 +8,11 @@ cd "$(dirname "$0")/.."
 
 MAX_RUNS="${MAX_RUNS:-40}"
 MAX_TURNS="${MAX_TURNS:-250}"
+# Unset means "whatever the CLI defaults to". Set it to put a specific model on
+# a milestone -- e.g. MODEL=opus for the Alembic baseline (F.4) or the frontend
+# decomposition (Phase 2), which are the two hardest things in the plan to
+# recover from. Accepts an alias (opus/sonnet/haiku) or a full model id.
+MODEL="${MODEL:-}"
 LOG_DIR="${LOG_DIR:-../opptrail-autopilot-logs}"   # outside the repo
 PROGRESS="docs/autopilot/PROGRESS.md"
 mkdir -p "$LOG_DIR"
@@ -44,13 +49,14 @@ for i in $(seq 1 "$MAX_RUNS"); do
   esac
 
   before="$(git rev-parse HEAD):$(status_line)"
-  echo "=== Run $i/$MAX_RUNS — $(date -u +%FT%TZ) — ${line} ==="
+  echo "=== Run $i/$MAX_RUNS — $(date -u +%FT%TZ) — ${line} — model=${MODEL:-cli-default} ==="
 
   claude -p "Read docs/autopilot-brief.md in full, then every file in docs/autopilot/ that exists. \
 Follow §3.3 exactly: determine the current state, then complete at most one milestone (or the rework items, \
 or the end-of-phase review packet), update the state files, commit to the autopilot branch, and exit. \
 Never commit to main, merge, push, or create acceptance tags." \
     --dangerously-skip-permissions \
+    ${MODEL:+--model "$MODEL"} \
     --max-turns "$MAX_TURNS" \
     --output-format text 2>&1 | tee "$LOG_DIR/run-$(date -u +%Y%m%dT%H%M%S).log"
 

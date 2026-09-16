@@ -18,6 +18,19 @@ sandbox/run.sh autopilot   # unattended, up to MAX_RUNS milestones
 sandbox/run.sh proxy-log   # what egress was requested, and what was refused
 ```
 
+`MODEL` picks the model for the agent session (`opus`, `sonnet`, `haiku`, or a
+full model id); unset uses the CLI default, which is what the first three
+milestones ran on. Worth setting for the two milestones that are hardest to
+recover from — the Alembic baseline (F.4) and the frontend decomposition
+(Phase 2):
+
+```bash
+MODEL=opus MAX_RUNS=1 sandbox/run.sh autopilot
+```
+
+The chosen model is printed in each run header and therefore recorded in the
+run logs under `../opptrail-autopilot-logs/`.
+
 `sandbox/run.sh shell` gives an interactive shell in the same environment, which
 is the fastest way to reproduce something the agent hit.
 
