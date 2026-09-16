@@ -339,9 +339,10 @@ def test_deletions_are_recorded_in_the_audit_log(client: TestClient) -> None:
     assert audit.status_code == 200
     actions = [row["action"] for row in audit.json()]
     assert actions == ["comment_deleted", "note_deleted", "timeline_entry_deleted"]
-    assert str(entry["id"]) in next(
+    detail = next(
         row["detail"] for row in audit.json() if row["action"] == "timeline_entry_deleted"
     )
+    assert detail["entry_id"] == entry["id"]
 
     assert client.delete(f"/api/opportunities/{opportunity['id']}").status_code == 204
     with db_connection() as connection:

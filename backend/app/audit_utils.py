@@ -1,5 +1,8 @@
 import json
 import sqlite3
+from typing import cast
+
+from .schemas import AUDIT_DETAIL_MODELS, AuditDetail
 
 
 def create_audit_log_entry(
@@ -16,3 +19,8 @@ def create_audit_log_entry(
         """,
         (opportunity_id, actor_id, action, json.dumps(detail, sort_keys=True)),
     )
+
+
+def parse_audit_detail(action: str, raw_detail: str) -> AuditDetail:
+    model = AUDIT_DETAIL_MODELS[action]
+    return cast(AuditDetail, model.model_validate_json(raw_detail))

@@ -137,16 +137,75 @@ vulnerabilities) and the explicit deferred-item notes for F.3/F.4/F.7's
 pieces; Docker build+smoke test named as deferred to the host per the split
 gate (unchanged from F.1).
 
-### F.3 — API contract (§4.3)
+### F.3 — API contract (§4.3) — **DONE**
 
-- [ ] Typed request/response models for every endpoint in OpenAPI (mostly
-      already true via Pydantic schemas — verify `AuditLogEntryPublic.detail`
-      and `NotificationPublic.payload`, which are currently opaque
-      `str`/`dict[str, Any]`, are as typed as the data allows).
-- [ ] Generate a TypeScript client from the schema; remove any hand-written API
-      types on the frontend (frontend currently hand-declares its own request/
-      response interfaces in `page.tsx`).
-- [ ] Gate fails on a stale generated client.
+- [x] Typed request/response models for every endpoint in OpenAPI.
+      `AuditLogEntryPublic.detail` (was opaque `str` — the JSON blob was never
+      even parsed before being wrapped in *another* JSON string on the wire)
+      is now a union of 7 typed models, one per audit action, parsed via
+      `audit_utils.parse_audit_detail`. `NotificationPublic.payload` (was
+      `dict[str, Any]`) is now a union of 6 typed models, one per notification
+      type, parsed via `notification_service.parse_notification_payload`.
+      Also tightened three previously-`str` fields that are actually closed
+      enums: `OpportunityPublic.stage` → `Stage`, `OpportunityPublic.
+      current_user_role` → new `CurrentUserRole` Literal, `TimelineEntryPublic.
+      type` → `EntryType`, `SharePublic.role` → `ShareRole`. Field-level unions
+      chosen over restructuring the two response models into whole-object
+      discriminated unions — see D-010 for the reasoning (the frontend has no
+      consumer that needs `type`-to-`payload` narrowing at the type level;
+      doubling the schema surface for it would be speculative).
+- [x] Generated a TypeScript client: `backend/app/export_openapi.py` prints
+      `app.openapi()` as JSON with no server boot (D-011); `openapi-typescript`
+      (new frontend devDependency) turns it into `frontend/lib/api-types.ts`
+      (committed, 1994 lines). `frontend/app/page.tsx`'s hand-declared
+      response-mirroring interfaces (`User`, `Opportunity`, `OpportunityShare`,
+      `AuditLogEntry`, `AppNotification`, `TimelineComment`, `TimelineNote`,
+      `TimelineEntry`, plus the four inline wrapper shapes used with
+      `apiRequest<...>()`) are now type aliases onto `components["schemas"][...]`
+      from the generated file. `TimelineComment`/`TimelineNote` were dropped
+      entirely once nothing referenced them by name (they'd only existed to
+      compose the other hand-written interfaces). Form-draft types
+      (`OpportunityForm`, `TimelineEntryForm`, `TimelineFilters`, `ShareForm`'s
+      `email` field) stay hand-written — they hold provisional UI string state
+      before submission (e.g. empty-string sentinels, local-datetime strings),
+      which is a genuinely different shape from the wire format, not a
+      duplicate of it. Fixed two downstream call sites that read the old
+      untyped shapes unconditionally: `notificationText()`'s `shared_activity`
+      branch now narrows the payload union with `"title" in payload` instead
+      of reading `.title` off every notification type, and the audit-log
+      `<code>` block renders `JSON.stringify(item.detail)` instead of a raw
+      string. `npm run typecheck`, `npm run lint`, and `npm run build` all
+      pass against the new types.
+- [x] Gate fails on a stale generated client:
+      `scripts/generate-api-client.sh --check` regenerates into a temp file
+      and diffs it against the committed `frontend/lib/api-types.ts`, wired
+      into both `make check-fast` and `.pre-commit-config.yaml` (new
+      `api-client-contract` hook). `make generate-client` regenerates it in
+      place. Also closed the human's F.2-review note in DECISIONS.md: added a
+      `frontend-deps` Make target (`npm ci` only if `node_modules/.bin` is
+      missing) as a prerequisite of `dev`, `check-fast`, and `build`, so
+      `make check-fast` now runs from a clean checkout with an empty
+      `node_modules` volume, not just a pre-populated one.
+
+Work log: single session. Backend diff: `backend/app/schemas.py` (14 new
+typed models + 4 tightened field types), `backend/app/audit_utils.py` /
+`backend/app/notification_service.py` (parse helpers), `backend/app/
+routes_sharing.py` / `backend/app/routes_notifications.py` (call sites), new
+`backend/app/export_openapi.py` + `backend/tests/test_export_openapi.py`.
+Two existing tests adjusted to match the tightened contract (not weakened —
+see COVERAGE.md's F.3 entry for why each was already testing something the
+new types made stricter): `test_deletions_are_recorded_in_the_audit_log`
+(`test_timeline.py`) and `test_user_can_mark_only_own_notification_read`
+(`test_notifications.py`). Frontend diff: `frontend/app/page.tsx` (type
+sourcing + two call-site fixes), new `frontend/lib/api-types.ts` (generated,
+committed), `frontend/package.json`/`package-lock.json` (+`openapi-typescript`
+devDependency). Tooling diff: new `scripts/generate-api-client.sh`, `Makefile`
+(`frontend-deps`, `generate-client` targets; `check-fast` gains the contract
+check), `.pre-commit-config.yaml` (new hook). Gate: `make check-fast` green
+(48 backend tests, 94.29% combined coverage, ruff/mypy/tsc/eslint all clean,
+contract check passes); `make check` also run and green (`pip-audit`/`npm
+audit` both 0 vulnerabilities); Docker portion still deferred to the host
+per the unchanged split-gate note.
 
 ### F.4 — Database (§4.4)
 

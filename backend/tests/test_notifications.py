@@ -139,14 +139,24 @@ def test_user_can_mark_only_own_notification_read(client: TestClient) -> None:
         connection.execute(
             """
             INSERT INTO notifications (user_id, type, payload)
-            VALUES (?, 'mention', '{"opportunity_id": 1}')
+            VALUES (
+                ?,
+                'mention',
+                '{"opportunity_id": 1, "source_type": "entry", "source_id": 1,
+                  "actor_id": 1, "email": "viewer@example.com"}'
+            )
             """,
             (viewer["id"],),
         )
         connection.execute(
             """
             INSERT INTO notifications (user_id, type, payload)
-            VALUES (?, 'mention', '{"opportunity_id": 1}')
+            VALUES (
+                ?,
+                'mention',
+                '{"opportunity_id": 1, "source_type": "entry", "source_id": 1,
+                  "actor_id": 1, "email": "other@example.com"}'
+            )
             """,
             (other["id"],),
         )

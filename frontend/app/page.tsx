@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
+import type { components } from "../lib/api-types";
 
 const stages = [
   "Prospecting",
@@ -28,93 +29,24 @@ const entryTypes = [
 
 type EntryType = (typeof entryTypes)[number]["value"];
 
-type User = {
-  id: number;
-  email: string;
-  name: string;
-};
+type User = components["schemas"]["UserPublic"];
+type Opportunity = components["schemas"]["OpportunityPublic"];
+type OpportunityShare = components["schemas"]["SharePublic"];
+type AuditLogEntry = components["schemas"]["AuditLogEntryPublic"];
+type AppNotification = components["schemas"]["NotificationPublic"];
+type TimelineEntry = components["schemas"]["TimelineEntryPublic"];
 
-type Opportunity = {
-  id: number;
-  name: string;
-  account_name: string;
-  value: string;
-  currency: string;
-  stage: string;
-  owner_name: string;
-  expected_close_date: string | null;
-  stalled: boolean;
-  current_user_role: "owner" | "editor" | "viewer";
-};
-
-type OpportunityShare = {
-  user_id: number;
-  email: string;
-  name: string;
-  role: "viewer" | "editor";
-  invited_by: number;
-  invited_by_name: string;
-  created_at: string;
-};
-
-type AuditLogEntry = {
-  id: number;
-  opportunity_id: number;
-  actor_id: number | null;
-  actor_name: string | null;
-  action: string;
-  detail: string;
-  created_at: string;
-};
+type AuthResponse = components["schemas"]["AuthResponse"];
+type OpportunityListResponse = components["schemas"]["OpportunityListResponse"];
+type TimelineResponse = components["schemas"]["TimelineResponse"];
+type ShareListResponse = components["schemas"]["ShareListResponse"];
+type NotificationListResponse = components["schemas"]["NotificationListResponse"];
+type AiAskResponse = components["schemas"]["AiAskResponse"];
 
 type AiChatMessage = {
   role: "user" | "assistant";
   body: string;
   referenced_entry_ids?: number[];
-};
-
-type AppNotification = {
-  id: number;
-  type: string;
-  payload: Record<string, unknown>;
-  read: boolean;
-  created_at: string;
-};
-
-type TimelineComment = {
-  id: number;
-  note_id: number;
-  body: string;
-  created_by: number;
-  author_name: string;
-  created_at: string;
-};
-
-type TimelineNote = {
-  id: number;
-  entry_id: number;
-  body: string;
-  created_by: number;
-  author_name: string;
-  created_at: string;
-  updated_at: string;
-  edited: boolean;
-  comments: TimelineComment[];
-};
-
-type TimelineEntry = {
-  id: number;
-  opportunity_id: number;
-  type: EntryType;
-  title: string;
-  body: string;
-  event_timestamp: string;
-  follow_up_date: string | null;
-  created_by: number | null;
-  author_name: string | null;
-  system_generated: boolean;
-  created_at: string;
-  notes: TimelineNote[];
 };
 
 type OpportunityForm = {
@@ -144,7 +76,7 @@ type TimelineFilters = {
 
 type ShareForm = {
   email: string;
-  role: "viewer" | "editor";
+  role: components["schemas"]["ShareCreate"]["role"];
 };
 
 const emptyOpportunityForm: OpportunityForm = {
@@ -337,7 +269,7 @@ export default function Home() {
   );
 
   useEffect(() => {
-    apiRequest<{ user: User }>("/api/auth/me")
+    apiRequest<AuthResponse>("/api/auth/me")
       .then((data) => {
         setUser(data.user);
         setStatus("");
@@ -366,25 +298,18 @@ export default function Home() {
   );
 
   async function loadOpportunities() {
-    const data = await apiRequest<{
-      stages: string[];
-      opportunities: Opportunity[];
-    }>("/api/opportunities");
+    const data = await apiRequest<OpportunityListResponse>("/api/opportunities");
     setOpportunities(data.opportunities);
   }
 
   async function loadNotifications() {
-    const data = await apiRequest<{ notifications: AppNotification[] }>(
+    const data = await apiRequest<NotificationListResponse>(
       "/api/notifications",
     );
     setNotifications(data.notifications);
   }
 
   function notificationText(notification: AppNotification) {
-    const title =
-      typeof notification.payload.title === "string"
-        ? notification.payload.title
-        : "";
     if (notification.type === "mention") {
       return "You were mentioned in a timeline update.";
     }
@@ -392,7 +317,10 @@ export default function Home() {
       return "New comment on your note.";
     }
     if (notification.type === "shared_activity") {
-      return title || "New activity on a shared opportunity.";
+      const payload = notification.payload;
+      return "title" in payload && payload.title
+        ? payload.title
+        : "New activity on a shared opportunity.";
     }
     if (notification.type === "share_added") {
       return "An opportunity was shared with you.";
@@ -424,7 +352,7 @@ export default function Home() {
     });
 
     const suffix = params.toString() ? `?${params.toString()}` : "";
-    const data = await apiRequest<{ entries: TimelineEntry[] }>(
+    const data = await apiRequest<TimelineResponse>(
       `/api/opportunities/${opportunityId}/timeline${suffix}`,
     );
     setTimelineEntries(data.entries);
@@ -438,7 +366,7 @@ export default function Home() {
     }
 
     const [shareData, auditData] = await Promise.all([
-      apiRequest<{ shares: OpportunityShare[] }>(
+      apiRequest<ShareListResponse>(
         `/api/opportunities/${opportunityId}/shares`,
       ),
       apiRequest<AuditLogEntry[]>(`/api/opportunities/${opportunityId}/audit-log`),
@@ -457,7 +385,7 @@ export default function Home() {
         authMode === "signup"
           ? { email: authEmail, password: authPassword, name: authName }
           : { email: authEmail, password: authPassword };
-      const data = await apiRequest<{ user: User }>(`/api/auth/${authMode}`, {
+      const data = await apiRequest<AuthResponse>(`/api/auth/${authMode}`, {
         method: "POST",
         body: JSON.stringify(payload),
       });
@@ -580,7 +508,7 @@ export default function Home() {
     setError("");
 
     try {
-      const data = await apiRequest<{ entries: TimelineEntry[] }>(
+      const data = await apiRequest<TimelineResponse>(
         `/api/opportunities/${opportunity.id}/timeline`,
       );
       setTimelineEntries(data.entries);
@@ -904,7 +832,7 @@ export default function Home() {
     if (selectedOpportunityId) {
       setStatus("Clearing filters...");
       try {
-        const data = await apiRequest<{ entries: TimelineEntry[] }>(
+        const data = await apiRequest<TimelineResponse>(
           `/api/opportunities/${selectedOpportunityId}/timeline`,
         );
         setTimelineEntries(data.entries);
@@ -940,10 +868,9 @@ export default function Home() {
     }));
 
     try {
-      const response = await apiRequest<{
-        answer: string;
-        referenced_entry_ids: number[];
-      }>(`/api/opportunities/${selectedOpportunityId}/ai/ask`, {
+      const response = await apiRequest<AiAskResponse>(
+        `/api/opportunities/${selectedOpportunityId}/ai/ask`,
+        {
         method: "POST",
         body: JSON.stringify({ question }),
       });
@@ -1416,7 +1343,7 @@ export default function Home() {
                             <strong>{item.action}</strong>
                             <span>{formatTimestamp(item.created_at)}</span>
                             <p>{item.actor_name ?? "System"}</p>
-                            <code>{item.detail}</code>
+                            <code>{JSON.stringify(item.detail)}</code>
                           </div>
                         ))}
                       </div>

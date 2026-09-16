@@ -2,7 +2,7 @@ import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from .audit_utils import create_audit_log_entry
+from .audit_utils import create_audit_log_entry, parse_audit_detail
 from .auth import get_current_user
 from .database import db_connection
 from .notification_service import create_notification
@@ -336,7 +336,7 @@ def list_audit_log(
             actor_id=row["actor_id"],
             actor_name=row["actor_name"],
             action=row["action"],
-            detail=row["detail"],
+            detail=parse_audit_detail(row["action"], row["detail"]),
             created_at=row["created_at"],
         )
         for row in rows

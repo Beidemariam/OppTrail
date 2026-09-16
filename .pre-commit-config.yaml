@@ -46,3 +46,10 @@ repos:
         language: system
         pass_filenames: false
         files: ^backend/
+
+      - id: api-client-contract
+        name: generated API client is current
+        entry: bash -c './scripts/generate-api-client.sh --check'
+        language: system
+        pass_filenames: false
+        files: ^(backend/app/(schemas|main|routes_).*\.py|frontend/lib/api-types\.ts)$

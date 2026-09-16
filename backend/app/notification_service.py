@@ -1,6 +1,9 @@
 import json
 import re
 import sqlite3
+from typing import cast
+
+from .schemas import NOTIFICATION_PAYLOAD_MODELS, NotificationPayload
 
 MENTION_RE = re.compile(r"@([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})")
 
@@ -27,6 +30,11 @@ def create_notification(
         """,
         (user_id, notification_type, json.dumps(payload, sort_keys=True)),
     )
+
+
+def parse_notification_payload(notification_type: str, raw_payload: str) -> NotificationPayload:
+    model = NOTIFICATION_PAYLOAD_MODELS[notification_type]
+    return cast(NotificationPayload, model.model_validate_json(raw_payload))
 
 
 def get_accessible_user_ids(

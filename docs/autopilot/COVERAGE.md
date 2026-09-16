@@ -105,3 +105,42 @@ vulnerabilities (weasyprint bumped 69.0 → 70.0 to clear PYSEC-2026-3940, a
 `url_fetcher`-bypass finding that does not apply to OppTrail's usage — no
 `xmp_metadata=`/`stylesheets=` arguments are ever passed — but the fix was a
 trivial, safe version bump so it was taken anyway).
+
+## Phase F — after milestone F.3 (API contract), 2026-09-16
+
+Command: `cd backend && uv run pytest -q --cov=app --cov-branch --cov-report=term-missing --cov-fail-under=90`
+(via `make check-fast`), run inside the sandbox.
+
+```
+48 passed in 16-34s (timing varies with sandbox load)
+TOTAL: 1210 stmts, 44 miss, 174 branches, 35 partial, 94% combined line+branch coverage
+Required test coverage of 90% reached. Total coverage: 94.29%
+```
+
+48 tests, up from 47: +1 (`test_export_openapi.py::test_main_prints_the_openapi_schema_as_json`,
+covering the new `app/export_openapi.py` CLI shim used by
+`scripts/generate-api-client.sh`). Two existing tests were adjusted to match
+the tightened response contract, not weakened — both changes are direct
+consequences of `AuditLogEntryPublic.detail` and `NotificationPublic.payload`
+moving from opaque `str`/`dict[str, Any]` to typed unions (see this session's
+DECISIONS.md entry): `test_deletions_are_recorded_in_the_audit_log`
+(`test_timeline.py`) now asserts the structured `detail.entry_id` field
+instead of a substring match on a JSON-as-string blob, and
+`test_user_can_mark_only_own_notification_read` (`test_notifications.py`)'s
+raw-SQL notification fixture now inserts a complete `mention` payload instead
+of a partial one, since the payload is now schema-validated on read.
+
+| Module | Combined line+branch % | Notes |
+|---|---|---|
+| `audit_utils.py` | 100% | now includes `parse_audit_detail`; unchanged floor |
+| `notification_service.py` | 97% | now includes `parse_notification_payload` |
+| `schemas.py` | 98% | +14 new typed models (7 audit-detail variants, 6 notification-payload variants, plus `CurrentUserRole`); untouched lines are validator branches already noted as thin in F.2 |
+| `export_openapi.py` | 75% | new module (6 statements); the untested line is the standard `if __name__ == "__main__":` guard, not application logic |
+| `routes_sharing.py` | 90% | unchanged — only the audit-log read path changed, already covered |
+| `routes_notifications.py` | 100% | unchanged |
+
+Frontend: still 0% (no test runner) — unchanged from baseline; F.7's scope.
+`npm run typecheck`, `npm run lint`, and `npm run build` all pass against the
+generated `frontend/lib/api-types.ts` and the `page.tsx` types now sourced
+from it — these are compile-time checks, not a substitute for F.7's Vitest
+component-test floor.

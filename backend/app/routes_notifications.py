@@ -1,10 +1,10 @@
-import json
 import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from .auth import get_current_user
 from .database import db_connection
+from .notification_service import parse_notification_payload
 from .schemas import NotificationListResponse, NotificationPublic
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
@@ -14,7 +14,7 @@ def notification_from_row(row: sqlite3.Row) -> NotificationPublic:
     return NotificationPublic(
         id=row["id"],
         type=row["type"],
-        payload=json.loads(row["payload"]),
+        payload=parse_notification_payload(row["type"], row["payload"]),
         read=bool(row["read"]),
         created_at=row["created_at"],
     )

@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_serializer, field_validator
 
@@ -39,6 +39,8 @@ Stage = Literal[
 ]
 
 ShareRole = Literal["viewer", "editor"]
+
+CurrentUserRole = Literal["owner", "viewer", "editor"]
 
 STAGES: list[str] = [
     "Prospecting",
@@ -149,14 +151,14 @@ class OpportunityPublic(BaseModel):
     account_name: str
     value: Decimal
     currency: str
-    stage: str
+    stage: Stage
     owner_id: int
     owner_name: str
     expected_close_date: str | None
     created_at: str
     updated_at: str
     stalled: bool = False
-    current_user_role: str = "owner"
+    current_user_role: CurrentUserRole = "owner"
 
     @field_serializer("value")
     def serialize_value(self, value: Decimal) -> str:
@@ -250,7 +252,7 @@ class NotePublic(BaseModel):
 class TimelineEntryPublic(BaseModel):
     id: int
     opportunity_id: int
-    type: str
+    type: EntryType
     title: str
     body: str
     event_timestamp: str
@@ -321,7 +323,7 @@ class SharePublic(BaseModel):
     user_id: int
     email: str
     name: str
-    role: str
+    role: ShareRole
     invited_by: int
     invited_by_name: str
     created_at: str
@@ -331,13 +333,89 @@ class ShareListResponse(BaseModel):
     shares: list[SharePublic]
 
 
+AuditAction = Literal[
+    "opportunity_deleted",
+    "share_added",
+    "share_role_changed",
+    "share_removed",
+    "timeline_entry_deleted",
+    "note_deleted",
+    "comment_deleted",
+]
+
+
+class AuditDetailOpportunityDeleted(BaseModel):
+    name: str
+    account_name: str | None
+    stage: str
+
+
+class AuditDetailShareAdded(BaseModel):
+    user_id: int
+    email: str
+    role: ShareRole
+
+
+class AuditDetailShareRoleChanged(BaseModel):
+    user_id: int
+    email: str
+    from_role: ShareRole
+    to_role: ShareRole
+
+
+class AuditDetailShareRemoved(BaseModel):
+    user_id: int
+    email: str
+    role: ShareRole
+
+
+class AuditDetailTimelineEntryDeleted(BaseModel):
+    entry_id: int
+    type: EntryType
+    title: str
+    author_id: int
+
+
+class AuditDetailNoteDeleted(BaseModel):
+    note_id: int
+    entry_id: int
+    author_id: int
+
+
+class AuditDetailCommentDeleted(BaseModel):
+    comment_id: int
+    note_id: int
+    author_id: int
+
+
+AuditDetail = (
+    AuditDetailOpportunityDeleted
+    | AuditDetailShareAdded
+    | AuditDetailShareRoleChanged
+    | AuditDetailShareRemoved
+    | AuditDetailTimelineEntryDeleted
+    | AuditDetailNoteDeleted
+    | AuditDetailCommentDeleted
+)
+
+AUDIT_DETAIL_MODELS: dict[str, type[BaseModel]] = {
+    "opportunity_deleted": AuditDetailOpportunityDeleted,
+    "share_added": AuditDetailShareAdded,
+    "share_role_changed": AuditDetailShareRoleChanged,
+    "share_removed": AuditDetailShareRemoved,
+    "timeline_entry_deleted": AuditDetailTimelineEntryDeleted,
+    "note_deleted": AuditDetailNoteDeleted,
+    "comment_deleted": AuditDetailCommentDeleted,
+}
+
+
 class AuditLogEntryPublic(BaseModel):
     id: int
     opportunity_id: int
     actor_id: int | None
     actor_name: str | None
-    action: str
-    detail: str
+    action: AuditAction
+    detail: AuditDetail
     created_at: str
 
 
@@ -355,10 +433,83 @@ class AiAskResponse(BaseModel):
     referenced_entry_ids: list[int]
 
 
+NotificationType = Literal[
+    "share_added",
+    "share_role_changed",
+    "share_removed",
+    "mention",
+    "shared_activity",
+    "comment",
+]
+
+SourceType = Literal["entry", "note", "comment"]
+
+
+class NotificationPayloadShareAdded(BaseModel):
+    opportunity_id: int
+    actor_id: int
+    role: ShareRole
+
+
+class NotificationPayloadShareRoleChanged(BaseModel):
+    opportunity_id: int
+    actor_id: int
+    from_role: ShareRole
+    to_role: ShareRole
+
+
+class NotificationPayloadShareRemoved(BaseModel):
+    opportunity_id: int
+    actor_id: int
+    role: ShareRole
+
+
+class NotificationPayloadMention(BaseModel):
+    opportunity_id: int
+    source_type: SourceType
+    source_id: int
+    actor_id: int
+    email: str
+
+
+class NotificationPayloadSharedActivity(BaseModel):
+    opportunity_id: int
+    source_type: SourceType
+    source_id: int
+    actor_id: int
+    title: str
+
+
+class NotificationPayloadComment(BaseModel):
+    opportunity_id: int
+    source_type: SourceType
+    source_id: int
+    actor_id: int
+
+
+NotificationPayload = (
+    NotificationPayloadShareAdded
+    | NotificationPayloadShareRoleChanged
+    | NotificationPayloadShareRemoved
+    | NotificationPayloadMention
+    | NotificationPayloadSharedActivity
+    | NotificationPayloadComment
+)
+
+NOTIFICATION_PAYLOAD_MODELS: dict[str, type[BaseModel]] = {
+    "share_added": NotificationPayloadShareAdded,
+    "share_role_changed": NotificationPayloadShareRoleChanged,
+    "share_removed": NotificationPayloadShareRemoved,
+    "mention": NotificationPayloadMention,
+    "shared_activity": NotificationPayloadSharedActivity,
+    "comment": NotificationPayloadComment,
+}
+
+
 class NotificationPublic(BaseModel):
     id: int
-    type: str
-    payload: dict[str, Any]
+    type: NotificationType
+    payload: NotificationPayload
     read: bool
     created_at: str
 
