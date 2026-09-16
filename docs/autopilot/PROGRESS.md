@@ -209,18 +209,23 @@ per the unchanged split-gate note.
 
 ### F.4 — Database (§4.4)
 
+Run this milestone on Opus (`MODEL=opus sandbox/run.sh autopilot`), per
+`scripts/autopilot.sh:11-14`: the Alembic baseline is one of the two things in
+the plan that is hardest to recover from if it lands wrong. The run header now
+records the model in the log file, so the resulting commit is attributable.
+
 - [ ] Introduce Alembic with the current schema as the baseline revision;
       convert `run_migrations()` (`database.py:55-71`) into real revisions.
       Preserve zero-setup for new installs (a fresh DB still gets a fully
       migrated schema with no manual step).
 - [ ] SQLite: enable WAL, confirm `PRAGMA foreign_keys = ON` (already set,
       `database.py:21`), set a busy timeout (not currently set).
-- [ ] ADR: SQLite fitness for v2 given real-time features and a single
-      container. **needs human review: Y** (brief §4.4 marks this explicitly).
-      Default recommendation is SQLite + WAL with data access kept portable.
-      Note ADR 0001 already exists and reaches this conclusion — confirm
-      whether a new ADR is needed or 0001 already satisfies this requirement
-      before writing a duplicate.
+- [x] ADR: SQLite fitness for v2. **Dropped — already satisfied, see D-012**
+      (human-accepted 2026-09-16). `docs/adr/0001-keep-sqlite.md` (Accepted,
+      benchmarked at the confirmed 800k-row scale) answers it and already
+      prescribes the WAL + busy-timeout work in the bullet above; ADR 0003
+      covers the real-time half and ADR 0011 the single-container half. Do not
+      write a new ADR here.
 - [ ] Central soft-delete implementation with a test that fails on hard
       deletes of user data (a real regression test, run against the unfixed
       state first per brief §6.5's "guard test" rule — there is currently no

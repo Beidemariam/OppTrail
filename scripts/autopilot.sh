@@ -49,7 +49,10 @@ for i in $(seq 1 "$MAX_RUNS"); do
   esac
 
   before="$(git rev-parse HEAD):$(status_line)"
-  echo "=== Run $i/$MAX_RUNS — $(date -u +%FT%TZ) — ${line} — model=${MODEL:-cli-default} ==="
+  log_file="$LOG_DIR/run-$(date -u +%Y%m%dT%H%M%S).log"
+  # The header goes through tee too, so the log records which model produced the
+  # commit. Printing it only to the terminal left every run unattributable.
+  echo "=== Run $i/$MAX_RUNS — $(date -u +%FT%TZ) — ${line} — model=${MODEL:-cli-default} ===" | tee "$log_file"
 
   claude -p "Read docs/autopilot-brief.md in full, then every file in docs/autopilot/ that exists. \
 Follow §3.3 exactly: determine the current state, then complete at most one milestone (or the rework items, \
@@ -58,7 +61,7 @@ Never commit to main, merge, push, or create acceptance tags." \
     --dangerously-skip-permissions \
     ${MODEL:+--model "$MODEL"} \
     --max-turns "$MAX_TURNS" \
-    --output-format text 2>&1 | tee "$LOG_DIR/run-$(date -u +%Y%m%dT%H%M%S).log"
+    --output-format text 2>&1 | tee -a "$log_file"
 
   after="$(git rev-parse HEAD):$(status_line)"
   case "$(status_line)" in "STATUS: BLOCKED"*) echo "Still BLOCKED — stopping."; exit 1;; esac
