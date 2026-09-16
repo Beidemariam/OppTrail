@@ -1,5 +1,7 @@
 from fastapi.testclient import TestClient
 
+from app.database import db_connection
+
 
 def signup(client: TestClient, email: str = "owner@example.com") -> dict:
     response = client.post(
@@ -62,5 +64,23 @@ def test_invalid_login_is_rejected(client: TestClient) -> None:
 
 def test_protected_endpoint_requires_session(client: TestClient) -> None:
     response = client.get("/api/opportunities")
+
+    assert response.status_code == 401
+
+
+def test_logout_without_a_session_cookie_is_a_no_op(client: TestClient) -> None:
+    response = client.post("/api/auth/logout")
+
+    assert response.status_code == 200
+
+
+def test_expired_or_unknown_session_cookie_is_rejected(client: TestClient) -> None:
+    signup(client)
+
+    with db_connection() as connection:
+        connection.execute("UPDATE sessions SET expires_at = '2000-01-01T00:00:00Z'")
+        connection.commit()
+
+    response = client.get("/api/auth/me")
 
     assert response.status_code == 401

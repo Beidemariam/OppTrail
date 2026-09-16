@@ -9,10 +9,10 @@ from .ai_service import (
 )
 from .auth import get_current_user
 from .database import db_connection
+from .logging_utils import logger
 from .permissions import require_opportunity_access
 from .schemas import AiAskRequest, AiAskResponse
 from .settings import settings
-
 
 router = APIRouter(prefix="/api/opportunities", tags=["ai"])
 
@@ -41,6 +41,11 @@ def ask_ai_agent(
             question=payload.question,
         )
     except Exception as exc:
+        logger.warning(
+            "ai_agent_call_failed",
+            exc_info=exc,
+            extra={"opportunity_id": opportunity_id},
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="AI service is unavailable",

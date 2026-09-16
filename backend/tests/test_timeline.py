@@ -115,9 +115,7 @@ def test_entry_note_comment_crud_and_note_versions(client: TestClient) -> None:
 
     timeline = client.get(f"/api/opportunities/{opportunity['id']}/timeline")
     assert timeline.status_code == 200
-    manual_entry = next(
-        item for item in timeline.json()["entries"] if item["id"] == entry["id"]
-    )
+    manual_entry = next(item for item in timeline.json()["entries"] if item["id"] == entry["id"])
     assert manual_entry["notes"][0]["comments"][0]["id"] == comment_id
 
     assert client.delete(f"/api/comments/{comment_id}").status_code == 204
@@ -165,16 +163,11 @@ def test_timeline_filters_keyword_type_date_and_author(client: TestClient) -> No
     assert [entry["title"] for entry in entry_type.json()["entries"]] == ["Proposal email"]
 
     date_range = client.get(
-        f"/api/opportunities/{opportunity['id']}/timeline"
-        f"?from={days_ago(45)}&to={days_ago(15)}"
+        f"/api/opportunities/{opportunity['id']}/timeline?from={days_ago(45)}&to={days_ago(15)}"
     )
-    assert [entry["title"] for entry in date_range.json()["entries"]] == [
-        "Proposal email"
-    ]
+    assert [entry["title"] for entry in date_range.json()["entries"]] == ["Proposal email"]
 
-    author = client.get(
-        f"/api/opportunities/{opportunity['id']}/timeline?author_id={owner['id']}"
-    )
+    author = client.get(f"/api/opportunities/{opportunity['id']}/timeline?author_id={owner['id']}")
     assert sorted(entry["title"] for entry in author.json()["entries"]) == [
         "Discovery call",
         "Opportunity created",
@@ -314,10 +307,7 @@ def test_editor_cannot_delete_another_users_note_or_entry(client: TestClient) ->
     assert client.delete(f"/api/timeline/{entry['id']}").status_code == 403
 
     # An editor still edits freely, and still owns what they create themselves.
-    assert (
-        client.patch(f"/api/notes/{note['id']}", json={"body": "Editor edit"}).status_code
-        == 200
-    )
+    assert client.patch(f"/api/notes/{note['id']}", json={"body": "Editor edit"}).status_code == 200
     own_entry = create_entry(client, opportunity["id"], title="Editor call")
     assert client.delete(f"/api/timeline/{own_entry['id']}").status_code == 204
     client.post("/api/auth/logout")
@@ -373,14 +363,10 @@ def test_timestamps_are_canonical_utc_and_sort_chronologically(
 
     # The "Opportunity created" system entry is stamped now; this user entry is
     # earlier on the same day, so it must sort first.
-    earlier_today = (datetime.now(UTC) - timedelta(hours=2)).strftime(
-        "%Y-%m-%dT%H:%M:%SZ"
-    )
+    earlier_today = (datetime.now(UTC) - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
     create_entry(client, opportunity["id"], title="Earlier today", event_timestamp=earlier_today)
 
-    entries = client.get(
-        f"/api/opportunities/{opportunity['id']}/timeline"
-    ).json()["entries"]
+    entries = client.get(f"/api/opportunities/{opportunity['id']}/timeline").json()["entries"]
     stamps = [entry["event_timestamp"] for entry in entries]
     assert all(len(stamp) == 20 and stamp.endswith("Z") for stamp in stamps)
     assert stamps == sorted(stamps)

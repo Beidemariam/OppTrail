@@ -1,6 +1,5 @@
 from datetime import UTC, datetime, timedelta
 
-
 # Fixed-width UTC ISO-8601. Every timestamp the app writes uses this format so
 # that lexicographic ordering in SQLite is also chronological ordering.
 CANONICAL_FORMAT = "%Y-%m-%dT%H:%M:%SZ"

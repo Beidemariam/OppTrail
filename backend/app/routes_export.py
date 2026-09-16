@@ -1,4 +1,5 @@
 import sqlite3
+from typing import Any
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse, Response
@@ -13,7 +14,6 @@ from .export_service import (
 )
 from .permissions import require_opportunity_access
 
-
 router = APIRouter(prefix="/api/opportunities", tags=["export"])
 
 
@@ -25,7 +25,7 @@ def get_export_data(
     connection: sqlite3.Connection,
     opportunity_id: int,
     user_id: int,
-) -> dict:
+) -> dict[str, Any]:
     require_opportunity_access(connection, opportunity_id, user_id)
     return fetch_export_data(connection, opportunity_id)
 

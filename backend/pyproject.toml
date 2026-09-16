@@ -10,16 +10,41 @@ dependencies = [
     "passlib[bcrypt]>=1.7.4",
     "pydantic-settings>=2.10.0",
     "uvicorn[standard]>=0.35.0",
-    "weasyprint>=69.0",
+    "weasyprint>=70.0",
 ]
 
 [dependency-groups]
 dev = [
     "httpx>=0.28.0",
+    "mypy>=1.14.0",
+    "pip-audit>=2.7.0",
     "pytest>=8.4.0",
     "pytest-cov>=6.2.0",
+    "ruff>=0.9.0",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's `Depends(...)`/`Cookie(...)` default-argument pattern is idiomatic,
+# not the mutable-default bug B008 exists to catch.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Cookie", "fastapi.Query", "fastapi.Path"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+disallow_untyped_defs = true
+files = ["app"]
+
+[[tool.mypy.overrides]]
+module = ["passlib.*", "weasyprint.*"]
+ignore_missing_imports = true

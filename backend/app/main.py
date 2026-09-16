@@ -1,3 +1,4 @@
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -6,6 +7,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .database import initialize_database
+from .errors import install_error_handlers
+from .logging_utils import RequestLoggingMiddleware, configure_logging
 from .routes_ai import router as ai_router
 from .routes_auth import router as auth_router
 from .routes_export import router as export_router
@@ -17,12 +20,15 @@ from .settings import settings
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    configure_logging()
     initialize_database()
     yield
 
 
 app = FastAPI(title="OppTrail API", version="0.1.0", lifespan=lifespan)
+install_error_handlers(app)
+app.add_middleware(RequestLoggingMiddleware)
 app.include_router(auth_router)
 app.include_router(opportunities_router)
 app.include_router(sharing_router)
@@ -53,8 +59,8 @@ def api_not_found(path: str) -> JSONResponse:
     return JSONResponse({"detail": "API endpoint not found"}, status_code=404)
 
 
-@app.get("/{path:path}", include_in_schema=False)
-def serve_frontend(path: str):
+@app.get("/{path:path}", include_in_schema=False, response_model=None)
+def serve_frontend(path: str) -> FileResponse | JSONResponse:
     # `path` is attacker-controlled and arrives percent-decoded, so it can carry
     # ".." segments. Resolve first and serve only what stays inside the build.
     static_root = frontend_dir.resolve()

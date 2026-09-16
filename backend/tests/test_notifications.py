@@ -103,8 +103,7 @@ def test_mentions_comments_and_shared_activity_create_notifications(
     viewer_notifications = client.get("/api/notifications")
     assert viewer_notifications.status_code == 200
     viewer_types = {
-        notification["type"]
-        for notification in viewer_notifications.json()["notifications"]
+        notification["type"] for notification in viewer_notifications.json()["notifications"]
     }
     assert "mention" in viewer_types
     assert "shared_activity" in viewer_types
@@ -190,9 +189,7 @@ def test_share_changes_create_notifications_for_shared_user(client: TestClient) 
         json={"role": "editor"},
     )
     assert changed.status_code == 200
-    removed = client.delete(
-        f"/api/opportunities/{opportunity['id']}/shares/{viewer['id']}"
-    )
+    removed = client.delete(f"/api/opportunities/{opportunity['id']}/shares/{viewer['id']}")
     assert removed.status_code == 204
     client.post("/api/auth/logout")
 
@@ -234,9 +231,9 @@ def test_follow_up_permissions_and_stalled_calculation(client: TestClient) -> No
     assert updated_follow_up.status_code == 200
     assert updated_follow_up.json()["follow_up_date"] == "2026-09-20"
 
-    old_timestamp = (
-        datetime.now(UTC).replace(tzinfo=None) - timedelta(days=30)
-    ).isoformat(timespec="seconds")
+    old_timestamp = (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=30)).isoformat(
+        timespec="seconds"
+    )
     with db_connection() as connection:
         connection.execute(
             """

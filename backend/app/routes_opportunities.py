@@ -1,11 +1,12 @@
 import sqlite3
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 
 from .audit_utils import create_audit_log_entry
 from .auth import get_current_user
 from .database import db_connection
+from .permissions import Role, require_opportunity_access, require_opportunity_owner
 from .schemas import (
     STAGES,
     OpportunityCreate,
@@ -15,7 +16,6 @@ from .schemas import (
 )
 from .time_utils import utc_days_ago
 from .timeline_utils import create_system_timeline_entry
-
 
 router = APIRouter(prefix="/api/opportunities", tags=["opportunities"])
 
@@ -62,10 +62,10 @@ def is_opportunity_stalled(
 
     if latest_activity is None:
         return False
-    return latest_activity < utc_days_ago(STALLED_AFTER_DAYS)
+    return bool(latest_activity < utc_days_ago(STALLED_AFTER_DAYS))
 
 
-def opportunity_from_row(row: sqlite3.Row, stalled: bool = False) -> OpportunityPublic:
+def opportunity_from_row(row: sqlite3.Row, role: Role, stalled: bool = False) -> OpportunityPublic:
     return OpportunityPublic(
         id=row["id"],
         name=row["name"],
@@ -79,57 +79,25 @@ def opportunity_from_row(row: sqlite3.Row, stalled: bool = False) -> Opportunity
         created_at=row["created_at"],
         updated_at=row["updated_at"],
         stalled=stalled,
-        current_user_role=row["current_user_role"],
+        current_user_role=role,
     )
 
 
-def fetch_accessible_opportunity(
+def fetch_opportunity_row(
     connection: sqlite3.Connection,
     opportunity_id: int,
-    user_id: int,
 ) -> sqlite3.Row | None:
-    return connection.execute(
+    """Plain opportunity lookup. Callers resolve role via `permissions.py`."""
+    row: sqlite3.Row | None = connection.execute(
         """
-        SELECT
-            opportunities.*,
-            users.name AS owner_name,
-            CASE
-                WHEN opportunities.owner_id = ? THEN 'owner'
-                ELSE opportunity_shares.role
-            END AS current_user_role
+        SELECT opportunities.*, users.name AS owner_name
         FROM opportunities
         JOIN users ON users.id = opportunities.owner_id
-        LEFT JOIN opportunity_shares
-            ON opportunity_shares.opportunity_id = opportunities.id
-            AND opportunity_shares.user_id = ?
-            AND opportunity_shares.deleted_at IS NULL
-        WHERE opportunities.id = ?
-            AND opportunities.deleted_at IS NULL
-            AND (
-                opportunities.owner_id = ?
-                OR opportunity_shares.user_id IS NOT NULL
-            )
+        WHERE opportunities.id = ? AND opportunities.deleted_at IS NULL
         """,
-        (user_id, user_id, opportunity_id, user_id),
+        (opportunity_id,),
     ).fetchone()
-
-
-def fetch_owned_opportunity(
-    connection: sqlite3.Connection,
-    opportunity_id: int,
-    user_id: int,
-) -> sqlite3.Row | None:
-    return connection.execute(
-        """
-        SELECT opportunities.*, users.name AS owner_name, 'owner' AS current_user_role
-        FROM opportunities
-        JOIN users ON users.id = opportunities.owner_id
-        WHERE opportunities.id = ?
-            AND opportunities.owner_id = ?
-            AND opportunities.deleted_at IS NULL
-        """,
-        (opportunity_id, user_id),
-    ).fetchone()
+    return row
 
 
 @router.get("", response_model=OpportunityListResponse)
@@ -162,7 +130,9 @@ def list_opportunities(
         ).fetchall()
 
         opportunities = [
-            opportunity_from_row(row, is_opportunity_stalled(connection, row["id"]))
+            opportunity_from_row(
+                row, row["current_user_role"], is_opportunity_stalled(connection, row["id"])
+            )
             for row in rows
         ]
 
@@ -198,6 +168,7 @@ def create_opportunity(
                 payload.expected_close_date,
             ),
         )
+        assert cursor.lastrowid is not None
         opportunity_id = int(cursor.lastrowid)
         create_system_timeline_entry(
             connection=connection,
@@ -208,10 +179,11 @@ def create_opportunity(
             body=f"{payload.name} was created for {payload.account_name}.",
         )
         connection.commit()
-        row = fetch_owned_opportunity(connection, opportunity_id, int(user["id"]))
+        row = fetch_opportunity_row(connection, opportunity_id)
         stalled = is_opportunity_stalled(connection, opportunity_id)
 
-    return opportunity_from_row(row, stalled)
+    assert row is not None
+    return opportunity_from_row(row, "owner", stalled)
 
 
 @router.get("/{opportunity_id}", response_model=OpportunityPublic)
@@ -220,15 +192,12 @@ def get_opportunity(
     user: sqlite3.Row = Depends(get_current_user),
 ) -> OpportunityPublic:
     with db_connection() as connection:
-        row = fetch_accessible_opportunity(connection, opportunity_id, int(user["id"]))
-
-    if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Opportunity not found")
-
-    with db_connection() as connection:
+        role = require_opportunity_access(connection, opportunity_id, int(user["id"]))
+        row = fetch_opportunity_row(connection, opportunity_id)
         stalled = is_opportunity_stalled(connection, opportunity_id)
 
-    return opportunity_from_row(row, stalled)
+    assert row is not None
+    return opportunity_from_row(row, role, stalled)
 
 
 @router.patch("/{opportunity_id}", response_model=OpportunityPublic)
@@ -240,26 +209,20 @@ def update_opportunity(
     updates = payload.model_dump(exclude_unset=True)
     if not updates:
         with db_connection() as connection:
-            row = fetch_owned_opportunity(connection, opportunity_id, int(user["id"]))
+            require_opportunity_owner(connection, opportunity_id, int(user["id"]))
+            row = fetch_opportunity_row(connection, opportunity_id)
             stalled = is_opportunity_stalled(connection, opportunity_id)
-        if not row:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Opportunity not found",
-            )
-        return opportunity_from_row(row, stalled)
+        assert row is not None
+        return opportunity_from_row(row, "owner", stalled)
 
     assignments = [f"{field} = ?" for field in updates]
     values = [str(value) if isinstance(value, Decimal) else value for value in updates.values()]
     values.extend([opportunity_id, user["id"]])
 
     with db_connection() as connection:
-        row = fetch_owned_opportunity(connection, opportunity_id, int(user["id"]))
-        if not row:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Opportunity not found",
-            )
+        require_opportunity_owner(connection, opportunity_id, int(user["id"]))
+        row = fetch_opportunity_row(connection, opportunity_id)
+        assert row is not None
         previous_stage = row["stage"]
 
         connection.execute(
@@ -280,10 +243,11 @@ def update_opportunity(
                 body=f"Stage changed from {previous_stage} to {updates['stage']}.",
             )
         connection.commit()
-        updated = fetch_owned_opportunity(connection, opportunity_id, int(user["id"]))
+        updated = fetch_opportunity_row(connection, opportunity_id)
         stalled = is_opportunity_stalled(connection, opportunity_id)
 
-    return opportunity_from_row(updated, stalled)
+    assert updated is not None
+    return opportunity_from_row(updated, "owner", stalled)
 
 
 @router.delete("/{opportunity_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -292,12 +256,9 @@ def delete_opportunity(
     user: sqlite3.Row = Depends(get_current_user),
 ) -> None:
     with db_connection() as connection:
-        row = fetch_owned_opportunity(connection, opportunity_id, int(user["id"]))
-        if not row:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Opportunity not found",
-            )
+        require_opportunity_owner(connection, opportunity_id, int(user["id"]))
+        row = fetch_opportunity_row(connection, opportunity_id)
+        assert row is not None
 
         connection.execute(
             """
@@ -345,7 +306,8 @@ def delete_opportunity(
         connection.execute(
             """
             UPDATE opportunities
-            SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+            SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
+                updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
             WHERE id = ? AND owner_id = ? AND deleted_at IS NULL
             """,
             (opportunity_id, user["id"]),

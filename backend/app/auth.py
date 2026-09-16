@@ -1,12 +1,11 @@
-from datetime import UTC, datetime, timedelta
 import secrets
 import sqlite3
+from datetime import UTC, datetime, timedelta
 
 from fastapi import Cookie, HTTPException, Response, status
 from passlib.context import CryptContext
 
 from .database import db_connection
-
 
 SESSION_COOKIE_NAME = "opptrail_session"
 SESSION_DAYS = 7
@@ -18,11 +17,13 @@ def normalize_email(email: str) -> str:
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    hashed: str = pwd_context.hash(password)
+    return hashed
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    return pwd_context.verify(password, password_hash)
+    is_valid: bool = pwd_context.verify(password, password_hash)
+    return is_valid
 
 
 def create_session(response: Response, user_id: int) -> None:
@@ -65,7 +66,7 @@ def get_current_user(
 
     now = datetime.now(UTC).isoformat()
     with db_connection() as connection:
-        user = connection.execute(
+        user: sqlite3.Row | None = connection.execute(
             """
             SELECT users.id, users.email, users.name, users.created_at
             FROM sessions

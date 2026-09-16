@@ -14,7 +14,6 @@ from .auth import (
 from .database import db_connection
 from .schemas import AuthResponse, LoginRequest, SignupRequest, UserPublic
 
-
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
@@ -77,7 +76,7 @@ def login(payload: LoginRequest, response: Response) -> AuthResponse:
 def logout(
     response: Response,
     session_id: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
-):
+) -> dict[str, bool]:
     clear_session(response, session_id)
     return {"ok": True}
 

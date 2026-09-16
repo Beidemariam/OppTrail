@@ -3,7 +3,6 @@ import sqlite3
 
 from openai import OpenAI
 
-
 SYSTEM_PROMPT = """
 You are OppTrail's read-only sales opportunity analyst.
 Answer only from the supplied opportunity timeline context.
@@ -97,7 +96,8 @@ def build_timeline_context(
             ).fetchall()
             for comment in comments:
                 lines.append(
-                    f"    Comment by {comment['author_name']} at {comment['created_at']}: {comment['body']}"
+                    f"    Comment by {comment['author_name']} at "
+                    f"{comment['created_at']}: {comment['body']}"
                 )
         lines.append("")
 

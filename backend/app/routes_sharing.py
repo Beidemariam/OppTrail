@@ -16,7 +16,6 @@ from .schemas import (
 )
 from .timeline_utils import create_system_timeline_entry
 
-
 router = APIRouter(prefix="/api/opportunities", tags=["sharing"])
 
 

@@ -3,7 +3,6 @@ from typing import Literal
 
 from fastapi import HTTPException, status
 
-
 Role = Literal["owner", "editor", "viewer"]
 
 
@@ -34,7 +33,8 @@ def get_opportunity_role(
         return None
     if row["owner_id"] == user_id:
         return "owner"
-    return row["role"]
+    role: Role = row["role"]
+    return role
 
 
 def require_opportunity_access(

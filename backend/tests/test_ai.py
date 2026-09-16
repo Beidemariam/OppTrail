@@ -61,12 +61,10 @@ def count_rows() -> dict[str, int]:
             "entries": connection.execute(
                 "SELECT COUNT(*) AS count FROM timeline_entries"
             ).fetchone()["count"],
-            "notes": connection.execute(
-                "SELECT COUNT(*) AS count FROM notes"
-            ).fetchone()["count"],
-            "comments": connection.execute(
-                "SELECT COUNT(*) AS count FROM comments"
-            ).fetchone()["count"],
+            "notes": connection.execute("SELECT COUNT(*) AS count FROM notes").fetchone()["count"],
+            "comments": connection.execute("SELECT COUNT(*) AS count FROM comments").fetchone()[
+                "count"
+            ],
             "audit": connection.execute(
                 "SELECT COUNT(*) AS count FROM audit_log_entries"
             ).fetchone()["count"],

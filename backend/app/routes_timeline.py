@@ -28,7 +28,6 @@ from .schemas import (
     TimelineResponse,
 )
 
-
 router = APIRouter(tags=["timeline"])
 
 
@@ -78,7 +77,7 @@ def fetch_entry_context(
     connection: sqlite3.Connection,
     entry_id: int,
 ) -> sqlite3.Row | None:
-    return connection.execute(
+    row: sqlite3.Row | None = connection.execute(
         """
         SELECT timeline_entries.*
         FROM timeline_entries
@@ -89,13 +88,14 @@ def fetch_entry_context(
         """,
         (entry_id,),
     ).fetchone()
+    return row
 
 
 def fetch_note_context(
     connection: sqlite3.Connection,
     note_id: int,
 ) -> sqlite3.Row | None:
-    return connection.execute(
+    row: sqlite3.Row | None = connection.execute(
         """
         SELECT notes.*, timeline_entries.opportunity_id
         FROM notes
@@ -108,13 +108,14 @@ def fetch_note_context(
         """,
         (note_id,),
     ).fetchone()
+    return row
 
 
 def fetch_comment_context(
     connection: sqlite3.Connection,
     comment_id: int,
 ) -> sqlite3.Row | None:
-    return connection.execute(
+    row: sqlite3.Row | None = connection.execute(
         """
         SELECT comments.*, timeline_entries.opportunity_id
         FROM comments
@@ -129,6 +130,7 @@ def fetch_comment_context(
         """,
         (comment_id,),
     ).fetchone()
+    return row
 
 
 @router.get(
@@ -271,10 +273,7 @@ def list_timeline(
             )
 
     return TimelineResponse(
-        entries=[
-            entry_from_row(entry, notes_by_entry_id.get(entry["id"], []))
-            for entry in entries
-        ]
+        entries=[entry_from_row(entry, notes_by_entry_id.get(entry["id"], [])) for entry in entries]
     )
 
 
@@ -313,6 +312,7 @@ def create_timeline_entry(
                 user["id"],
             ),
         )
+        assert cursor.lastrowid is not None
         entry_id = int(cursor.lastrowid)
         notify_shared_activity(
             connection,
@@ -427,7 +427,11 @@ def delete_timeline_entry(
             (entry_id,),
         )
         connection.execute(
-            "UPDATE timeline_entries SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?",
+            """
+            UPDATE timeline_entries
+            SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+            WHERE id = ?
+            """,
             (entry_id,),
         )
         create_audit_log_entry(
@@ -471,6 +475,7 @@ def create_note(
             """,
             (entry_id, payload.body, user["id"]),
         )
+        assert cursor.lastrowid is not None
         note_id = int(cursor.lastrowid)
         connection.execute(
             """
@@ -526,7 +531,11 @@ def update_note(
         require_timeline_write(connection, note["opportunity_id"], int(user["id"]))
 
         latest_version = connection.execute(
-            "SELECT COALESCE(MAX(version_number), 0) AS version_number FROM note_versions WHERE note_id = ?",
+            """
+            SELECT COALESCE(MAX(version_number), 0) AS version_number
+            FROM note_versions
+            WHERE note_id = ?
+            """,
             (note_id,),
         ).fetchone()["version_number"]
         next_version = int(latest_version) + 1
@@ -686,6 +695,7 @@ def create_comment(
             """,
             (note_id, payload.body, user["id"]),
         )
+        assert cursor.lastrowid is not None
         comment_id = int(cursor.lastrowid)
         notify_note_comment(
             connection,

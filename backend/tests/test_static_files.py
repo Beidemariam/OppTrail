@@ -2,7 +2,6 @@ from fastapi.testclient import TestClient
 
 import app.main
 
-
 SECRET = "TOP SECRET - outside the static build"
 INDEX = "<html>opptrail</html>"
 

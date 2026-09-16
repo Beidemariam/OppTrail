@@ -1,9 +1,9 @@
 import csv
-from html import escape
-from io import StringIO
 import re
 import sqlite3
-
+from html import escape
+from io import StringIO
+from typing import Any
 
 # Excel, LibreOffice and Google Sheets evaluate a cell that opens with one of
 # these characters as a formula, so a note body is a live injection vector once
@@ -25,7 +25,7 @@ def safe_export_filename(name: str, extension: str) -> str:
 def fetch_export_data(
     connection: sqlite3.Connection,
     opportunity_id: int,
-) -> dict:
+) -> dict[str, Any]:
     opportunity = connection.execute(
         """
         SELECT opportunities.*, users.name AS owner_name
@@ -51,8 +51,8 @@ def fetch_export_data(
     ).fetchall()
 
     entry_ids = [entry["id"] for entry in entries]
-    notes_by_entry_id: dict[int, list[dict]] = {}
-    comments_by_note_id: dict[int, list[dict]] = {}
+    notes_by_entry_id: dict[int, list[dict[str, Any]]] = {}
+    comments_by_note_id: dict[int, list[dict[str, Any]]] = {}
     if entry_ids:
         placeholders = ",".join("?" for _ in entry_ids)
         notes = connection.execute(
@@ -142,7 +142,7 @@ def fetch_export_data(
     }
 
 
-def export_data_to_csv(data: dict) -> str:
+def export_data_to_csv(data: dict[str, Any]) -> str:
     output = StringIO()
     fieldnames = [
         "row_type",
@@ -169,7 +169,7 @@ def export_data_to_csv(data: dict) -> str:
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     writer.writeheader()
 
-    def write_row(row: dict) -> None:
+    def write_row(row: dict[str, Any]) -> None:
         writer.writerow({key: escape_csv_value(value) for key, value in row.items()})
 
     opportunity = data["opportunity"]
@@ -231,14 +231,15 @@ def export_data_to_csv(data: dict) -> str:
     return output.getvalue()
 
 
-def export_data_to_pdf(data: dict) -> bytes:
+def export_data_to_pdf(data: dict[str, Any]) -> bytes:
     from weasyprint import HTML
 
     html = render_export_html(data)
-    return HTML(string=html).write_pdf()
+    pdf_bytes: bytes = HTML(string=html).write_pdf()
+    return pdf_bytes
 
 
-def render_export_html(data: dict) -> str:
+def render_export_html(data: dict[str, Any]) -> str:
     opportunity = data["opportunity"]
     entries_html = []
     for entry in data["entries"]:
@@ -267,9 +268,9 @@ def render_export_html(data: dict) -> str:
             )
 
         notes_block = (
-            f"<ul class=\"notes\">{''.join(notes_html)}</ul>"
+            f'<ul class="notes">{"".join(notes_html)}</ul>'
             if notes_html
-            else "<p class=\"muted\">No notes</p>"
+            else '<p class="muted">No notes</p>'
         )
         body = entry["body"] or "No details"
         follow_up = (
@@ -295,9 +296,7 @@ def render_export_html(data: dict) -> str:
         )
 
     timeline_html = (
-        "".join(entries_html)
-        if entries_html
-        else "<p class=\"muted\">No timeline entries.</p>"
+        "".join(entries_html) if entries_html else '<p class="muted">No timeline entries.</p>'
     )
 
     return f"""
@@ -355,12 +354,22 @@ def render_export_html(data: dict) -> str:
           <p class="label">Opportunity Timeline Export</p>
           <h1>{escape(opportunity["name"])}</h1>
           <div class="grid">
-            <div><div class="label">Account</div><div class="value">{escape(opportunity["account_name"])}</div></div>
-            <div><div class="label">Value</div><div class="value">{escape(opportunity["currency"])} {escape(opportunity["value"])}</div></div>
-            <div><div class="label">Stage</div><div class="value">{escape(opportunity["stage"])}</div></div>
-            <div><div class="label">Owner</div><div class="value">{escape(opportunity["owner_name"])}</div></div>
-            <div><div class="label">Expected Close</div><div class="value">{escape(opportunity["expected_close_date"] or "Not set")}</div></div>
-            <div><div class="label">Exported Rows</div><div class="value">{len(data["entries"])} entries</div></div>
+            <div><div class="label">Account</div>
+              <div class="value">{escape(opportunity["account_name"])}</div></div>
+            <div><div class="label">Value</div>
+              <div class="value">
+                {escape(opportunity["currency"])} {escape(opportunity["value"])}
+              </div></div>
+            <div><div class="label">Stage</div>
+              <div class="value">{escape(opportunity["stage"])}</div></div>
+            <div><div class="label">Owner</div>
+              <div class="value">{escape(opportunity["owner_name"])}</div></div>
+            <div><div class="label">Expected Close</div>
+              <div class="value">
+                {escape(opportunity["expected_close_date"] or "Not set")}
+              </div></div>
+            <div><div class="label">Exported Rows</div>
+              <div class="value">{len(data["entries"])} entries</div></div>
           </div>
         </section>
         {timeline_html}

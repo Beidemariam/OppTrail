@@ -1,7 +1,7 @@
 from collections.abc import Iterator
 
-from fastapi.testclient import TestClient
 import pytest
+from fastapi.testclient import TestClient
 
 from app.database import initialize_database
 from app.main import app

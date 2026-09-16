@@ -40,27 +40,102 @@ files. Gate for this milestone: existing 39 tests still pass unmodified
 application behavior changed, so `make check-fast` (not yet built — see F.2)
 is vacuously satisfied by "the untouched test suite still passes."
 
-### F.2 — Tooling and structure (§4.2)
+### F.2 — Tooling and structure (§4.2) — **DONE**
 
-- [ ] `Makefile` with targets: `dev`, `test`, `check`, `check-fast`, `e2e`,
-      `build`, `docker`, `seed`, `migrate`.
-- [ ] Pre-commit hooks mirroring `check-fast`.
-- [ ] Introduce a service layer between routers and data access (routers: HTTP
-      only → services: business rules and permission checks → data access),
-      starting with the permission-check consolidation named in
-      `docs/autopilot/DECISIONS.md` D-004 (`routes_opportunities.py`'s inline
-      `fetch_accessible_opportunity`/`fetch_owned_opportunity` should call
-      `permissions.py` instead of duplicating it).
-- [ ] Typed settings with fail-fast validation in `backend/app/settings.py`
-      (currently no validators beyond Pydantic's type coercion — see
-      `docs/autopilot/INVENTORY.md` §2); `.env.example` documents every
-      variable (already close — verify `SESSION_SECRET` is either wired up or
-      removed, per `docs/code_review.md` finding 10).
-- [ ] Structured JSON logging with request IDs; no secrets/tokens in logs.
-      Currently there is no logging at all (`docs/code_review.md` finding 10,
-      `routes_ai.py:43` swallows the OpenAI exception with no record).
-- [ ] Consistent API error envelope; no stack traces to clients outside dev
-      mode.
+- [x] `Makefile` with targets: `dev`, `test`, `check`, `check-fast`, `e2e`,
+      `build`, `docker`, `seed`, `migrate`. `check-fast` runs everything
+      buildable in this sandbox (ruff, mypy, frontend typecheck/lint, pytest
+      with coverage floor); `check` adds `pip-audit`/`npm audit` and prints
+      explicit "deferred to milestone F.x" notes for pieces whose
+      infrastructure doesn't exist yet (frontend unit tests, migration tests,
+      contract check, E2E), plus the Docker split-gate note from F.1's
+      baseline. Nothing is silently absent.
+- [x] `.pre-commit-config.yaml` — local hooks (no fetched repos, so it can't
+      drift from the Makefile or need network at hook-install time) that run
+      the exact same six commands as `check-fast`. Verified end-to-end with
+      `uvx pre-commit run --all-files` — all six pass.
+- [x] Permission-check consolidation (D-004): `routes_opportunities.py`'s
+      `fetch_accessible_opportunity`/`fetch_owned_opportunity` replaced by a
+      role-agnostic `fetch_opportunity_row` plus calls to
+      `permissions.require_opportunity_access`/`require_opportunity_owner`.
+      Found and fixed one real behavior gap this surfaced (D-007): shared
+      non-owners now get 403, not 404, on `PATCH`/`DELETE /api/opportunities`,
+      matching `routes_sharing.py`'s existing convention — locked in by a new
+      regression test, confirmed to fail pre-fix. Deferred: a full
+      routers→services→data-access layer split (brief's other F.2 phrasing)
+      is a much larger refactor than this milestone's session budget allows;
+      the consolidation closes the specific gap D-004 named without it.
+- [x] Typed settings: `field_validator`s on `database_url` (must be
+      `sqlite:///`-prefixed) and the new `environment` field
+      (`development`/`production`/`test`), plus `validate_assignment=True` so
+      later mutation (tests reassign `settings.database_url`) still
+      validates. `SESSION_SECRET` removed as dead config per D-008 (ADR 0009
+      prefers a dedicated `INBOUND_EMAIL_SECRET` in Phase 5 anyway);
+      `environment` added in its place and is what the new error handler
+      uses. `.env.example`/`README.md` updated to match.
+- [x] Structured JSON logging (`logging_utils.py`): a `JsonFormatter` plus a
+      pure-ASGI `RequestLoggingMiddleware` (not `@app.middleware("http")` /
+      `BaseHTTPMiddleware` — that has a documented exception-propagation bug
+      with sync routes run in the threadpool that surfaced here as a
+      genuinely order-independent-but-content-dependent test failure; traced
+      to ground before switching approaches, not worked around). Adds
+      `X-Request-ID` to every response and logs method/path/status/duration
+      for every request, never headers/cookies/bodies. `routes_ai.py`'s
+      previously-silent OpenAI-call exception now logs a warning with the
+      opportunity id before converting to the 502 the client sees.
+- [x] Consistent API error envelope (`errors.py`): a handler for the bare
+      `Exception` class returns `{"detail": str}` — the same shape
+      `HTTPException` and validation errors already use — instead of
+      Starlette's default plain-text 500. This was a real, verified gap, not
+      speculative: `apiRequest<T>()` (CLAUDE.md) calls `response.json()` on
+      every non-2xx response, which would throw a JSON-parse error on the old
+      plain-text body. `detail` is the real exception message outside
+      `environment=production`, a generic string inside it. Found and fixed a
+      second real bug while writing the regression test: Starlette routes a
+      bare-`Exception` handler through `ServerErrorMiddleware`, which sits
+      *above* `RequestLoggingMiddleware`, so the response it returns never
+      passed through the middleware's `X-Request-ID`-adding `send_wrapper` —
+      the handler now sets that header directly.
+- [x] Tooling side-effects, all verified rather than assumed: `ruff check`,
+      `ruff format --check`, and `mypy --strict app/` all pass clean —
+      required reformatting/reordering imports across most of `backend/app`
+      and `backend/tests` (cosmetic only, diffed and confirmed), fixing 10
+      genuine line-length violations, and annotating ~28 real
+      `no-any-return`/missing-type-arg gaps (sqlite3's stubs return `Any` from
+      `fetchone()`/`Row.__getitem__` and `cursor.lastrowid` is typed
+      `int | None`, so several "assert not None" guards are new and correct,
+      not decorative). `pip-audit`/`npm audit` both clean; `pip-audit` found
+      one real CVE (PYSEC-2026-3940, a WeasyPrint `url_fetcher` bypass) that
+      doesn't apply to this codebase's usage (no `xmp_metadata=`/
+      `stylesheets=` arguments are ever passed) but was a trivial, safe
+      69.0→70.0 bump, taken anyway. mypy strict is scoped to `app/`, not
+      `tests/`, per D-009. Coverage: `--cov-branch` now on by default
+      (COVERAGE.md's prior to-do); backend 94% combined line+branch,
+      `--cov-fail-under=90` enforced in `check-fast`. Closed two per-module
+      gaps against brief §6.2's ≥95% floor for critical modules: `auth.py`
+      93%→100%, `settings.py`'s new validators 100%. `ai_service.py` (79%,
+      below the floor) is knowingly deferred to F.6, which explicitly owns
+      wrapping `ask_openai` with the timeout/retry/graceful-failure work that
+      would let its error branches be tested without a live API call.
+
+Work log: single session. Full diff: `backend/app/routes_opportunities.py`
+(permission consolidation), new `backend/app/errors.py` and
+`backend/app/logging_utils.py`, `backend/app/settings.py`,
+`backend/app/main.py`, `backend/app/routes_ai.py` (one added log call),
+line-length-only edits to `ai_service.py`/`export_service.py`/
+`routes_timeline.py`, mypy-annotation-only edits across 8 more `app/` files,
+new `Makefile` and `.pre-commit-config.yaml` at the repo root, `.env.example`
+and `README.md` (SESSION_SECRET → ENVIRONMENT), `backend/pyproject.toml`
+(ruff/mypy config, `pip-audit`/`mypy`/`ruff` dev deps, weasyprint bump), new
+tests in `test_opportunities.py`, `test_auth.py`, and two new files
+(`test_error_handling.py`, `test_settings.py`). Every new/changed assertion
+was confirmed to fail against the pre-fix code before being trusted (brief
+§6.5). Gate: `make check-fast` green (ruff, ruff format, mypy --strict,
+frontend typecheck, frontend lint, pytest 47 passed w/ 90% coverage floor);
+`make check` green including `pip-audit`/`npm audit` (0 known
+vulnerabilities) and the explicit deferred-item notes for F.3/F.4/F.7's
+pieces; Docker build+smoke test named as deferred to the host per the split
+gate (unchanged from F.1).
 
 ### F.3 — API contract (§4.3)
 

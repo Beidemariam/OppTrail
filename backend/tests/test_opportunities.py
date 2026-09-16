@@ -153,3 +153,45 @@ def test_non_owner_cannot_view_or_mutate_opportunity(client: TestClient) -> None
     listed = client.get("/api/opportunities")
     assert listed.status_code == 200
     assert listed.json()["opportunities"] == []
+
+
+def test_shared_editor_can_view_but_not_mutate_opportunity(client: TestClient) -> None:
+    """Editors/viewers have access (unlike `test_non_owner_...` above) but are
+    not the owner, so mutation must be forbidden, not treated as not-found.
+
+    Regression test for the permission-check consolidation onto
+    `permissions.require_opportunity_owner` (D-004/D-007): before the
+    consolidation, `PATCH`/`DELETE` used an inline owner-only query that
+    returned 404 for *any* non-owner, including a shared editor who legitimately
+    has read access. That collapsed "forbidden" and "not found" into one status
+    code for a user who could see the opportunity via `GET`.
+    """
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    client.post("/api/auth/logout")
+
+    signup(client, "editor@example.com", "Editor")
+    client.post("/api/auth/logout")
+
+    login(client, "owner@example.com")
+    added = client.post(
+        f"/api/opportunities/{opportunity['id']}/shares",
+        json={"email": "editor@example.com", "role": "editor"},
+    )
+    assert added.status_code == 201
+    client.post("/api/auth/logout")
+
+    login(client, "editor@example.com")
+
+    fetched = client.get(f"/api/opportunities/{opportunity['id']}")
+    assert fetched.status_code == 200
+    assert fetched.json()["current_user_role"] == "editor"
+
+    updated = client.patch(
+        f"/api/opportunities/{opportunity['id']}",
+        json={"stage": "Qualification"},
+    )
+    assert updated.status_code == 403
+
+    deleted = client.delete(f"/api/opportunities/{opportunity['id']}")
+    assert deleted.status_code == 403

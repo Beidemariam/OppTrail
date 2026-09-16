@@ -7,7 +7,6 @@ from .auth import get_current_user
 from .database import db_connection
 from .schemas import NotificationListResponse, NotificationPublic
 
-
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
 
@@ -36,9 +35,7 @@ def list_notifications(
             (user["id"],),
         ).fetchall()
 
-    return NotificationListResponse(
-        notifications=[notification_from_row(row) for row in rows]
-    )
+    return NotificationListResponse(notifications=[notification_from_row(row) for row in rows])
 
 
 @router.patch("/{notification_id}/read", response_model=NotificationPublic)

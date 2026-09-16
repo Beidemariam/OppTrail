@@ -1,0 +1,48 @@
+# Mirrors `make check-fast` exactly, as local hooks (no separate pre-commit
+# venvs to fetch) so this stays usable offline and never drifts from the
+# Makefile. Install with `pre-commit install` after `pip install pre-commit`
+# or `uvx pre-commit install`.
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check (backend)
+        entry: bash -c 'cd backend && uv run ruff check .'
+        language: system
+        pass_filenames: false
+        files: ^backend/
+
+      - id: ruff-format
+        name: ruff format --check (backend)
+        entry: bash -c 'cd backend && uv run ruff format --check .'
+        language: system
+        pass_filenames: false
+        files: ^backend/
+
+      - id: mypy
+        name: mypy --strict (backend)
+        entry: bash -c 'cd backend && uv run mypy app'
+        language: system
+        pass_filenames: false
+        files: ^backend/
+
+      - id: frontend-typecheck
+        name: tsc --noEmit (frontend)
+        entry: bash -c 'cd frontend && npm run typecheck'
+        language: system
+        pass_filenames: false
+        files: ^frontend/
+
+      - id: frontend-lint
+        name: eslint (frontend)
+        entry: bash -c 'cd frontend && npm run lint'
+        language: system
+        pass_filenames: false
+        files: ^frontend/
+
+      - id: backend-tests
+        name: pytest with coverage floor (backend)
+        entry: bash -c 'cd backend && uv run pytest -q --cov=app --cov-branch --cov-report=term-missing --cov-fail-under=90'
+        language: system
+        pass_filenames: false
+        files: ^backend/

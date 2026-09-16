@@ -53,9 +53,7 @@ def test_owner_can_manage_shares_and_audit_history(client: TestClient) -> None:
 
     listed = client.get(f"/api/opportunities/{opportunity['id']}/shares")
     assert listed.status_code == 200
-    assert [share["email"] for share in listed.json()["shares"]] == [
-        "editor@example.com"
-    ]
+    assert [share["email"] for share in listed.json()["shares"]] == ["editor@example.com"]
 
     updated = client.patch(
         f"/api/opportunities/{opportunity['id']}/shares/{editor['id']}",
@@ -67,9 +65,7 @@ def test_owner_can_manage_shares_and_audit_history(client: TestClient) -> None:
     timeline = client.get(f"/api/opportunities/{opportunity['id']}/timeline")
     assert timeline.status_code == 200
     assert [
-        entry["title"]
-        for entry in timeline.json()["entries"]
-        if entry["system_generated"]
+        entry["title"] for entry in timeline.json()["entries"] if entry["system_generated"]
     ] == [
         "Opportunity created",
         "Shared with Editor",
@@ -84,9 +80,7 @@ def test_owner_can_manage_shares_and_audit_history(client: TestClient) -> None:
     ]
     assert all(row["actor_id"] == owner["id"] for row in audit.json())
 
-    deleted = client.delete(
-        f"/api/opportunities/{opportunity['id']}/shares/{editor['id']}"
-    )
+    deleted = client.delete(f"/api/opportunities/{opportunity['id']}/shares/{editor['id']}")
     assert deleted.status_code == 204
 
     shares_after_delete = client.get(f"/api/opportunities/{opportunity['id']}/shares")
@@ -128,9 +122,7 @@ def test_shared_user_dashboard_and_permissions_follow_role(
 
     login(client, "editor@example.com")
     dashboard = client.get("/api/opportunities")
-    assert [item["id"] for item in dashboard.json()["opportunities"]] == [
-        opportunity["id"]
-    ]
+    assert [item["id"] for item in dashboard.json()["opportunities"]] == [opportunity["id"]]
     blocked = client.post(
         f"/api/opportunities/{opportunity['id']}/timeline",
         json={

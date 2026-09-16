@@ -2,7 +2,6 @@ import json
 import re
 import sqlite3
 
-
 MENTION_RE = re.compile(r"@([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})")
 
 
@@ -19,7 +18,7 @@ def create_notification(
     connection: sqlite3.Connection,
     user_id: int,
     notification_type: str,
-    payload: dict,
+    payload: dict[str, object],
 ) -> None:
     connection.execute(
         """
