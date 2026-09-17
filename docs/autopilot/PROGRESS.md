@@ -610,6 +610,37 @@ Docker build + smoke test remains the host's half of the split gate.
       **D-023.**
 - [ ] Pin frontend dependency versions instead of `"latest"`
       (`frontend/package.json`).
+- [ ] Guard the authorization matrix's PDF-export cases against a host
+      without WeasyPrint's native libraries. `test_authorization_matrix.py`
+      currently fails on macOS with `OSError: cannot load library
+      'libgobject-2.0-0'` (F.7 shipped green because the sandbox gate only
+      ever runs on Linux, where the libraries are present). Reuse the existing
+      pattern in `tests/test_export.py:224-228`, which catches `OSError` as
+      well as `ImportError` because the cffi failure is not an `ImportError`
+      and `pytest.importorskip` does not catch it — see `CLAUDE.md`'s
+      WeasyPrint section.
+      **Guard only the three cases that expect 200.** The unauthorized cases
+      never reach the renderer: `require_opportunity_access` runs inside the
+      `get_export_data` dependency (`routes_export.py:24-29`), so 404 and 401
+      are decided before any PDF is produced. Skipping the whole endpoint
+      would drop its authorization coverage on every laptop run while the
+      suite still reported green — the vacuous pass the matrix exists to
+      prevent.
+- [ ] Decide whether the split gate should grow a host-native test run.
+      `scripts/autopilot-gate.sh` runs only `docker build` plus
+      `scripts/docker-smoke.sh` (its receipt line reads
+      `verified=docker-build,health,csrf,signup,opportunity-create,timeline,
+      pdf-export,frontend-served`), and the sandbox half runs the suite only
+      under Linux. Neither half ever runs `pytest` on the developer's own
+      platform, which is why the macOS failure above reached the human instead
+      of the gate. This is a structural blind spot, not a one-off: the same
+      gap will swallow the next platform-specific regression.
+      **needs human review: Y** — brief §3.4 defines what the split gate is
+      responsible for, so widening it is a reading of the brief rather than an
+      agent's call. Log the options (add a host `pytest` step to
+      `autopilot-gate.sh`; leave the gate as-is and treat host-only breakage
+      as accepted; or require every new test to be platform-guarded) with a
+      recommendation, and stop for the ruling rather than implementing one.
 
 ### F.9 — Phase F gate and review packet
 
