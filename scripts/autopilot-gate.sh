@@ -25,9 +25,6 @@ git rev-parse -q --verify "refs/heads/${BRANCH}" >/dev/null \
 SHA="$(git rev-parse "${BRANCH}")"
 mkdir -p "$GATE_DIR"
 
-cleanup() { docker rm -f "$CONTAINER" >/dev/null 2>&1 || true; }
-trap cleanup EXIT
-
 echo "=== Host gate for phase ${PHASE} at ${SHA:0:12} ==="
 
 # Build the application image from the phase branch without disturbing your
@@ -35,47 +32,12 @@ echo "=== Host gate for phase ${PHASE} at ${SHA:0:12} ==="
 echo "--- docker build ---"
 git archive "${BRANCH}" | docker build -t "$IMAGE" -
 
-echo "--- start ---"
-docker run -d --rm --name "$CONTAINER" -p "${PORT}:8000" \
-  -e OPENAI_API_KEY=gate-smoke-test-unused "$IMAGE" >/dev/null
-
-api="http://127.0.0.1:${PORT}"
-for _ in $(seq 1 60); do
-  curl -fsS "${api}/api/health" >/dev/null 2>&1 && break
-  sleep 1
-done
-curl -fsS "${api}/api/health" >/dev/null || { echo "FAIL: health check never passed"; docker logs "$CONTAINER" | tail -30; exit 1; }
-echo "health          ok"
-
-# Exercise the real stack end to end: session auth, a write, and the WeasyPrint
-# PDF path, which is the reason this step cannot run in the sandbox.
-jar="$(mktemp)"; trap 'rm -f "$jar"' RETURN 2>/dev/null || true
-user="gate-$(date +%s)@example.com"
-
-curl -fsS -c "$jar" -X POST "${api}/api/auth/signup" \
-  -H 'Content-Type: application/json' \
-  -d "{\"email\":\"${user}\",\"password\":\"gate-smoke-pw-123\",\"name\":\"Gate Smoke\"}" >/dev/null
-echo "signup          ok"
-
-opp="$(curl -fsS -b "$jar" -X POST "${api}/api/opportunities" \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"Gate smoke opportunity","account_name":"Acme","stage":"Qualification"}')"
-opp_id="$(printf '%s' "$opp" | sed -n 's/.*"id":[ ]*\([0-9]*\).*/\1/p' | head -1)"
-[ -n "$opp_id" ] || { echo "FAIL: could not create an opportunity: $opp"; exit 1; }
-echo "opportunity     ok (id ${opp_id})"
-
-pdf="$(mktemp)"
-curl -fsS -b "$jar" "${api}/api/opportunities/${opp_id}/export/pdf" -o "$pdf"
-if [ "$(head -c 4 "$pdf")" = "%PDF" ]; then
-  echo "pdf export      ok ($(wc -c < "$pdf" | tr -d ' ') bytes, %PDF verified)"
-else
-  echo "FAIL: export did not return a PDF"; head -c 200 "$pdf"; rm -f "$pdf"; exit 1
-fi
-rm -f "$pdf"
-
-# The static frontend must be served from the same origin as the API.
-curl -fsS "${api}/" | grep -qi '<html' && echo "frontend        ok" \
-  || { echo "FAIL: frontend not served"; exit 1; }
+# One definition of "the image works", shared with `make docker-smoke` and CI.
+# It exercises session auth, CSRF, a write, the auto-generated timeline entry,
+# the WeasyPrint PDF path (the reason this step cannot run in the sandbox), and
+# same-origin delivery of the frontend.
+echo "--- smoke test ---"
+SMOKE_PORT="$PORT" ./scripts/docker-smoke.sh "$IMAGE" "$CONTAINER"
 
 cat > "${GATE_DIR}/${SHA}" <<RECEIPT
 phase=${PHASE}
@@ -84,7 +46,7 @@ commit=${SHA}
 image=${IMAGE}
 host=$(uname -srm)
 docker=$(docker --version)
-verified=docker-build,health,signup,opportunity-create,pdf-export,frontend-served
+verified=docker-build,health,csrf,signup,opportunity-create,timeline,pdf-export,frontend-served
 at=$(date -u +%FT%TZ)
 RECEIPT
 

@@ -37,6 +37,15 @@ cd frontend
 npm run typecheck    # tsc --noEmit
 npm run lint         # eslint
 npm run build        # static export to frontend/out
+npm test             # vitest run
+npm run test:coverage
+npm run e2e          # playwright; builds the app and starts scripts/e2e-server.sh
+```
+
+```bash
+make check-fast      # the inner-loop gate
+make check           # the full gate (Docker portion deferred to the host)
+make seed            # demo data; prints the seeded users and what each can see
 ```
 
 Full app (builds the frontend, packages both into one container):
@@ -211,36 +220,91 @@ user content, and logging out really does delete the row.
 
 ### AI agent
 
-Read-only by construction, not by prompt instruction. `routes_ai` assembles the full
+Read-only by construction, not by prompt instruction, in two independent ways.
+`routes_ai` opens `database.read_only_connection()` — `PRAGMA query_only = ON`, so
+SQLite itself raises on any write from that path, and it is a pragma rather than a
+`mode=ro` URI because the database runs in WAL. It then assembles the full
 chronological timeline as text (`ai_service.build_timeline_context`), sends it with
 the question via `client.responses.create(..., store=False)`, and returns a string.
-No tool surface is exposed to the model, and none should be added. Viewers may ask
+No tool surface is exposed to the model, and none should be added. Both halves are
+pinned by `test_invariant_*` tests. Viewers may ask
 questions; the endpoint uses `require_opportunity_access`, not
 `require_timeline_write`.
 
 ### Frontend
 
-`frontend/app/page.tsx` is the entire application — one large client component
-holding all state in `useState`, with `apiRequest<T>()` as the only fetch wrapper
-(`credentials: "include"`, throws on non-2xx using the API's `detail` field). There
-is no router, no state library, and no data-fetching cache; views switch on
-`selectedOpportunityId`. Note and comment bodies render through `MarkdownText`, which
-runs `rehype-sanitize` with an explicit `http`/`https`/`mailto` protocol allowlist —
-keep that allowlist if you touch the Markdown pipeline.
+`frontend/app/page.tsx` is still the entire application — one large client
+component holding all state in `useState`. There is no router, no state library,
+and no data-fetching cache; views switch on `selectedOpportunityId`. Milestone 2.1
+is where it is decomposed into routed views.
+
+What has been pulled out of it, because each is a unit worth testing directly:
+
+- `lib/api.ts` — `apiRequest<T>()`, the only fetch wrapper
+  (`credentials: "include"`, echoes the CSRF cookie on unsafe methods, throws on
+  non-2xx using the API's `detail` field).
+- `lib/time.ts` — the UTC/`datetime-local` conversions at both boundaries.
+- `lib/permissions.ts` — `canManageOpportunity` / `canWriteTimeline` /
+  `canChangeItem`, the client mirror of `backend/app/permissions.py`. They decide
+  which buttons are offered, never who is allowed to do what.
+- `lib/notifications.ts` — the sentence shown for each notification type.
+- `app/MarkdownText.tsx` — note and comment bodies, rendered through
+  `rehype-sanitize` with an explicit `http`/`https`/`mailto` protocol allowlist.
+  Keep that allowlist if you touch the Markdown pipeline.
+
+`lib/api-types.ts` is generated from the OpenAPI schema; never hand-edit it.
 
 ## Testing
 
-`backend/tests/` mirrors the routers. `conftest.py` points `settings.database_url` at
-a per-test `tmp_path` database and yields a `TestClient`; tests drive the app through
-real HTTP calls and switch users with `signup` / `login` / `logout` on one client.
-There are no frontend tests.
+`make check-fast` is the inner loop and `make check` is the full gate; the Docker
+build and smoke test are the one piece that cannot run in the autopilot sandbox
+and are deferred to `scripts/autopilot-gate.sh` on a host.
 
-Two rules the suite has already been bitten by:
+**Backend** (`backend/tests/`) mirrors the routers. `conftest.py` points
+`settings.database_url` at a per-test `tmp_path` database and yields a `TestClient`;
+tests drive the app through real HTTP calls and switch users with `signup` /
+`login` / `logout` on one client. Two autouse fixtures apply to every test: the
+rate limiter is reset (it is process-global by design), and `no_live_network`
+fails any test that opens a socket off this machine — so a forgotten OpenAI mock
+is an immediate, attributable failure rather than a real API call.
+
+Three suites carry rules rather than features and should not be treated as
+ordinary tests:
+
+- `test_authorization_matrix.py` — every endpoint × {owner, editor, viewer,
+  unrelated, anonymous}. The endpoint list is read out of the running app
+  (`route_registry.py`), so **a new route with no entry in `MATRIX` fails the
+  build**. Add the expectation with the route.
+- `test_invariants.py` — the rules from `AGENTS.md` that the product may not
+  break, named `test_invariant_*`. Joined by
+  `test_soft_delete.py::test_invariant_no_hard_deletes_of_user_data` and
+  `test_ai.py::test_invariant_ai_agent_has_no_write_tools`, which live next to
+  the code they guard.
+- `test_seed.py` — keeps `make seed`'s printed tour true.
+
+**Frontend** (`frontend/`): Vitest + React Testing Library over `app/` and
+`lib/` (`npm test`), with thresholds in `vitest.config.ts` set above the
+project floor and never lowered. `app/test-api.ts` is a stateful fake of the
+API — the page reloads a list after every write, so canned responses would test
+the click and not the consequence.
+
+**E2E** (`frontend/e2e/`): Playwright against the production build served by
+FastAPI, started by `scripts/e2e-server.sh`, which rebuilds and reseeds a
+throwaway database each run and deliberately starts the server with no
+`OPENAI_API_KEY` so the suite cannot reach a paid API. `@axe-core/playwright`
+runs on the major screens. `DEFERRED_AXE_RULES` in `e2e/helpers.ts` is a
+ratchet, not an allowlist: it holds `color-contrast` only, any other rule fails
+immediately, and a test asserts the deferred rule still fails — so the gate
+tightens itself when the palette work lands.
+
+Three rules the suite has already been bitten by:
 - Assertions must not depend on the wall clock. The auto-generated "Opportunity
   created" entry is stamped with the current time, so anchor date windows to `now`
   (see the `days_ago` helper in `test_timeline.py`) rather than hardcoding dates.
 - A guard test should be confirmed to fail against the unfixed code before it is
   trusted.
+- In Playwright, do not filter a locator by text you are about to change — the
+  locator stops matching mid-test. Address the element by position instead.
 
 `docs/TEST_CRITERIA.md` defines the phase gates and the Review / Accept / Reject
 decision block. `docs/code_review.md` records the findings from the last full review

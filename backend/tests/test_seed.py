@@ -1,0 +1,156 @@
+"""The seed data has to keep being what its own output claims it is.
+
+`make seed` prints a short tour ("Casey is a viewer on Northwind and Globex",
+"Globex renewal is stalled") that a human then follows by hand. Those sentences
+are only useful if they stay true, so they are assertions here rather than
+prose only.
+"""
+
+from conftest import CsrfClient
+from fastapi.testclient import TestClient
+
+from app.database import db_connection, initialize_database
+from app.settings import settings
+from tools.seed import ALEX, BLAIR, CASEY, DANA, DEMO_PASSWORD, seed
+
+
+def sign_in(client: TestClient, email: str) -> None:
+    response = client.post("/api/auth/login", json={"email": email, "password": DEMO_PASSWORD})
+    assert response.status_code == 200, response.text
+
+
+def seeded_client(email: str) -> CsrfClient:
+    from app.main import app
+
+    client = CsrfClient(app)
+    client.__enter__()
+    sign_in(client, email)
+    return client
+
+
+def test_seed_populates_every_shipped_feature(tmp_path) -> None:
+    settings.database_url = f"sqlite:///{tmp_path / 'seed.db'}"
+    initialize_database()
+
+    seed()
+
+    with db_connection() as connection:
+        counts = {
+            table: connection.execute(
+                f"SELECT COUNT(*) AS count FROM {table}"  # noqa: S608 - table is a literal
+            ).fetchone()["count"]
+            for table in (
+                "users",
+                "opportunities",
+                "opportunity_shares",
+                "timeline_entries",
+                "notes",
+                "comments",
+                "note_versions",
+                "notifications",
+                "audit_log_entries",
+            )
+        }
+        entry_types = {
+            row["type"] for row in connection.execute("SELECT DISTINCT type FROM timeline_entries")
+        }
+        notification_types = {
+            row["type"] for row in connection.execute("SELECT DISTINCT type FROM notifications")
+        }
+        system_entries = connection.execute(
+            "SELECT COUNT(*) AS count FROM timeline_entries WHERE system_generated = 1"
+        ).fetchone()["count"]
+        soft_deleted_notes = connection.execute(
+            "SELECT COUNT(*) AS count FROM notes WHERE deleted_at IS NOT NULL"
+        ).fetchone()["count"]
+        edited_notes = connection.execute(
+            "SELECT COUNT(*) AS count FROM notes WHERE edited = 1"
+        ).fetchone()["count"]
+
+    assert counts["users"] == 4
+    assert counts["opportunities"] == 5
+    assert counts["opportunity_shares"] == 4
+    for table in ("timeline_entries", "notes", "comments", "note_versions", "audit_log_entries"):
+        assert counts[table] > 0, f"{table} is empty after seeding"
+
+    # Every relationship the demo tour names has to be reachable.
+    assert {"call", "email", "meeting", "demo", "proposal", "contract", "other"} <= entry_types
+    assert "stage_change" in entry_types and system_entries > 0
+    assert {"share_added", "shared_activity", "mention", "comment"} <= notification_types
+    assert soft_deleted_notes == 1
+    assert edited_notes == 1
+
+
+def test_seeded_permissions_match_the_printed_tour(tmp_path) -> None:
+    settings.database_url = f"sqlite:///{tmp_path / 'seed.db'}"
+    initialize_database()
+    seed()
+
+    alex = seeded_client(ALEX)
+    blair = seeded_client(BLAIR)
+    casey = seeded_client(CASEY)
+    dana = seeded_client(DANA)
+
+    try:
+        alex_list = alex.get("/api/opportunities").json()["opportunities"]
+        by_name = {opportunity["name"]: opportunity for opportunity in alex_list}
+
+        assert set(by_name) == {
+            "Northwind platform rollout",
+            "Contoso pilot",
+            "Globex renewal",
+            "Initech expansion",
+            "Umbrella discovery",
+        }
+        assert by_name["Initech expansion"]["current_user_role"] == "viewer"
+        assert by_name["Globex renewal"]["stalled"] is True
+        assert by_name["Northwind platform rollout"]["stalled"] is False
+        assert by_name["Northwind platform rollout"]["stage"] == "Negotiation"
+
+        northwind = by_name["Northwind platform rollout"]["id"]
+
+        # Blair edits Northwind; Casey may only read it; Dana cannot see it.
+        assert (
+            blair.post(
+                f"/api/opportunities/{northwind}/timeline",
+                json={
+                    "type": "call",
+                    "title": "Editor can write",
+                    "body": "",
+                    "event_timestamp": "2026-09-04T10:00",
+                },
+            ).status_code
+            == 201
+        )
+        assert casey.get(f"/api/opportunities/{northwind}").status_code == 200
+        assert (
+            casey.post(
+                f"/api/opportunities/{northwind}/timeline",
+                json={
+                    "type": "call",
+                    "title": "Viewer cannot write",
+                    "body": "",
+                    "event_timestamp": "2026-09-04T10:00",
+                },
+            ).status_code
+            == 403
+        )
+        assert dana.get(f"/api/opportunities/{northwind}").status_code == 404
+        assert dana.get("/api/opportunities").json()["opportunities"] == []
+
+        # The mention in the demo note notified Alex.
+        mentions = [
+            notification
+            for notification in alex.get("/api/notifications").json()["notifications"]
+            if notification["type"] == "mention"
+        ]
+        assert mentions, "the seeded @mention did not produce a notification"
+
+        # The owner-only audit log is not empty on a fresh seed.
+        audit = alex.get(f"/api/opportunities/{northwind}/audit-log")
+        assert audit.status_code == 200
+        assert audit.json(), "expected share activity in the audit log"
+        assert casey.get(f"/api/opportunities/{northwind}/audit-log").status_code == 403
+    finally:
+        for client in (alex, blair, casey, dana):
+            client.__exit__(None, None, None)

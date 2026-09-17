@@ -1,3 +1,4 @@
+import socket
 from collections.abc import Iterator
 from typing import Any
 
@@ -30,6 +31,36 @@ class CsrfClient(TestClient):
             headers.setdefault("X-CSRF-Token", self.cookies[CSRF_COOKIE_NAME])
             kwargs["headers"] = headers
         return super().request(method, url, **kwargs)
+
+
+# Loopback stays reachable because that is where the tests' own machinery
+# lives; anything else is a real outbound call and must not happen in a unit or
+# integration test (brief §6.5).
+LOCAL_HOSTS = frozenset({"127.0.0.1", "::1", "localhost", ""})
+
+
+@pytest.fixture(autouse=True)
+def no_live_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fail any test that opens a socket to somewhere off this machine.
+
+    Without this the suite's OpenAI mocking is a convention: forget one
+    `monkeypatch.setattr` and the test quietly bills a real API call and starts
+    depending on the network. The guard turns that into an immediate,
+    attributable failure. `TestClient` talks to the app in-process over ASGI
+    and opens no socket at all, so nothing legitimate is caught here.
+    """
+    real_connect = socket.socket.connect
+
+    def guarded_connect(self: socket.socket, address: Any) -> Any:
+        host = address[0] if isinstance(address, tuple) else address
+        if isinstance(host, str) and host not in LOCAL_HOSTS:
+            raise RuntimeError(
+                f"Live network access to {host!r} from a test. Mock the client "
+                "instead (brief §6.5: no live network in tests)."
+            )
+        return real_connect(self, address)
+
+    monkeypatch.setattr(socket.socket, "connect", guarded_connect)
 
 
 @pytest.fixture(autouse=True)

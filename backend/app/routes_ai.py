@@ -8,7 +8,7 @@ from .ai_service import (
     extract_referenced_entry_ids,
 )
 from .auth import get_current_user
-from .database import db_connection
+from .database import read_only_connection
 from .logging_utils import logger
 from .permissions import require_opportunity_access
 from .schemas import AiAskRequest, AiAskResponse
@@ -29,7 +29,9 @@ def ask_ai_agent(
             detail="OPENAI_API_KEY is not configured",
         )
 
-    with db_connection() as connection:
+    # Read-only by construction, not by instruction (brief §2.1): this
+    # connection refuses writes at the SQLite level.
+    with read_only_connection() as connection:
         require_opportunity_access(connection, opportunity_id, int(user["id"]))
         timeline_context, entry_ids = build_timeline_context(connection, opportunity_id)
 

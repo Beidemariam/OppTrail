@@ -26,5 +26,12 @@ tsconfig.tsbuildinfo
 .coverage
 .pytest_cache/
 
+# Test output: Vitest coverage, Playwright artefacts, and the throwaway
+# database scripts/e2e-server.sh rebuilds on every run.
+coverage/
+playwright-report/
+test-results/
+.e2e/
+
 # OS/editor
 .DS_Store

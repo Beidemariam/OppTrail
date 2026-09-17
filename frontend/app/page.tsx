@@ -1,10 +1,17 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
-import remarkGfm from "remark-gfm";
 import type { components } from "../lib/api-types";
+import { apiRequest } from "../lib/api";
+import { notificationText } from "../lib/notifications";
+import { canChangeItem as canChangeItemFor, canManageOpportunity, canWriteTimeline } from "../lib/permissions";
+import {
+  formatTimestamp,
+  localInputToUtc,
+  nowDateTimeInput,
+  toDateTimeInput,
+} from "../lib/time";
+import { MarkdownText } from "./MarkdownText";
 
 const stages = [
   "Prospecting",
@@ -109,115 +116,8 @@ const emptyShareForm: ShareForm = {
   role: "viewer",
 };
 
-const markdownSanitizeSchema = {
-  ...defaultSchema,
-  attributes: {
-    ...defaultSchema.attributes,
-    a: [
-      ...(defaultSchema.attributes?.a ?? []),
-      "href",
-      "title",
-      "target",
-      "rel",
-    ],
-  },
-  protocols: {
-    ...defaultSchema.protocols,
-    href: ["http", "https", "mailto"],
-  },
-};
-
-// The API stores and returns fixed-width UTC ISO-8601 ("2026-09-06T14:30:00Z").
-// Browser datetime-local inputs are always local wall-clock time, so every value
-// is converted at the boundary rather than passed through.
-function parseTimestamp(value: string) {
-  const normalized = value.replace(" ", "T");
-  const hasZone = /(Z|[+-]\d{2}:?\d{2})$/.test(normalized);
-  return new Date(hasZone ? normalized : `${normalized}Z`);
-}
-
-function toLocalInput(date: Date) {
-  const offsetMs = date.getTimezoneOffset() * 60 * 1000;
-  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
-}
-
-function toDateTimeInput(value: string) {
-  return toLocalInput(parseTimestamp(value));
-}
-
-function nowDateTimeInput() {
-  return toLocalInput(new Date());
-}
-
-function localInputToUtc(value: string) {
-  return `${new Date(value).toISOString().slice(0, 19)}Z`;
-}
-
-function formatTimestamp(value: string) {
-  return parseTimestamp(value).toLocaleString();
-}
-
 function confirmDelete(description: string) {
   return window.confirm(`Delete ${description}? This cannot be undone here.`);
-}
-
-const CSRF_COOKIE_NAME = "opptrail_csrf";
-const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
-
-// The API rejects any unsafe request whose X-CSRF-Token header does not match
-// this cookie (backend/app/security.py). The cookie is deliberately readable
-// here; the session cookie stays HttpOnly.
-function csrfToken() {
-  const match = document.cookie.match(
-    new RegExp(`(?:^|; )${CSRF_COOKIE_NAME}=([^;]*)`),
-  );
-  return match ? decodeURIComponent(match[1]) : "";
-}
-
-async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const method = (options.method ?? "GET").toUpperCase();
-  const response = await fetch(path, {
-    ...options,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(SAFE_METHODS.has(method) ? {} : { "X-CSRF-Token": csrfToken() }),
-      ...(options.headers ?? {}),
-    },
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: "Request failed" }));
-    throw new Error(
-      typeof error.detail === "string" ? error.detail : "Request failed",
-    );
-  }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return response.json() as Promise<T>;
-}
-
-function MarkdownText({ content }: { content: string }) {
-  return (
-    <div className="markdown-content">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[[rehypeSanitize, markdownSanitizeSchema]]}
-        components={{
-          a: ({ children, href }) => (
-            <a href={href} rel="noreferrer" target="_blank">
-              {children}
-            </a>
-          ),
-        }}
-      >
-        {content}
-      </ReactMarkdown>
-    </div>
-  );
 }
 
 export default function Home() {
@@ -265,21 +165,13 @@ export default function Home() {
       null,
     [opportunities, selectedOpportunityId],
   );
-  const canManageSelectedOpportunity =
-    selectedOpportunity?.current_user_role === "owner";
-  const canWriteSelectedTimeline =
-    selectedOpportunity?.current_user_role === "owner" ||
-    selectedOpportunity?.current_user_role === "editor";
-  // The API reserves both editing and deleting an existing item to its author
-  // and the opportunity owner (AGENTS.md's permissions model), so the buttons
-  // follow the same rule instead of offering a dead end.
-  // Editing and deleting an existing item are the same rule — its author or
-  // the opportunity owner — so the buttons follow it instead of offering a
-  // dead end. `require_author_or_owner` in backend/app/permissions.py is the
-  // side that enforces it; these two names mirror the two wrappers there.
+  // The rules themselves live in ../lib/permissions.ts, next to the note
+  // explaining why editing and deleting resolve through one function.
+  const selectedRole = selectedOpportunity?.current_user_role;
+  const canManageSelectedOpportunity = canManageOpportunity(selectedRole);
+  const canWriteSelectedTimeline = canWriteTimeline(selectedRole);
   const canChangeItem = (authorId: number | null) =>
-    canWriteSelectedTimeline &&
-    (canManageSelectedOpportunity || authorId === user?.id);
+    canChangeItemFor({ role: selectedRole, userId: user?.id, authorId });
   const canEdit = (authorId: number | null) => canChangeItem(authorId);
   const canDelete = (authorId: number | null) => canChangeItem(authorId);
   const aiMessages = useMemo(
@@ -329,31 +221,6 @@ export default function Home() {
       "/api/notifications",
     );
     setNotifications(data.notifications);
-  }
-
-  function notificationText(notification: AppNotification) {
-    if (notification.type === "mention") {
-      return "You were mentioned in a timeline update.";
-    }
-    if (notification.type === "comment") {
-      return "New comment on your note.";
-    }
-    if (notification.type === "shared_activity") {
-      const payload = notification.payload;
-      return "title" in payload && payload.title
-        ? payload.title
-        : "New activity on a shared opportunity.";
-    }
-    if (notification.type === "share_added") {
-      return "An opportunity was shared with you.";
-    }
-    if (notification.type === "share_role_changed") {
-      return "Your access role changed.";
-    }
-    if (notification.type === "share_removed") {
-      return "Your opportunity access was removed.";
-    }
-    return "New notification.";
   }
 
   async function loadTimeline(opportunityId = selectedOpportunityId) {
@@ -1162,7 +1029,14 @@ export default function Home() {
         </form>
 
         <section className="workspace">
-          <section className="stage-board" aria-label="Opportunities grouped by stage">
+          {/* The board scrolls horizontally, so it needs to be focusable or a
+              keyboard-only user cannot reach the stages past the fold
+              (axe: scrollable-region-focusable). */}
+          <section
+            className="stage-board"
+            aria-label="Opportunities grouped by stage"
+            tabIndex={0}
+          >
             {groupedOpportunities.map(({ stage, items }) => (
               <div className="stage-column" key={stage}>
                 <div className="stage-header">
@@ -1304,6 +1178,7 @@ export default function Home() {
                       required
                     />
                     <select
+                      aria-label="Role for the colleague being invited"
                       value={shareForm.role}
                       onChange={(event) =>
                         setShareForm({
@@ -1331,6 +1206,7 @@ export default function Home() {
                             <p>{share.email}</p>
                           </div>
                           <select
+                            aria-label={`Role for ${share.name}`}
                             value={share.role}
                             onChange={(event) =>
                               updateShareRole(
@@ -1376,6 +1252,7 @@ export default function Home() {
 
               <form className="filter-bar" onSubmit={applyTimelineFilters}>
                 <input
+                  aria-label="Filter the timeline by keyword"
                   placeholder="Keyword"
                   value={timelineFilters.q}
                   onChange={(event) =>
@@ -1383,6 +1260,7 @@ export default function Home() {
                   }
                 />
                 <select
+                  aria-label="Filter the timeline by entry type"
                   value={timelineFilters.type}
                   onChange={(event) =>
                     setTimelineFilters({ ...timelineFilters, type: event.target.value })
@@ -1396,6 +1274,7 @@ export default function Home() {
                   ))}
                 </select>
                 <input
+                  aria-label="Show entries from"
                   type="datetime-local"
                   value={timelineFilters.from}
                   onChange={(event) =>
@@ -1403,6 +1282,7 @@ export default function Home() {
                   }
                 />
                 <input
+                  aria-label="Show entries up to"
                   type="datetime-local"
                   value={timelineFilters.to}
                   onChange={(event) =>
@@ -1410,6 +1290,7 @@ export default function Home() {
                   }
                 />
                 <input
+                  aria-label="Filter the timeline by author id"
                   type="number"
                   min="1"
                   placeholder="Author ID"
@@ -1622,6 +1503,7 @@ export default function Home() {
                               {editingNotes[note.id] !== undefined ? (
                                 <div className="stacked-form">
                                   <textarea
+                                    aria-label="Edit this note"
                                     value={editingNotes[note.id]}
                                     onChange={(event) =>
                                       setEditingNotes({
@@ -1679,6 +1561,7 @@ export default function Home() {
                               {canWriteSelectedTimeline && (
                                 <div className="inline-compose">
                                   <input
+                                    aria-label="Add a comment to this note"
                                     placeholder="Add comment"
                                     value={commentForms[note.id] ?? ""}
                                     onChange={(event) =>
@@ -1703,6 +1586,7 @@ export default function Home() {
                           {canWriteSelectedTimeline && (
                             <div className="inline-compose">
                               <input
+                                aria-label="Add a note to this entry"
                                 placeholder="Add note"
                                 value={noteForms[entry.id] ?? ""}
                                 onChange={(event) =>
@@ -1755,6 +1639,7 @@ export default function Home() {
 
                 <form className="ai-form" onSubmit={submitAiQuestion}>
                   <textarea
+                    aria-label="Ask the read-only AI agent about this timeline"
                     value={aiQuestion}
                     onChange={(event) => setAiQuestion(event.target.value)}
                     placeholder="Where do we stand?"

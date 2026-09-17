@@ -300,3 +300,95 @@ Brief §6.2's ≥95% branch floor for critical modules: `auth.py`, `permissions.
 `soft_delete.py`, `audit_utils.py`, and now `ai_service.py` are all at 100%.
 
 Frontend: still 0% (no test runner) — unchanged; F.7's scope.
+
+---
+
+## F.7 — Test infrastructure (§4.7)
+
+### Backend
+
+```
+189 passed in 57.71s
+TOTAL: 1472 stmts, 32 miss, 226 branches, 30 partial
+Required test coverage of 90% reached. Total coverage: 96.35%
+```
+
+189 tests, up from 138: **+51**, no test removed or weakened.
+
+- `tests/test_authorization_matrix.py` (+39) — every endpoint the app serves,
+  against all five actors. One parametrized test per endpoint plus
+  `test_every_endpoint_has_a_matrix_entry`, which reads the endpoint list out
+  of the running app (`tests/route_registry.py`) and fails when a route ships
+  without an expectation. Both halves were confirmed to fail against mutated
+  code before being trusted (brief §6.5): adding an unregistered route fails
+  the completeness test, and replacing `require_edit_permission` with
+  `require_timeline_write` in `routes_timeline.update_timeline_entry` fails
+  `PATCH /api/timeline/{entry_id}`. This is also where F.5's carried-over
+  "authorization-matrix entries with the tightened expectations" lands.
+- `tests/test_invariants.py` (+10) — brief §2, under the §6.4 naming. AI data
+  layer refuses writes; the AI route is wired to that connection; no comment
+  edit route exists at any path shape and `PATCH`/`PUT` are refused over HTTP;
+  editing a note marks it and keeps the history; every delete endpoint stamps
+  rather than removes; `event_timestamp` is editable; `created_at` cannot be
+  set or moved through any endpoint that takes a body; the stage list is fixed
+  and anything outside it is a 422. Two were confirmed to fail against mutated
+  code (pragma removed, an eighth stage added).
+- `tests/test_seed.py` (+2) — the demo data is what `make seed` prints that it
+  is, including the permission relationships and the stalled flag.
+
+Per-module, against brief §6.2's ≥95% branch floor for critical modules:
+
+| Module | Coverage | Note |
+|---|---|---|
+| `auth.py` | 100% | |
+| `permissions.py` | 100% | |
+| `soft_delete.py` | 100% | |
+| `audit_utils.py` | 100% | |
+| `ai_service.py` | 100% | |
+| `routes_ai.py` | 100% | |
+| `database.py` | 94% | the one new miss is `read_only_connection`'s cleanup on an unused branch; not a permission-critical module |
+
+### Frontend — first measurement (was 0%: no runner existed)
+
+```
+Test Files  6 passed (6)
+     Tests  80 passed (80)
+Statements : 87.09% ( 405/465 )
+Branches   : 79.29% ( 226/285 )
+Functions  : 88.33% ( 106/120 )
+Lines      : 86.81% ( 395/455 )
+```
+
+Vitest + React Testing Library, jsdom, `@vitest/coverage-v8`, over `app/` and
+`lib/` (`lib/api-types.ts` is generated and excluded — the contract check in
+`scripts/generate-api-client.sh` is what guards it; `app/test-api.ts` is test
+infrastructure).
+
+| File | Line % |
+|---|---|
+| `lib/time.ts` | 100% |
+| `lib/api.ts` | 100% |
+| `lib/permissions.ts` | 100% |
+| `lib/notifications.ts` | 100% |
+| `app/MarkdownText.tsx` | 100% |
+| `app/page.tsx` | 85.4% |
+
+Brief §6.2's frontend floor is ≥80% line. The enforced thresholds in
+`frontend/vitest.config.ts` are set **above** it — lines 85, statements 85,
+functions 85, branches 78 — so the measured value is what has to be kept, not
+the brief's minimum. Never lowered; raising them is how a future gain is held.
+
+The suite was confirmed to catch a real regression rather than merely execute
+code: inverting `canChangeItem` in `lib/permissions.ts` fails three tests
+across the unit and component suites.
+
+### E2E
+
+13 Playwright tests, 0 before. Brief §6.3 journeys 1, 2, 3, 5, 11 and 12 (12
+adapted — see **D-025**), plus axe on four screens. Journeys 4, 6, 7, 8, 9, 10
+and 13 depend on features no phase has shipped yet (attachments, search,
+custom fields, board view, reminders, automations, command palette) and are
+added in the phases that build them.
+
+Coverage moved 96.22% → 96.35% on the backend while the codebase grew
+1465 → 1472 statements, and 0% → 86.81% on the frontend.

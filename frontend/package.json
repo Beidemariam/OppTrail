@@ -6,7 +6,11 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "next": "latest",
@@ -17,12 +21,25 @@
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.10.2",
+    "@playwright/test": "1.56.1",
+    "@testing-library/dom": "10.4.1",
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.0",
+    "@testing-library/user-event": "14.6.1",
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
+    "@vitejs/plugin-react": "5.0.4",
+    "@vitest/coverage-v8": "5.0.1",
     "eslint": "latest",
     "eslint-config-next": "latest",
+    "jsdom": "27.0.0",
     "openapi-typescript": "^7.13.0",
-    "typescript": "latest"
+    "typescript": "latest",
+    "vitest": "5.0.1"
+  },
+  "overrides": {
+    "playwright-core": "1.56.1"
   }
 }

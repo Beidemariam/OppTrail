@@ -55,6 +55,30 @@ def db_connection() -> Iterator[sqlite3.Connection]:
         connection.close()
 
 
+@contextmanager
+def read_only_connection() -> Iterator[sqlite3.Connection]:
+    """A connection SQLite itself refuses every write on.
+
+    Brief §2.1 requires the AI agent's data access to be unable to mutate state
+    *by construction* rather than by convention, and a reviewer noticing that
+    `ai_service` only contains SELECTs is convention. `PRAGMA query_only` is
+    enforced inside SQLite: an INSERT, UPDATE or DELETE on this connection
+    raises `sqlite3.OperationalError` no matter what the calling code, the
+    prompt, or the model's answer says.
+
+    It is a pragma rather than a `mode=ro` URI because the database runs in WAL
+    (ADR 0001), and a `mode=ro` connection cannot create the `-shm` file that
+    WAL needs when no writer happens to be connected — which would turn "ask
+    the agent a question" into an intermittent failure.
+    """
+    connection = get_connection()
+    connection.execute("PRAGMA query_only = ON")
+    try:
+        yield connection
+    finally:
+        connection.close()
+
+
 def alembic_config() -> Config:
     """Alembic configuration built without depending on the process's cwd.
 

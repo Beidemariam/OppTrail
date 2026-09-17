@@ -368,9 +368,10 @@ human 2026-09-16).** Done.
 - [x] Added: an editor editing a colleague's entry and note both get 403; the
       editor still edits and deletes what they created; the owner edits an
       editor's entry and note (`test_owner_can_edit_an_editors_entry_and_note`).
-- [ ] Authorization-matrix entries with the tightened expectations — **carried to
-      F.7**, which builds the matrix (§6.4). Nothing to add to yet; the behaviour
-      is covered by the tests above in the meantime.
+- [x] Authorization-matrix entries with the tightened expectations — **delivered
+      in F.7**: `tests/test_authorization_matrix.py` records `editor -> 403` on
+      `PATCH`/`DELETE` of an owner-authored entry, note and comment, and the
+      matrix was confirmed to fail when the rule is loosened.
 - [x] Frontend: `canChangeItem(authorId)` with `canEdit`/`canDelete` wrappers
       mirroring the two backend wrappers, gating both the Edit and Delete buttons
       on entries and notes.
@@ -474,31 +475,117 @@ combined coverage against the 90% floor). `make check` also green
 E2E, and Docker build+smoke test all still print their explicit deferred-to
 notes per the split gate, unchanged).
 
-### F.7 — Test infrastructure (§4.7)
+### F.7 — Test infrastructure (§4.7) — **DONE**
 
-- [ ] Stand up every layer in brief §6.1 not yet present: frontend unit/
-      component tests (Vitest + React Testing Library — zero exist today),
-      contract tests (generated-client-matches-schema), Playwright E2E with
-      `@axe-core/playwright`, migration tests (upgrade-from-empty and
-      upgrade-from-an-MVP-snapshot, once F.4's Alembic work lands).
-- [ ] Authorization matrix: every endpoint × {owner, editor, viewer, unrelated
-      user, anonymous}; unregistered routes fail the test. Build this by
-      enumerating `app.routes` at runtime so a new route without a permission
-      dependency cannot silently ship (brief §6.4, `AGENTS.md` invariant 2).
-- [ ] Invariant tests named `test_invariant_*` for each item in brief §2
-      (currently satisfied by construction, per `docs/autopilot/INVENTORY.md`
-      §4's review, but not asserted under this naming/organization yet):
-      AI read-only, no comment-edit route, hard-delete detection, `created_at`
-      immutable via every endpoint, stage list fixed.
-- [ ] Seed data script (`make seed`) at a scale useful for manual testing
-      (full 800k-row scale is Phase R's concern; Phase F needs a small,
-      fast, feature-covering seed).
-- [ ] Docker smoke test defined (build, start, health check, sign up, open an
-      opportunity, export a PDF) — **cannot run inside this sandbox** (no
-      Docker socket, `sandbox/README.md`). Write the smoke-test script/steps
-      here; the human runs it via `scripts/autopilot-gate.sh` per the split
-      gate (brief §3.4). Do not skip defining it just because it cannot be
-      executed here.
+- [x] Every layer in brief §6.1 that was missing is now standing up:
+      - **Frontend unit/component** — Vitest + React Testing Library + jsdom
+        (`frontend/vitest.config.ts`, `vitest.setup.ts`). 80 tests, 0 before.
+        Six units were first extracted out of the 1,783-line `app/page.tsx`
+        with no behaviour change (`lib/time.ts`, `lib/api.ts`,
+        `lib/permissions.ts`, `lib/notifications.ts`, `app/MarkdownText.tsx`),
+        which is the layering §4.2 asks for and what makes them testable at
+        all — **D-028**. The whole Playwright suite was re-run against the
+        refactor unchanged to show it moved nothing. `page.tsx` itself is
+        covered through `app/test-api.ts`, a stateful fake of the API that
+        keeps the state the page reads back, so "delete the note, the note is
+        gone" is a real assertion rather than a click count.
+      - **Contract** — already in place from F.3
+        (`scripts/generate-api-client.sh --check`, `tests/test_export_openapi.py`);
+        unchanged, still in `check-fast`.
+      - **Playwright E2E with `@axe-core/playwright`** —
+        `frontend/playwright.config.ts` plus seven specs in `frontend/e2e/`.
+        The suite runs against the production build served by FastAPI, started
+        by `scripts/e2e-server.sh`, which rebuilds and reseeds a throwaway
+        database on every start so no run inherits the last one's writes.
+      - **Migration** — already in place from F.4 (`tests/test_migrations.py`,
+        upgrade-from-empty and upgrade-from-an-MVP-snapshot); unchanged.
+      - **Hygiene (§6.5)** — `conftest.no_live_network`, an autouse fixture
+        that fails any test opening a socket off this machine. Without it the
+        suite's OpenAI mocking is a convention: forget one `monkeypatch` and a
+        test silently bills a real call. Confirmed to fail a probe test that
+        really dials out.
+- [x] Authorization matrix: `tests/test_authorization_matrix.py`, every one of
+      the 38 endpoints × {owner, editor, viewer, unrelated user, anonymous}.
+      The endpoint list is read out of the running app at runtime
+      (`tests/route_registry.py` — FastAPI 0.141 hides included routers behind
+      `_IncludedRouter`, so the walk is recursive), and
+      `test_every_endpoint_has_a_matrix_entry` fails when a route ships with no
+      expectation. Actors run least-privileged first so every rejection is
+      observed before the one call allowed to change state, and each endpoint
+      gets a fresh world. Seven surfaces are registered as deliberately
+      identity-independent (health, the API 404 catch-all, static delivery);
+      there the assertion is that the answer does not vary by caller.
+      Both guards confirmed to fail against mutated code first.
+- [x] Invariant tests named `test_invariant_*` for brief §2:
+      `tests/test_invariants.py` (10 tests) plus the two that already live next
+      to the code they guard (`test_soft_delete.py`,
+      `test_ai.py::test_invariant_ai_agent_has_no_write_tools`) and the matrix
+      for §2.7. §2.1's second half — "write through its data layer fails" —
+      needed a code change to be assertable at all: the AI route now opens
+      `database.read_only_connection()`, which sets `PRAGMA query_only = ON`,
+      so a write on the agent's path raises inside SQLite rather than relying
+      on review to notice. **D-027**.
+- [x] Seed data: `backend/tools/seed.py`, `make seed`. It drives the real HTTP
+      API rather than writing rows, so system entries, audit rows,
+      notifications and note versions all come out right without the script
+      restating any of that logic — and it breaks loudly if a route's contract
+      changes. Four users, five opportunities, both share roles, every entry
+      type, an edited note, a soft-deleted note, a mention notification and a
+      stalled opportunity. `tests/test_seed.py` asserts the tour it prints is
+      true. One direct SQL statement, documented: the stalled flag cannot be
+      demonstrated through the API because `created_at` is immutable and
+      system entries cannot be edited, so Globex is backdated.
+- [x] Docker smoke test defined: `scripts/docker-smoke.sh` — health, CSRF
+      cookie, signup, opportunity create, the auto-generated timeline entry,
+      PDF export, frontend served from the same origin. Extracted out of
+      `scripts/autopilot-gate.sh` so one definition serves the host gate,
+      `make docker-smoke` and CI. **Cannot run here** (no Docker socket,
+      `sandbox/README.md`); the HTTP sequence was instead verified against the
+      real application running locally, every step in order, PDF included.
+      Doing that found a live bug: the gate script's signup call predates F.5's
+      CSRF middleware and now returns 403, so the host gate would have failed
+      at its second step. Fixed and confirmed — **D-029**.
+- [x] Accessibility findings, all real, from standing up axe: two `critical`
+      rules (`label`, `select-name` — unnamed filter inputs, share-role
+      selects, inline composers, textareas) and `scrollable-region-focusable`
+      on the horizontally scrolling stage board are **fixed** here, since they
+      are `aria-label`/`tabIndex` attributes with no visual change.
+      `color-contrast` fails on roughly forty nodes and is a palette change
+      belonging to milestone 2.5 and R.2; it sits on a one-entry ratchet
+      (`DEFERRED_AXE_RULES`) where any other rule fails immediately and a test
+      asserts the deferred rule *still fails*, so the gate tightens itself the
+      moment 2.5 lands. **D-026**.
+
+Known limitation recorded rather than fixed: note revision history has an API
+(`GET /api/notes/{id}/versions`) and a `note_versions` table but no screen, so
+journey 3's third step is asserted over the API from the E2E test. Building the
+screen is a user-facing feature, which brief §4 rules out for Phase F.
+
+Work log: single session. Backend diff: `app/database.py`
+(`read_only_connection`), `app/routes_ai.py` (uses it). Backend tests:
+`tests/route_registry.py`, `tests/test_authorization_matrix.py`,
+`tests/test_invariants.py`, `tests/test_seed.py` (all new),
+`tests/conftest.py` (network guard). Tooling: `backend/tools/seed.py`,
+`scripts/docker-smoke.sh`, `scripts/e2e-server.sh` (all new),
+`scripts/autopilot-gate.sh` (delegates to the smoke script),
+`Makefile` (`seed`, `docker-smoke`, real `e2e`, frontend tests in `check-fast`,
+`mypy app tools`), `backend/pyproject.toml` (mypy covers `tools`).
+Frontend: `lib/time.ts`, `lib/api.ts`, `lib/permissions.ts`,
+`lib/notifications.ts`, `app/MarkdownText.tsx`, `app/test-api.ts`,
+six `*.test.ts(x)` files, `vitest.config.ts`, `vitest.setup.ts`,
+`playwright.config.ts`, seven `e2e/*.spec.ts`, `app/page.tsx` (imports the
+extracted units; `aria-label`/`tabIndex` accessibility fixes),
+`package.json` (test/e2e scripts, pinned dev dependencies, a
+`playwright-core` override so `@axe-core/playwright` and `@playwright/test`
+agree on one version). Ignore files updated for the new test output.
+Decisions: **D-025** to **D-029**; D-025 and D-026 are flagged
+needs-human-review.
+Gate: full `make check` green (exit 0) — ruff, `ruff format --check`,
+`mypy --strict` over `app` and `tools`, frontend typecheck and lint,
+189 backend tests at 96.35%, 80 frontend tests at 86.81% line,
+API-contract check current, `pip-audit` "No known vulnerabilities found",
+`npm audit` 0 vulnerabilities, 13 Playwright tests passing with axe.
+Docker build + smoke test remains the host's half of the split gate.
 
 ### F.8 — Gap-analysis fixes not covered above
 
