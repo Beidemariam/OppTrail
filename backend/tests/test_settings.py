@@ -26,6 +26,16 @@ def test_limits_must_be_positive(field: str) -> None:
         Settings(**{field: 0})
 
 
+def test_openai_timeout_must_be_positive() -> None:
+    with pytest.raises(ValidationError, match="OPENAI_TIMEOUT_SECONDS must be greater than 0"):
+        Settings(openai_timeout_seconds=0)
+
+
+def test_openai_max_retries_must_not_be_negative() -> None:
+    with pytest.raises(ValidationError, match="OPENAI_MAX_RETRIES must be 0 or greater"):
+        Settings(openai_max_retries=-1)
+
+
 def test_valid_settings_construct_without_error() -> None:
     settings = Settings(database_url="sqlite:///./x.db", environment="production")
     assert settings.database_url == "sqlite:///./x.db"

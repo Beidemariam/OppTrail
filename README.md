@@ -12,7 +12,8 @@ cp .env.example .env
 Open http://localhost:8000.
 
 Set `OPENAI_API_KEY` in `.env` before using the AI sidebar. Optional:
-`OPENAI_MODEL`, `ENVIRONMENT`, and `PORT`.
+`OPENAI_MODEL`, `OPENAI_TIMEOUT_SECONDS`, `OPENAI_MAX_RETRIES`, `ENVIRONMENT`,
+and `PORT`.
 
 Stop the container:
 

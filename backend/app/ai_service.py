@@ -126,8 +126,10 @@ def ask_openai(
     model: str,
     timeline_context: str,
     question: str,
+    timeout: float,
+    max_retries: int,
 ) -> str:
-    client = OpenAI(api_key=api_key)
+    client = OpenAI(api_key=api_key, timeout=timeout, max_retries=max_retries)
     response = client.responses.create(
         model=model,
         instructions=SYSTEM_PROMPT,

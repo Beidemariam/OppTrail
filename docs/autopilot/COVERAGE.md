@@ -252,3 +252,51 @@ Brief §6.2's ≥95% branch floor for critical modules: `auth.py`, `permissions.
 branches testable without a live API call.
 
 Frontend: still 0% (no test runner) — unchanged; F.7's scope.
+
+---
+
+## F.6 — AI agent hardening (§4.6)
+
+```
+138 passed in 23.69s
+TOTAL: 1465 stmts, 34 miss, 226 branches, 30 partial, 96% combined line+branch coverage
+Required test coverage of 90% reached. Total coverage: 96.22%
+```
+
+138 tests, up from 129: +9 (no test removed or weakened).
+
+- `tests/test_ai.py` (+7):
+  - `test_invariant_ai_agent_has_no_write_tools` — drives `ask_openai` directly
+    against a fake `OpenAI` class and asserts `"tools"` is never a key in the
+    `responses.create(...)` call, `store=False` is always sent, and the client
+    is constructed with the configured `timeout`/`max_retries` (brief §2.1,
+    §6.4 naming).
+  - `test_ai_context_never_includes_another_opportunitys_data` — the positive
+    half of cross-opportunity leakage that F.6 named as missing: a second
+    opportunity with distinctive name/account/body text exists, and asking
+    about the first opportunity proves none of that text reaches the model.
+  - `test_ai_treats_hostile_note_content_as_inert_data` — an
+    instruction-shaped hostile note body reaches the model only as quoted
+    timeline text; even a simulated answer that *claims* to have deleted and
+    shared the opportunity produces no row-count change and no new share row,
+    because there is no tool surface to act through.
+  - `test_build_timeline_context_reports_a_missing_opportunity`,
+    `test_build_timeline_context_reports_no_entries_yet`,
+    `test_build_timeline_context_includes_follow_up_dates_and_comments`,
+    `test_extract_referenced_entry_ids_deduplicates_and_ignores_unknown_ids` —
+    close `ai_service.py`'s remaining branch gaps (the defensive
+    opportunity-not-found path, the no-entries path, the follow-up-date and
+    comment-rendering branches, and the dedupe/unknown-id branch in
+    `extract_referenced_entry_ids`), unrelated to the client wrapper but
+    needed to clear the module's ≥95% branch floor.
+- `tests/test_settings.py` (+2) — `openai_timeout_seconds` must be positive,
+  `openai_max_retries` must not be negative.
+
+Coverage moved 95.46% → 96.22% while the codebase grew 1451 → 1465 statements.
+`ai_service.py` moved 79% → **100%**, closing the floor gap F.5's log entry
+named. `routes_ai.py` and `settings.py` stay at 100%.
+
+Brief §6.2's ≥95% branch floor for critical modules: `auth.py`, `permissions.py`,
+`soft_delete.py`, `audit_utils.py`, and now `ai_service.py` are all at 100%.
+
+Frontend: still 0% (no test runner) — unchanged; F.7's scope.
