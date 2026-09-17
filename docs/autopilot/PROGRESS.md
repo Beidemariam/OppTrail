@@ -944,6 +944,27 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
 - [ ] 2.8 Table and calendar view — may slip to Phase 3 per the roadmap's own
       stated risk mitigation; do not treat slipping these as a blocked
       milestone.
+- [ ] 2.9 Finish the `/api/v2` migration and remove v1 (**D-033**, ruled by
+      the human 2026-09-17). Milestone 1.3 moved only the collection reads and
+      the error envelope to v2 — the mutations and single-resource reads had no
+      shape change to justify mirroring them — but `docs/ROADMAP.md`'s
+      breaking-changes table says v1 is removed at the end of Phase 2, and no
+      milestone scheduled the port that removal requires. This is that
+      milestone; the table stands as written.
+      - Port the remaining endpoints to `/api/v2`: every mutation and
+        single-resource read still served only under `/api/*`.
+      - Move the frontend onto v2. It still calls v1 paths through
+        `apiRequest`, so this lands in the same files 2.1 decomposes — which
+        is why it belongs in this phase rather than later, once those files
+        have been restructured around v1's shapes.
+      - Remove v1, including the per-table shared SQL constants 1.3 introduced
+        to keep the two versions from drifting; with v1 gone they collapse back
+        to one caller.
+      - Regenerate `frontend/lib/api-types.ts` and update the authorization
+        matrix, which currently carries entries for both surfaces. The
+        registry guard should fail first on the removed v1 routes.
+      - Confirm no v1 path survives: `grep -rn '\"/api/' backend/app` should
+        return only `/api/v2` routes and the catch-all in `main.py`.
 
 ### Acceptance
 
