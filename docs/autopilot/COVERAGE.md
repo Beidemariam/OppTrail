@@ -425,3 +425,33 @@ covers the new sweep in `auth.create_session`; one existing test
 (`test_ai.py::test_build_timeline_context_reports_a_missing_opportunity`)
 gained the `client` fixture it should always have had, which is a
 test-isolation fix, not new coverage.
+
+## F.9 — Phase F gate (full `make check`, sandbox half)
+
+No production code changed this milestone — this is the gate run, not a
+feature. Numbers confirm no regression since F.8's measurement.
+
+```
+backend:  190 passed, 96.46% combined line+branch coverage
+          (--cov-fail-under=90 enforced)
+frontend: 6 files / 80 passed
+          Statements 87.09%  Branches 79.29%  Functions 88.33%  Lines 86.87%
+          (thresholds in vitest.config.ts: 85/85/85/78 — met)
+e2e:      13 passed (7 specs), axe on 4 screens
+```
+
+Identical to F.8's measurement to the figures reported there — expected,
+since F.9 added no application code, only the review packet and this
+history entry.
+
+## Phase F summary (F.1 baseline → F.9 gate)
+
+| | F.1 baseline | F.9 gate |
+|---|---|---|
+| Backend tests | 39 | 190 |
+| Backend coverage | 96% line (no branch figure yet) | 96.46% line+branch combined |
+| Frontend tests | 0 (no runner) | 80 |
+| Frontend coverage | 0% | 86.87% line |
+| E2E tests | 0 | 13 |
+| Invariant tests | 0 named | 10 named `test_invariant_*`, plus 2 living beside their code |
+| Authorization matrix | none | 38 endpoints × 5 actor types |

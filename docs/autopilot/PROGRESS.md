@@ -1,4 +1,4 @@
-STATUS: IN_PROGRESS phase=F
+STATUS: AWAITING_REVIEW phase=F
 
 # Autopilot Progress
 
@@ -671,12 +671,27 @@ format, mypy, frontend typecheck/lint, `prettier --check`, backend suite at
 client current). Full `make check` (pip-audit, npm audit, e2e, Docker note) is
 F.9's gate, not this milestone's.
 
-### F.9 — Phase F gate and review packet
+### F.9 — Phase F gate and review packet — **DONE**
 
-- [ ] Full `make check` (once F.2 builds it) green, Docker portion named as
-      deferred to the host per the split gate.
-- [ ] Write `docs/autopilot/reviews/phase-F-summary.md` per brief §3.5.
-- [ ] Set `STATUS: AWAITING_REVIEW phase=F`, commit, stop.
+- [x] Full `make check` green in the sandbox — ruff, `ruff format --check`,
+      `mypy --strict`, frontend typecheck/lint, `prettier --check`, 190
+      backend tests (96.46% combined line+branch coverage), 80 frontend
+      tests (86.87% line), API-contract check current, `pip-audit` and
+      `npm audit` both 0 vulnerabilities, 13 Playwright E2E tests with axe.
+      Docker build + smoke test named as deferred to the host per the split
+      gate (unchanged — no Docker socket in this sandbox).
+      One environment issue found and fixed while running the gate, not a
+      code regression: `frontend/node_modules` held a `darwin-arm64`
+      `@rollup/rollup-*` optional dependency instead of `linux-arm64-gnu`
+      (the npm/cli#4828 optional-dependency bug — same class D-030 already
+      patched once for a stale lockfile stamp). `rm -rf
+      frontend/node_modules && npm ci` (gitignored build output) picked up
+      the correct binary; no application or test code changed.
+- [x] Write `docs/autopilot/reviews/phase-F-summary.md` per brief §3.5 — all
+      7 sections, with D-025 and D-026 surfaced as the two open
+      needs-human-review items for this gate (D-003/D-005/D-012/D-018/D-030
+      were already ruled on mid-phase).
+- [x] Set `STATUS: AWAITING_REVIEW phase=F`, commit, stop.
 
 ---
 
