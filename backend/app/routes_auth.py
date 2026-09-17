@@ -1,18 +1,21 @@
 import sqlite3
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 
 from .auth import (
     SESSION_COOKIE_NAME,
     clear_session,
     create_session,
+    delete_user_sessions,
     get_current_user,
     hash_password,
     normalize_email,
     verify_password,
 )
 from .database import db_connection
-from .schemas import AuthResponse, LoginRequest, SignupRequest, UserPublic
+from .rate_limit import auth_rate_limiter, client_key
+from .schemas import AuthResponse, LoginRequest, PasswordChangeRequest, SignupRequest, UserPublic
+from .settings import settings
 from .time_utils import utc_now
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -27,8 +30,25 @@ def public_user(row: sqlite3.Row) -> UserPublic:
     )
 
 
+def enforce_auth_rate_limit(request: Request, scope: str) -> None:
+    """Applied before any password work, so a flood costs the server a dict
+    lookup rather than a bcrypt verification.
+    """
+    auth_rate_limiter.check(
+        client_key(request, scope),
+        settings.auth_rate_limit_attempts,
+        settings.auth_rate_limit_window_seconds,
+    )
+
+
 @router.post("/signup", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
-def signup(payload: SignupRequest, response: Response) -> AuthResponse:
+def signup(
+    payload: SignupRequest,
+    request: Request,
+    response: Response,
+    session_id: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+) -> AuthResponse:
+    enforce_auth_rate_limit(request, "signup")
     email = normalize_email(payload.email)
     with db_connection() as connection:
         try:
@@ -51,12 +71,18 @@ def signup(payload: SignupRequest, response: Response) -> AuthResponse:
             (cursor.lastrowid,),
         ).fetchone()
 
-    create_session(response, int(user["id"]))
+    create_session(response, int(user["id"]), session_id)
     return AuthResponse(user=public_user(user))
 
 
 @router.post("/login", response_model=AuthResponse)
-def login(payload: LoginRequest, response: Response) -> AuthResponse:
+def login(
+    payload: LoginRequest,
+    request: Request,
+    response: Response,
+    session_id: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+) -> AuthResponse:
+    enforce_auth_rate_limit(request, "login")
     with db_connection() as connection:
         user = connection.execute(
             "SELECT id, email, name, password_hash, created_at FROM users WHERE email = ?",
@@ -69,7 +95,40 @@ def login(payload: LoginRequest, response: Response) -> AuthResponse:
             detail="Invalid email or password",
         )
 
-    create_session(response, int(user["id"]))
+    create_session(response, int(user["id"]), session_id)
+    return AuthResponse(user=public_user(user))
+
+
+@router.post("/password", response_model=AuthResponse)
+def change_password(
+    payload: PasswordChangeRequest,
+    response: Response,
+    user: sqlite3.Row = Depends(get_current_user),
+) -> AuthResponse:
+    """Changing the password invalidates every existing session, including the
+    caller's, and issues a fresh one — so a stolen cookie stops working the
+    moment the theft is responded to (brief §4.5).
+    """
+    with db_connection() as connection:
+        stored = connection.execute(
+            "SELECT password_hash FROM users WHERE id = ?",
+            (user["id"],),
+        ).fetchone()
+
+        if not verify_password(payload.current_password, stored["password_hash"]):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password",
+            )
+
+        connection.execute(
+            "UPDATE users SET password_hash = ? WHERE id = ?",
+            (hash_password(payload.new_password), user["id"]),
+        )
+        delete_user_sessions(connection, int(user["id"]))
+        connection.commit()
+
+    create_session(response, int(user["id"]), None)
     return AuthResponse(user=public_user(user))
 
 

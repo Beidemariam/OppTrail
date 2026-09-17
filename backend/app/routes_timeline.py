@@ -12,6 +12,7 @@ from .notification_service import (
 )
 from .permissions import (
     require_delete_permission,
+    require_edit_permission,
     require_opportunity_access,
     require_timeline_write,
 )
@@ -358,7 +359,13 @@ def update_timeline_entry(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Timeline entry not found",
             )
-        require_timeline_write(connection, entry["opportunity_id"], int(user["id"]))
+        require_edit_permission(
+            connection,
+            entry["opportunity_id"],
+            int(user["id"]),
+            entry["created_by"],
+            "Only the author or the opportunity owner can edit this timeline entry",
+        )
         if entry["system_generated"]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -511,7 +518,13 @@ def update_note(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Note not found",
             )
-        require_timeline_write(connection, note["opportunity_id"], int(user["id"]))
+        require_edit_permission(
+            connection,
+            note["opportunity_id"],
+            int(user["id"]),
+            note["created_by"],
+            "Only the author or the opportunity owner can edit this note",
+        )
 
         latest_version = connection.execute(
             """

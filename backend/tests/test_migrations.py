@@ -13,7 +13,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
+from conftest import CsrfClient
 
 from app.database import (
     BASELINE_REVISION,
@@ -221,7 +221,7 @@ def test_writes_to_a_bridged_legacy_database_are_canonical(database_url: str) ->
     """
     build_mvp_database(database_url)
 
-    with TestClient(app) as client:
+    with CsrfClient(app) as client:
         signup = client.post(
             "/api/auth/signup",
             json={"email": "new@example.com", "password": "password123", "name": "New User"},

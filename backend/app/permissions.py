@@ -65,6 +65,37 @@ def require_timeline_write(
     return role
 
 
+def require_author_or_owner(
+    connection: sqlite3.Connection,
+    opportunity_id: int,
+    user_id: int,
+    author_id: int | None,
+    detail: str,
+) -> Role:
+    """Changing an existing item is limited to its author or the opportunity
+    owner. Editors add freely; a colleague's record on a shared opportunity is
+    theirs to rewrite or remove.
+
+    Editing and deleting resolve through this one function rather than two
+    copies of the rule, so the two can no longer drift apart — which is how
+    they came to disagree in the first place (DECISIONS.md D-005).
+    """
+    role = require_timeline_write(connection, opportunity_id, user_id)
+    if role != "owner" and author_id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+    return role
+
+
+def require_edit_permission(
+    connection: sqlite3.Connection,
+    opportunity_id: int,
+    user_id: int,
+    author_id: int | None,
+    detail: str,
+) -> Role:
+    return require_author_or_owner(connection, opportunity_id, user_id, author_id, detail)
+
+
 def require_delete_permission(
     connection: sqlite3.Connection,
     opportunity_id: int,
@@ -72,15 +103,7 @@ def require_delete_permission(
     author_id: int | None,
     detail: str,
 ) -> Role:
-    """Deleting is limited to the author of the item or the opportunity owner.
-
-    Editors may add and edit freely, but removing a colleague's record on a
-    shared opportunity is reserved to its author and the owner.
-    """
-    role = require_timeline_write(connection, opportunity_id, user_id)
-    if role != "owner" and author_id != user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
-    return role
+    return require_author_or_owner(connection, opportunity_id, user_id, author_id, detail)
 
 
 def require_opportunity_owner(

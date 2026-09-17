@@ -288,7 +288,15 @@ def test_comment_delete_is_author_or_owner_only(client: TestClient) -> None:
     assert deleted.status_code == 204
 
 
-def test_editor_cannot_delete_another_users_note_or_entry(client: TestClient) -> None:
+def test_editor_cannot_change_another_users_note_or_entry(client: TestClient) -> None:
+    """Editing a colleague's record is author-or-owner, exactly like deleting.
+
+    This test previously asserted that an editor could PATCH a colleague's
+    note. That expectation is retired under the human ruling recorded in
+    DECISIONS.md D-005, which overruled the permissive reading and rewrote
+    `AGENTS.md`'s permissions model: an editor who may not remove a
+    colleague's record may not rewrite it either.
+    """
     owner = signup(client, "owner@example.com", "Owner")
     opportunity = create_opportunity(client)
     entry = create_entry(client, opportunity["id"], title="Owner call")
@@ -305,17 +313,62 @@ def test_editor_cannot_delete_another_users_note_or_entry(client: TestClient) ->
     login(client, "editor@example.com")
     assert client.delete(f"/api/notes/{note['id']}").status_code == 403
     assert client.delete(f"/api/timeline/{entry['id']}").status_code == 403
+    assert client.patch(f"/api/notes/{note['id']}", json={"body": "Editor edit"}).status_code == 403
+    assert (
+        client.patch(f"/api/timeline/{entry['id']}", json={"title": "Editor edit"}).status_code
+        == 403
+    )
 
-    # An editor still edits freely, and still owns what they create themselves.
-    assert client.patch(f"/api/notes/{note['id']}", json={"body": "Editor edit"}).status_code == 200
+    # An editor still owns everything they create themselves.
     own_entry = create_entry(client, opportunity["id"], title="Editor call")
+    own_note = client.post(
+        f"/api/timeline/{own_entry['id']}/notes",
+        json={"body": "Editor note"},
+    ).json()
+    assert (
+        client.patch(f"/api/timeline/{own_entry['id']}", json={"title": "Edited"}).status_code
+        == 200
+    )
+    assert client.patch(f"/api/notes/{own_note['id']}", json={"body": "Edited"}).status_code == 200
     assert client.delete(f"/api/timeline/{own_entry['id']}").status_code == 204
     client.post("/api/auth/logout")
 
-    # The owner can remove anything on their own opportunity.
+    # The owner can change or remove anything on their own opportunity.
     login(client, "owner@example.com")
+    assert client.patch(f"/api/notes/{note['id']}", json={"body": "Owner edit"}).status_code == 200
+    assert (
+        client.patch(f"/api/timeline/{entry['id']}", json={"title": "Owner edit"}).status_code
+        == 200
+    )
     assert client.delete(f"/api/notes/{note['id']}").status_code == 204
     assert client.delete(f"/api/timeline/{entry['id']}").status_code == 204
+
+
+def test_owner_can_edit_an_editors_entry_and_note(client: TestClient) -> None:
+    owner = signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    client.post("/api/auth/logout")
+
+    editor = signup(client, "editor@example.com", "Editor")
+    client.post("/api/auth/logout")
+    share_opportunity(opportunity["id"], editor["id"], owner["id"], "editor")
+
+    login(client, "editor@example.com")
+    entry = create_entry(client, opportunity["id"], title="Editor call")
+    note = client.post(
+        f"/api/timeline/{entry['id']}/notes",
+        json={"body": "Editor note"},
+    ).json()
+    client.post("/api/auth/logout")
+
+    login(client, "owner@example.com")
+    edited_entry = client.patch(f"/api/timeline/{entry['id']}", json={"title": "Owner retitled"})
+    assert edited_entry.status_code == 200
+    assert edited_entry.json()["title"] == "Owner retitled"
+
+    edited_note = client.patch(f"/api/notes/{note['id']}", json={"body": "Owner rewrote this"})
+    assert edited_note.status_code == 200
+    assert edited_note.json()["body"] == "Owner rewrote this"
 
 
 def test_deletions_are_recorded_in_the_audit_log(client: TestClient) -> None:

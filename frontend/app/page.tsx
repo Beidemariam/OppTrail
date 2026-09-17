@@ -161,12 +161,27 @@ function confirmDelete(description: string) {
   return window.confirm(`Delete ${description}? This cannot be undone here.`);
 }
 
+const CSRF_COOKIE_NAME = "opptrail_csrf";
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+// The API rejects any unsafe request whose X-CSRF-Token header does not match
+// this cookie (backend/app/security.py). The cookie is deliberately readable
+// here; the session cookie stays HttpOnly.
+function csrfToken() {
+  const match = document.cookie.match(
+    new RegExp(`(?:^|; )${CSRF_COOKIE_NAME}=([^;]*)`),
+  );
+  return match ? decodeURIComponent(match[1]) : "";
+}
+
 async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const method = (options.method ?? "GET").toUpperCase();
   const response = await fetch(path, {
     ...options,
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
+      ...(SAFE_METHODS.has(method) ? {} : { "X-CSRF-Token": csrfToken() }),
       ...(options.headers ?? {}),
     },
   });
@@ -255,11 +270,18 @@ export default function Home() {
   const canWriteSelectedTimeline =
     selectedOpportunity?.current_user_role === "owner" ||
     selectedOpportunity?.current_user_role === "editor";
-  // The API allows deletes only for the author of an item or the opportunity
-  // owner, so the buttons follow the same rule instead of offering a dead end.
-  const canDelete = (authorId: number | null) =>
+  // The API reserves both editing and deleting an existing item to its author
+  // and the opportunity owner (AGENTS.md's permissions model), so the buttons
+  // follow the same rule instead of offering a dead end.
+  // Editing and deleting an existing item are the same rule — its author or
+  // the opportunity owner — so the buttons follow it instead of offering a
+  // dead end. `require_author_or_owner` in backend/app/permissions.py is the
+  // side that enforces it; these two names mirror the two wrappers there.
+  const canChangeItem = (authorId: number | null) =>
     canWriteSelectedTimeline &&
     (canManageSelectedOpportunity || authorId === user?.id);
+  const canEdit = (authorId: number | null) => canChangeItem(authorId);
+  const canDelete = (authorId: number | null) => canChangeItem(authorId);
   const aiMessages = useMemo(
     () =>
       selectedOpportunityId
@@ -1529,26 +1551,29 @@ export default function Home() {
                             <h3>{entry.title}</h3>
                             <p className="timeline-copy">{entry.body || "No details"}</p>
                           </div>
-                          {canWriteSelectedTimeline && !entry.system_generated && (
-                            <div className="inline-actions">
-                              <button
-                                type="button"
-                                className="secondary-button"
-                                onClick={() => editTimelineEntry(entry)}
-                              >
-                                Edit
-                              </button>
-                              {canDelete(entry.created_by) && (
-                                <button
-                                  type="button"
-                                  className="danger-button"
-                                  onClick={() => deleteTimelineEntry(entry.id)}
-                                >
-                                  Delete
-                                </button>
-                              )}
-                            </div>
-                          )}
+                          {canChangeItem(entry.created_by) &&
+                            !entry.system_generated && (
+                              <div className="inline-actions">
+                                {canEdit(entry.created_by) && (
+                                  <button
+                                    type="button"
+                                    className="secondary-button"
+                                    onClick={() => editTimelineEntry(entry)}
+                                  >
+                                    Edit
+                                  </button>
+                                )}
+                                {canDelete(entry.created_by) && (
+                                  <button
+                                    type="button"
+                                    className="danger-button"
+                                    onClick={() => deleteTimelineEntry(entry.id)}
+                                  >
+                                    Delete
+                                  </button>
+                                )}
+                              </div>
+                            )}
                         </div>
                         <p className="meta-row">
                           By {entry.author_name ?? "System"}
@@ -1565,20 +1590,22 @@ export default function Home() {
                                   {note.author_name}
                                   {note.edited ? " | edited" : ""}
                                 </p>
-                                {canWriteSelectedTimeline && (
+                                {canChangeItem(note.created_by) && (
                                   <div className="inline-actions">
-                                    <button
-                                      type="button"
-                                      className="secondary-button"
-                                      onClick={() =>
-                                        setEditingNotes({
-                                          ...editingNotes,
-                                          [note.id]: note.body,
-                                        })
-                                      }
-                                    >
-                                      Edit
-                                    </button>
+                                    {canEdit(note.created_by) && (
+                                      <button
+                                        type="button"
+                                        className="secondary-button"
+                                        onClick={() =>
+                                          setEditingNotes({
+                                            ...editingNotes,
+                                            [note.id]: note.body,
+                                          })
+                                        }
+                                      >
+                                        Edit
+                                      </button>
+                                    )}
                                     {canDelete(note.created_by) && (
                                       <button
                                         type="button"

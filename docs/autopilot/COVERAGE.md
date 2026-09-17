@@ -194,3 +194,61 @@ at 79% and remains knowingly deferred to F.6, which owns the timeout/retry
 wrapper that makes its error branches testable without a live API call.
 
 Frontend: still 0% (no test runner) — unchanged; F.7's scope.
+
+---
+
+## F.5 — Security (§4.5)
+
+```
+129 passed in 22.99s
+TOTAL: 1451 stmts, 41 miss, 222 branches, 35 partial, 95% combined line+branch coverage
+Required test coverage of 90% reached. Total coverage: 95.46%
+```
+
+129 tests, up from 60: +69 (no test removed; one rewritten in place under D-005,
+one moved onto `CsrfClient`).
+
+- `tests/test_uploads.py` (+23) — sniffing per allowed type, three rejected
+  binary shapes, the declared type being ignored entirely, the size ceiling,
+  generated-name randomness and shape, seven traversal shapes, a symlink planted
+  inside the upload root, and three disposition-header cases including CRLF and
+  non-ASCII filenames.
+- `tests/test_sanitize.py` (+16) — five hostile element classes, event-handler
+  attributes, four rejected URL schemes against three allowed ones, forced
+  `rel`, and a round-trip proving ordinary Markdown output survives byte for
+  byte.
+- `tests/test_security.py` (+11) — cookie issuance, four CSRF rejection shapes
+  (no header, mismatched token, header without a cookie, and the matching pair
+  succeeding), headers on API/page/rejection responses, cookie flags in and out
+  of production, session rotation, and logout.
+- `tests/test_rate_limit.py` (+9) — the cap, the window sliding rather than
+  resetting, per-caller and per-endpoint isolation, reset, the memory sweep, the
+  no-peer fallback, both endpoints end to end, and the ordering check that
+  bcrypt is never reached by a limited caller.
+- `tests/test_auth.py` (+5) — password change: wrong current password, no
+  authentication, short new password, every other session invalidated, and the
+  new password being the one that works.
+- `tests/test_settings.py` (+3) — the three new settings must be positive.
+- `tests/test_timeline.py` (+1, one rewritten) — owner edits an editor's entry
+  and note; the editor test now asserts 403 on both edit paths (D-005).
+
+Coverage moved 94.65% → 95.46% while the codebase grew 1261 → 1451 statements.
+
+| Module | Combined line+branch % | Notes |
+|---|---|---|
+| `security.py` | 100% | new; every branch of the CSRF decision and both cookie-flag directions are exercised |
+| `rate_limit.py` | 100% | new; includes the sweep path and the `request.client is None` fallback |
+| `uploads.py` | 100% | new |
+| `sanitize.py` | 100% | new |
+| `permissions.py` | 100% | unchanged floor; `require_author_or_owner` is reached from both wrappers |
+| `auth.py` | 100% | rotation and `delete_user_sessions` both covered |
+| `routes_auth.py` | 100% | includes every branch of the new endpoint |
+| `settings.py` | 100% | was 95%; the new positive-value validator is tested |
+| `main.py` | 93% | unchanged; the two uncovered lines are the frontend-build-missing fallbacks |
+
+Brief §6.2's ≥95% branch floor for critical modules: `auth.py`, `permissions.py`,
+`soft_delete.py` and `audit_utils.py` remain at 100%. `ai_service.py` stays at
+79% and is still F.6's, which owns the client wrapper that makes its error
+branches testable without a live API call.
+
+Frontend: still 0% (no test runner) — unchanged; F.7's scope.

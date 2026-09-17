@@ -82,6 +82,35 @@ Routers are split by domain and all mounted in `main.py`: `routes_auth`,
 rather than a service layer: `permissions.py`, `time_utils.py`, `audit_utils.py`,
 `timeline_utils.py`, `notification_service.py`, `ai_service.py`, `export_service.py`.
 
+### Request security
+
+Three cross-cutting controls, all in `security.py` and registered in `main.py` in
+an order that is load bearing (Starlette runs the last-added middleware outermost:
+logging → security headers → CSRF → app, so the headers are attached to CSRF
+rejections too):
+
+- **CSRF** — double-submit cookie. Every unsafe method needs `X-CSRF-Token` to
+  match the non-`HttpOnly` `opptrail_csrf` cookie, login and signup included; safe
+  requests issue the cookie, so the SPA bootstraps it from the page load. The
+  backend test suite runs through `conftest.CsrfClient`, which echoes the header
+  like the browser does — `tests/test_security.py` uses a plain `TestClient` to
+  prove the middleware still rejects.
+- **Security headers** — CSP (including `frame-ancestors 'none'`),
+  `X-Content-Type-Options`, `Referrer-Policy` on every response. The CSP allows
+  inline script because `output: "export"` emits Next's hydration payload inline
+  and there is no render pass to attach a nonce to.
+- **Cookie flags** — `HttpOnly` session cookie, `Secure` when
+  `ENVIRONMENT=production` (a `Secure` cookie is dropped over the plain HTTP that
+  development and the tests use).
+
+`rate_limit.py` caps login and signup per source address in-process — correct
+because the app is a single process in a single container, and the one place to
+change if that stops being true. `auth.py` rotates the session on login (the
+presented session row is deleted) and `POST /api/auth/password` invalidates every
+session of that user. `uploads.py` and `sanitize.py` hold the upload and HTML
+rules for the Phase 4 and Phase 3 features that will use them; each explains in
+its docstring why it exists before its feature does.
+
 `database.py` opens a fresh connection per operation via the `db_connection()`
 context manager, which sets `PRAGMA foreign_keys = ON`, `journal_mode = WAL`, and a
 5s `busy_timeout` on every connection (`tests/test_database.py` guards all three).
@@ -138,12 +167,19 @@ leak.
 
 - `require_opportunity_access` — any role, used for reads and the AI agent
 - `require_timeline_write` — blocks viewers
-- `require_delete_permission` — author of the item or the opportunity owner
+- `require_author_or_owner` — author of the item or the opportunity owner;
+  `require_edit_permission` and `require_delete_permission` are both thin wrappers
+  over it
 - `require_opportunity_owner` — sharing and audit log
 
-Editors add and edit freely, but deleting a colleague's entry, note, or comment is
-reserved to its author and the owner. The frontend `canDelete(authorId)` helper
-mirrors this so buttons never offer an action the API will reject.
+Editors add entries, notes, and comments freely, but changing an existing one —
+editing it or deleting it — is reserved to its author and the opportunity owner.
+The two rules are deliberately identical and resolve through one function, so they
+cannot drift apart again (they had: see `docs/autopilot/DECISIONS.md` D-005, which
+the human overruled in favour of the stricter reading). Comments stay immutable to
+everyone; there is no comment edit route. The frontend `canEdit(authorId)` /
+`canDelete(authorId)` helpers mirror this so buttons never offer an action the API
+will reject.
 
 ### Auditability
 

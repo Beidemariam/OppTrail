@@ -313,57 +313,104 @@ combined coverage against the 90% floor. `make check` also green (`pip-audit`
 and `npm audit` both 0 vulnerabilities). Docker build + smoke test remains
 deferred to the host per the split gate (brief §3.4), unchanged.
 
-### F.5 — Security (§4.5)
+### F.5 — Security (§4.5) — **DONE**
 
-- [ ] CSRF protection for cookie sessions (none exists today — cookies are
-      `httponly`, `samesite=lax` only, `auth.py:39-45`).
-- [ ] Secure cookie flags (`secure=True` in production).
-- [ ] Session rotation on login (already effectively true — `create_session`
-      issues a fresh token every login, `auth.py:28-45` — verify and test
-      explicitly), invalidation on logout (already true, `auth.py:48-54`) and
-      on password change (**no password-change endpoint exists yet** — new
-      endpoint, or explicitly scope it to a later phase since it is not a v1
-      requirement).
-- [ ] Rate limiting on login/signup (none today, `docs/code_review.md`
-      finding 10); generic auth errors (already true, `routes_auth.py:66-70`).
-- [ ] Finish the permission-check consolidation from F.2/D-004 across every
-      service method touching an opportunity.
+- [x] CSRF protection for cookie sessions. `app/security.py`'s `CsrfMiddleware`
+      is a double-submit cookie (**D-017**): a non-`HttpOnly` `opptrail_csrf`
+      cookie issued on any safe request, echoed in `X-CSRF-Token`, compared with
+      `secrets.compare_digest`. Every unsafe method is covered, login and signup
+      included; a rejection carries a fresh cookie so the retry can succeed.
+- [x] Secure cookie flags. `security.cookies_are_secure()` sets `Secure` when
+      `ENVIRONMENT=production` only — development and the test suite speak plain
+      HTTP to localhost, where a `Secure` cookie is dropped by the client
+      (`test_cookies_are_secure_in_production` runs over `https://testserver` for
+      exactly this reason). The session cookie stays `HttpOnly`.
+- [x] Session rotation on login. It was *not* already true in the sense that
+      matters: `create_session` issued a new token but left the presented
+      session row valid. It now deletes it
+      (`test_login_rotates_the_session_and_invalidates_the_old_one`).
+      Invalidation on logout was already true and is now pinned by
+      `test_logout_deletes_the_session_row`.
+- [x] Invalidation on password change, via a new `POST /api/auth/password`
+      (**D-018**, **needs human review: Y** — a new endpoint in a phase whose
+      brief text says no new user-facing features; the §4.5 requirement names it
+      explicitly and there is nothing else to test invalidation against). Every
+      session of that user is deleted and the caller is re-issued one.
+- [x] Rate limiting on login/signup: `app/rate_limit.py`, sliding window keyed
+      by source address, counted separately per endpoint, injected clock so no
+      test sleeps (**D-020**). Checked before the password is verified, asserted
+      by `test_the_limit_is_checked_before_the_password_is_verified`, so a flood
+      costs a dict lookup rather than a bcrypt hash. Generic auth errors were
+      already true and are unchanged.
+- [x] Permission-check consolidation from F.2/D-004 finished and verified: every
+      route module that touches an opportunity resolves its role through
+      `permissions.py` (`grep` over `app/*.py` for `owner_id`/`opportunity_shares`
+      now returns only `permissions.py`, `soft_delete.py`, and the read queries
+      that select an owner's *name*). `routes_notifications.py` is user-scoped and
+      never resolves an opportunity role.
 
 **F.5a — Editors may edit only their own content (D-005, overruled by the
-human 2026-09-16).** Edit permission must mirror delete exactly: author or
-opportunity owner. This closes `docs/code_review.md` finding 4a the way it
-asked.
+human 2026-09-16).** Done.
 
-- [ ] Add the edit-side counterpart to `permissions.require_delete_permission`
-      (`permissions.py:68-82`) rather than a second inline rule, so both paths
-      resolve through one helper.
-- [ ] Apply it to timeline entry edit (`routes_timeline.py:340-383`) and note
-      edit (`routes_timeline.py:513-577`). Comments stay immutable to everyone
-      (invariant §2.2) — no edit route is to be added.
-- [ ] Update `test_editor_can_write_and_viewer_is_read_only`
-      (`test_timeline.py:225`). **This assertion change is authorised by the
-      human ruling in DECISIONS.md D-005** and is therefore not a weakened test
-      under brief §6.5; cite D-005 in the commit.
-- [ ] Add tests: an editor editing a colleague's entry and note gets 403; the
-      author and the opportunity owner both still succeed.
-- [ ] Add the endpoints to the authorization matrix (§6.4) with the tightened
-      expectations.
-- [ ] Frontend: add a `canEdit(authorId)` helper mirroring the existing
-      `canDelete(authorId)`, so the UI never offers an edit the API will
-      reject.
-- [ ] Update `CLAUDE.md`'s Permissions section, which still describes the old
-      "editors add and edit freely" behaviour — it documents the code, so it
-      changes when the code does, in this milestone's commit.
-- [ ] Upload hardening (size limits, content sniffing, randomized stored
-      names, safe paths, forced download disposition, traversal tests) — no
-      attachments exist yet (Phase 4 feature); stand up the framework here so
-      Phase 4 only wires into it, per brief §4.7's intent.
-- [ ] Server-side sanitization framework for user HTML, ready for rich text
-      (Phase 3) — the frontend already runs `rehype-sanitize` client-side
-      (`page.tsx:166-178` per `docs/code_review.md`); a server-side companion
-      does not exist yet.
-- [ ] Security headers: CSP, `X-Content-Type-Options`, `Referrer-Policy`,
-      `frame-ancestors` (none set today).
+- [x] `permissions.require_author_or_owner` is the single rule;
+      `require_edit_permission` and `require_delete_permission` are both thin
+      wrappers over it, so the two can no longer drift apart.
+- [x] Applied to timeline entry edit and note edit in `routes_timeline.py`.
+      Comments remain immutable to everyone — no edit route added.
+- [x] `test_editor_can_write_and_viewer_is_read_only` needed no change; the
+      assertion that actually encoded the old behaviour was in
+      `test_editor_cannot_delete_another_users_note_or_entry`
+      (`assert client.patch(f"/api/notes/{note['id']}", ...).status_code == 200`).
+      That test is now `test_editor_cannot_change_another_users_note_or_entry`,
+      its docstring cites **D-005** as the authority for the changed expectation,
+      and the whole block was confirmed to fail against the unfixed code.
+- [x] Added: an editor editing a colleague's entry and note both get 403; the
+      editor still edits and deletes what they created; the owner edits an
+      editor's entry and note (`test_owner_can_edit_an_editors_entry_and_note`).
+- [ ] Authorization-matrix entries with the tightened expectations — **carried to
+      F.7**, which builds the matrix (§6.4). Nothing to add to yet; the behaviour
+      is covered by the tests above in the meantime.
+- [x] Frontend: `canChangeItem(authorId)` with `canEdit`/`canDelete` wrappers
+      mirroring the two backend wrappers, gating both the Edit and Delete buttons
+      on entries and notes.
+- [x] `CLAUDE.md`'s Permissions section rewritten to match, and a new "Request
+      security" section documents the middleware order, the CSRF mechanism, and
+      the cookie flags.
+- [x] Upload hardening: `app/uploads.py` — size ceiling, magic-byte sniffing with
+      the declared type never consulted, generated stored names, a resolved-parent
+      path check, forced `attachment` disposition with `nosniff`. No endpoint
+      accepts a file yet (**D-021**); 23 tests including seven traversal shapes and
+      a symlink planted inside the upload root.
+- [x] Server-side sanitization framework: `app/sanitize.py` over `nh3`, allowlist
+      deliberately identical to the frontend's `markdownSanitizeSchema`, so the two
+      boundaries cannot drift (**D-021**).
+- [x] Security headers: CSP (`default-src 'self'`, `object-src 'none'`,
+      `frame-ancestors 'none'`, `base-uri 'self'`, `form-action 'self'`),
+      `X-Content-Type-Options`, `Referrer-Policy`, on every response including the
+      CSRF rejection. `script-src`/`style-src` allow inline because the static
+      export emits Next's hydration payload inline and there is no render pass to
+      attach a nonce to — **D-019**, with hashing named as a Phase R item.
+
+Work log: single session (Opus). Backend diff: new `app/security.py`,
+`app/rate_limit.py`, `app/uploads.py`, `app/sanitize.py`; `app/auth.py` (rotation,
+`delete_user_sessions`, cookie flags), `app/routes_auth.py` (rate limiting,
+password change), `app/permissions.py` (`require_author_or_owner` +
+`require_edit_permission`), `app/routes_timeline.py` (entry and note edit),
+`app/main.py` (middleware order), `app/settings.py` (three new validated
+settings), `app/schemas.py` (`PasswordChangeRequest`), `pyproject.toml`/`uv.lock`
+(+`nh3`). Tests: new `tests/test_security.py` (11), `tests/test_rate_limit.py`
+(9), `tests/test_uploads.py` (23), `tests/test_sanitize.py` (16); `conftest.py`
+(`CsrfClient`, limiter reset — **D-022**), `tests/test_auth.py` (+5),
+`tests/test_timeline.py` (rewritten editor test, +1 owner-edit test),
+`tests/test_settings.py` (+3), `tests/test_migrations.py` (uses `CsrfClient`).
+Frontend: `app/page.tsx` (CSRF header in `apiRequest`, `canChangeItem`/`canEdit`),
+regenerated `lib/api-types.ts`. Docs: `CLAUDE.md` (Permissions rewritten, new
+Request security section), `.env.example` (three new variables, documented).
+Decisions: **D-017**-**D-023**; **D-018** is flagged needs-human-review.
+Gate: `make check` green — ruff, `ruff format --check`, `mypy --strict`, frontend
+typecheck/lint, API-contract check, `pip-audit` and `npm audit` both clean, and
+129 backend tests at 95.46% combined coverage against the 90% floor. Docker build
++ smoke test remains deferred to the host per the split gate (brief §3.4).
 
 ### F.6 — AI agent hardening (§4.6)
 
@@ -425,6 +472,11 @@ asked.
 - [ ] Replace `passlib` (unmaintained, warns on every test run) with a
       maintained bcrypt wrapper, dropping the `bcrypt<5` pin
       (`docs/code_review.md` finding 10).
+- [ ] Add `prettier --check` to the gate (brief §3.4 lists it; `make check`
+      does not run it). Needs a `.prettierignore` — `npx prettier .` currently
+      walks `out/` and reports 106 files — and a one-time reformat of
+      `frontend/app/page.tsx`, which was already non-conforming before F.5.
+      **D-023.**
 - [ ] Pin frontend dependency versions instead of `"latest"`
       (`frontend/package.json`).
 

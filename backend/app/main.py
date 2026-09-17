@@ -16,6 +16,7 @@ from .routes_notifications import router as notifications_router
 from .routes_opportunities import router as opportunities_router
 from .routes_sharing import router as sharing_router
 from .routes_timeline import router as timeline_router
+from .security import CsrfMiddleware, SecurityHeadersMiddleware
 from .settings import settings
 
 
@@ -28,6 +29,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="OppTrail API", version="0.1.0", lifespan=lifespan)
 install_error_handlers(app)
+# Starlette runs the most recently added middleware outermost, so this
+# ordering is load bearing: request logging sees every response including the
+# rejections below it, and the security headers are attached to the CSRF
+# middleware's 403 as well as to real responses.
+app.add_middleware(CsrfMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestLoggingMiddleware)
 app.include_router(auth_router)
 app.include_router(opportunities_router)

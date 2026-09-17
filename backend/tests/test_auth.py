@@ -84,3 +84,94 @@ def test_expired_or_unknown_session_cookie_is_rejected(client: TestClient) -> No
     response = client.get("/api/auth/me")
 
     assert response.status_code == 401
+
+
+def test_password_change_requires_the_current_password(client: TestClient) -> None:
+    signup(client)
+
+    response = client.post(
+        "/api/auth/password",
+        json={"current_password": "wrong-password", "new_password": "new-password123"},
+    )
+
+    assert response.status_code == 401
+    # The old password still works.
+    client.post("/api/auth/logout")
+    assert (
+        client.post(
+            "/api/auth/login",
+            json={"email": "owner@example.com", "password": "password123"},
+        ).status_code
+        == 200
+    )
+
+
+def test_password_change_requires_authentication(client: TestClient) -> None:
+    response = client.post(
+        "/api/auth/password",
+        json={"current_password": "password123", "new_password": "new-password123"},
+    )
+
+    assert response.status_code == 401
+
+
+def test_password_change_rejects_a_short_new_password(client: TestClient) -> None:
+    signup(client)
+
+    response = client.post(
+        "/api/auth/password",
+        json={"current_password": "password123", "new_password": "short"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_password_change_invalidates_every_other_session(client: TestClient) -> None:
+    """The point of the endpoint: a session stolen before the change stops
+    working after it, including on another device.
+    """
+    user = signup(client)
+    other_device = client.post(
+        "/api/auth/login",
+        json={"email": "owner@example.com", "password": "password123"},
+    )
+    assert other_device.status_code == 200
+    stolen_session = client.cookies["opptrail_session"]
+
+    changed = client.post(
+        "/api/auth/password",
+        json={"current_password": "password123", "new_password": "new-password123"},
+    )
+
+    assert changed.status_code == 200
+    assert changed.json()["user"]["id"] == user["id"]
+    # The caller is re-issued a working session; the old one is gone.
+    assert client.cookies["opptrail_session"] != stolen_session
+    assert client.get("/api/auth/me").status_code == 200
+    with db_connection() as connection:
+        sessions = connection.execute("SELECT id FROM sessions").fetchall()
+    assert [row["id"] for row in sessions] == [client.cookies["opptrail_session"]]
+
+
+def test_the_new_password_is_the_one_that_works(client: TestClient) -> None:
+    signup(client)
+    client.post(
+        "/api/auth/password",
+        json={"current_password": "password123", "new_password": "new-password123"},
+    )
+    client.post("/api/auth/logout")
+
+    assert (
+        client.post(
+            "/api/auth/login",
+            json={"email": "owner@example.com", "password": "password123"},
+        ).status_code
+        == 401
+    )
+    assert (
+        client.post(
+            "/api/auth/login",
+            json={"email": "owner@example.com", "password": "new-password123"},
+        ).status_code
+        == 200
+    )

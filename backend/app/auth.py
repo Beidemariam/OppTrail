@@ -6,6 +6,7 @@ from fastapi import Cookie, HTTPException, Response, status
 from passlib.context import CryptContext
 
 from .database import db_connection
+from .security import CSRF_COOKIE_NAME, cookies_are_secure, new_csrf_token
 from .time_utils import to_canonical, utc_now
 
 SESSION_COOKIE_NAME = "opptrail_session"
@@ -27,11 +28,20 @@ def verify_password(password: str, password_hash: str) -> bool:
     return is_valid
 
 
-def create_session(response: Response, user_id: int) -> None:
+def create_session(response: Response, user_id: int, previous_session_id: str | None) -> None:
+    """Issue a new session, destroying the one the caller arrived with.
+
+    Rotation is the point of `previous_session_id`: without it a token planted
+    before authentication would stay valid alongside the new one, which is the
+    session-fixation case brief §4.5 asks to close. The CSRF token is rotated
+    with it for the same reason.
+    """
     session_id = secrets.token_urlsafe(32)
     expires_at = datetime.now(UTC) + timedelta(days=SESSION_DAYS)
 
     with db_connection() as connection:
+        if previous_session_id:
+            connection.execute("DELETE FROM sessions WHERE id = ?", (previous_session_id,))
         connection.execute(
             """
             INSERT INTO sessions (id, user_id, created_at, expires_at)
@@ -46,8 +56,25 @@ def create_session(response: Response, user_id: int) -> None:
         value=session_id,
         httponly=True,
         samesite="lax",
+        secure=cookies_are_secure(),
         max_age=SESSION_DAYS * 24 * 60 * 60,
     )
+    response.set_cookie(
+        key=CSRF_COOKIE_NAME,
+        value=new_csrf_token(),
+        httponly=False,
+        samesite="lax",
+        secure=cookies_are_secure(),
+        max_age=SESSION_DAYS * 24 * 60 * 60,
+    )
+
+
+def delete_user_sessions(connection: sqlite3.Connection, user_id: int) -> None:
+    """Every session of one user, used when a password changes. `sessions` is
+    ephemeral authentication state, not user content, so this really is a row
+    deletion (see CLAUDE.md's Soft deletes section).
+    """
+    connection.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
 
 
 def clear_session(response: Response, session_id: str | None) -> None:
@@ -56,7 +83,12 @@ def clear_session(response: Response, session_id: str | None) -> None:
             connection.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
             connection.commit()
 
-    response.delete_cookie(key=SESSION_COOKIE_NAME, httponly=True, samesite="lax")
+    response.delete_cookie(
+        key=SESSION_COOKIE_NAME,
+        httponly=True,
+        samesite="lax",
+        secure=cookies_are_secure(),
+    )
 
 
 def get_current_user(
