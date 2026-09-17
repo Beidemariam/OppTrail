@@ -827,8 +827,69 @@ Docker portion of the split gate remains the host's, per `scripts/
 autopilot-gate.sh 1` (unaffected by this session — the CI workflow's `docker`
 job trigger narrowed, but its steps did not change).
 
-- [ ] 1.3 `/api/v2` with the pagination envelope and the unified error shape.
-      Blocker B3.
+### 1.3 — `/api/v2`: pagination envelope and unified error shape (Blocker B3) — **DONE**
+
+- [x] `backend/app/pagination.py`: the `{"items", "next_cursor"}` envelope
+      (`Page[T]`), the `?limit` (1-200, default 50) / `?cursor` dependency, and
+      keyset cursors — opaque base64 of the last row's `(sort value, id)`, with
+      each query asking for `limit + 1` rows so the last page reports
+      `next_cursor: null` instead of a cursor that resolves to nothing. Keyset
+      rather than offset per **D-034**: an offset skips or repeats rows when the
+      table changes between two requests, which is what a timeline does while it
+      is being read.
+- [x] `backend/app/errors.py` rewritten: v2 failures are
+      `{"error": {"code", "message", "fields"?}}` (`docs/ARCHITECTURE.md`, "Error
+      shapes"), v1 keeps `{"detail": ...}`. Handlers for `HTTPException`,
+      `RequestValidationError` and the bare `Exception` branch on the request
+      path and otherwise delegate to FastAPI's own handlers, so v1 is byte-for-
+      byte what it was. `fields` maps a form field to its message, which is the
+      half that matters — `docs/REVIEW.md` M4 is a 422 reaching the UI as a flat
+      "Request failed". The two error paths that never reach a handler carry the
+      envelope themselves: the CSRF rejection (`security.py`, middleware answers
+      before routing) and `main.py`'s `/api/{path:path}` catch-all.
+- [x] Seven v2 endpoints, each mirroring a v1 route's rows, filters and
+      permissions exactly: `GET /api/v2/opportunities`, `/stages`,
+      `/opportunities/{id}/timeline` (same `?q=&type=&from=&to=&author_id=`),
+      `/opportunities/{id}/shares`, `/opportunities/{id}/audit-log`,
+      `/notes/{note_id}/versions`, `/notifications`. `stages` exists because v1
+      carried the fixed stage list as a field on the opportunity list response
+      and the envelope has no room for it. Shared SQL was lifted into one
+      constant per table (`ACCESSIBLE_OPPORTUNITIES_SQL`, `SHARE_ROWS_SQL`,
+      `AUDIT_LOG_ROWS_SQL`, `NOTE_VERSION_ROWS_SQL`, `timeline_filters`,
+      `entries_with_notes`) so the two versions cannot drift while both exist.
+- [x] `tests/test_api_v2.py` — 20 tests: cursor walks that assert every row
+      appears exactly once, the exact-multiple-of-limit case, a row inserted
+      between pages, soft-deleted rows leaving the page, `limit` out of range,
+      an unreadable cursor, each of the seven collections, every v2 error class,
+      and a test that v1's list/404/422/CSRF/catch-all shapes are unchanged
+      (the Phase 1 acceptance line "v1 endpoints still serve the existing
+      frontend"). Both guards were confirmed to fail against mutated code before
+      being trusted (brief §6.5): forcing `is_v2_path` true fails the v1 test,
+      and turning `split_page`'s `<=` into `<` fails the page-boundary tests.
+- [x] Authorization matrix extended to the seven new endpoints (38 → 45); the
+      registry guard failed first with all seven listed, as designed.
+- [x] `frontend/lib/api-types.ts` regenerated from the schema
+      (`Page_OpportunityPublic_` and its six siblings); contract check green.
+      No frontend source changed — v1 still serves it.
+- [x] Docs: `CLAUDE.md` gains an "API versions" section; `docs/PLAN.md`'s API
+      surface lists the v2 endpoints and both shape rules.
+
+Work log: single session. New: `backend/app/pagination.py`,
+`backend/tests/test_api_v2.py`. Changed: `backend/app/errors.py` (v2 envelope),
+`backend/app/main.py` (four v2 routers mounted, v2-aware catch-all),
+`backend/app/security.py` (CSRF rejection shape), `routes_opportunities.py`,
+`routes_sharing.py`, `routes_timeline.py`, `routes_notifications.py` (a
+`v2_router` each, plus the shared-SQL extractions), `tests/
+test_authorization_matrix.py`, `frontend/lib/api-types.ts` (generated),
+`CLAUDE.md`, `docs/PLAN.md`. Decisions: **D-033** (v2 scope — collection reads
+plus the error envelope this milestone; **needs human review Y**, because
+removing v1 "at the end of Phase 2" now needs a Phase 2 milestone that ports
+the remaining ~20 endpoints, and none exists) and **D-034** (keyset cursors,
+and the two tie-break changes they require). Gate: `make check-fast` green —
+217 backend tests (was 190), 96.82% combined coverage (was 96.46%), both new
+modules at 100%; 80 frontend tests, 86.87% line, unchanged. Docker portion of
+the split gate remains the host's (`scripts/autopilot-gate.sh 1`).
+
 - [ ] 1.4 FTS5 contentless index plus triggers, including soft-delete
       transitions (ADR 0007). Feature: Search (§13).
 - [ ] 1.5 React Router and TanStack Query introduced — justified by needing a

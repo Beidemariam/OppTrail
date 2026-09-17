@@ -6,6 +6,7 @@ from .audit_utils import create_audit_log_entry, parse_audit_detail
 from .auth import get_current_user
 from .database import db_connection
 from .notification_service import create_notification
+from .pagination import Page, PageRequest, cursor_clause, page_params, split_page
 from .permissions import require_opportunity_owner
 from .schemas import (
     AuditLogEntryPublic,
@@ -19,6 +20,7 @@ from .time_utils import utc_now
 from .timeline_utils import create_system_timeline_entry
 
 router = APIRouter(prefix="/api/opportunities", tags=["sharing"])
+v2_router = APIRouter(prefix="/api/v2/opportunities", tags=["sharing"])
 
 
 def share_from_row(row: sqlite3.Row) -> SharePublic:
@@ -33,25 +35,30 @@ def share_from_row(row: sqlite3.Row) -> SharePublic:
     )
 
 
+SHARE_ROWS_SQL = """
+    SELECT
+        opportunity_shares.user_id,
+        opportunity_shares.role,
+        opportunity_shares.invited_by,
+        opportunity_shares.created_at,
+        shared_user.email,
+        shared_user.name,
+        inviter.name AS invited_by_name
+    FROM opportunity_shares
+    JOIN users AS shared_user ON shared_user.id = opportunity_shares.user_id
+    JOIN users AS inviter ON inviter.id = opportunity_shares.invited_by
+    WHERE opportunity_shares.opportunity_id = ?
+        AND opportunity_shares.deleted_at IS NULL
+"""
+
+
 def fetch_share_rows(
     connection: sqlite3.Connection,
     opportunity_id: int,
 ) -> list[sqlite3.Row]:
     return connection.execute(
-        """
-        SELECT
-            opportunity_shares.user_id,
-            opportunity_shares.role,
-            opportunity_shares.invited_by,
-            opportunity_shares.created_at,
-            shared_user.email,
-            shared_user.name,
-            inviter.name AS invited_by_name
-        FROM opportunity_shares
-        JOIN users AS shared_user ON shared_user.id = opportunity_shares.user_id
-        JOIN users AS inviter ON inviter.id = opportunity_shares.invited_by
-        WHERE opportunity_shares.opportunity_id = ?
-            AND opportunity_shares.deleted_at IS NULL
+        f"""
+        {SHARE_ROWS_SQL}
         ORDER BY shared_user.name ASC, shared_user.email ASC
         """,
         (opportunity_id,),
@@ -68,6 +75,39 @@ def list_shares(
         rows = fetch_share_rows(connection, opportunity_id)
 
     return ShareListResponse(shares=[share_from_row(row) for row in rows])
+
+
+@v2_router.get("/{opportunity_id}/shares", response_model=Page[SharePublic])
+def list_shares_page(
+    opportunity_id: int,
+    page: PageRequest = Depends(page_params),
+    user: sqlite3.Row = Depends(get_current_user),
+) -> Page[SharePublic]:
+    """Ordered by name like v1, but tie-broken on `user_id` rather than email,
+    because a cursor needs a column that is unique within the ordering.
+    """
+    continuation, cursor_values = cursor_clause(
+        page,
+        "shared_user.name",
+        "opportunity_shares.user_id",
+        descending=False,
+    )
+    params: list[object] = [opportunity_id, *cursor_values, page.limit + 1]
+
+    with db_connection() as connection:
+        require_opportunity_owner(connection, opportunity_id, int(user["id"]))
+        rows = connection.execute(
+            f"""
+            {SHARE_ROWS_SQL}
+            {f"AND {continuation}" if continuation else ""}
+            ORDER BY shared_user.name ASC, opportunity_shares.user_id ASC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+
+    rows, next_cursor = split_page(rows, page.limit, lambda row: (row["name"], row["user_id"]))
+    return Page(items=[share_from_row(row) for row in rows], next_cursor=next_cursor)
 
 
 @router.post(
@@ -305,6 +345,26 @@ def delete_share(
         connection.commit()
 
 
+AUDIT_LOG_ROWS_SQL = """
+    SELECT audit_log_entries.*, users.name AS actor_name
+    FROM audit_log_entries
+    LEFT JOIN users ON users.id = audit_log_entries.actor_id
+    WHERE audit_log_entries.opportunity_id = ?
+"""
+
+
+def audit_entry_from_row(row: sqlite3.Row) -> AuditLogEntryPublic:
+    return AuditLogEntryPublic(
+        id=row["id"],
+        opportunity_id=row["opportunity_id"],
+        actor_id=row["actor_id"],
+        actor_name=row["actor_name"],
+        action=row["action"],
+        detail=parse_audit_detail(row["action"], row["detail"]),
+        created_at=row["created_at"],
+    )
+
+
 @router.get(
     "/{opportunity_id}/audit-log",
     response_model=list[AuditLogEntryPublic],
@@ -316,25 +376,44 @@ def list_audit_log(
     with db_connection() as connection:
         require_opportunity_owner(connection, opportunity_id, int(user["id"]))
         rows = connection.execute(
-            """
-            SELECT audit_log_entries.*, users.name AS actor_name
-            FROM audit_log_entries
-            LEFT JOIN users ON users.id = audit_log_entries.actor_id
-            WHERE audit_log_entries.opportunity_id = ?
+            f"""
+            {AUDIT_LOG_ROWS_SQL}
             ORDER BY audit_log_entries.created_at ASC, audit_log_entries.id ASC
             """,
             (opportunity_id,),
         ).fetchall()
 
-    return [
-        AuditLogEntryPublic(
-            id=row["id"],
-            opportunity_id=row["opportunity_id"],
-            actor_id=row["actor_id"],
-            actor_name=row["actor_name"],
-            action=row["action"],
-            detail=parse_audit_detail(row["action"], row["detail"]),
-            created_at=row["created_at"],
-        )
-        for row in rows
-    ]
+    return [audit_entry_from_row(row) for row in rows]
+
+
+@v2_router.get("/{opportunity_id}/audit-log", response_model=Page[AuditLogEntryPublic])
+def list_audit_log_page(
+    opportunity_id: int,
+    page: PageRequest = Depends(page_params),
+    user: sqlite3.Row = Depends(get_current_user),
+) -> Page[AuditLogEntryPublic]:
+    """Oldest first, like v1: the audit log is read as a narrative of what
+    happened to the opportunity, so the page boundary walks forward in time.
+    """
+    continuation, cursor_values = cursor_clause(
+        page,
+        "audit_log_entries.created_at",
+        "audit_log_entries.id",
+        descending=False,
+    )
+    params: list[object] = [opportunity_id, *cursor_values, page.limit + 1]
+
+    with db_connection() as connection:
+        require_opportunity_owner(connection, opportunity_id, int(user["id"]))
+        rows = connection.execute(
+            f"""
+            {AUDIT_LOG_ROWS_SQL}
+            {f"AND {continuation}" if continuation else ""}
+            ORDER BY audit_log_entries.created_at ASC, audit_log_entries.id ASC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+
+    rows, next_cursor = split_page(rows, page.limit, lambda row: (row["created_at"], row["id"]))
+    return Page(items=[audit_entry_from_row(row) for row in rows], next_cursor=next_cursor)

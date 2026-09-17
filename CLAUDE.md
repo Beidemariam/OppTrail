@@ -91,6 +91,33 @@ Routers are split by domain and all mounted in `main.py`: `routes_auth`,
 rather than a service layer: `permissions.py`, `time_utils.py`, `audit_utils.py`,
 `timeline_utils.py`, `notification_service.py`, `ai_service.py`, `export_service.py`.
 
+### API versions
+
+Two surfaces, mounted side by side in `main.py`. `/api/*` is v1 — the shapes the
+shipped frontend reads, unchanged until it moves. `/api/v2/*` is the new surface
+(`docs/ARCHITECTURE.md`, "API versioning"), carrying the two breaking changes that
+would otherwise get more expensive with every client feature built on the old ones:
+
+- **Pagination** (`pagination.py`). Every v2 collection read takes `?limit`
+  (1-200, default 50) and `?cursor` and answers `{"items", "next_cursor"}`.
+  Keyset, not offset: the cursor is an opaque base64 of the last row's
+  `(sort value, id)`, and each query asks for `limit + 1` rows so the last page
+  reports `next_cursor: null` rather than handing back a cursor that resolves to
+  nothing. Every paginated `ORDER BY` therefore ends in the row id — a sort column
+  alone is not unique, and a cursor over a non-unique order skips rows.
+- **Error envelope** (`errors.py`). v2 failures are
+  `{"error": {"code", "message", "fields"?}}`; v1 stays `{"detail": ...}`. The
+  split is by request path (`is_v2_path`), which is why the two error paths that
+  never reach a handler carry it themselves: the CSRF rejection in `security.py`
+  (middleware answers before routing) and `main.py`'s `/api/{path:path}` catch-all.
+
+A v2 route mirrors its v1 twin's rows, filters and permissions exactly — the
+boundary carries response shape, not behavior. Where both versions read the same
+table the SQL lives in one module-level constant (`ACCESSIBLE_OPPORTUNITIES_SQL`,
+`SHARE_ROWS_SQL`, `AUDIT_LOG_ROWS_SQL`, `NOTE_VERSION_ROWS_SQL`,
+`timeline_filters`) so the two cannot drift. `tests/test_api_v2.py` holds the
+envelope and cursor-walk tests, including the ones that assert v1 is untouched.
+
 ### Request security
 
 Three cross-cutting controls, all in `security.py` and registered in `main.py` in

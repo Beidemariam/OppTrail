@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, status
 from .audit_utils import create_audit_log_entry
 from .auth import get_current_user
 from .database import db_connection
+from .pagination import Page, PageRequest, cursor_clause, page_params, split_page
 from .permissions import Role, require_opportunity_access, require_opportunity_owner
 from .schemas import (
     STAGES,
@@ -19,6 +20,7 @@ from .time_utils import utc_days_ago, utc_now
 from .timeline_utils import create_system_timeline_entry
 
 router = APIRouter(prefix="/api/opportunities", tags=["opportunities"])
+v2_router = APIRouter(prefix="/api/v2", tags=["opportunities"])
 
 
 STALLED_AFTER_DAYS = 14
@@ -101,30 +103,35 @@ def fetch_opportunity_row(
     return row
 
 
+ACCESSIBLE_OPPORTUNITIES_SQL = """
+    SELECT DISTINCT
+        opportunities.*,
+        users.name AS owner_name,
+        CASE
+            WHEN opportunities.owner_id = ? THEN 'owner'
+            ELSE opportunity_shares.role
+        END AS current_user_role
+    FROM opportunities
+    JOIN users ON users.id = opportunities.owner_id
+    LEFT JOIN opportunity_shares
+        ON opportunity_shares.opportunity_id = opportunities.id
+        AND opportunity_shares.deleted_at IS NULL
+    WHERE opportunities.deleted_at IS NULL
+        AND (
+            opportunities.owner_id = ?
+            OR opportunity_shares.user_id = ?
+        )
+"""
+
+
 @router.get("", response_model=OpportunityListResponse)
 def list_opportunities(
     user: sqlite3.Row = Depends(get_current_user),
 ) -> OpportunityListResponse:
     with db_connection() as connection:
         rows = connection.execute(
-            """
-            SELECT DISTINCT
-                opportunities.*,
-                users.name AS owner_name,
-                CASE
-                    WHEN opportunities.owner_id = ? THEN 'owner'
-                    ELSE opportunity_shares.role
-                END AS current_user_role
-            FROM opportunities
-            JOIN users ON users.id = opportunities.owner_id
-            LEFT JOIN opportunity_shares
-                ON opportunity_shares.opportunity_id = opportunities.id
-                AND opportunity_shares.deleted_at IS NULL
-            WHERE opportunities.deleted_at IS NULL
-                AND (
-                    opportunities.owner_id = ?
-                    OR opportunity_shares.user_id = ?
-                )
+            f"""
+            {ACCESSIBLE_OPPORTUNITIES_SQL}
             ORDER BY opportunities.updated_at DESC, opportunities.id DESC
             """,
             (user["id"], user["id"], user["id"]),
@@ -138,6 +145,61 @@ def list_opportunities(
         ]
 
     return OpportunityListResponse(stages=STAGES, opportunities=opportunities)
+
+
+@v2_router.get("/opportunities", response_model=Page[OpportunityPublic])
+def list_opportunities_page(
+    page: PageRequest = Depends(page_params),
+    user: sqlite3.Row = Depends(get_current_user),
+) -> Page[OpportunityPublic]:
+    """The v1 list, in the v2 envelope, minus `stages` — which is a fixed list
+    rather than a property of this page and now has its own endpoint below.
+    """
+    continuation, cursor_values = cursor_clause(
+        page,
+        "opportunities.updated_at",
+        "opportunities.id",
+        descending=True,
+    )
+    params: list[object] = [user["id"], user["id"], user["id"], *cursor_values, page.limit + 1]
+
+    with db_connection() as connection:
+        rows = connection.execute(
+            f"""
+            {ACCESSIBLE_OPPORTUNITIES_SQL}
+            {f"AND {continuation}" if continuation else ""}
+            ORDER BY opportunities.updated_at DESC, opportunities.id DESC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+
+        rows, next_cursor = split_page(rows, page.limit, lambda row: (row["updated_at"], row["id"]))
+        items = [
+            opportunity_from_row(
+                row, row["current_user_role"], is_opportunity_stalled(connection, row["id"])
+            )
+            for row in rows
+        ]
+
+    return Page(items=items, next_cursor=next_cursor)
+
+
+@v2_router.get(
+    "/stages",
+    response_model=Page[str],
+    dependencies=[Depends(get_current_user)],
+)
+def list_stages() -> Page[str]:
+    """The fixed stage list, which v1 delivered as a field on the opportunity
+    list response and the v2 envelope has no room for.
+
+    Paginating seven values that a migration cannot add to (invariant 6: the
+    stage list is fixed and non-renamable) would be theatre, so `next_cursor`
+    is always null — but the shape stays the envelope, because a v2 client
+    should not have to learn a second one.
+    """
+    return Page(items=STAGES, next_cursor=None)
 
 
 @router.post("", response_model=OpportunityPublic, status_code=status.HTTP_201_CREATED)

@@ -119,6 +119,29 @@ system simple per the coding standards.
 **Audit Log**
 - `GET /api/opportunities/{id}/audit-log` — owner only
 
+**v2 (`/api/v2`, added in roadmap Phase 1)**
+
+The version boundary carries two breaking response-shape changes and nothing
+else — same rows, same permissions, same filters as the v1 route each one
+mirrors (`docs/ARCHITECTURE.md`, "Pagination" / "Error shapes"):
+
+- Every collection read takes `?limit` (1-200, default 50) and `?cursor`, and
+  answers `{"items": [...], "next_cursor": null}`.
+- Every failure answers `{"error": {"code", "message", "fields"?}}`, with
+  `fields` present on validation errors.
+
+- `GET /api/v2/opportunities`
+- `GET /api/v2/stages` — the fixed stage list, which v1 carried as a field on
+  the opportunity list response
+- `GET /api/v2/opportunities/{id}/timeline` — same `?q=&type=&from=&to=&author_id=`
+- `GET /api/v2/opportunities/{id}/shares`
+- `GET /api/v2/opportunities/{id}/audit-log`
+- `GET /api/v2/notes/{note_id}/versions`
+- `GET /api/v2/notifications`
+
+v1 stays as it is while it serves the shipped frontend, and is removed at the
+end of roadmap Phase 2 once the frontend has moved.
+
 All endpoints except `/api/auth/*` require a valid session and enforce the
 Permissions Model from AGENTS.md server-side (not just hidden in the UI).
 

@@ -304,6 +304,40 @@ MATRIX: dict[Endpoint, Case] = {
         body=lambda world, actor: None,
         notes="The fixture's notification belongs to the owner; everyone else 404s.",
     ),
+    # --- v2 surface (paginated collection reads) --------------------------
+    # Same permission rules as the v1 route each one mirrors: the version
+    # boundary carries response shape, not authorization.
+    Endpoint("GET", "/api/v2/opportunities"): Case(
+        expected=authenticated_only(200),
+        url=lambda world: "/api/v2/opportunities",
+        notes="Scoped by the query itself, like its v1 twin.",
+    ),
+    Endpoint("GET", "/api/v2/stages"): Case(
+        expected=authenticated_only(200),
+        url=lambda world: "/api/v2/stages",
+        notes="The fixed stage list; no user data, but not offered anonymously.",
+    ),
+    Endpoint("GET", "/api/v2/opportunities/{opportunity_id}/timeline"): Case(
+        expected=scoped(viewer=200, editor=200, owner=200),
+        url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/timeline",
+    ),
+    Endpoint("GET", "/api/v2/opportunities/{opportunity_id}/shares"): Case(
+        expected=scoped(viewer=403, editor=403, owner=200),
+        url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/shares",
+    ),
+    Endpoint("GET", "/api/v2/opportunities/{opportunity_id}/audit-log"): Case(
+        expected=scoped(viewer=403, editor=403, owner=200),
+        url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/audit-log",
+    ),
+    Endpoint("GET", "/api/v2/notes/{note_id}/versions"): Case(
+        expected=scoped(viewer=200, editor=200, owner=200),
+        url=lambda world: f"/api/v2/notes/{world.note_id}/versions",
+    ),
+    Endpoint("GET", "/api/v2/notifications"): Case(
+        expected=authenticated_only(200),
+        url=lambda world: "/api/v2/notifications",
+        notes="Scoped by the query: a user only ever reads their own rows.",
+    ),
     # --- Identity-independent surfaces ------------------------------------
     Endpoint("GET", "/api/health"): public(
         lambda world: "/api/health",

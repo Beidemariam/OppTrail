@@ -486,3 +486,24 @@ re-implement.
 backend:  190 passed, 96.46% combined line+branch coverage (unchanged from 1.1)
 frontend: 80 passed, 86.87% line (unchanged from 1.1)
 ```
+
+## Phase 1 — milestone 1.3 (`/api/v2`: pagination envelope, error shape)
+
+First milestone of Phase 1 to add application code. Seven new endpoints, two
+new modules (`app/pagination.py`, the rewritten `app/errors.py`), one new test
+file (`tests/test_api_v2.py`, 20 tests) and 7 new authorization-matrix entries.
+
+```
+backend:  217 passed (was 190), 96.82% combined line+branch coverage
+          (was 96.46%; --cov-fail-under=90 enforced)
+          app/pagination.py  100% line, 100% branch
+          app/errors.py      100% line, 100% branch
+frontend: 80 passed, 86.87% line (unchanged — no frontend source changed;
+          lib/api-types.ts is generated and carries no executable code)
+```
+
+Coverage rose rather than held because both new modules are fully exercised
+and the v2 handlers reuse the v1 row-mapping code that was already covered.
+
+Authorization matrix: 38 endpoints → 45, each v2 entry carrying the same
+expectations as the v1 route it mirrors.

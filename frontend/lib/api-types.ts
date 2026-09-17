@@ -408,6 +408,168 @@ export interface paths {
         patch: operations["mark_notification_read_api_notifications__notification_id__read_patch"];
         trace?: never;
     };
+    "/api/v2/opportunities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Opportunities Page
+         * @description The v1 list, in the v2 envelope, minus `stages` — which is a fixed list
+         *     rather than a property of this page and now has its own endpoint below.
+         */
+        get: operations["list_opportunities_page_api_v2_opportunities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/stages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Stages
+         * @description The fixed stage list, which v1 delivered as a field on the opportunity
+         *     list response and the v2 envelope has no room for.
+         *
+         *     Paginating seven values that a migration cannot add to (invariant 6: the
+         *     stage list is fixed and non-renamable) would be theatre, so `next_cursor`
+         *     is always null — but the shape stays the envelope, because a v2 client
+         *     should not have to learn a second one.
+         */
+        get: operations["list_stages_api_v2_stages_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/opportunities/{opportunity_id}/shares": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Shares Page
+         * @description Ordered by name like v1, but tie-broken on `user_id` rather than email,
+         *     because a cursor needs a column that is unique within the ordering.
+         */
+        get: operations["list_shares_page_api_v2_opportunities__opportunity_id__shares_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/opportunities/{opportunity_id}/audit-log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Audit Log Page
+         * @description Oldest first, like v1: the audit log is read as a narrative of what
+         *     happened to the opportunity, so the page boundary walks forward in time.
+         */
+        get: operations["list_audit_log_page_api_v2_opportunities__opportunity_id__audit_log_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/opportunities/{opportunity_id}/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Timeline Page
+         * @description The page unit is the entry. Its notes and comments come with it whole —
+         *     an entry split across two pages would be a worse shape than a long one,
+         *     and `docs/ROADMAP.md` puts threaded comments in Phase 3, which is where a
+         *     nested page would belong if one is ever needed.
+         *
+         *     v1 tie-breaks equal `event_timestamp`s on `created_at`, which is not unique
+         *     and so cannot carry a cursor; v2 tie-breaks on the entry id, which orders
+         *     identically for rows created in sequence.
+         */
+        get: operations["list_timeline_page_api_v2_opportunities__opportunity_id__timeline_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/notes/{note_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Note Versions Page
+         * @description Oldest version first, as v1 has it: revision history reads forwards.
+         */
+        get: operations["list_note_versions_page_api_v2_notes__note_id__versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Notifications Page
+         * @description The v1 list in the v2 envelope, unread-only exactly as v1 is.
+         *
+         *     Read notifications staying visible is the notifications rework (milestone
+         *     1.7, `docs/REVIEW.md` H2), which needs the `read_at`/`grouped_key` columns
+         *     this endpoint does not have yet. Changing the rows it returns here would
+         *     make that milestone's behaviour change invisible — the version boundary
+         *     carries the response *shape*, not the feature.
+         */
+        get: operations["list_notifications_page_api_v2_notifications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -820,6 +982,55 @@ export interface components {
             stage?: ("Prospecting" | "Qualification" | "Needs Analysis" | "Proposal" | "Negotiation" | "Closed Won" | "Closed Lost") | null;
             /** Expected Close Date */
             expected_close_date?: string | null;
+        };
+        /** Page[AuditLogEntryPublic] */
+        Page_AuditLogEntryPublic_: {
+            /** Items */
+            items: components["schemas"]["AuditLogEntryPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[NoteVersionPublic] */
+        Page_NoteVersionPublic_: {
+            /** Items */
+            items: components["schemas"]["NoteVersionPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[NotificationPublic] */
+        Page_NotificationPublic_: {
+            /** Items */
+            items: components["schemas"]["NotificationPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[OpportunityPublic] */
+        Page_OpportunityPublic_: {
+            /** Items */
+            items: components["schemas"]["OpportunityPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[SharePublic] */
+        Page_SharePublic_: {
+            /** Items */
+            items: components["schemas"]["SharePublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[TimelineEntryPublic] */
+        Page_TimelineEntryPublic_: {
+            /** Items */
+            items: components["schemas"]["TimelineEntryPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[str] */
+        Page_str_: {
+            /** Items */
+            items: string[];
+            /** Next Cursor */
+            next_cursor?: string | null;
         };
         /** PasswordChangeRequest */
         PasswordChangeRequest: {
@@ -2027,6 +2238,254 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NotificationPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_opportunities_page_api_v2_opportunities_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_OpportunityPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_stages_api_v2_stages_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_str_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_shares_page_api_v2_opportunities__opportunity_id__shares_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_SharePublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_audit_log_page_api_v2_opportunities__opportunity_id__audit_log_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_AuditLogEntryPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_timeline_page_api_v2_opportunities__opportunity_id__timeline_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                type?: string | null;
+                from?: string | null;
+                to?: string | null;
+                author_id?: number | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_TimelineEntryPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_note_versions_page_api_v2_notes__note_id__versions_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                note_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_NoteVersionPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_notifications_page_api_v2_notifications_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_NotificationPublic_"];
                 };
             };
             /** @description Validation Error */

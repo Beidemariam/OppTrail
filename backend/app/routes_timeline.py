@@ -10,6 +10,7 @@ from .notification_service import (
     notify_note_comment,
     notify_shared_activity,
 )
+from .pagination import Page, PageRequest, cursor_clause, page_params, split_page
 from .permissions import (
     require_delete_permission,
     require_edit_permission,
@@ -36,6 +37,7 @@ from .soft_delete import (
 from .time_utils import utc_now
 
 router = APIRouter(tags=["timeline"])
+v2_router = APIRouter(prefix="/api/v2", tags=["timeline"])
 
 
 def comment_from_row(row: sqlite3.Row) -> CommentPublic:
@@ -140,19 +142,17 @@ def fetch_comment_context(
     return row
 
 
-@router.get(
-    "/api/opportunities/{opportunity_id}/timeline",
-    response_model=TimelineResponse,
-)
-def list_timeline(
+def timeline_filters(
     opportunity_id: int,
-    q: str | None = None,
-    type: str | None = None,
-    from_date: str | None = Query(default=None, alias="from"),
-    to_date: str | None = Query(default=None, alias="to"),
-    author_id: int | None = None,
-    user: sqlite3.Row = Depends(get_current_user),
-) -> TimelineResponse:
+    q: str | None,
+    type: str | None,
+    from_date: str | None,
+    to_date: str | None,
+    author_id: int | None,
+) -> tuple[list[str], list[object]]:
+    """The timeline's filter set, shared by the v1 and v2 list endpoints so the
+    two cannot answer the same question differently.
+    """
     where = [
         "timeline_entries.opportunity_id = ?",
         "timeline_entries.deleted_at IS NULL",
@@ -223,6 +223,77 @@ def list_timeline(
         )
         params.extend([author_id, author_id, author_id])
 
+    return where, params
+
+
+def entries_with_notes(
+    connection: sqlite3.Connection,
+    entries: list[sqlite3.Row],
+) -> list[TimelineEntryPublic]:
+    """Attach every entry's notes and each note's comments.
+
+    Three queries for the whole set rather than two per entry, so a page of
+    entries costs the same number of round trips as one.
+    """
+    entry_ids = [entry["id"] for entry in entries]
+    if not entry_ids:
+        return []
+
+    placeholders = ",".join("?" for _ in entry_ids)
+    notes = connection.execute(
+        f"""
+        SELECT notes.*, users.name AS author_name
+        FROM notes
+        JOIN users ON users.id = notes.created_by
+        WHERE notes.deleted_at IS NULL
+            AND notes.entry_id IN ({placeholders})
+        ORDER BY notes.created_at ASC, notes.id ASC
+        """,
+        entry_ids,
+    ).fetchall()
+
+    note_ids = [note["id"] for note in notes]
+    comments_by_note_id: dict[int, list[CommentPublic]] = {}
+    if note_ids:
+        note_placeholders = ",".join("?" for _ in note_ids)
+        comments = connection.execute(
+            f"""
+            SELECT comments.*, users.name AS author_name
+            FROM comments
+            JOIN users ON users.id = comments.created_by
+            WHERE comments.deleted_at IS NULL
+                AND comments.note_id IN ({note_placeholders})
+            ORDER BY comments.created_at ASC, comments.id ASC
+            """,
+            note_ids,
+        ).fetchall()
+        for comment in comments:
+            comments_by_note_id.setdefault(comment["note_id"], []).append(comment_from_row(comment))
+
+    notes_by_entry_id: dict[int, list[NotePublic]] = {}
+    for note in notes:
+        notes_by_entry_id.setdefault(note["entry_id"], []).append(
+            note_from_row(note, comments_by_note_id.get(note["id"], []))
+        )
+
+    return [entry_from_row(entry, notes_by_entry_id.get(entry["id"], [])) for entry in entries]
+
+
+@router.get(
+    "/api/opportunities/{opportunity_id}/timeline",
+    response_model=TimelineResponse,
+)
+def list_timeline(
+    opportunity_id: int,
+    q: str | None = None,
+    type: str | None = None,
+    from_date: str | None = Query(default=None, alias="from"),
+    to_date: str | None = Query(default=None, alias="to"),
+    author_id: int | None = None,
+    user: sqlite3.Row = Depends(get_current_user),
+) -> TimelineResponse:
+    where, params = timeline_filters(opportunity_id, q, type, from_date, to_date, author_id)
+
     with db_connection() as connection:
         require_opportunity_access(connection, opportunity_id, int(user["id"]))
         entries = connection.execute(
@@ -236,52 +307,62 @@ def list_timeline(
             params,
         ).fetchall()
 
-        entry_ids = [entry["id"] for entry in entries]
-        if not entry_ids:
-            return TimelineResponse(entries=[])
+        return TimelineResponse(entries=entries_with_notes(connection, entries))
 
-        placeholders = ",".join("?" for _ in entry_ids)
-        notes = connection.execute(
+
+@v2_router.get(
+    "/opportunities/{opportunity_id}/timeline",
+    response_model=Page[TimelineEntryPublic],
+)
+def list_timeline_page(
+    opportunity_id: int,
+    page: PageRequest = Depends(page_params),
+    q: str | None = None,
+    type: str | None = None,
+    from_date: str | None = Query(default=None, alias="from"),
+    to_date: str | None = Query(default=None, alias="to"),
+    author_id: int | None = None,
+    user: sqlite3.Row = Depends(get_current_user),
+) -> Page[TimelineEntryPublic]:
+    """The page unit is the entry. Its notes and comments come with it whole —
+    an entry split across two pages would be a worse shape than a long one,
+    and `docs/ROADMAP.md` puts threaded comments in Phase 3, which is where a
+    nested page would belong if one is ever needed.
+
+    v1 tie-breaks equal `event_timestamp`s on `created_at`, which is not unique
+    and so cannot carry a cursor; v2 tie-breaks on the entry id, which orders
+    identically for rows created in sequence.
+    """
+    where, params = timeline_filters(opportunity_id, q, type, from_date, to_date, author_id)
+    continuation, cursor_values = cursor_clause(
+        page,
+        "timeline_entries.event_timestamp",
+        "timeline_entries.id",
+        descending=False,
+    )
+    if continuation:
+        where.append(continuation)
+        params.extend(cursor_values)
+    params.append(page.limit + 1)
+
+    with db_connection() as connection:
+        require_opportunity_access(connection, opportunity_id, int(user["id"]))
+        rows = connection.execute(
             f"""
-            SELECT notes.*, users.name AS author_name
-            FROM notes
-            JOIN users ON users.id = notes.created_by
-            WHERE notes.deleted_at IS NULL
-                AND notes.entry_id IN ({placeholders})
-            ORDER BY notes.created_at ASC, notes.id ASC
+            SELECT timeline_entries.*, users.name AS author_name
+            FROM timeline_entries
+            LEFT JOIN users ON users.id = timeline_entries.created_by
+            WHERE {" AND ".join(where)}
+            ORDER BY timeline_entries.event_timestamp ASC, timeline_entries.id ASC
+            LIMIT ?
             """,
-            entry_ids,
+            params,
         ).fetchall()
 
-        note_ids = [note["id"] for note in notes]
-        comments_by_note_id: dict[int, list[CommentPublic]] = {}
-        if note_ids:
-            note_placeholders = ",".join("?" for _ in note_ids)
-            comments = connection.execute(
-                f"""
-                SELECT comments.*, users.name AS author_name
-                FROM comments
-                JOIN users ON users.id = comments.created_by
-                WHERE comments.deleted_at IS NULL
-                    AND comments.note_id IN ({note_placeholders})
-                ORDER BY comments.created_at ASC, comments.id ASC
-                """,
-                note_ids,
-            ).fetchall()
-            for comment in comments:
-                comments_by_note_id.setdefault(comment["note_id"], []).append(
-                    comment_from_row(comment)
-                )
-
-        notes_by_entry_id: dict[int, list[NotePublic]] = {}
-        for note in notes:
-            notes_by_entry_id.setdefault(note["entry_id"], []).append(
-                note_from_row(note, comments_by_note_id.get(note["id"], []))
-            )
-
-    return TimelineResponse(
-        entries=[entry_from_row(entry, notes_by_entry_id.get(entry["id"], [])) for entry in entries]
-    )
+        entries, next_cursor = split_page(
+            rows, page.limit, lambda row: (row["event_timestamp"], row["id"])
+        )
+        return Page(items=entries_with_notes(connection, entries), next_cursor=next_cursor)
 
 
 @router.post(
@@ -583,42 +664,83 @@ def update_note(
     return note_from_row(row, [])
 
 
+NOTE_VERSION_ROWS_SQL = """
+    SELECT note_versions.*, users.name AS editor_name
+    FROM note_versions
+    JOIN users ON users.id = note_versions.edited_by
+    WHERE note_versions.note_id = ?
+"""
+
+
+def note_version_from_row(row: sqlite3.Row) -> NoteVersionPublic:
+    return NoteVersionPublic(
+        id=row["id"],
+        note_id=row["note_id"],
+        version_number=row["version_number"],
+        body=row["body"],
+        edited_by=row["edited_by"],
+        editor_name=row["editor_name"],
+        created_at=row["created_at"],
+    )
+
+
+def require_note_access(connection: sqlite3.Connection, note_id: int, user_id: int) -> None:
+    note = fetch_note_context(connection, note_id)
+    if not note:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Note not found",
+        )
+    require_opportunity_access(connection, note["opportunity_id"], user_id)
+
+
 @router.get("/api/notes/{note_id}/versions", response_model=list[NoteVersionPublic])
 def list_note_versions(
     note_id: int,
     user: sqlite3.Row = Depends(get_current_user),
 ) -> list[NoteVersionPublic]:
     with db_connection() as connection:
-        note = fetch_note_context(connection, note_id)
-        if not note:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Note not found",
-            )
-        require_opportunity_access(connection, note["opportunity_id"], int(user["id"]))
+        require_note_access(connection, note_id, int(user["id"]))
         rows = connection.execute(
-            """
-            SELECT note_versions.*, users.name AS editor_name
-            FROM note_versions
-            JOIN users ON users.id = note_versions.edited_by
-            WHERE note_versions.note_id = ?
+            f"""
+            {NOTE_VERSION_ROWS_SQL}
             ORDER BY note_versions.version_number ASC
             """,
             (note_id,),
         ).fetchall()
 
-    return [
-        NoteVersionPublic(
-            id=row["id"],
-            note_id=row["note_id"],
-            version_number=row["version_number"],
-            body=row["body"],
-            edited_by=row["edited_by"],
-            editor_name=row["editor_name"],
-            created_at=row["created_at"],
-        )
-        for row in rows
-    ]
+    return [note_version_from_row(row) for row in rows]
+
+
+@v2_router.get("/notes/{note_id}/versions", response_model=Page[NoteVersionPublic])
+def list_note_versions_page(
+    note_id: int,
+    page: PageRequest = Depends(page_params),
+    user: sqlite3.Row = Depends(get_current_user),
+) -> Page[NoteVersionPublic]:
+    """Oldest version first, as v1 has it: revision history reads forwards."""
+    continuation, cursor_values = cursor_clause(
+        page,
+        "note_versions.version_number",
+        "note_versions.id",
+        descending=False,
+    )
+    params: list[object] = [note_id, *cursor_values, page.limit + 1]
+
+    with db_connection() as connection:
+        require_note_access(connection, note_id, int(user["id"]))
+        rows = connection.execute(
+            f"""
+            {NOTE_VERSION_ROWS_SQL}
+            {f"AND {continuation}" if continuation else ""}
+            ORDER BY note_versions.version_number ASC, note_versions.id ASC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+
+    rows, next_cursor = split_page(rows, page.limit, lambda row: (row["version_number"], row["id"]))
+    return Page(items=[note_version_from_row(row) for row in rows], next_cursor=next_cursor)
 
 
 @router.delete("/api/notes/{note_id}", status_code=status.HTTP_204_NO_CONTENT)
