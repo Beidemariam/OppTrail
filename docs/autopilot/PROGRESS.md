@@ -332,10 +332,11 @@ deferred to the host per the split gate (brief §3.4), unchanged.
       Invalidation on logout was already true and is now pinned by
       `test_logout_deletes_the_session_row`.
 - [x] Invalidation on password change, via a new `POST /api/auth/password`
-      (**D-018**, **needs human review: Y** — a new endpoint in a phase whose
-      brief text says no new user-facing features; the §4.5 requirement names it
-      explicitly and there is nothing else to test invalidation against). Every
-      session of that user is deleted and the caller is re-issued one.
+      (**D-018** — **resolved 2026-09-17: the human ruled keep it**). Every
+      session of that user is deleted and the caller is re-issued one. The
+      §4.5 requirement outranks §4's no-new-features line here; the route is
+      backend-only, so the account-settings UI that calls it belongs to a
+      later phase and is not a debt against Phase F.
 - [x] Rate limiting on login/signup: `app/rate_limit.py`, sliding window keyed
       by source address, counted separately per endpoint, injected clock so no
       test sleeps (**D-020**). Checked before the password is verified, asserted
@@ -406,7 +407,8 @@ settings), `app/schemas.py` (`PasswordChangeRequest`), `pyproject.toml`/`uv.lock
 Frontend: `app/page.tsx` (CSRF header in `apiRequest`, `canChangeItem`/`canEdit`),
 regenerated `lib/api-types.ts`. Docs: `CLAUDE.md` (Permissions rewritten, new
 Request security section), `.env.example` (three new variables, documented).
-Decisions: **D-017**-**D-023**; **D-018** is flagged needs-human-review.
+Decisions: **D-017**-**D-023**; **D-018** was flagged needs-human-review and
+was resolved 2026-09-17 (human ruled: keep the endpoint).
 Gate: `make check` green — ruff, `ruff format --check`, `mypy --strict`, frontend
 typecheck/lint, API-contract check, `pip-audit` and `npm audit` both clean, and
 129 backend tests at 95.46% combined coverage against the 90% floor. Docker build
