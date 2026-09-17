@@ -222,7 +222,12 @@ def test_ai_answer_normalization_removes_markdown_bold_markers() -> None:
     assert normalize_ai_answer(answer) == "- Account: Acme\n- Value: USD 25000"
 
 
-def test_build_timeline_context_reports_a_missing_opportunity() -> None:
+def test_build_timeline_context_reports_a_missing_opportunity(client: TestClient) -> None:
+    # The `client` fixture's only job here is to initialize a database at
+    # `settings.database_url` isolated to this test — this test issues no HTTP
+    # requests. Without it, this test only passed by relying on whatever
+    # database an earlier test in the run happened to leave initialized at
+    # that path, an order dependence brief §6.5 forbids.
     with db_connection() as connection:
         context, entry_ids = ai_service.build_timeline_context(connection, 999999)
 

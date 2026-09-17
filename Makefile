@@ -28,6 +28,7 @@ check-fast: frontend-deps
 	cd backend && uv run mypy app tools
 	cd frontend && npm run typecheck
 	cd frontend && npm run lint
+	cd frontend && npx prettier . --check
 	cd backend && uv run pytest -q --cov=app --cov-branch --cov-report=term-missing --cov-fail-under=90
 	cd frontend && npm run test:coverage
 	./scripts/generate-api-client.sh --check

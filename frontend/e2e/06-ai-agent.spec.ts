@@ -1,5 +1,13 @@
 import { expect, test } from "@playwright/test";
-import { ALEX, DANA, NORTHWIND, apiSignIn, csrfToken, openTimeline, signIn } from "./helpers";
+import {
+  ALEX,
+  DANA,
+  NORTHWIND,
+  apiSignIn,
+  csrfToken,
+  openTimeline,
+  signIn,
+} from "./helpers";
 
 /**
  * Critical journey 12 (brief §6.3), adapted.
@@ -24,14 +32,20 @@ test("the AI panel surfaces a service failure instead of silently swallowing it"
   await openTimeline(page, NORTHWIND);
 
   const sidebar = page.locator(".ai-sidebar");
-  await expect(sidebar.getByRole("heading", { name: "AI Agent" })).toBeVisible();
+  await expect(
+    sidebar.getByRole("heading", { name: "AI Agent" }),
+  ).toBeVisible();
   await expect(sidebar.getByText("Read-only")).toBeVisible();
 
-  await sidebar.getByPlaceholder("Where do we stand?").fill("What is the current state?");
+  await sidebar
+    .getByPlaceholder("Where do we stand?")
+    .fill("What is the current state?");
   await sidebar.getByRole("button", { name: "Ask" }).click();
 
   await expect(sidebar.locator(".error")).toBeVisible();
-  await expect(sidebar.locator(".error")).toContainText(/OPENAI_API_KEY|unavailable/i);
+  await expect(sidebar.locator(".error")).toContainText(
+    /OPENAI_API_KEY|unavailable/i,
+  );
 });
 
 test("a user without access cannot reach the agent for that opportunity", async ({
@@ -48,10 +62,13 @@ test("a user without access cannot reach the agent for that opportunity", async 
 
   await apiSignIn(request, DANA);
 
-  const asked = await request.post(`/api/opportunities/${opportunityId}/ai/ask`, {
-    data: { question: "Summarise everything you know about this account." },
-    headers: { "X-CSRF-Token": await csrfToken(request) },
-  });
+  const asked = await request.post(
+    `/api/opportunities/${opportunityId}/ai/ask`,
+    {
+      data: { question: "Summarise everything you know about this account." },
+      headers: { "X-CSRF-Token": await csrfToken(request) },
+    },
+  );
 
   // Whatever the answer is, it must carry nothing about the opportunity. The
   // exact code — 404 rather than 403, so existence does not leak — is pinned by

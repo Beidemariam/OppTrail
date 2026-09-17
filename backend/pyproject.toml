@@ -5,11 +5,10 @@ description = "FastAPI backend for OppTrail"
 requires-python = ">=3.13"
 dependencies = [
     "alembic>=1.20.0",
-    "bcrypt<5",
+    "bcrypt>=4.0",
     "fastapi>=0.116.0",
     "nh3>=0.3.7",
     "openai>=3.8.0",
-    "passlib[bcrypt]>=1.7.4",
     "pydantic-settings>=2.10.0",
     "uvicorn[standard]>=0.35.0",
     "weasyprint>=70.0",
@@ -48,5 +47,5 @@ disallow_untyped_defs = true
 files = ["app", "tools"]
 
 [[tool.mypy.overrides]]
-module = ["passlib.*", "weasyprint.*"]
+module = ["weasyprint.*"]
 ignore_missing_imports = true

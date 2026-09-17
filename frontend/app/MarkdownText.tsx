@@ -14,7 +14,13 @@ export const markdownSanitizeSchema = {
   ...defaultSchema,
   attributes: {
     ...defaultSchema.attributes,
-    a: [...(defaultSchema.attributes?.a ?? []), "href", "title", "target", "rel"],
+    a: [
+      ...(defaultSchema.attributes?.a ?? []),
+      "href",
+      "title",
+      "target",
+      "rel",
+    ],
   },
   protocols: {
     ...defaultSchema.protocols,

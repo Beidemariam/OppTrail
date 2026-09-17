@@ -2,8 +2,8 @@ import secrets
 import sqlite3
 from datetime import UTC, datetime, timedelta
 
+import bcrypt
 from fastapi import Cookie, HTTPException, Response, status
-from passlib.context import CryptContext
 
 from .database import db_connection
 from .security import CSRF_COOKIE_NAME, cookies_are_secure, new_csrf_token
@@ -11,7 +11,6 @@ from .time_utils import to_canonical, utc_now
 
 SESSION_COOKIE_NAME = "opptrail_session"
 SESSION_DAYS = 7
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def normalize_email(email: str) -> str:
@@ -19,13 +18,11 @@ def normalize_email(email: str) -> str:
 
 
 def hash_password(password: str) -> str:
-    hashed: str = pwd_context.hash(password)
-    return hashed
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    is_valid: bool = pwd_context.verify(password, password_hash)
-    return is_valid
+    return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
 
 
 def create_session(response: Response, user_id: int, previous_session_id: str | None) -> None:
@@ -40,6 +37,9 @@ def create_session(response: Response, user_id: int, previous_session_id: str | 
     expires_at = datetime.now(UTC) + timedelta(days=SESSION_DAYS)
 
     with db_connection() as connection:
+        # There is no background worker to sweep expired rows (ADR 0011), so
+        # every new login clears out what has lapsed since the last one.
+        connection.execute("DELETE FROM sessions WHERE expires_at <= ?", (utc_now(),))
         if previous_session_id:
             connection.execute("DELETE FROM sessions WHERE id = ?", (previous_session_id,))
         connection.execute(

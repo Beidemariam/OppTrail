@@ -1,5 +1,11 @@
 import { expect, test } from "@playwright/test";
-import { entry, entryForm, openTimeline, opportunityForm, signUp } from "./helpers";
+import {
+  entry,
+  entryForm,
+  openTimeline,
+  opportunityForm,
+  signUp,
+} from "./helpers";
 
 /**
  * Critical journey 3 (brief §6.3): edit a note, see the edit marker, and find
@@ -11,7 +17,9 @@ import { entry, entryForm, openTimeline, opportunityForm, signUp } from "./helpe
  * not. That gap is recorded in the Phase F review packet rather than closed
  * here: brief §4 rules out new user-facing features in this phase.
  */
-test("editing a note marks it as edited and keeps the previous version", async ({ page }) => {
+test("editing a note marks it as edited and keeps the previous version", async ({
+  page,
+}) => {
   const suffix = Math.random().toString(36).slice(2, 8);
   const opportunity = `History ${suffix}`;
 
@@ -26,10 +34,14 @@ test("editing a note marks it as edited and keeps the previous version", async (
 
   await entryForm(page).getByLabel("Title").fill("Pricing conversation");
   await entryForm(page).getByRole("button", { name: "Add Entry" }).click();
-  await expect(page.getByRole("heading", { name: "Pricing conversation" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Pricing conversation" }),
+  ).toBeVisible();
 
   const pricing = entry(page, "Pricing conversation");
-  await pricing.getByPlaceholder("Add note").fill("First draft of the pricing summary.");
+  await pricing
+    .getByPlaceholder("Add note")
+    .fill("First draft of the pricing summary.");
   await pricing.getByRole("button", { name: "Add Note" }).click();
 
   // Addressed by position, not by its text: the text is about to change, and a
@@ -54,11 +66,15 @@ test("editing a note marks it as edited and keeps the previous version", async (
   expect(timeline.ok()).toBeTruthy();
   const noteId = (await timeline.json()).entries
     .flatMap((entry: { notes: { id: number; body: string }[] }) => entry.notes)
-    .find((candidate: { body: string }) => candidate.body.includes("Second draft")).id;
+    .find((candidate: { body: string }) =>
+      candidate.body.includes("Second draft"),
+    ).id;
 
   const versions = await page.request.get(`/api/notes/${noteId}/versions`);
   expect(versions.ok()).toBeTruthy();
-  const bodies = (await versions.json()).map((version: { body: string }) => version.body);
+  const bodies = (await versions.json()).map(
+    (version: { body: string }) => version.body,
+  );
   expect(bodies).toEqual([
     "First draft of the pricing summary.",
     "Second draft, with the 8% discount.",
@@ -66,7 +82,11 @@ test("editing a note marks it as edited and keeps the previous version", async (
 });
 
 /** The id of the opportunity whose timeline is currently open. */
-async function opportunityId(page: import("@playwright/test").Page): Promise<number> {
-  const href = await page.locator(".export-actions a", { hasText: "JSON" }).getAttribute("href");
+async function opportunityId(
+  page: import("@playwright/test").Page,
+): Promise<number> {
+  const href = await page
+    .locator(".export-actions a", { hasText: "JSON" })
+    .getAttribute("href");
   return Number(href!.split("/")[3]);
 }

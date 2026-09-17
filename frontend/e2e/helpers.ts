@@ -15,8 +15,13 @@ export async function signIn(page: Page, email: string) {
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(DEMO_PASSWORD);
-  await page.getByRole("button", { name: "Sign in", exact: true }).last().click();
-  await expect(page.getByRole("heading", { name: "Opportunities" })).toBeVisible();
+  await page
+    .getByRole("button", { name: "Sign in", exact: true })
+    .last()
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Opportunities" }),
+  ).toBeVisible();
 }
 
 export async function signUp(page: Page, email: string, name: string) {
@@ -26,7 +31,9 @@ export async function signUp(page: Page, email: string, name: string) {
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(DEMO_PASSWORD);
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("heading", { name: "Opportunities" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Opportunities" }),
+  ).toBeVisible();
 }
 
 export async function signOut(page: Page) {
@@ -49,17 +56,25 @@ export function entryForm(page: Page) {
 
 /** The card for one opportunity on the stage board. */
 export function card(page: Page, name: string) {
-  return page.locator("article.opportunity-card").filter({ hasText: name }).first();
+  return page
+    .locator("article.opportunity-card")
+    .filter({ hasText: name })
+    .first();
 }
 
 /** One timeline entry, addressed by its title. */
 export function entry(page: Page, title: string) {
-  return page.locator("article.timeline-entry").filter({ hasText: title }).first();
+  return page
+    .locator("article.timeline-entry")
+    .filter({ hasText: title })
+    .first();
 }
 
 export async function openTimeline(page: Page, name: string) {
   await card(page, name).getByRole("button", { name: "Timeline" }).click();
-  await expect(page.locator(".timeline-panel").getByRole("heading", { name })).toBeVisible();
+  await expect(
+    page.locator(".timeline-panel").getByRole("heading", { name }),
+  ).toBeVisible();
 }
 
 /**
@@ -81,8 +96,13 @@ export async function apiSignIn(request: APIRequestContext, email: string) {
 export async function csrfToken(request: APIRequestContext) {
   await request.get("/api/health");
   const state = await request.storageState();
-  const cookie = state.cookies.find((candidate) => candidate.name === "opptrail_csrf");
-  expect(cookie, "the app must issue a CSRF cookie on a safe request").toBeDefined();
+  const cookie = state.cookies.find(
+    (candidate) => candidate.name === "opptrail_csrf",
+  );
+  expect(
+    cookie,
+    "the app must issue a CSRF cookie on a safe request",
+  ).toBeDefined();
   return cookie!.value;
 }
 
@@ -127,9 +147,14 @@ async function auditPage(page: Page): Promise<ReportedViolation[]> {
  * WCAG 2.1 AA is the target in brief §8; axe asserts the machine-checkable
  * part of it, which is what can be gated automatically.
  */
-export async function expectNoAccessibilityViolations(page: Page, context: string) {
+export async function expectNoAccessibilityViolations(
+  page: Page,
+  context: string,
+) {
   const violations = await auditPage(page);
-  const unexpected = violations.filter((violation) => !DEFERRED_AXE_RULES.has(violation.id));
+  const unexpected = violations.filter(
+    (violation) => !DEFERRED_AXE_RULES.has(violation.id),
+  );
 
   expect(unexpected, `axe violations on ${context}`).toEqual([]);
 }

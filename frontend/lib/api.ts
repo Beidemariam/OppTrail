@@ -15,11 +15,16 @@ export const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
  * cookie stays HttpOnly.
  */
 export function csrfToken(): string {
-  const match = document.cookie.match(new RegExp(`(?:^|; )${CSRF_COOKIE_NAME}=([^;]*)`));
+  const match = document.cookie.match(
+    new RegExp(`(?:^|; )${CSRF_COOKIE_NAME}=([^;]*)`),
+  );
   return match ? decodeURIComponent(match[1]) : "";
 }
 
-export async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+export async function apiRequest<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
   const method = (options.method ?? "GET").toUpperCase();
   const response = await fetch(path, {
     ...options,
@@ -32,8 +37,12 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}): Pr
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: "Request failed" }));
-    throw new Error(typeof error.detail === "string" ? error.detail : "Request failed");
+    const error = await response
+      .json()
+      .catch(() => ({ detail: "Request failed" }));
+    throw new Error(
+      typeof error.detail === "string" ? error.detail : "Request failed",
+    );
   }
 
   if (response.status === 204) {

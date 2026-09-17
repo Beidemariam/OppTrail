@@ -11,7 +11,9 @@ import {
  * Critical journey 1 (brief §6.3): sign up, create an opportunity, add typed
  * entries, change the stage, and see the system entry the change generates.
  */
-test("sign up, create an opportunity, add entries, change stage", async ({ page }) => {
+test("sign up, create an opportunity, add entries, change stage", async ({
+  page,
+}) => {
   const suffix = Math.random().toString(36).slice(2, 8);
   const opportunity = `Lifecycle ${suffix}`;
 
@@ -29,7 +31,9 @@ test("sign up, create an opportunity, add entries, change stage", async ({ page 
   await form.getByLabel("Stage").selectOption("Prospecting");
   await form.getByRole("button", { name: "Create opportunity" }).click();
 
-  await expect(page.locator("article.opportunity-card").filter({ hasText: opportunity })).toBeVisible();
+  await expect(
+    page.locator("article.opportunity-card").filter({ hasText: opportunity }),
+  ).toBeVisible();
 
   await openTimeline(page, opportunity);
 
@@ -44,7 +48,9 @@ test("sign up, create an opportunity, add entries, change stage", async ({ page 
   ] as const) {
     await entryForm(page).getByLabel("Type").selectOption({ label: type });
     await entryForm(page).getByLabel("Title").fill(title);
-    await entryForm(page).getByLabel("Body").fill(`Notes from the ${title.toLowerCase()}.`);
+    await entryForm(page)
+      .getByLabel("Body")
+      .fill(`Notes from the ${title.toLowerCase()}.`);
     await entryForm(page).getByRole("button", { name: "Add Entry" }).click();
     await expect(timeline.getByRole("heading", { name: title })).toBeVisible();
   }
@@ -58,7 +64,9 @@ test("sign up, create an opportunity, add entries, change stage", async ({ page 
     .getByRole("button", { name: "Edit" })
     .click();
   await opportunityForm(page).getByLabel("Stage").selectOption("Proposal");
-  await opportunityForm(page).getByRole("button", { name: "Save changes" }).click();
+  await opportunityForm(page)
+    .getByRole("button", { name: "Save changes" })
+    .click();
 
   await openTimeline(page, opportunity);
   const systemEntry = timeline
@@ -66,8 +74,12 @@ test("sign up, create an opportunity, add entries, change stage", async ({ page 
     .filter({ hasText: "Stage changed to Proposal" });
   await expect(systemEntry).toBeVisible();
   await expect(systemEntry.getByText("System")).toBeVisible();
-  await expect(systemEntry.getByRole("button", { name: "Edit" })).toHaveCount(0);
-  await expect(systemEntry.getByRole("button", { name: "Delete" })).toHaveCount(0);
+  await expect(systemEntry.getByRole("button", { name: "Edit" })).toHaveCount(
+    0,
+  );
+  await expect(systemEntry.getByRole("button", { name: "Delete" })).toHaveCount(
+    0,
+  );
 
   await expectNoAccessibilityViolations(page, "timeline with entries");
 });

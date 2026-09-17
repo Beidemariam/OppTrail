@@ -392,3 +392,36 @@ added in the phases that build them.
 
 Coverage moved 96.22% → 96.35% on the backend while the codebase grew
 1465 → 1472 statements, and 0% → 86.81% on the frontend.
+
+## F.8 — Gap-analysis fixes not covered above
+
+No new production code paths — this milestone is fixes and cleanup, not
+features — so coverage is reported to show it did not regress, not to show
+growth.
+
+```
+190 passed
+TOTAL   1469 stmts   30 miss   96% line   96%-line-branch combined coverage
+Required test coverage of 90% reached. Total coverage: 96.46%
+```
+
+Frontend, after the repository-wide Prettier reformat (whitespace-only, no
+statements added or removed):
+
+```
+Test Files  6 passed (6)
+     Tests  80 passed (80)
+Statements : 87.09% ( 405/465 )
+Branches   : 79.29% ( 226/285 )
+Functions  : 88.33% ( 106/120 )
+Lines      : 86.87% ( 397/457 )
+```
+
+Unchanged from F.7's measurement to three significant figures — expected,
+since no `app/`/`lib/` behavior changed, only formatting.
+
+One new test (`test_login_purges_expired_sessions`, `tests/test_auth.py`)
+covers the new sweep in `auth.create_session`; one existing test
+(`test_ai.py::test_build_timeline_context_reports_a_missing_opportunity`)
+gained the `client` fixture it should always have had, which is a
+test-isolation fix, not new coverage.

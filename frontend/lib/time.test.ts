@@ -11,14 +11,20 @@ import {
 
 describe("parseTimestamp", () => {
   it("reads the canonical fixed-width UTC format the API returns", () => {
-    expect(parseTimestamp("2026-09-06T14:30:00Z").toISOString()).toBe("2026-09-06T14:30:00.000Z");
+    expect(parseTimestamp("2026-09-06T14:30:00Z").toISOString()).toBe(
+      "2026-09-06T14:30:00.000Z",
+    );
   });
 
   it("treats a value with no zone as UTC rather than local", () => {
     // SQLite rows written before the canonical format existed look like this.
     // Reading them as local time would shift the whole timeline by the offset.
-    expect(parseTimestamp("2026-09-06 14:30:00").toISOString()).toBe("2026-09-06T14:30:00.000Z");
-    expect(parseTimestamp("2026-09-06T14:30:00").toISOString()).toBe("2026-09-06T14:30:00.000Z");
+    expect(parseTimestamp("2026-09-06 14:30:00").toISOString()).toBe(
+      "2026-09-06T14:30:00.000Z",
+    );
+    expect(parseTimestamp("2026-09-06T14:30:00").toISOString()).toBe(
+      "2026-09-06T14:30:00.000Z",
+    );
   });
 
   it("keeps an explicit offset instead of overriding it", () => {
@@ -31,12 +37,16 @@ describe("parseTimestamp", () => {
 describe("toLocalInput", () => {
   it("renders a datetime-local value in the browser's zone", () => {
     // 14:30 UTC is 10:30 in America/New_York during daylight saving time.
-    expect(toLocalInput(new Date("2026-09-06T14:30:00Z"))).toBe("2026-09-06T10:30");
+    expect(toLocalInput(new Date("2026-09-06T14:30:00Z"))).toBe(
+      "2026-09-06T10:30",
+    );
   });
 
   it("follows the zone across a daylight-saving boundary", () => {
     // Five hours behind UTC in January, four in September.
-    expect(toLocalInput(new Date("2026-01-06T14:30:00Z"))).toBe("2026-01-06T09:30");
+    expect(toLocalInput(new Date("2026-01-06T14:30:00Z"))).toBe(
+      "2026-01-06T09:30",
+    );
   });
 });
 

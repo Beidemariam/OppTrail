@@ -4,7 +4,10 @@ import { notificationText } from "./notifications";
 
 type Notification = Parameters<typeof notificationText>[0];
 
-function notification(type: string, payload: Record<string, unknown> = {}): Notification {
+function notification(
+  type: string,
+  payload: Record<string, unknown> = {},
+): Notification {
   return {
     id: 1,
     type,
@@ -26,21 +29,25 @@ describe("notificationText", () => {
   });
 
   it("uses the entry title for shared activity when there is one", () => {
-    expect(notificationText(notification("shared_activity", { title: "Proposal sent" }))).toBe(
-      "Proposal sent",
-    );
+    expect(
+      notificationText(
+        notification("shared_activity", { title: "Proposal sent" }),
+      ),
+    ).toBe("Proposal sent");
   });
 
   it("falls back when shared activity carries no title", () => {
     expect(notificationText(notification("shared_activity", {}))).toBe(
       "New activity on a shared opportunity.",
     );
-    expect(notificationText(notification("shared_activity", { title: "" }))).toBe(
-      "New activity on a shared opportunity.",
-    );
+    expect(
+      notificationText(notification("shared_activity", { title: "" })),
+    ).toBe("New activity on a shared opportunity.");
   });
 
   it("says something rather than nothing for a type it does not know", () => {
-    expect(notificationText(notification("invented_later"))).toBe("New notification.");
+    expect(notificationText(notification("invented_later"))).toBe(
+      "New notification.",
+    );
   });
 });

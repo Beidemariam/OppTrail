@@ -15,7 +15,9 @@ import {
  * upgrade to editor and verify the editor can add and edit their own note but
  * still cannot edit a comment — comments are immutable to everyone (§2.2).
  */
-test("viewer is read-only, editor can write, comments stay immutable", async ({ page }) => {
+test("viewer is read-only, editor can write, comments stay immutable", async ({
+  page,
+}) => {
   const suffix = Math.random().toString(36).slice(2, 8);
   const ownerEmail = `share-owner-${suffix}@opptrail.test`;
   const guestEmail = `share-guest-${suffix}@opptrail.test`;
@@ -46,14 +48,18 @@ test("viewer is read-only, editor can write, comments stay immutable", async ({ 
   await page.getByPlaceholder("Colleague email").fill(guestEmail);
   await page.locator("form.share-form select").selectOption("viewer");
   await page.getByRole("button", { name: "Share", exact: true }).click();
-  await expect(page.locator(".share-row").filter({ hasText: guestEmail })).toBeVisible();
+  await expect(
+    page.locator(".share-row").filter({ hasText: guestEmail }),
+  ).toBeVisible();
   await signOut(page);
 
   // --- As a viewer: everything readable, nothing writable ---------------
   await signIn(page, guestEmail);
   await expect(card(page, opportunity)).toBeVisible();
   await expect(card(page, opportunity).getByText("viewer")).toBeVisible();
-  await expect(card(page, opportunity).getByRole("button", { name: "Delete" })).toHaveCount(0);
+  await expect(
+    card(page, opportunity).getByRole("button", { name: "Delete" }),
+  ).toHaveCount(0);
 
   await openTimeline(page, opportunity);
   await expect(page.getByText("Owner's note")).toBeVisible();
@@ -67,8 +73,17 @@ test("viewer is read-only, editor can write, comments stay immutable", async ({ 
   // --- Upgrade to editor ------------------------------------------------
   await signIn(page, ownerEmail);
   await openTimeline(page, opportunity);
-  await page.locator(".share-row").filter({ hasText: guestEmail }).locator("select").selectOption("editor");
-  await expect(page.locator(".share-row").filter({ hasText: guestEmail }).locator("select")).toHaveValue("editor");
+  await page
+    .locator(".share-row")
+    .filter({ hasText: guestEmail })
+    .locator("select")
+    .selectOption("editor");
+  await expect(
+    page
+      .locator(".share-row")
+      .filter({ hasText: guestEmail })
+      .locator("select"),
+  ).toHaveValue("editor");
   await signOut(page);
 
   // --- As an editor: can add, can change only their own ------------------
@@ -78,18 +93,26 @@ test("viewer is read-only, editor can write, comments stay immutable", async ({ 
   const editorEntry = entry(page, "Kickoff");
   await editorEntry.getByPlaceholder("Add note").fill("Editor's own note");
   await editorEntry.getByRole("button", { name: "Add Note" }).click();
-  const editorNote = page.locator("section.note-block").filter({ hasText: "Editor's own note" });
+  const editorNote = page
+    .locator("section.note-block")
+    .filter({ hasText: "Editor's own note" });
   await expect(editorNote).toBeVisible();
   await expect(editorNote.getByRole("button", { name: "Edit" })).toBeVisible();
 
   // The owner's note is not the editor's to change (D-005).
-  const ownersNote = page.locator("section.note-block").filter({ hasText: "Owner's note" });
+  const ownersNote = page
+    .locator("section.note-block")
+    .filter({ hasText: "Owner's note" });
   await expect(ownersNote.getByRole("button", { name: "Edit" })).toHaveCount(0);
-  await expect(ownersNote.getByRole("button", { name: "Delete" })).toHaveCount(0);
+  await expect(ownersNote.getByRole("button", { name: "Delete" })).toHaveCount(
+    0,
+  );
 
   await editorNote.getByPlaceholder("Add comment").fill("Editor's comment");
   await editorNote.getByRole("button", { name: "Post" }).click();
-  const comment = editorNote.locator(".comment-row").filter({ hasText: "Editor's comment" });
+  const comment = editorNote
+    .locator(".comment-row")
+    .filter({ hasText: "Editor's comment" });
   await expect(comment).toBeVisible();
 
   // A comment can be removed by its author but never edited, by anyone.

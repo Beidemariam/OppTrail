@@ -24,7 +24,9 @@ test("the dashboard is accessible", async ({ page }) => {
   await expectNoAccessibilityViolations(page, "dashboard");
 });
 
-test("the timeline, sharing panel and AI sidebar are accessible", async ({ page }) => {
+test("the timeline, sharing panel and AI sidebar are accessible", async ({
+  page,
+}) => {
   await signIn(page, ALEX);
   await openTimeline(page, NORTHWIND);
   await expectNoAccessibilityViolations(page, "timeline panel");

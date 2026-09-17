@@ -5,9 +5,13 @@ import { MarkdownText } from "./MarkdownText";
 
 describe("MarkdownText", () => {
   it("renders Markdown rather than raw text", () => {
-    const { container } = render(<MarkdownText content={"# Heading\n\n**bold** and `code`"} />);
+    const { container } = render(
+      <MarkdownText content={"# Heading\n\n**bold** and `code`"} />,
+    );
 
-    expect(screen.getByRole("heading", { name: "Heading" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Heading" }),
+    ).toBeInTheDocument();
     expect(container.querySelector("strong")).toHaveTextContent("bold");
     expect(container.querySelector("code")).toHaveTextContent("code");
   });
@@ -23,10 +27,14 @@ describe("MarkdownText", () => {
 
   it("keeps links on the allowed protocols", () => {
     const { container } = render(
-      <MarkdownText content={"[web](https://example.com) [mail](mailto:a@example.com)"} />,
+      <MarkdownText
+        content={"[web](https://example.com) [mail](mailto:a@example.com)"}
+      />,
     );
 
-    const hrefs = [...container.querySelectorAll("a")].map((anchor) => anchor.getAttribute("href"));
+    const hrefs = [...container.querySelectorAll("a")].map((anchor) =>
+      anchor.getAttribute("href"),
+    );
     expect(hrefs).toEqual(["https://example.com", "mailto:a@example.com"]);
   });
 
@@ -42,7 +50,9 @@ describe("MarkdownText", () => {
 
   it("drops embedded HTML instead of rendering it", () => {
     const { container } = render(
-      <MarkdownText content={'<img src=x onerror="alert(1)"><script>alert(1)</script>'} />,
+      <MarkdownText
+        content={'<img src=x onerror="alert(1)"><script>alert(1)</script>'}
+      />,
     );
 
     expect(container.querySelector("script")).toBeNull();
@@ -50,7 +60,9 @@ describe("MarkdownText", () => {
   });
 
   it("opens external links in a new tab without handing over the opener", () => {
-    const { container } = render(<MarkdownText content={"[web](https://example.com)"} />);
+    const { container } = render(
+      <MarkdownText content={"[web](https://example.com)"} />,
+    );
     const anchor = container.querySelector("a");
 
     expect(anchor).toHaveAttribute("target", "_blank");

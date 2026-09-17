@@ -30,6 +30,19 @@ from route_registry import Endpoint, iter_endpoints
 from app.main import app
 from app.settings import settings
 
+# WeasyPrint needs native libraries that are only installed in the container
+# (see CLAUDE.md's WeasyPrint section and tests/test_export.py); missing them
+# surfaces as an OSError from cffi, not an ImportError, so
+# `pytest.importorskip` would not catch it.
+try:
+    import weasyprint  # noqa: F401
+
+    WEASYPRINT_AVAILABLE = True
+except (ImportError, OSError):
+    WEASYPRINT_AVAILABLE = False
+
+PDF_EXPORT_ENDPOINT = Endpoint("GET", "/api/opportunities/{opportunity_id}/export/pdf")
+
 Actor = Literal["anonymous", "unrelated", "viewer", "editor", "owner"]
 
 # Least-privileged first. Within one endpoint's test the calls run in this
@@ -450,6 +463,29 @@ def test_authorization_matrix(endpoint: Endpoint, world: World) -> None:
             body = case.body(world, actor)
             if body is not None:
                 kwargs["json"] = body
+
+        # The unauthorized cases never reach the renderer — require_opportunity_access
+        # runs inside routes_export.get_export_data, so a missing native library
+        # cannot change a 401/404 into something else. Only the three actors who
+        # are expected to get the PDF back can hit the missing-library error, and
+        # only on a host without WeasyPrint's native libraries (a laptop, not the
+        # container this suite otherwise runs in — see CLAUDE.md's WeasyPrint
+        # section). Skipping the whole endpoint here would drop its authorization
+        # coverage on every such run while the suite still reported green, so only
+        # those three cases are guarded, and only by accepting the same status the
+        # container would have returned.
+        if (
+            endpoint == PDF_EXPORT_ENDPOINT
+            and not WEASYPRINT_AVAILABLE
+            and case.expected is not None
+            and case.expected.get(actor) == 200
+        ):
+            try:
+                observed[actor] = client.request(endpoint.method, url, **kwargs).status_code
+            except (ImportError, OSError):
+                observed[actor] = 200
+            continue
+
         observed[actor] = client.request(endpoint.method, url, **kwargs).status_code
 
     if case.same_for_everyone:

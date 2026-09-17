@@ -101,10 +101,22 @@ interface AuditEntry {
   created_at: string;
 }
 
-export const ALEX = { id: 1, email: "alex@opptrail.test", name: "Alex", created_at: "2026-01-01T00:00:00Z" };
-export const BLAIR = { id: 2, email: "blair@opptrail.test", name: "Blair", created_at: "2026-01-01T00:00:00Z" };
+export const ALEX = {
+  id: 1,
+  email: "alex@opptrail.test",
+  name: "Alex",
+  created_at: "2026-01-01T00:00:00Z",
+};
+export const BLAIR = {
+  id: 2,
+  email: "blair@opptrail.test",
+  name: "Blair",
+  created_at: "2026-01-01T00:00:00Z",
+};
 
-export function anOpportunity(overrides: Partial<Opportunity> = {}): Opportunity {
+export function anOpportunity(
+  overrides: Partial<Opportunity> = {},
+): Opportunity {
   return {
     id: 10,
     name: "Northwind rollout",
@@ -215,7 +227,10 @@ export class FakeApi {
     });
   }
 
-  private async handle(path: string, options: RequestInit = {}): Promise<Response> {
+  private async handle(
+    path: string,
+    options: RequestInit = {},
+  ): Promise<Response> {
     const method = (options.method ?? "GET").toUpperCase();
     const body = options.body ? JSON.parse(options.body as string) : undefined;
     this.calls.push({ method, path, body });
@@ -234,7 +249,11 @@ export class FakeApi {
         : this.json({ detail: "Authentication required" }, 401);
     }
     if (bare === "/api/auth/login" || bare === "/api/auth/signup") {
-      this.user = this.user ?? { ...ALEX, email: body.email, name: body.name ?? ALEX.name };
+      this.user = this.user ?? {
+        ...ALEX,
+        email: body.email,
+        name: body.name ?? ALEX.name,
+      };
       return this.json({ user: this.user });
     }
     if (bare === "/api/auth/logout") {
@@ -242,7 +261,9 @@ export class FakeApi {
       return this.json({ ok: true });
     }
     if (bare === "/api/notifications") {
-      return this.json({ notifications: this.notifications.filter((item) => !item.read) });
+      return this.json({
+        notifications: this.notifications.filter((item) => !item.read),
+      });
     }
     if (segments[1] === "notifications" && method === "PATCH") {
       const id = Number(segments[2]);
@@ -254,7 +275,11 @@ export class FakeApi {
       return this.json({ stages: [], opportunities: this.opportunities });
     }
     if (bare === "/api/opportunities" && method === "POST") {
-      const created = anOpportunity({ ...body, id: this.nextId++, value: String(body.value) });
+      const created = anOpportunity({
+        ...body,
+        id: this.nextId++,
+        value: String(body.value),
+      });
       this.opportunities.push(created);
       return this.json(created, 201);
     }
@@ -262,11 +287,15 @@ export class FakeApi {
       const id = Number(segments[2]);
       if (method === "PATCH") {
         const found = this.opportunities.find((item) => item.id === id)!;
-        Object.assign(found, body, { value: String(body.value ?? found.value) });
+        Object.assign(found, body, {
+          value: String(body.value ?? found.value),
+        });
         return this.json(found);
       }
       if (method === "DELETE") {
-        this.opportunities = this.opportunities.filter((item) => item.id !== id);
+        this.opportunities = this.opportunities.filter(
+          (item) => item.id !== id,
+        );
         return new Response(null, { status: 204 });
       }
     }
@@ -312,13 +341,20 @@ export class FakeApi {
       return new Response(null, { status: 204 });
     }
     if (segments[3] === "ai") {
-      return this.json({ answer: `Answer to: ${body.question}`, referenced_entry_ids: [100] });
+      return this.json({
+        answer: `Answer to: ${body.question}`,
+        referenced_entry_ids: [100],
+      });
     }
     if (segments[1] === "timeline") {
       const entryId = Number(segments[2]);
       if (segments[3] === "notes") {
         const entry = this.entries.find((item) => item.id === entryId)!;
-        const created = aNote({ id: this.nextId++, entry_id: entryId, body: body.body });
+        const created = aNote({
+          id: this.nextId++,
+          entry_id: entryId,
+          body: body.body,
+        });
         entry.notes.push(created);
         return this.json(created, 201);
       }
@@ -337,7 +373,11 @@ export class FakeApi {
       )!;
       const note = owner.notes.find((item) => item.id === noteId)!;
       if (segments[3] === "comments") {
-        const created = aComment({ id: this.nextId++, note_id: noteId, body: body.body });
+        const created = aComment({
+          id: this.nextId++,
+          note_id: noteId,
+          body: body.body,
+        });
         note.comments.push(created);
         return this.json(created, 201);
       }
@@ -359,6 +399,9 @@ export class FakeApi {
       return new Response(null, { status: 204 });
     }
 
-    return this.json({ detail: `Unhandled in the fake API: ${method} ${path}` }, 500);
+    return this.json(
+      { detail: `Unhandled in the fake API: ${method} ${path}` },
+      500,
+    );
   }
 }

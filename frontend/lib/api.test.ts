@@ -52,7 +52,9 @@ describe("apiRequest", () => {
     document.cookie = "opptrail_csrf=abc123";
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ ok: true }));
 
-    await expect(apiRequest("/api/opportunities")).resolves.toEqual({ ok: true });
+    await expect(apiRequest("/api/opportunities")).resolves.toEqual({
+      ok: true,
+    });
     expect(lastRequestInit().credentials).toBe("include");
     expect(headerOf("X-CSRF-Token")).toBeUndefined();
   });
@@ -70,7 +72,9 @@ describe("apiRequest", () => {
 
   it("returns nothing for a 204, which the delete routes answer with", async () => {
     vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 204 }));
-    await expect(apiRequest("/api/notes/1", { method: "DELETE" })).resolves.toBeUndefined();
+    await expect(
+      apiRequest("/api/notes/1", { method: "DELETE" }),
+    ).resolves.toBeUndefined();
   });
 
   it("raises the API's own detail message so the UI can show it", async () => {
@@ -78,14 +82,18 @@ describe("apiRequest", () => {
       jsonResponse({ detail: "Viewer cannot edit this opportunity" }, 403),
     );
 
-    await expect(apiRequest("/api/timeline/1", { method: "PATCH" })).rejects.toThrow(
-      "Viewer cannot edit this opportunity",
-    );
+    await expect(
+      apiRequest("/api/timeline/1", { method: "PATCH" }),
+    ).rejects.toThrow("Viewer cannot edit this opportunity");
   });
 
   it("falls back when the error body is not JSON", async () => {
-    vi.mocked(fetch).mockResolvedValue(new Response("<html>502</html>", { status: 502 }));
-    await expect(apiRequest("/api/opportunities")).rejects.toThrow("Request failed");
+    vi.mocked(fetch).mockResolvedValue(
+      new Response("<html>502</html>", { status: 502 }),
+    );
+    await expect(apiRequest("/api/opportunities")).rejects.toThrow(
+      "Request failed",
+    );
   });
 
   it("falls back when detail is a structure rather than a sentence", async () => {
@@ -93,14 +101,16 @@ describe("apiRequest", () => {
     vi.mocked(fetch).mockResolvedValue(
       jsonResponse({ detail: [{ loc: ["body", "stage"], msg: "bad" }] }, 422),
     );
-    await expect(apiRequest("/api/opportunities", { method: "POST" })).rejects.toThrow(
-      "Request failed",
-    );
+    await expect(
+      apiRequest("/api/opportunities", { method: "POST" }),
+    ).rejects.toThrow("Request failed");
   });
 
   it("lets a caller's own headers win", async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({}));
-    await apiRequest("/api/opportunities", { headers: { "Content-Type": "text/plain" } });
+    await apiRequest("/api/opportunities", {
+      headers: { "Content-Type": "text/plain" },
+    });
     expect(headerOf("Content-Type")).toBe("text/plain");
   });
 });

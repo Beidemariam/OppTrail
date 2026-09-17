@@ -1,10 +1,10 @@
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_serializer, field_validator
 
-from .time_utils import to_canonical
+from .time_utils import parse_timestamp, to_canonical
 
 
 def canonical_timestamp(value: str) -> str:
@@ -15,7 +15,7 @@ def canonical_timestamp(value: str) -> str:
     when the dashboard tries to read it back.
     """
     try:
-        parsed = datetime.fromisoformat(value.strip().replace(" ", "T"))
+        parsed = parse_timestamp(value.strip())
     except ValueError as exc:
         raise ValueError("Enter a valid ISO-8601 timestamp") from exc
     return to_canonical(parsed)

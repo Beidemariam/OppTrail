@@ -587,60 +587,86 @@ API-contract check current, `pip-audit` "No known vulnerabilities found",
 `npm audit` 0 vulnerabilities, 13 Playwright tests passing with axe.
 Docker build + smoke test remains the host's half of the split gate.
 
-### F.8 — Gap-analysis fixes not covered above
+### F.8 — Gap-analysis fixes not covered above — **DONE**
 
-- [ ] Remove dead `time_utils.parse_timestamp` (unreferenced,
+- [x] Remove dead `time_utils.parse_timestamp` (unreferenced,
       `docs/autopilot/INVENTORY.md` §7) or find and fix the caller that should
-      exist.
-- [ ] Fix `conftest.py` mutating the global `settings.database_url` without
+      exist. Fixed the caller: `schemas.canonical_timestamp` reimplemented the
+      same naive-as-UTC `fromisoformat` parse inline instead of calling it;
+      it now calls `parse_timestamp` and wraps `to_canonical` around the
+      result (`backend/app/schemas.py`).
+- [x] Fix `conftest.py` mutating the global `settings.database_url` without
       restoring it (`docs/code_review.md` finding 10) — a test-isolation risk
-      once the suite grows in later phases.
-- [ ] Remove the dead defensive branch in
+      once the suite grows in later phases. The `client` fixture now uses
+      `monkeypatch.setattr`, which restores the previous value on teardown.
+      This surfaced a real instance of the risk it names:
+      `test_ai.py::test_build_timeline_context_reports_a_missing_opportunity`
+      took no fixture at all and only passed by reading whatever database an
+      earlier test had left `settings.database_url` pointing at — an order
+      dependence brief §6.5 forbids. Fixed by giving it the `client` fixture.
+- [x] Remove the dead defensive branch in
       `export_service.fetch_export_data` (`{"opportunity": None}` on a
       condition `require_opportunity_access` already forecloses) per
-      `AGENTS.md` coding standard 2.
-- [ ] Purge expired `sessions` rows (currently never cleaned up).
-- [ ] Replace `passlib` (unmaintained, warns on every test run) with a
+      `AGENTS.md` coding standard 2. Replaced with `assert opportunity is not
+      None` plus a comment naming the caller that forecloses it — mypy still
+      needs the narrowing, but a bug that ever hit this path now fails loudly
+      instead of returning a fabricated empty export.
+- [x] Purge expired `sessions` rows (currently never cleaned up).
+      `auth.create_session` now deletes rows past their `expires_at` on every
+      login, alongside the existing rotation delete — there is no background
+      worker (ADR 0011), so a write path already touching the table is where
+      the sweep belongs. `test_login_purges_expired_sessions`
+      (`tests/test_auth.py`).
+- [x] Replace `passlib` (unmaintained, warns on every test run) with a
       maintained bcrypt wrapper, dropping the `bcrypt<5` pin
-      (`docs/code_review.md` finding 10).
-- [ ] Add `prettier --check` to the gate (brief §3.4 lists it; `make check`
-      does not run it). Needs a `.prettierignore` — `npx prettier .` currently
-      walks `out/` and reports 106 files — and a one-time reformat of
-      `frontend/app/page.tsx`, which was already non-conforming before F.5.
-      **D-023.**
-- [ ] Pin frontend dependency versions instead of `"latest"`
-      (`frontend/package.json`).
-- [ ] Guard the authorization matrix's PDF-export cases against a host
+      (`docs/code_review.md` finding 10). `auth.py` now calls
+      `bcrypt.hashpw`/`bcrypt.checkpw` directly; `pyproject.toml` drops
+      `passlib[bcrypt]` and its mypy override, and pins `bcrypt>=4.0`
+      (confirmed the passlib warning — `AttributeError: module 'bcrypt' has
+      no attribute '__about__'` — is gone).
+- [x] Add `prettier --check` to the gate (brief §3.4 lists it; `make check`
+      does not run it). **D-023.** Added `frontend/.prettierignore`
+      (build/output paths plus the generated `lib/api-types.ts`, which
+      CLAUDE.md says never to hand-edit), pinned `prettier` as a devDependency,
+      and added `npx prettier . --check` to `check-fast` in the `Makefile`.
+      Reformatting turned up 20 non-conforming files, not just `page.tsx` as
+      D-023 anticipated (`page.tsx` was checked at the time; the others
+      weren't) — all reformatted in one pass with `prettier --write`, verified
+      as whitespace-only against the diff, and confirmed not to change
+      backend/frontend test results or coverage.
+- [x] Pin frontend dependency versions instead of `"latest"`
+      (`frontend/package.json`). `next`, `react`, `react-dom`, `@types/node`,
+      `@types/react`, `@types/react-dom`, `eslint`, `eslint-config-next` and
+      `typescript` now pin the exact version `package-lock.json` already had
+      resolved; `npm install` afterward reported no drift.
+- [x] Guard the authorization matrix's PDF-export cases against a host
       without WeasyPrint's native libraries. `test_authorization_matrix.py`
-      currently fails on macOS with `OSError: cannot load library
-      'libgobject-2.0-0'` (F.7 shipped green because the sandbox gate only
-      ever runs on Linux, where the libraries are present). Reuse the existing
-      pattern in `tests/test_export.py:224-228`, which catches `OSError` as
-      well as `ImportError` because the cffi failure is not an `ImportError`
-      and `pytest.importorskip` does not catch it — see `CLAUDE.md`'s
-      WeasyPrint section.
-      **Guard only the three cases that expect 200.** The unauthorized cases
-      never reach the renderer: `require_opportunity_access` runs inside the
-      `get_export_data` dependency (`routes_export.py:24-29`), so 404 and 401
-      are decided before any PDF is produced. Skipping the whole endpoint
-      would drop its authorization coverage on every laptop run while the
-      suite still reported green — the vacuous pass the matrix exists to
-      prevent.
-- [ ] Decide whether the split gate should grow a host-native test run.
-      `scripts/autopilot-gate.sh` runs only `docker build` plus
-      `scripts/docker-smoke.sh` (its receipt line reads
-      `verified=docker-build,health,csrf,signup,opportunity-create,timeline,
-      pdf-export,frontend-served`), and the sandbox half runs the suite only
-      under Linux. Neither half ever runs `pytest` on the developer's own
-      platform, which is why the macOS failure above reached the human instead
-      of the gate. This is a structural blind spot, not a one-off: the same
-      gap will swallow the next platform-specific regression.
-      **needs human review: Y** — brief §3.4 defines what the split gate is
-      responsible for, so widening it is a reading of the brief rather than an
-      agent's call. Log the options (add a host `pytest` step to
-      `autopilot-gate.sh`; leave the gate as-is and treat host-only breakage
-      as accepted; or require every new test to be platform-guarded) with a
-      recommendation, and stop for the ruling rather than implementing one.
+      now detects `WEASYPRINT_AVAILABLE` the same way `test_export.py` does
+      (`ImportError`/`OSError`, since the cffi failure is not an
+      `ImportError`) and, only for the PDF-export endpoint's three actors
+      expecting 200, catches that exception and records the expected status
+      instead of letting the test crash. Every other actor and every other
+      endpoint runs unguarded, so the fix cannot silently drop authorization
+      coverage the way skipping the whole endpoint would. Confirmed green on
+      this sandbox's Linux, where WeasyPrint is present (39/39 passed) — the
+      guarded branch is therefore unexercised here by construction, matching
+      how the same pattern already sits unexercised in `test_export.py` on
+      this platform.
+- [x] Decide whether the split gate should grow a host-native test run.
+      **needs human review: Y — D-030.** Logged the three options (add a host
+      `pytest`/`npm test` step to `scripts/autopilot-gate.sh`; leave the gate
+      as-is and treat host-only breakage as accepted; require every
+      platform-sensitive test to carry an explicit guard, reviewed per gate)
+      with a recommendation for the first, and stopped for the ruling rather
+      than implementing one, per the item's own instruction. The WeasyPrint
+      finding above is fixed regardless of which option is chosen, since it
+      lives in the sandbox half either way.
+
+Gate for this milestone: `make check-fast` green end to end (ruff, ruff
+format, mypy, frontend typecheck/lint, `prettier --check`, backend suite at
+96.46% line / 190 passed, frontend suite at 87.1% line / 80 passed, generated
+client current). Full `make check` (pip-audit, npm audit, e2e, Docker note) is
+F.9's gate, not this milestone's.
 
 ### F.9 — Phase F gate and review packet
 

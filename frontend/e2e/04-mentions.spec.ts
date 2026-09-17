@@ -32,14 +32,20 @@ test("mentioning a colleague notifies them", async ({ page }) => {
 
   await page.getByPlaceholder("Colleague email").fill(colleagueEmail);
   await page.getByRole("button", { name: "Share", exact: true }).click();
-  await expect(page.locator(".share-row").filter({ hasText: colleagueEmail })).toBeVisible();
+  await expect(
+    page.locator(".share-row").filter({ hasText: colleagueEmail }),
+  ).toBeVisible();
 
   await entryForm(page).getByLabel("Title").fill("Security review");
   await entryForm(page).getByRole("button", { name: "Add Entry" }).click();
-  await expect(page.getByRole("heading", { name: "Security review" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Security review" }),
+  ).toBeVisible();
 
   const review = entry(page, "Security review");
-  await review.getByPlaceholder("Add note").fill(`@${colleagueEmail} can you take the DPA?`);
+  await review
+    .getByPlaceholder("Add note")
+    .fill(`@${colleagueEmail} can you take the DPA?`);
   await review.getByRole("button", { name: "Add Note" }).click();
   await expect(page.getByText("can you take the DPA?")).toBeVisible();
   await signOut(page);
@@ -47,5 +53,7 @@ test("mentioning a colleague notifies them", async ({ page }) => {
   await signIn(page, colleagueEmail);
   await page.getByRole("button", { name: "Notifications" }).click();
   const panel = page.locator(".notification-panel");
-  await expect(panel.getByText("You were mentioned in a timeline update.")).toBeVisible();
+  await expect(
+    panel.getByText("You were mentioned in a timeline update."),
+  ).toBeVisible();
 });

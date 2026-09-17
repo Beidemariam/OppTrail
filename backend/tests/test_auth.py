@@ -86,6 +86,25 @@ def test_expired_or_unknown_session_cookie_is_rejected(client: TestClient) -> No
     assert response.status_code == 401
 
 
+def test_login_purges_expired_sessions(client: TestClient) -> None:
+    signup(client)
+
+    with db_connection() as connection:
+        connection.execute("UPDATE sessions SET expires_at = '2000-01-01T00:00:00Z'")
+        connection.commit()
+
+    client.post(
+        "/api/auth/login",
+        json={"email": "owner@example.com", "password": "password123"},
+    )
+
+    with db_connection() as connection:
+        rows = connection.execute(
+            "SELECT expires_at FROM sessions WHERE expires_at = '2000-01-01T00:00:00Z'"
+        ).fetchall()
+    assert rows == []
+
+
 def test_password_change_requires_the_current_password(client: TestClient) -> None:
     signup(client)
 

@@ -4,7 +4,11 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { components } from "../lib/api-types";
 import { apiRequest } from "../lib/api";
 import { notificationText } from "../lib/notifications";
-import { canChangeItem as canChangeItemFor, canManageOpportunity, canWriteTimeline } from "../lib/permissions";
+import {
+  canChangeItem as canChangeItemFor,
+  canManageOpportunity,
+  canWriteTimeline,
+} from "../lib/permissions";
 import {
   formatTimestamp,
   localInputToUtc,
@@ -47,7 +51,8 @@ type AuthResponse = components["schemas"]["AuthResponse"];
 type OpportunityListResponse = components["schemas"]["OpportunityListResponse"];
 type TimelineResponse = components["schemas"]["TimelineResponse"];
 type ShareListResponse = components["schemas"]["ShareListResponse"];
-type NotificationListResponse = components["schemas"]["NotificationListResponse"];
+type NotificationListResponse =
+  components["schemas"]["NotificationListResponse"];
 type AiAskResponse = components["schemas"]["AiAskResponse"];
 
 type AiChatMessage = {
@@ -130,9 +135,9 @@ export default function Home() {
   const [opportunityForm, setOpportunityForm] =
     useState<OpportunityForm>(emptyOpportunityForm);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [selectedOpportunityId, setSelectedOpportunityId] = useState<number | null>(
-    null,
-  );
+  const [selectedOpportunityId, setSelectedOpportunityId] = useState<
+    number | null
+  >(null);
   const [timelineEntries, setTimelineEntries] = useState<TimelineEntry[]>([]);
   const [entryForm, setEntryForm] = useState<TimelineEntryForm>({
     ...emptyEntryForm,
@@ -161,8 +166,9 @@ export default function Home() {
 
   const selectedOpportunity = useMemo(
     () =>
-      opportunities.find((opportunity) => opportunity.id === selectedOpportunityId) ??
-      null,
+      opportunities.find(
+        (opportunity) => opportunity.id === selectedOpportunityId,
+      ) ?? null,
     [opportunities, selectedOpportunityId],
   );
   // The rules themselves live in ../lib/permissions.ts, next to the note
@@ -206,20 +212,22 @@ export default function Home() {
     () =>
       stages.map((stage) => ({
         stage,
-        items: opportunities.filter((opportunity) => opportunity.stage === stage),
+        items: opportunities.filter(
+          (opportunity) => opportunity.stage === stage,
+        ),
       })),
     [opportunities],
   );
 
   async function loadOpportunities() {
-    const data = await apiRequest<OpportunityListResponse>("/api/opportunities");
+    const data =
+      await apiRequest<OpportunityListResponse>("/api/opportunities");
     setOpportunities(data.opportunities);
   }
 
   async function loadNotifications() {
-    const data = await apiRequest<NotificationListResponse>(
-      "/api/notifications",
-    );
+    const data =
+      await apiRequest<NotificationListResponse>("/api/notifications");
     setNotifications(data.notifications);
   }
 
@@ -258,7 +266,9 @@ export default function Home() {
       apiRequest<ShareListResponse>(
         `/api/opportunities/${opportunityId}/shares`,
       ),
-      apiRequest<AuditLogEntry[]>(`/api/opportunities/${opportunityId}/audit-log`),
+      apiRequest<AuditLogEntry[]>(
+        `/api/opportunities/${opportunityId}/audit-log`,
+      ),
     ]);
     setShares(shareData.shares);
     setAuditLog(auditData);
@@ -283,7 +293,9 @@ export default function Home() {
       setStatus("");
       await Promise.all([loadOpportunities(), loadNotifications()]);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Authentication failed");
+      setError(
+        caught instanceof Error ? caught.message : "Authentication failed",
+      );
       setStatus("");
     }
   }
@@ -309,7 +321,9 @@ export default function Home() {
   async function submitOpportunity(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
-    setStatus(editingId ? "Updating opportunity..." : "Creating opportunity...");
+    setStatus(
+      editingId ? "Updating opportunity..." : "Creating opportunity...",
+    );
 
     const payload = {
       ...opportunityForm,
@@ -336,7 +350,9 @@ export default function Home() {
         await loadTimeline(selectedOpportunityId);
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not save opportunity");
+      setError(
+        caught instanceof Error ? caught.message : "Could not save opportunity",
+      );
       setStatus("");
     }
   }
@@ -366,7 +382,9 @@ export default function Home() {
     setError("");
     setStatus("Deleting opportunity...");
     try {
-      await apiRequest(`/api/opportunities/${opportunityId}`, { method: "DELETE" });
+      await apiRequest(`/api/opportunities/${opportunityId}`, {
+        method: "DELETE",
+      });
       setStatus("");
       await loadOpportunities();
       if (editingId === opportunityId) {
@@ -380,7 +398,11 @@ export default function Home() {
         setAuditLog([]);
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not delete opportunity");
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not delete opportunity",
+      );
       setStatus("");
     }
   }
@@ -404,7 +426,9 @@ export default function Home() {
       await loadSharingData(opportunity.id, opportunity.current_user_role);
       setStatus("");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not load timeline");
+      setError(
+        caught instanceof Error ? caught.message : "Could not load timeline",
+      );
       setStatus("");
     }
   }
@@ -430,10 +454,13 @@ export default function Home() {
           body: JSON.stringify(payload),
         });
       } else {
-        await apiRequest(`/api/opportunities/${selectedOpportunityId}/timeline`, {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
+        await apiRequest(
+          `/api/opportunities/${selectedOpportunityId}/timeline`,
+          {
+            method: "POST",
+            body: JSON.stringify(payload),
+          },
+        );
       }
       setEntryForm({ ...emptyEntryForm, event_timestamp: nowDateTimeInput() });
       setEditingEntryId(null);
@@ -442,7 +469,9 @@ export default function Home() {
       await loadOpportunities();
       await loadOpportunities();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not save entry");
+      setError(
+        caught instanceof Error ? caught.message : "Could not save entry",
+      );
       setStatus("");
     }
   }
@@ -468,7 +497,11 @@ export default function Home() {
       await loadTimeline(selectedOpportunity.id);
       setStatus("");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not share opportunity");
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not share opportunity",
+      );
       setStatus("");
     }
   }
@@ -495,7 +528,9 @@ export default function Home() {
       await loadTimeline(selectedOpportunity.id);
       setStatus("");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not update share");
+      setError(
+        caught instanceof Error ? caught.message : "Could not update share",
+      );
       setStatus("");
     }
   }
@@ -524,7 +559,9 @@ export default function Home() {
       await loadTimeline(selectedOpportunity.id);
       setStatus("");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not remove share");
+      setError(
+        caught instanceof Error ? caught.message : "Could not remove share",
+      );
       setStatus("");
     }
   }
@@ -558,7 +595,9 @@ export default function Home() {
       await loadOpportunities();
       await loadOpportunities();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not delete entry");
+      setError(
+        caught instanceof Error ? caught.message : "Could not delete entry",
+      );
       setStatus("");
     }
   }
@@ -615,7 +654,9 @@ export default function Home() {
       await loadTimeline(selectedOpportunityId);
       await loadOpportunities();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not save note");
+      setError(
+        caught instanceof Error ? caught.message : "Could not save note",
+      );
       setStatus("");
     }
   }
@@ -636,7 +677,9 @@ export default function Home() {
       setStatus("");
       await loadTimeline(selectedOpportunityId);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not delete note");
+      setError(
+        caught instanceof Error ? caught.message : "Could not delete note",
+      );
       setStatus("");
     }
   }
@@ -662,7 +705,9 @@ export default function Home() {
       setStatus("");
       await loadTimeline(selectedOpportunityId);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not add comment");
+      setError(
+        caught instanceof Error ? caught.message : "Could not add comment",
+      );
       setStatus("");
     }
   }
@@ -683,7 +728,9 @@ export default function Home() {
       setStatus("");
       await loadTimeline(selectedOpportunityId);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not delete comment");
+      setError(
+        caught instanceof Error ? caught.message : "Could not delete comment",
+      );
       setStatus("");
     }
   }
@@ -697,7 +744,9 @@ export default function Home() {
       await loadNotifications();
     } catch (caught) {
       setError(
-        caught instanceof Error ? caught.message : "Could not update notification",
+        caught instanceof Error
+          ? caught.message
+          : "Could not update notification",
       );
     }
   }
@@ -710,7 +759,9 @@ export default function Home() {
       await loadTimeline();
       setStatus("");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not filter timeline");
+      setError(
+        caught instanceof Error ? caught.message : "Could not filter timeline",
+      );
       setStatus("");
     }
   }
@@ -727,7 +778,9 @@ export default function Home() {
         setTimelineEntries(data.entries);
         setStatus("");
       } catch (caught) {
-        setError(caught instanceof Error ? caught.message : "Could not clear filters");
+        setError(
+          caught instanceof Error ? caught.message : "Could not clear filters",
+        );
         setStatus("");
       }
     }
@@ -760,9 +813,10 @@ export default function Home() {
       const response = await apiRequest<AiAskResponse>(
         `/api/opportunities/${selectedOpportunityId}/ai/ask`,
         {
-        method: "POST",
-        body: JSON.stringify({ question }),
-      });
+          method: "POST",
+          body: JSON.stringify({ question }),
+        },
+      );
       setAiConversations((current) => ({
         ...current,
         [selectedOpportunityId]: [
@@ -775,7 +829,9 @@ export default function Home() {
         ],
       }));
     } catch (caught) {
-      setAiError(caught instanceof Error ? caught.message : "AI request failed");
+      setAiError(
+        caught instanceof Error ? caught.message : "AI request failed",
+      );
     } finally {
       setAiLoading(false);
     }
@@ -891,15 +947,22 @@ export default function Home() {
                 ) : (
                   <div className="notification-list">
                     {notifications.map((notification) => (
-                      <article className="notification-row" key={notification.id}>
+                      <article
+                        className="notification-row"
+                        key={notification.id}
+                      >
                         <div>
                           <strong>{notificationText(notification)}</strong>
-                          <span>{formatTimestamp(notification.created_at)}</span>
+                          <span>
+                            {formatTimestamp(notification.created_at)}
+                          </span>
                         </div>
                         <button
                           type="button"
                           className="secondary-button compact-button"
-                          onClick={() => void markNotificationRead(notification.id)}
+                          onClick={() =>
+                            void markNotificationRead(notification.id)
+                          }
                         >
                           Mark read
                         </button>
@@ -926,7 +989,10 @@ export default function Home() {
             <input
               value={opportunityForm.name}
               onChange={(event) =>
-                setOpportunityForm({ ...opportunityForm, name: event.target.value })
+                setOpportunityForm({
+                  ...opportunityForm,
+                  name: event.target.value,
+                })
               }
               required
             />
@@ -986,7 +1052,10 @@ export default function Home() {
             <select
               value={opportunityForm.stage}
               onChange={(event) =>
-                setOpportunityForm({ ...opportunityForm, stage: event.target.value })
+                setOpportunityForm({
+                  ...opportunityForm,
+                  stage: event.target.value,
+                })
               }
             >
               {stages.map((stage) => (
@@ -1083,7 +1152,9 @@ export default function Home() {
                           </div>
                           <div>
                             <dt>Close</dt>
-                            <dd>{opportunity.expected_close_date ?? "Not set"}</dd>
+                            <dd>
+                              {opportunity.expected_close_date ?? "Not set"}
+                            </dd>
                           </div>
                         </dl>
                         <div className="card-actions">
@@ -1106,7 +1177,9 @@ export default function Home() {
                               <button
                                 type="button"
                                 className="danger-button"
-                                onClick={() => deleteOpportunity(opportunity.id)}
+                                onClick={() =>
+                                  deleteOpportunity(opportunity.id)
+                                }
                               >
                                 Delete
                               </button>
@@ -1173,7 +1246,10 @@ export default function Home() {
                       placeholder="Colleague email"
                       value={shareForm.email}
                       onChange={(event) =>
-                        setShareForm({ ...shareForm, email: event.target.value })
+                        setShareForm({
+                          ...shareForm,
+                          email: event.target.value,
+                        })
                       }
                       required
                     />
@@ -1256,14 +1332,20 @@ export default function Home() {
                   placeholder="Keyword"
                   value={timelineFilters.q}
                   onChange={(event) =>
-                    setTimelineFilters({ ...timelineFilters, q: event.target.value })
+                    setTimelineFilters({
+                      ...timelineFilters,
+                      q: event.target.value,
+                    })
                   }
                 />
                 <select
                   aria-label="Filter the timeline by entry type"
                   value={timelineFilters.type}
                   onChange={(event) =>
-                    setTimelineFilters({ ...timelineFilters, type: event.target.value })
+                    setTimelineFilters({
+                      ...timelineFilters,
+                      type: event.target.value,
+                    })
                   }
                 >
                   <option value="">All types</option>
@@ -1278,7 +1360,10 @@ export default function Home() {
                   type="datetime-local"
                   value={timelineFilters.from}
                   onChange={(event) =>
-                    setTimelineFilters({ ...timelineFilters, from: event.target.value })
+                    setTimelineFilters({
+                      ...timelineFilters,
+                      from: event.target.value,
+                    })
                   }
                 />
                 <input
@@ -1286,7 +1371,10 @@ export default function Home() {
                   type="datetime-local"
                   value={timelineFilters.to}
                   onChange={(event) =>
-                    setTimelineFilters({ ...timelineFilters, to: event.target.value })
+                    setTimelineFilters({
+                      ...timelineFilters,
+                      to: event.target.value,
+                    })
                   }
                 />
                 <input
@@ -1368,7 +1456,10 @@ export default function Home() {
                     <input
                       value={entryForm.title}
                       onChange={(event) =>
-                        setEntryForm({ ...entryForm, title: event.target.value })
+                        setEntryForm({
+                          ...entryForm,
+                          title: event.target.value,
+                        })
                       }
                       required
                     />
@@ -1407,7 +1498,9 @@ export default function Home() {
               )}
 
               {timelineEntries.length === 0 ? (
-                <p className="empty-state">No timeline entries match this view.</p>
+                <p className="empty-state">
+                  No timeline entries match this view.
+                </p>
               ) : (
                 <div className="timeline-list">
                   {timelineEntries.map((entry) => (
@@ -1420,17 +1513,22 @@ export default function Home() {
                               <span className={`type-badge ${entry.type}`}>
                                 {
                                   entryTypes.find(
-                                    (entryType) => entryType.value === entry.type,
+                                    (entryType) =>
+                                      entryType.value === entry.type,
                                   )?.label
                                 }
                               </span>
                               {entry.system_generated && (
                                 <span className="system-badge">System</span>
                               )}
-                              <span>{formatTimestamp(entry.event_timestamp)}</span>
+                              <span>
+                                {formatTimestamp(entry.event_timestamp)}
+                              </span>
                             </div>
                             <h3>{entry.title}</h3>
-                            <p className="timeline-copy">{entry.body || "No details"}</p>
+                            <p className="timeline-copy">
+                              {entry.body || "No details"}
+                            </p>
                           </div>
                           {canChangeItem(entry.created_by) &&
                             !entry.system_generated && (
@@ -1448,7 +1546,9 @@ export default function Home() {
                                   <button
                                     type="button"
                                     className="danger-button"
-                                    onClick={() => deleteTimelineEntry(entry.id)}
+                                    onClick={() =>
+                                      deleteTimelineEntry(entry.id)
+                                    }
                                   >
                                     Delete
                                   </button>
@@ -1525,7 +1625,9 @@ export default function Home() {
                                       type="button"
                                       className="secondary-button"
                                       onClick={() => {
-                                        const nextEditingNotes = { ...editingNotes };
+                                        const nextEditingNotes = {
+                                          ...editingNotes,
+                                        };
                                         delete nextEditingNotes[note.id];
                                         setEditingNotes(nextEditingNotes);
                                       }}
@@ -1549,7 +1651,9 @@ export default function Home() {
                                       <button
                                         type="button"
                                         className="danger-button compact"
-                                        onClick={() => deleteComment(comment.id)}
+                                        onClick={() =>
+                                          deleteComment(comment.id)
+                                        }
                                       >
                                         Delete
                                       </button>

@@ -75,8 +75,12 @@ def reset_rate_limiter() -> Iterator[None]:
 
 
 @pytest.fixture
-def client(tmp_path) -> Iterator[TestClient]:
-    settings.database_url = f"sqlite:///{tmp_path / 'test.db'}"
+def client(tmp_path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
+    # `monkeypatch.setattr` restores the previous value on teardown, unlike a
+    # plain assignment — without it, a test that reads `settings.database_url`
+    # without going through this fixture could see whichever tmp path the last
+    # test that used it left behind.
+    monkeypatch.setattr(settings, "database_url", f"sqlite:///{tmp_path / 'test.db'}")
     initialize_database()
     with CsrfClient(app) as test_client:
         yield test_client

@@ -35,8 +35,9 @@ def fetch_export_data(
         """,
         (opportunity_id,),
     ).fetchone()
-    if not opportunity:
-        return {"opportunity": None, "entries": []}
+    # Callers resolve access through `require_opportunity_access` before reaching
+    # here, which already forecloses a missing or soft-deleted opportunity.
+    assert opportunity is not None
 
     entries = connection.execute(
         """

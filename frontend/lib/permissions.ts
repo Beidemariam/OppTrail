@@ -36,5 +36,7 @@ export function canChangeItem(options: {
   if (!canWriteTimeline(role)) {
     return false;
   }
-  return canManageOpportunity(role) || (authorId != null && authorId === userId);
+  return (
+    canManageOpportunity(role) || (authorId != null && authorId === userId)
+  );
 }
