@@ -28,8 +28,12 @@ recover from — the Alembic baseline (F.4) and the frontend decomposition
 MODEL=opus MAX_RUNS=1 sandbox/run.sh autopilot
 ```
 
-The chosen model is printed in each run header and therefore recorded in the
-run logs under `../opptrail-autopilot-logs/`.
+Each run records two lines in its log under `../opptrail-autopilot-logs/`: a
+header naming what was *requested* (`requested=opus`, or `requested=cli-default`
+when `MODEL` is unset -- an alias, not a model id), and a footer naming what
+actually *served* it, read back from the session transcript
+(`served=claude-opus-5`). The footer is written whether the run succeeds or
+fails, so an interrupted run is still attributable.
 
 `sandbox/run.sh shell` gives an interactive shell in the same environment, which
 is the fastest way to reproduce something the agent hit.

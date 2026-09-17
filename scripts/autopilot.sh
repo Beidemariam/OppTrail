@@ -52,8 +52,12 @@ for i in $(seq 1 "$MAX_RUNS"); do
   log_file="$LOG_DIR/run-$(date -u +%Y%m%dT%H%M%S).log"
   # The header goes through tee too, so the log records which model produced the
   # commit. Printing it only to the terminal left every run unattributable.
-  echo "=== Run $i/$MAX_RUNS — $(date -u +%FT%TZ) — ${line} — model=${MODEL:-cli-default} ===" | tee "$log_file"
+  echo "=== Run $i/$MAX_RUNS — $(date -u +%FT%TZ) — ${line} — requested=${MODEL:-cli-default} ===" | tee "$log_file"
 
+  # An API error mid-response used to abort the whole script through pipefail,
+  # losing the attribution footer on exactly the runs that most need it. Record
+  # the status instead and let the no-progress counter below decide.
+  rc=0
   claude -p "Read docs/autopilot-brief.md in full, then every file in docs/autopilot/ that exists. \
 Follow §3.3 exactly: determine the current state, then complete at most one milestone (or the rework items, \
 or the end-of-phase review packet), update the state files, commit to the autopilot branch, and exit. \
@@ -61,7 +65,20 @@ Never commit to main, merge, push, or create acceptance tags." \
     --dangerously-skip-permissions \
     ${MODEL:+--model "$MODEL"} \
     --max-turns "$MAX_TURNS" \
-    --output-format text 2>&1 | tee -a "$log_file"
+    --output-format text 2>&1 | tee -a "$log_file" || rc=$?
+
+  # The header can only name what was asked for -- an alias like "opus", or
+  # "cli-default" when MODEL is unset, neither of which is a model id. The
+  # session transcript names what actually answered. Entries reading
+  # "<synthetic>" are the CLI's own error messages, not a model, so skip them.
+  transcript="$(ls -t "$HOME"/.claude/projects/*/*.jsonl 2>/dev/null | head -1 || true)"
+  served=""
+  if [ -n "$transcript" ]; then
+    served="$(grep -ho '"model":"[^"]*"' "$transcript" \
+      | sed 's/.*:"//; s/"$//' | grep -v '^<' | tail -1 || true)"
+  fi
+  echo "=== Run $i/$MAX_RUNS — exit=${rc} — served=${served:-unknown} ===" | tee -a "$log_file"
+  if [ "$rc" -ne 0 ]; then echo "claude exited ${rc}; see ${log_file}"; fi
 
   after="$(git rev-parse HEAD):$(status_line)"
   case "$(status_line)" in "STATUS: BLOCKED"*) echo "Still BLOCKED — stopping."; exit 1;; esac
