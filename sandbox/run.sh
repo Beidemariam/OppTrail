@@ -98,6 +98,20 @@ common_args=(
   --volume "${HOME_VOLUME}:/home/node"
   --volume "opptrail-autopilot-venv:/work/venv"
   --volume "opptrail-autopilot-pw:/work/pw-browsers"
+  # frontend/node_modules is gitignored build output holding platform-native
+  # binaries. Without this overlay the container and the host share one tree
+  # through the repo bind mount, so whichever ran `npm ci` last wins and the
+  # other breaks: a Linux npm ci leaves the host without
+  # @rollup/rollup-darwin-arm64, and vice versa (npm/cli#4828). This is the
+  # node counterpart to UV_PROJECT_ENVIRONMENT, which already keeps the
+  # container off the host's macOS backend/.venv (sandbox/Dockerfile).
+  #
+  # volume-nocopy is load bearing: Docker seeds an empty volume from whatever
+  # is already at the mount path, and that path sits inside the repo bind
+  # mount -- so a plain --volume copies the host's macOS tree in and recreates
+  # the very mismatch this prevents. With nocopy the container sees an empty
+  # node_modules, `make frontend-deps` runs npm ci, and the trees never touch.
+  --mount "type=volume,source=opptrail-autopilot-node-modules,target=/work/repo/frontend/node_modules,volume-nocopy=true"
   --workdir /work/repo
   --env "MAX_RUNS=${MAX_RUNS:-40}"
   --env "MAX_TURNS=${MAX_TURNS:-250}"
@@ -125,10 +139,23 @@ build() {
     "${REPO_ROOT}/sandbox"
 }
 
+# The node_modules volume is mounted nocopy, so it starts empty and root-owned:
+# there is nothing for Docker to seed it from and no ownership to inherit. The
+# agent runs as a non-root user, so `npm ci` would fail on permissions. Create
+# and chown it once, from a throwaway root container.
+ensure_volumes() {
+  docker volume inspect opptrail-autopilot-node-modules >/dev/null 2>&1 && return
+  docker volume create opptrail-autopilot-node-modules >/dev/null
+  docker run --rm -u 0:0 \
+    --volume "opptrail-autopilot-node-modules:/v" \
+    "$IMAGE" chown "$(id -u):$(id -g)" /v
+}
+
 ensure_image() {
   image_exists || { echo "Image missing; building."; build; }
   ensure_network
   ensure_proxy
+  ensure_volumes
 }
 
 case "${1:-}" in
@@ -223,11 +250,22 @@ fi
 echo
 echo "=== commit-to-main guard (defence in depth, not a seal) ==="
 cd /work/repo
+probe_branch="$(git rev-parse --abbrev-ref HEAD)"
 if git commit --allow-empty -m 'sandbox guard probe' >/dev/null 2>&1; then
-  echo "guard           FAILED - an empty commit landed on $(git rev-parse --abbrev-ref HEAD)"
-  git reset --hard HEAD~1 >/dev/null 2>&1
+  # --soft, never --hard: the probe commit is empty, so dropping it restores
+  # the previous state exactly, while `reset --hard` would also delete any
+  # uncommitted work in the bind-mounted repo. A read-only diagnostic must not
+  # be able to destroy the tree it is reporting on.
+  git reset --soft HEAD~1 >/dev/null 2>&1
+  if [ "$probe_branch" = "main" ]; then
+    echo "guard           FAILED - an empty commit landed on main"
+  else
+    echo "guard           not exercised - HEAD is ${probe_branch}; the guard"
+    echo "                only blocks commits to main, so a commit succeeding"
+    echo "                here is expected, not a failure"
+  fi
 else
-  echo "guard           refused a commit on $(git rev-parse --abbrev-ref HEAD) (ok)"
+  echo "guard           refused a commit on ${probe_branch} (ok)"
 fi
 echo "bypassable      yes, by --no-verify or -c core.hooksPath= (git has no"
 echo "                mandatory hooks). The host-side tripwire in run.sh"
