@@ -1,4 +1,4 @@
-.PHONY: dev test check check-fast e2e build docker docker-smoke seed migrate frontend-deps generate-client
+.PHONY: dev test test-host check check-fast e2e build docker docker-test docker-smoke seed migrate frontend-deps generate-client
 
 # Guards frontend targets against a clean checkout / empty node_modules volume
 # (see docs/autopilot/DECISIONS.md's F.2 review note — the sandbox gives the
@@ -57,10 +57,12 @@ check: check-fast
 	cd frontend && npm audit
 	@$(MAKE) e2e
 	@echo
-	@echo "Docker build + smoke test: deferred to the host — this sandbox has no"
-	@echo "Docker socket (sandbox/README.md). Run scripts/autopilot-gate.sh <phase>,"
-	@echo "which builds the image from the phase branch and runs scripts/docker-smoke.sh"
-	@echo "against it."
+	@echo "Docker build + in-image backend suite + smoke test: deferred to the host —"
+	@echo "this sandbox has no Docker socket (sandbox/README.md). Run"
+	@echo "scripts/autopilot-gate.sh <phase>, which builds the image from the phase"
+	@echo "branch and runs scripts/docker-smoke.sh against it; 'make docker-test' runs"
+	@echo "the backend suite inside the image. GitHub Actions (.github/workflows/ci.yml)"
+	@echo "runs both on every push."
 
 # Playwright builds the frontend and starts scripts/e2e-server.sh itself (see
 # frontend/playwright.config.ts), so this needs no separate build step.
@@ -76,6 +78,14 @@ build: frontend-deps
 
 docker:
 	docker build -t opptrail .
+
+# ROADMAP.md Phase 1's "backend suite inside the image": builds the
+# `backend-test` Dockerfile stage (same Debian base and pinned WeasyPrint
+# libraries as the shipped image, but with dev dependencies) and runs the
+# suite inside it.
+docker-test:
+	docker build --target backend-test -t opptrail-test .
+	docker run --rm opptrail-test
 
 # Small, fast demo data covering every shipped feature and permission
 # relationship. Prints the seeded users and what each of them can see.

@@ -52,6 +52,12 @@ make test-host
 echo "--- docker build ---"
 git archive "${BRANCH}" | docker build -t "$IMAGE" -
 
+# ROADMAP.md Phase 1's "backend suite inside the image". The working tree is
+# already a clean checkout of this exact commit (checked above), so this can
+# build straight from it rather than archiving a second time.
+echo "--- backend suite inside the image ---"
+make docker-test
+
 # One definition of "the image works", shared with `make docker-smoke` and CI.
 # It exercises session auth, CSRF, a write, the auto-generated timeline entry,
 # the WeasyPrint PDF path (the reason this step cannot run in the sandbox), and
@@ -66,7 +72,7 @@ commit=${SHA}
 image=${IMAGE}
 host=$(uname -srm)
 docker=$(docker --version)
-verified=host-pytest,host-vitest,docker-build,health,csrf,signup,opportunity-create,timeline,pdf-export,frontend-served
+verified=host-pytest,host-vitest,docker-build,docker-test,health,csrf,signup,opportunity-create,timeline,pdf-export,frontend-served
 at=$(date -u +%FT%TZ)
 RECEIPT
 

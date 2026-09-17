@@ -1,0 +1,70 @@
+name: CI
+
+# docs/ROADMAP.md Phase 1 technical work ("GitHub Actions CI: backend suite,
+# frontend typecheck/lint, `docker build`, and the backend suite inside the
+# image", review blocker B4 in docs/ARCHITECTURE.md). Runs `make check-fast`
+# (everything the autopilot sandbox already runs without a Docker socket) plus
+# the two Docker-only steps the sandbox cannot: an image build and the backend
+# suite run inside it. `make check`'s remaining items (pip-audit, npm audit,
+# Playwright E2E) are Phase R's CI scope (brief docs/autopilot-brief.md §8
+# R.6) — not pulled forward here.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: make check-fast
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # Same three packages the Dockerfile installs, so this job's pytest run
+      # exercises the WeasyPrint PDF path too instead of skipping it (see
+      # CLAUDE.md's WeasyPrint section — without them the test skips rather
+      # than fails, but skipping here would mean nothing in CI ever proves
+      # PDF export works outside the image-build job below).
+      - name: Install WeasyPrint native libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libharfbuzz-subset0 \
+            libpango-1.0-0 \
+            libpangoft2-1.0-0
+
+      - name: make check-fast
+        run: make check-fast
+
+  docker:
+    name: docker build, in-image backend suite, smoke test
+    runs-on: ubuntu-latest
+    needs: checks
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the application image
+        run: make docker
+
+      # ROADMAP.md Phase 1: "the backend suite inside the image" — the same
+      # Debian base and pinned WeasyPrint libraries as the shipped image.
+      - name: Run the backend suite inside the image
+        run: make docker-test
+
+      - name: Docker smoke test
+        run: make docker-smoke

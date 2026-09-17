@@ -1,4 +1,4 @@
-STATUS: AWAITING_REVIEW phase=F
+STATUS: IN_PROGRESS phase=1
 
 # Autopilot Progress
 
@@ -8,6 +8,10 @@ enough for a fresh session to continue using only the brief and the files in
 
 Base commit for `autopilot/phase-F`: `4c16a70` on `main` (clean checkout, no
 tags exist yet — this is the project's first autopilot run).
+
+Phase F was accepted: `phase-F-accepted` exists at `544533d`, which is also
+where `main` and `autopilot/phase-F` sit. Base commit for `autopilot/phase-1`:
+`544533d` on `main`.
 
 ---
 
@@ -707,9 +711,68 @@ keeps history instead of erasing it.
 
 ### Milestones
 
-- [ ] 1.1 GitHub Actions CI: backend suite, frontend typecheck/lint,
-      `docker build`, and the backend suite **inside the image** (WeasyPrint).
-      Blocker B4.
+### 1.1 — GitHub Actions CI (Blocker B4) — **DONE**
+
+- [x] `.github/workflows/ci.yml`, two jobs, not pushed (guardrail: never push
+      to any remote). Scope is `AGENTS.md`'s Quality Bar definition of "CI must
+      be green" — backend suite, frontend typecheck/lint, `docker build`, and
+      the backend suite inside the image — rather than `docs/ARCHITECTURE.md`'s
+      longer CI wishlist (Playwright smoke, dependency audits), which the
+      brief's own R.6 milestone already schedules for Phase R. See **D-031**
+      for the ranking argument.
+      - `checks` job: `make check-fast` (backend ruff/format/mypy/pytest with
+        the 90% coverage floor, frontend typecheck/lint/prettier/vitest, the
+        generated-client contract check) on `ubuntu-latest`, with the same
+        three WeasyPrint `apt` packages the Dockerfile installs so the PDF
+        export test runs instead of skipping (CLAUDE.md's WeasyPrint section).
+      - `docker` job (`needs: checks`, so a cheap failure blocks the expensive
+        one): `make docker`, the new `make docker-test`, `make docker-smoke`.
+- [x] New Dockerfile stage `backend-test`, a sibling of `final` off a shared
+      `backend-base` (apt packages, `WORKDIR`, `pyproject.toml`/`uv.lock`
+      copied once). `uv sync --locked --no-cache` (dev deps included, unlike
+      `final`'s `--no-dev`) then runs the coverage-gated pytest command as its
+      `CMD`. Nothing changes in the `final` stage's build graph or output —
+      `backend-test` isn't in its dependency chain — and `docker build .` with
+      no `--target` still builds `final` last, so
+      `scripts/autopilot-gate.sh`'s untargeted `docker build` is unaffected.
+- [x] `Makefile`: new `docker-test` target (`docker build --target
+      backend-test` then `docker run --rm`). `check`'s Docker-deferred-to-host
+      echo block and `README.md`'s Development section both updated to name
+      the new target and the workflow file, so neither goes stale next to the
+      thing it describes.
+- [x] Alembic-in-CI (ROADMAP's separate acceptance line, "`alembic upgrade
+      head` applies to an empty database and to a copy of the current
+      `data/app.db`, both verified in CI") needs no new step:
+      `tests/test_migrations.py` already asserts both cases and runs inside
+      the backend suite that both CI jobs execute.
+- [x] Verified everything that can be verified without a Docker socket
+      (`sandbox/README.md`): `make check-fast` reruns green (190 backend
+      tests, 96.46% combined coverage; 80 frontend tests, 86.87% line — both
+      unchanged from the Phase F gate, since no application code moved). The
+      workflow YAML has no tab characters and consistent indentation (checked
+      by script; no YAML parser was installable offline in this sandbox — see
+      BLOCKERS.md). The Dockerfile's two new stages, `make docker`/`make
+      docker-test`/`make docker-smoke`, and the workflow's `docker` job are
+      **unverified here** — no Docker socket in this sandbox — and are the
+      host gate's job, per the unchanged split gate (brief §3.4). Named
+      explicitly rather than silently assumed correct.
+
+Work log: single session. New: `.github/workflows/ci.yml`. Changed:
+`Dockerfile` (three-stage split: `backend-base` → `backend-test` / `final`,
+`final`'s behavior and output unchanged), `Makefile` (`docker-test` target,
+`.PHONY` gains it and the already-existing but previously unlisted
+`test-host`, `check`'s deferred-Docker echo reworded), `README.md`
+(Development section). No backend or frontend application code touched — `make
+check-fast` reruns at identical coverage. Decisions: **D-031** (CI scope
+ranking), not flagged needs-human-review — it resolves a wording question
+between two already-ranked documents per brief §1, not a new scope or
+architecture call. Gate: `make check-fast` green (190 backend / 80 frontend
+tests, coverage unchanged from the Phase F gate). Docker build, the in-image
+backend suite, and the smoke test — this milestone's actual subject — remain
+the host's half of the split gate; run `scripts/autopilot-gate.sh 1` to verify
+them, which now also exercises the new `backend-test` stage via `make
+docker-test` inside the phase branch's archive.
+
 - [ ] 1.2 Alembic: baseline-stamp the existing database, convert
       `run_migrations()` to revisions, make `normalize_legacy_timestamps` a
       one-shot. Blocker B2, ADR 0002. (Coordinate with Phase F milestone F.4 —

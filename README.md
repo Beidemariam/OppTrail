@@ -44,5 +44,8 @@ make check        # the full gate, including audits and Playwright E2E
 make e2e          # Playwright only
 ```
 
-`make check` runs everything except the Docker build and smoke test, which need
-a Docker socket; run those with `make docker-smoke`.
+`make check` runs everything except the Docker build, the backend suite inside
+the image, and the smoke test, which need a Docker socket; run those with
+`make docker-test` and `make docker-smoke`. GitHub Actions
+(`.github/workflows/ci.yml`) runs `make check-fast` plus both Docker steps on
+every push and pull request.
