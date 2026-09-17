@@ -773,6 +773,19 @@ the host's half of the split gate; run `scripts/autopilot-gate.sh 1` to verify
 them, which now also exercises the new `backend-test` stage via `make
 docker-test` inside the phase branch's archive.
 
+- [ ] 1.1a CI trigger scope (raised at the 1.1 review, 2026-09-17).
+      `.github/workflows/ci.yml` declares `on: push:` and `on: pull_request:`
+      with no branch filter, so `push` fires on every branch — including each
+      `autopilot/phase-*` branch — and a pull request from a local branch runs
+      the same commits twice. The R.6 milestone below specifies "on push to
+      `main`", so the shipped trigger is broader than the plan states. Nothing
+      is broken today: `origin` is many commits behind, nothing here is pushed,
+      and no run has ever been billed. It starts costing double minutes the
+      first time this reaches a remote. Decide it either way and log it:
+      narrow `push` to `branches: [main]` to match R.6, or keep the broad
+      trigger and record why (wanting CI on phase branches before they merge
+      is a real reason), so the difference from R.6 is deliberate rather than
+      an unexamined default.
 - [ ] 1.2 Alembic: baseline-stamp the existing database, convert
       `run_migrations()` to revisions, make `normalize_legacy_timestamps` a
       one-shot. Blocker B2, ADR 0002. (Coordinate with Phase F milestone F.4 —
