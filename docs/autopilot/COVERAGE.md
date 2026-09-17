@@ -474,3 +474,15 @@ command as `check-fast`; it has no separate coverage report here because
 building and running it needs the Docker socket this sandbox does not have —
 it is the host gate's job (`scripts/autopilot-gate.sh 1`), same as the image
 build and smoke test always have been.
+
+## Phase 1 — milestones 1.1a + 1.2
+
+No application code changed — 1.1a is a one-line CI trigger filter
+(`.github/workflows/ci.yml`), and 1.2 (Alembic baseline/one-shot bridge) was
+confirmed already satisfied by Phase F milestone F.4, so there was nothing to
+re-implement.
+
+```
+backend:  190 passed, 96.46% combined line+branch coverage (unchanged from 1.1)
+frontend: 80 passed, 86.87% line (unchanged from 1.1)
+```
