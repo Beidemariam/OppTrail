@@ -3,8 +3,16 @@
 # Guards frontend targets against a clean checkout / empty node_modules volume
 # (see docs/autopilot/DECISIONS.md's F.2 review note — the sandbox gives the
 # container its own node_modules volume, which starts empty).
-frontend-deps:
-	cd frontend && [ -d node_modules/.bin ] || npm ci
+# npm writes node_modules/.package-lock.json on every install, so it is a
+# reliable stamp for "this tree matches the lockfile". The old guard only
+# checked that node_modules existed, so a lockfile change never triggered a
+# reinstall: after F.7 added vitest and rollup inside the sandbox, a host that
+# already had node_modules kept a tree with neither, and `npm test` failed
+# there with a missing @rollup/rollup-darwin-arm64.
+frontend/node_modules/.package-lock.json: frontend/package-lock.json
+	cd frontend && npm ci
+
+frontend-deps: frontend/node_modules/.package-lock.json
 
 # Backend-only: the frontend can't reach /api/* via `next dev` (no rewrites in
 # `output: "export"` mode — see CLAUDE.md's "Dev loop gotcha"). Build once and
@@ -15,6 +23,14 @@ dev: frontend-deps
 
 test:
 	cd backend && uv run pytest -q
+
+# Both halves of the split gate otherwise run the suites only under Linux -- the
+# sandbox container. Nothing exercised them on the reviewer's own platform, so a
+# host-only failure reached the human instead of failing a gate (F.7's
+# WeasyPrint case). `scripts/autopilot-gate.sh` runs this there. D-030(a).
+test-host: frontend-deps
+	$(MAKE) test
+	cd frontend && npm test
 
 # Regenerates frontend/lib/api-types.ts from the live OpenAPI schema.
 generate-client: frontend-deps

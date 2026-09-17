@@ -653,7 +653,10 @@ Docker build + smoke test remains the host's half of the split gate.
       how the same pattern already sits unexercised in `test_export.py` on
       this platform.
 - [x] Decide whether the split gate should grow a host-native test run.
-      **needs human review: Y — D-030.** Logged the three options (add a host
+      **D-030 — resolved 2026-09-17: the human ruled (a); implemented.**
+      `scripts/autopilot-gate.sh` runs `make test-host` before the image
+      build and the receipt records `host-pytest,host-vitest`.
+      (Originally logged as **needs human review: Y**.) Logged the three options (add a host
       `pytest`/`npm test` step to `scripts/autopilot-gate.sh`; leave the gate
       as-is and treat host-only breakage as accepted; require every
       platform-sensitive test to carry an explicit guard, reviewed per gate)

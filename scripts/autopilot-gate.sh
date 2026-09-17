@@ -27,6 +27,26 @@ mkdir -p "$GATE_DIR"
 
 echo "=== Host gate for phase ${PHASE} at ${SHA:0:12} ==="
 
+# D-030(a). Until this step existed, both halves of the split gate ran the test
+# suites only under Linux -- the sandbox's own container -- so nothing ever
+# exercised them on the reviewer's platform. F.7's WeasyPrint failure reached
+# the human directly instead of failing a gate. Run first: it is far cheaper
+# than the image build below, so a platform-specific break fails fast.
+# The receipt names a commit, so the suite has to run against that commit's
+# tree. The image build below is immune -- it archives the branch -- but this
+# step runs in the working tree, so refuse unless the two agree.
+if [ "$(git rev-parse HEAD)" != "$SHA" ] || [ -n "$(git status --porcelain)" ]; then
+  echo "The host suite runs in your working tree, so it must be a clean"
+  echo "checkout of ${BRANCH} or the receipt would name a commit it never ran."
+  echo "  HEAD:        $(git rev-parse --short HEAD)"
+  echo "  ${BRANCH}: ${SHA:0:12}"
+  [ -n "$(git status --porcelain)" ] && echo "  working tree: dirty"
+  exit 1
+fi
+
+echo "--- host test suite ($(uname -sm)) ---"
+make test-host
+
 # Build the application image from the phase branch without disturbing your
 # working tree, by piping a git archive of that commit as the build context.
 echo "--- docker build ---"
@@ -46,7 +66,7 @@ commit=${SHA}
 image=${IMAGE}
 host=$(uname -srm)
 docker=$(docker --version)
-verified=docker-build,health,csrf,signup,opportunity-create,timeline,pdf-export,frontend-served
+verified=host-pytest,host-vitest,docker-build,health,csrf,signup,opportunity-create,timeline,pdf-export,frontend-served
 at=$(date -u +%FT%TZ)
 RECEIPT
 
