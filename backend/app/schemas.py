@@ -521,3 +521,42 @@ class NotificationPublic(BaseModel):
 
 class NotificationListResponse(BaseModel):
     notifications: list[NotificationPublic]
+
+
+class SnippetMatch(BaseModel):
+    """Where one matched word sits inside `SearchSnippet.text`."""
+
+    start: int
+    length: int
+
+
+class SearchSnippet(BaseModel):
+    """A search result's excerpt as plain text, plus the offsets to highlight.
+
+    Offsets rather than markup: the API never emits something a client has to
+    remember to escape, and the excerpt stays the text it came from.
+    """
+
+    text: str
+    matches: list[SnippetMatch]
+
+
+class SearchResultPublic(BaseModel):
+    """One match, with enough context to link to it and to group by deal.
+
+    `entry_id` is the timeline entry the match sits under -- for a note or a
+    comment that is its ancestor entry, and for an entry it is the entry
+    itself -- so every result addresses one place in one timeline.
+    """
+
+    kind: SourceType
+    id: int
+    opportunity_id: int
+    opportunity_name: str
+    entry_id: int
+    note_id: int | None
+    title: str | None
+    snippet: SearchSnippet
+    timestamp: str
+    author_id: int | None
+    author_name: str | None

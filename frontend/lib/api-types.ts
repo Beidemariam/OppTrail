@@ -570,6 +570,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Everything
+         * @description Ranked, snippeted matches in entries, notes and comments, across every
+         *     opportunity this user can read and no others (`FEATURES.md` §13).
+         *
+         *     The filters are the timeline's, by the same names: `type` is the type of
+         *     the entry a match sits under, `author_id` is who wrote the matched item,
+         *     and the date window is over the item's own timestamp.
+         */
+        get: operations["search_everything_api_v2_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -1011,6 +1036,13 @@ export interface components {
             /** Next Cursor */
             next_cursor?: string | null;
         };
+        /** Page[SearchResultPublic] */
+        Page_SearchResultPublic_: {
+            /** Items */
+            items: components["schemas"]["SearchResultPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
         /** Page[SharePublic] */
         Page_SharePublic_: {
             /** Items */
@@ -1038,6 +1070,53 @@ export interface components {
             current_password: string;
             /** New Password */
             new_password: string;
+        };
+        /**
+         * SearchResultPublic
+         * @description One match, with enough context to link to it and to group by deal.
+         *
+         *     `entry_id` is the timeline entry the match sits under -- for a note or a
+         *     comment that is its ancestor entry, and for an entry it is the entry
+         *     itself -- so every result addresses one place in one timeline.
+         */
+        SearchResultPublic: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "entry" | "note" | "comment";
+            /** Id */
+            id: number;
+            /** Opportunity Id */
+            opportunity_id: number;
+            /** Opportunity Name */
+            opportunity_name: string;
+            /** Entry Id */
+            entry_id: number;
+            /** Note Id */
+            note_id: number | null;
+            /** Title */
+            title: string | null;
+            snippet: components["schemas"]["SearchSnippet"];
+            /** Timestamp */
+            timestamp: string;
+            /** Author Id */
+            author_id: number | null;
+            /** Author Name */
+            author_name: string | null;
+        };
+        /**
+         * SearchSnippet
+         * @description A search result's excerpt as plain text, plus the offsets to highlight.
+         *
+         *     Offsets rather than markup: the API never emits something a client has to
+         *     remember to escape, and the excerpt stays the text it came from.
+         */
+        SearchSnippet: {
+            /** Text */
+            text: string;
+            /** Matches */
+            matches: components["schemas"]["SnippetMatch"][];
         };
         /** ShareCreate */
         ShareCreate: {
@@ -1090,6 +1169,16 @@ export interface components {
             password: string;
             /** Name */
             name: string;
+        };
+        /**
+         * SnippetMatch
+         * @description Where one matched word sits inside `SearchSnippet.text`.
+         */
+        SnippetMatch: {
+            /** Start */
+            start: number;
+            /** Length */
+            length: number;
         };
         /** TimelineEntryCreate */
         TimelineEntryCreate: {
@@ -2486,6 +2575,45 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Page_NotificationPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_everything_api_v2_search_get: {
+        parameters: {
+            query: {
+                q: string;
+                type?: string | null;
+                from?: string | null;
+                to?: string | null;
+                author_id?: number | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_SearchResultPublic_"];
                 };
             };
             /** @description Validation Error */

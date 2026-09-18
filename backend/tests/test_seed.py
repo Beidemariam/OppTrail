@@ -138,6 +138,18 @@ def test_seeded_permissions_match_the_printed_tour(tmp_path) -> None:
         assert dana.get(f"/api/opportunities/{northwind}").status_code == 404
         assert dana.get("/api/opportunities").json()["opportunities"] == []
 
+        # The tour's search line: one query, four different answers, because
+        # the permission filter lives inside the query (`app/search.py`).
+        def finance_hits(session: CsrfClient) -> list[str]:
+            page = session.get("/api/v2/search?q=finance")
+            assert page.status_code == 200, page.text
+            return sorted(item["opportunity_name"] for item in page.json()["items"])
+
+        assert finance_hits(alex) == ["Initech expansion", "Northwind platform rollout"]
+        assert finance_hits(blair) == ["Initech expansion", "Northwind platform rollout"]
+        assert finance_hits(casey) == ["Northwind platform rollout"]
+        assert finance_hits(dana) == []
+
         # The mention in the demo note notified Alex.
         mentions = [
             notification

@@ -29,6 +29,7 @@ from .schemas import (
     TimelineEntryUpdate,
     TimelineResponse,
 )
+from .search import MATCHING_ENTRY_IDS_SQL, match_expression
 from .soft_delete import (
     soft_delete_comment,
     soft_delete_note,
@@ -160,31 +161,17 @@ def timeline_filters(
     params: list[object] = [opportunity_id]
 
     if q:
-        like = f"%{q.strip().lower()}%"
-        where.append(
-            """
-            (
-                lower(timeline_entries.title) LIKE ?
-                OR lower(timeline_entries.body) LIKE ?
-                OR EXISTS (
-                    SELECT 1 FROM notes
-                    WHERE notes.entry_id = timeline_entries.id
-                        AND notes.deleted_at IS NULL
-                        AND lower(notes.body) LIKE ?
-                )
-                OR EXISTS (
-                    SELECT 1
-                    FROM comments
-                    JOIN notes ON notes.id = comments.note_id
-                    WHERE notes.entry_id = timeline_entries.id
-                        AND notes.deleted_at IS NULL
-                        AND comments.deleted_at IS NULL
-                        AND lower(comments.body) LIKE ?
-                )
-            )
-            """
-        )
-        params.extend([like, like, like, like])
+        # Was four `LIKE '%…%'` predicates and two correlated EXISTS
+        # subqueries, which could use no index and was slowest exactly when the
+        # term was rare (ADR 0007). Same question, asked of the FTS5 index.
+        expression = match_expression(q)
+        if expression is None:
+            # Punctuation only: nothing to look for, so nothing matches —
+            # which is what the substring form did with it too.
+            where.append("0")
+        else:
+            where.append(f"timeline_entries.id IN ({MATCHING_ENTRY_IDS_SQL})")
+            params.append(expression)
 
     if type:
         where.append("timeline_entries.type = ?")

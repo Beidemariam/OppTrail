@@ -890,10 +890,144 @@ and the two tie-break changes they require). Gate: `make check-fast` green —
 modules at 100%; 80 frontend tests, 86.87% line, unchanged. Docker portion of
 the split gate remains the host's (`scripts/autopilot-gate.sh 1`).
 
-- [ ] 1.4 FTS5 contentless index plus triggers, including soft-delete
-      transitions (ADR 0007). Feature: Search (§13).
+### 1.4 — FTS5 search index, triggers, and `/api/v2/search` (ADR 0007) — **DONE**
+
+Feature: Search (§13). "Contentless index plus triggers, including soft-delete
+transitions" is the milestone's own wording; the endpoint over it is what makes
+the index a feature rather than a table.
+
+- [x] `backend/alembic/versions/20260917_0002_search_index.py`: one contentless
+      FTS5 table (`search_index`, `content=''`, `tokenize='porter unicode61'`)
+      plus nine triggers and a backfill of the rows already in the database.
+      Contentless is ADR 0007's size argument (+13 MB against +212 MB for a
+      content-duplicating index at the benchmarked scale); its price is that
+      the table stores no text, so `snippet()`/`highlight()` are unavailable
+      and it cannot be scanned without a `MATCH`. The rowid *is* the document
+      identity — `source id * 4 + kind code`, 0 entry / 1 note / 2 comment —
+      which is why no mapping table exists.
+- [x] Soft-delete transitions, the ADR's named correctness risk. One `AFTER
+      UPDATE` trigger per table covers an edit, a soft delete and a restore
+      with the same two statements: remove what was indexed (`old.*`, guarded
+      on `old.deleted_at IS NULL`), then index what is now visible. Either half
+      can be a no-op and both are when an already-deleted row is touched again.
+      A contentless table cannot be `UPDATE`d or `DELETE`d from with ordinary
+      SQL, so removals use FTS5's `'delete'` command, which needs the row's
+      previous column values — available in a trigger and nowhere else, which
+      is why this is trigger work rather than application work.
+- [x] `backend/app/search.py`: the MATCH expression builder (every typed token
+      becomes a quoted prefix term, so nothing the user types can reach FTS5's
+      query parser as an operator), the union that decodes matched rowids back
+      to the three source tables, `build_snippet` (excerpt plus match offsets,
+      not markup — the API never emits something a client must remember to
+      escape), and `rebuild_search_index`.
+- [x] Permissions inside the query, not over its results:
+      `permissions.ACCESSIBLE_OPPORTUNITY_IDS_SQL`. Search is the first read in
+      the app that spans opportunities, so it cannot resolve a role first the
+      way every other route does; a page of 50 is 50 rows the caller may read.
+      Every branch of the union also filters `deleted_at IS NULL` at each level
+      it joins through — the triggers already keep deleted rows out of the
+      index, and a read that depends on that is a read that trusts a cache.
+- [x] `GET /api/v2/search` (`backend/app/routes_search.py`), paginated-only:
+      an unbounded ranked result set is the shape the v2 envelope exists to
+      stop shipping. Carries the timeline's filters by the same names
+      (`?q=&type=&from=&to=&author_id=`), with the two differences documented
+      in the route's docstring — `type` is the type of the entry a match sits
+      under, `author_id` is who wrote the matched item. bm25 ranking with the
+      document id as the cursor tie-break, per D-034.
+- [x] The timeline's `?q=` filter reimplemented against the index
+      (`routes_timeline.timeline_filters`), replacing four `LIKE '%…%'`
+      predicates and two correlated `EXISTS` subqueries. Changes v1 matching
+      from substring to word prefix — **D-037**, which ADR 0007 lists as one of
+      the defects the index is for.
+- [x] `make reindex` / `backend/tools/reindex.py`: the rebuild command ADR 0007
+      asks for. Its SQL is duplicated by the revision's backfill on purpose (a
+      revision is frozen in time and must not import application code);
+      `test_rebuild_reproduces_the_index_the_migration_built` fails if the two
+      ever drift.
+- [x] `tests/test_search.py` — 30 tests in four groups: the index says what the
+      tables say (insert, edit, soft delete, the whole-tree cascade, restore,
+      hard delete, an update to an already-deleted row, rebuild); the endpoint
+      answers with rows the caller may read and no others; the timeline filter
+      still answers what it answered; and the units. Several read `search_index`
+      directly — a test that only went through the endpoint could not tell a
+      correct index from a query that happens to compensate for a wrong one.
+      Includes the acceptance line's own case by name
+      (`test_soft_deleting_a_note_removes_it_from_the_index_and_from_results`)
+      and the legacy-database case, where revision 0002's backfill indexes a
+      pre-Alembic installation's existing rows.
+- [x] The latency half of the acceptance line, split in two per **D-036**: the
+      budget asserted at a bounded 24,000-document corpus, and the query plan
+      asserted separately (three MATCH-driven `search_index` scans, every
+      matched row reached by rowid, no `SCAN` of `timeline_entries`, `notes` or
+      `comments`) because the plan is what keeps the figure true as the corpus
+      grows. The plan test was confirmed to fail first, against SQL mutated to
+      defeat the rowid lookups; the latency test does not catch that mutation
+      at this size, which is why both exist. Measurement at `AGENTS.md`'s
+      confirmed 800k-row scale is R.3's, against R.7's large seed — flagged
+      **needs human review Y**.
+- [x] Authorization matrix extended (45 → 46). Search answers 200 for anyone
+      signed in and carries the permission filter inside the query, so the
+      leakage cases live in `tests/test_search.py` rather than in the matrix.
+- [x] `tests/data/expected_schema.sql` updated with the virtual table, the four
+      shadow tables SQLite creates beneath it and the nine triggers.
+      `tests/test_migrations.py` now pins `HEAD_REVISION` rather than the
+      baseline, and its statement splitter changed from splitting on every
+      semicolon to splitting on blank lines — a trigger body carries semicolons
+      of its own.
+- [x] Seed demo path: `make seed`'s printed tour gains the search line, and
+      `tests/test_seed.py` asserts it. One query, `?q=finance`, four different
+      answers — Alex and Blair get two hits in two different opportunities,
+      Casey gets only the Northwind one, Dana gets nothing — which is the
+      permission scoping, demonstrable by hand. No new seed data was invented
+      for it; the existing content already carried the term.
+- [x] `frontend/lib/api-types.ts` regenerated (`Page_SearchResultPublic_` and
+      its two new component schemas); contract check green.
+- [x] Docs: `CLAUDE.md` gains a "Search" section (the four load-bearing
+      properties) and `make reindex`; `docs/PLAN.md`'s v2 list gains the
+      endpoint and why it has no v1 twin; `README.md` gains `make reindex`, and
+      its stale "every push and pull request" line was corrected to match
+      D-032's narrowed CI trigger.
+- [ ] **Deferred to 1.5, not dropped: the search UI and E2E journey 6**
+      (**D-035**). `docs/ROADMAP.md`'s next item introduces React Router
+      "justified by needing a second route" — the search page *is* that route.
+      Building it now would mean either pulling the router into a backend
+      milestone or writing it into `frontend/app/page.tsx`, the file 1.5 and
+      2.1 exist to take apart. The phase's user-visible outcome still lands
+      inside Phase 1.
+
+Work log: single session, resuming an interrupted one — the previous session
+left 1.4's implementation in the working tree uncommitted and undocumented,
+with `ruff check` and `ruff format` red and the generated client stale. This
+session verified that work line by line against ADR 0007 rather than assuming
+it, fixed the gate, and added what the milestone still owed: the query-plan and
+latency tests (D-036), the empty-token unit test that closed `search.py`'s last
+branch, the seed demo path and its assertion, and the docs. New:
+`backend/alembic/versions/20260917_0002_search_index.py`, `backend/app/search.py`,
+`backend/app/routes_search.py`, `backend/tools/reindex.py`,
+`backend/tests/test_search.py`. Changed: `backend/app/main.py` (router mounted),
+`backend/app/permissions.py` (`ACCESSIBLE_OPPORTUNITY_IDS_SQL`),
+`backend/app/routes_timeline.py` (keyword filter), `backend/app/schemas.py`
+(four search response models), `backend/tools/seed.py` (printed tour),
+`backend/tests/test_seed.py`, `backend/tests/test_authorization_matrix.py`,
+`backend/tests/test_migrations.py`, `backend/tests/data/expected_schema.sql`,
+`Makefile` (`reindex`), `frontend/lib/api-types.ts` (generated), `CLAUDE.md`,
+`docs/PLAN.md`, `README.md`. Decisions: **D-035** (search UI deferred to 1.5,
+not flagged — it follows the roadmap's own ordering), **D-036** (latency
+measured at a bounded corpus plus a query-plan assertion; **needs human review
+Y**, because it narrows a stated Phase 1 acceptance criterion) and **D-037**
+(the v1 timeline filter's substring-to-prefix change, not flagged — ADR 0007
+lists substring matching among the defects the index fixes). Gate: `make
+check-fast` green — 247 backend tests (was 217), 97.11% combined coverage (was
+96.82%), `app/search.py` and `app/routes_search.py` both 100% line and branch;
+80 frontend tests, 86.87% line, unchanged. Docker portion of the split gate
+remains the host's (`scripts/autopilot-gate.sh 1`).
+
 - [ ] 1.5 React Router and TanStack Query introduced — justified by needing a
-      second route, carrying blocker B1's first instalment (ADR 0005).
+      second route, carrying blocker B1's first instalment (ADR 0005). The
+      second route is the **search page**, deferred here from 1.4 with its E2E
+      journey (brief §6.3 journey 6) per **D-035**; `GET /api/v2/search` and
+      its generated client types are already in place, so this milestone owes
+      the router, the query layer, the page and the journey.
 - [ ] 1.6 Structured logging, `/api/health` detail, WAL, `VACUUM INTO` backup
       job with a tested restore (ADR 0011).
 - [ ] 1.7 Notifications inbox rework (§9, minus digests): read/unread with

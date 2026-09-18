@@ -16,6 +16,7 @@ from .routes_notifications import router as notifications_router
 from .routes_notifications import v2_router as notifications_v2_router
 from .routes_opportunities import router as opportunities_router
 from .routes_opportunities import v2_router as opportunities_v2_router
+from .routes_search import v2_router as search_v2_router
 from .routes_sharing import router as sharing_router
 from .routes_sharing import v2_router as sharing_v2_router
 from .routes_timeline import router as timeline_router
@@ -54,6 +55,7 @@ app.include_router(opportunities_v2_router)
 app.include_router(sharing_v2_router)
 app.include_router(timeline_v2_router)
 app.include_router(notifications_v2_router)
+app.include_router(search_v2_router)
 
 
 @app.get("/api/health")

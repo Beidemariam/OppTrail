@@ -507,3 +507,32 @@ and the v2 handlers reuse the v1 row-mapping code that was already covered.
 
 Authorization matrix: 38 endpoints → 45, each v2 entry carrying the same
 expectations as the v1 route it mirrors.
+
+## Phase 1 — milestone 1.4 (FTS5 search index, triggers, `/api/v2/search`)
+
+Two new modules (`app/search.py`, `app/routes_search.py`), one migration
+(`alembic/versions/20260917_0002_search_index.py`), one new tool
+(`tools/reindex.py`), one new test file (`tests/test_search.py`, 30 tests) and
+one new authorization-matrix entry. `routes_timeline.py`'s keyword filter was
+reimplemented against the index, so its existing tests cover changed code.
+
+```
+backend:  247 passed (was 217), 97.11% combined line+branch coverage
+          (was 96.82%; --cov-fail-under=90 enforced)
+          app/search.py        100% line, 100% branch
+          app/routes_search.py 100% line, 100% branch
+          app/permissions.py   100% line, 100% branch (unchanged; brief §6.2's
+                               95%-branch floor for permissions modules holds)
+frontend: 80 passed, 86.87% line (unchanged — no frontend source changed; the
+          search UI is milestone 1.5's, see D-035. lib/api-types.ts is
+          generated and carries no executable code)
+```
+
+Authorization matrix: 45 endpoints → 46.
+
+The one branch that needed a test written for it rather than falling out of the
+feature tests is `search.matches_pattern`'s empty-token guard: `search()`
+returns early on a query with no words, so no request reaches it, but
+`build_snippet` is a public helper and without the guard its alternation would
+be empty and match at every position. `test_build_snippet_with_no_tokens_marks_
+nothing` pins that.

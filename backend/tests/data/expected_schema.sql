@@ -145,3 +145,73 @@ CREATE TABLE users (
     name TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
+
+-- Revision 0002_search_index (ADR 0007). The FTS5 virtual table, the four
+-- shadow tables SQLite creates beneath it, and the nine triggers that keep the
+-- index current -- including the soft-delete transitions.
+
+CREATE VIRTUAL TABLE search_index USING fts5(
+    title,
+    body,
+    content='',
+    tokenize='porter unicode61'
+);
+
+CREATE TABLE 'search_index_config'(k PRIMARY KEY, v) WITHOUT ROWID;
+
+CREATE TABLE 'search_index_data'(id INTEGER PRIMARY KEY, block BLOB);
+
+CREATE TABLE 'search_index_docsize'(id INTEGER PRIMARY KEY, sz BLOB);
+
+CREATE TABLE 'search_index_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID;
+
+CREATE TRIGGER timeline_entries_search_insert AFTER INSERT ON timeline_entries BEGIN
+    INSERT INTO search_index(rowid, title, body)
+    SELECT new.id * 4 + 0, new.title, new.body WHERE new.deleted_at IS NULL;
+END;
+
+CREATE TRIGGER timeline_entries_search_update AFTER UPDATE ON timeline_entries BEGIN
+    INSERT INTO search_index(search_index, rowid, title, body)
+    SELECT 'delete', old.id * 4 + 0, old.title, old.body WHERE old.deleted_at IS NULL;
+    INSERT INTO search_index(rowid, title, body)
+    SELECT new.id * 4 + 0, new.title, new.body WHERE new.deleted_at IS NULL;
+END;
+
+CREATE TRIGGER timeline_entries_search_delete AFTER DELETE ON timeline_entries BEGIN
+    INSERT INTO search_index(search_index, rowid, title, body)
+    SELECT 'delete', old.id * 4 + 0, old.title, old.body WHERE old.deleted_at IS NULL;
+END;
+
+CREATE TRIGGER notes_search_insert AFTER INSERT ON notes BEGIN
+    INSERT INTO search_index(rowid, title, body)
+    SELECT new.id * 4 + 1, '', new.body WHERE new.deleted_at IS NULL;
+END;
+
+CREATE TRIGGER notes_search_update AFTER UPDATE ON notes BEGIN
+    INSERT INTO search_index(search_index, rowid, title, body)
+    SELECT 'delete', old.id * 4 + 1, '', old.body WHERE old.deleted_at IS NULL;
+    INSERT INTO search_index(rowid, title, body)
+    SELECT new.id * 4 + 1, '', new.body WHERE new.deleted_at IS NULL;
+END;
+
+CREATE TRIGGER notes_search_delete AFTER DELETE ON notes BEGIN
+    INSERT INTO search_index(search_index, rowid, title, body)
+    SELECT 'delete', old.id * 4 + 1, '', old.body WHERE old.deleted_at IS NULL;
+END;
+
+CREATE TRIGGER comments_search_insert AFTER INSERT ON comments BEGIN
+    INSERT INTO search_index(rowid, title, body)
+    SELECT new.id * 4 + 2, '', new.body WHERE new.deleted_at IS NULL;
+END;
+
+CREATE TRIGGER comments_search_update AFTER UPDATE ON comments BEGIN
+    INSERT INTO search_index(search_index, rowid, title, body)
+    SELECT 'delete', old.id * 4 + 2, '', old.body WHERE old.deleted_at IS NULL;
+    INSERT INTO search_index(rowid, title, body)
+    SELECT new.id * 4 + 2, '', new.body WHERE new.deleted_at IS NULL;
+END;
+
+CREATE TRIGGER comments_search_delete AFTER DELETE ON comments BEGIN
+    INSERT INTO search_index(search_index, rowid, title, body)
+    SELECT 'delete', old.id * 4 + 2, '', old.body WHERE old.deleted_at IS NULL;
+END;

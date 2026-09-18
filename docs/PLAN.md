@@ -138,6 +138,11 @@ mirrors (`docs/ARCHITECTURE.md`, "Pagination" / "Error shapes"):
 - `GET /api/v2/opportunities/{id}/audit-log`
 - `GET /api/v2/notes/{note_id}/versions`
 - `GET /api/v2/notifications`
+- `GET /api/v2/search` — ranked, snippeted matches in entries, notes and
+  comments across every opportunity the caller can read, with the timeline's
+  filters by the same names (`?q=&type=&from=&to=&author_id=`). It has no v1
+  twin: an unbounded ranked result set is the shape the envelope exists to
+  stop shipping, so search is paginated-only (ADR 0007).
 
 v1 stays as it is while it serves the shipped frontend, and is removed at the
 end of roadmap Phase 2 once the frontend has moved.

@@ -338,6 +338,15 @@ MATRIX: dict[Endpoint, Case] = {
         url=lambda world: "/api/v2/notifications",
         notes="Scoped by the query: a user only ever reads their own rows.",
     ),
+    Endpoint("GET", "/api/v2/search"): Case(
+        expected=authenticated_only(200),
+        url=lambda world: "/api/v2/search?q=discovery",
+        notes=(
+            "Cross-opportunity, so it answers 200 for anyone signed in and "
+            "carries the permission filter inside the query instead "
+            "(tests/test_search.py has the leakage cases)."
+        ),
+    ),
     # --- Identity-independent surfaces ------------------------------------
     Endpoint("GET", "/api/health"): public(
         lambda world: "/api/health",

@@ -46,6 +46,7 @@ npm run e2e          # playwright; builds the app and starts scripts/e2e-server.
 make check-fast      # the inner-loop gate
 make check           # the full gate (Docker portion deferred to the host)
 make seed            # demo data; prints the seeded users and what each can see
+make reindex         # rebuilds the FTS5 search index from the source tables
 ```
 
 Full app (builds the frontend, packages both into one container):
@@ -87,9 +88,10 @@ websockets, no ORM — raw `sqlite3` with `Row` factory throughout.
 Routers are split by domain and all mounted in `main.py`: `routes_auth`,
 `routes_opportunities`, `routes_sharing` (also owns the audit log endpoint),
 `routes_timeline` (entries, notes, comments, note versions), `routes_ai`,
-`routes_export`, `routes_notifications`. Shared logic lives in small helper modules
-rather than a service layer: `permissions.py`, `time_utils.py`, `audit_utils.py`,
-`timeline_utils.py`, `notification_service.py`, `ai_service.py`, `export_service.py`.
+`routes_export`, `routes_notifications`, `routes_search`. Shared logic lives in small
+helper modules rather than a service layer: `permissions.py`, `time_utils.py`,
+`audit_utils.py`, `timeline_utils.py`, `notification_service.py`, `ai_service.py`,
+`export_service.py`, `search.py`.
 
 ### API versions
 
@@ -152,6 +154,47 @@ context manager, which sets `PRAGMA foreign_keys = ON`, `journal_mode = WAL`, an
 5s `busy_timeout` on every connection (`tests/test_database.py` guards all three).
 There is no connection pool and no request-scoped session — routes open a
 connection, do their work, `commit()`, and close.
+
+### Search
+
+`GET /api/v2/search` is ranked, snippeted, cross-opportunity keyword search over
+entries, notes and comments, and the timeline's `?q=` filter is the same index
+asked a narrower question (ADR 0007). Four things about it are load bearing:
+
+- **The index is a contentless FTS5 table** (`search_index`, revision
+  `20260917_0002_search_index`), so it stores no text. `snippet()` and
+  `highlight()` are therefore unavailable and `search.build_snippet` produces
+  the excerpt by re-reading the matched row; the table also cannot be scanned
+  without a `MATCH`, which is why every query in `search.py` starts from one.
+  Contentless is what keeps it cheap — the ADR measured +13 MB against +212 MB
+  for a content-duplicating index.
+- **The rowid is the document identity**: `source id * 4 + kind code`, kind
+  codes 0 entry, 1 note, 2 comment. That bijection is why no mapping table
+  exists. The encoding is written twice — as constants in `search.py` and as
+  arithmetic in the revision's trigger SQL — and
+  `tests/test_search.py::test_writes_are_indexed_under_the_documented_rowid`
+  is what keeps the two in agreement.
+- **Triggers maintain it, including the soft-delete transitions.** Nine of
+  them, `AFTER INSERT/UPDATE/DELETE` on each of the three tables. The UPDATE
+  trigger covers an edit, a soft delete and a restore with the same two
+  statements: remove what was indexed (`old.*`, guarded on
+  `old.deleted_at IS NULL`), index what is now visible. A contentless table
+  cannot be `UPDATE`d or `DELETE`d from with ordinary SQL, so removals use
+  FTS5's `'delete'` command, which needs the row's previous column values.
+  Those queries still filter `deleted_at IS NULL` at every level they join
+  through — a read that trusts the index to be current is a read that trusts a
+  cache.
+- **Permissions are inside the query**, not a filter over its results
+  (`permissions.ACCESSIBLE_OPPORTUNITY_IDS_SQL`): search is the first read that
+  spans opportunities, so it cannot resolve a role first the way every other
+  route does. A page of 50 is 50 rows the caller may read.
+
+`make reindex` (`backend/tools/reindex.py`) rebuilds the index from the source
+tables, for the two cases ADR 0007 names — corruption, and a change that
+invalidates the stored terms such as a different tokenizer or a new document
+kind. Its SQL is duplicated in the revision's backfill, because a revision is
+frozen in time and must not import application code;
+`test_rebuild_reproduces_the_index_the_migration_built` fails if the two drift.
 
 ### Migrations
 

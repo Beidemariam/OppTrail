@@ -1,4 +1,4 @@
-.PHONY: dev test test-host check check-fast e2e build docker docker-test docker-smoke seed migrate frontend-deps generate-client
+.PHONY: dev test test-host check check-fast e2e build docker docker-test docker-smoke seed migrate reindex frontend-deps generate-client
 
 # Guards frontend targets against a clean checkout / empty node_modules volume
 # (see docs/autopilot/DECISIONS.md's F.2 review note — the sandbox gives the
@@ -101,3 +101,8 @@ docker-smoke: docker
 # step; this target is for inspecting or applying revisions by hand.
 migrate:
 	cd backend && uv run alembic upgrade head
+
+# Rebuilds the FTS5 search index from the source tables (ADR 0007). Triggers
+# keep it current, so this is for a corrupted index or a tokenizer change.
+reindex:
+	cd backend && uv run python -m tools.reindex

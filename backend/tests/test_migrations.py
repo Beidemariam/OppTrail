@@ -16,7 +16,6 @@ import pytest
 from conftest import CsrfClient
 
 from app.database import (
-    BASELINE_REVISION,
     column_exists,
     db_connection,
     initialize_database,
@@ -27,6 +26,11 @@ from app.settings import settings
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
 CANONICAL = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+
+# The revision `alembic upgrade head` is expected to land on. Written down
+# rather than read from the script directory, for the same reason
+# `expected_schema.sql` is: a new revision should have to say so here.
+HEAD_REVISION = "0002_search_index"
 
 
 @pytest.fixture
@@ -66,7 +70,10 @@ def expected_schema() -> list[str]:
     without_comments = "\n".join(
         line for line in text.splitlines() if not line.strip().startswith("--")
     )
-    statements = [chunk for chunk in without_comments.split(";") if chunk.strip()]
+    # Statements are separated by a blank line rather than by every semicolon:
+    # a trigger body holds semicolons of its own (revision 0002_search_index).
+    chunks = re.split(r";\n\s*\n", without_comments)
+    statements = [chunk.strip().rstrip(";") for chunk in chunks if chunk.strip()]
     return sorted(collapse(statement) for statement in statements)
 
 
@@ -124,7 +131,7 @@ def test_upgrade_from_empty_produces_the_expected_schema(database_url: str) -> N
         schema = normalized_schema(connection)
         revision = connection.execute("SELECT version_num FROM alembic_version").fetchone()
 
-    assert revision["version_num"] == BASELINE_REVISION
+    assert revision["version_num"] == HEAD_REVISION
     # alembic_version is Alembic's bookkeeping, not part of the app's schema.
     assert sorted(item for item in schema if "alembic_version" not in item) == expected_schema()
 
@@ -138,7 +145,7 @@ def test_upgrade_from_empty_is_idempotent(database_url: str) -> None:
     with db_connection() as connection:
         revisions = connection.execute("SELECT version_num FROM alembic_version").fetchall()
 
-    assert [row["version_num"] for row in revisions] == [BASELINE_REVISION]
+    assert [row["version_num"] for row in revisions] == [HEAD_REVISION]
     assert len(first) > 0
 
 
@@ -151,8 +158,9 @@ def test_upgrade_from_an_mvp_database_repairs_and_stamps_it(database_url: str) -
         assert column_exists(connection, "timeline_entries", "system_generated")
         assert column_exists(connection, "opportunity_shares", "deleted_at")
 
+        # Stamped at the baseline, then carried up to head by the same call.
         revision = connection.execute("SELECT version_num FROM alembic_version").fetchone()
-        assert revision["version_num"] == BASELINE_REVISION
+        assert revision["version_num"] == HEAD_REVISION
 
         # Legacy rows are rewritten into the canonical fixed-width UTC format.
         assert timestamps(connection, "opportunities", "created_at") == ["2026-01-04T09:16:00Z"]

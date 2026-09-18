@@ -5,6 +5,25 @@ from fastapi import HTTPException, status
 
 Role = Literal["owner", "editor", "viewer"]
 
+# Every opportunity one user may read, as a subquery for the reads that are not
+# scoped to a single opportunity and so cannot resolve a role first (search,
+# ADR 0007). Same rule as `get_opportunity_role` below -- owner, or an
+# undeleted share -- expressed as a set rather than one row, and takes the
+# user's id twice.
+ACCESSIBLE_OPPORTUNITY_IDS_SQL = """
+    SELECT opportunities.id
+    FROM opportunities
+    LEFT JOIN opportunity_shares
+        ON opportunity_shares.opportunity_id = opportunities.id
+        AND opportunity_shares.user_id = ?
+        AND opportunity_shares.deleted_at IS NULL
+    WHERE opportunities.deleted_at IS NULL
+        AND (
+            opportunities.owner_id = ?
+            OR opportunity_shares.user_id IS NOT NULL
+        )
+"""
+
 
 def get_opportunity_role(
     connection: sqlite3.Connection,
