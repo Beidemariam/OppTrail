@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router";
 import type { components } from "../lib/api-types";
 import { apiRequest } from "../lib/api";
 import { notificationText } from "../lib/notifications";
@@ -918,6 +919,9 @@ export default function Home() {
           <h1>Opportunities</h1>
         </div>
         <div className="user-block">
+          <Link className="secondary-button" to="/search">
+            Search
+          </Link>
           <div className="notification-menu">
             <button
               type="button"

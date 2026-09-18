@@ -106,6 +106,42 @@ describe("apiRequest", () => {
     ).rejects.toThrow("Request failed");
   });
 
+  it("raises the v2 envelope's message", async () => {
+    // `/api/v2/*` answers `{"error": {...}}` rather than `{"detail": ...}`
+    // (`backend/app/errors.py`), and both reach the user through this wrapper.
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse(
+        {
+          error: {
+            code: "validation_error",
+            message: "limit must be between 1 and 200",
+          },
+        },
+        422,
+      ),
+    );
+
+    await expect(apiRequest("/api/v2/search?q=a&limit=500")).rejects.toThrow(
+      "limit must be between 1 and 200",
+    );
+  });
+
+  it("falls back when the v2 envelope carries no message", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse({ error: { code: "not_found" } }, 404),
+    );
+    await expect(apiRequest("/api/v2/search?q=a")).rejects.toThrow(
+      "Request failed",
+    );
+  });
+
+  it("falls back when the error body is JSON but not an object", async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse("nope", 500));
+    await expect(apiRequest("/api/v2/search?q=a")).rejects.toThrow(
+      "Request failed",
+    );
+  });
+
   it("lets a caller's own headers win", async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({}));
     await apiRequest("/api/opportunities", {

@@ -987,8 +987,8 @@ the index a feature rather than a table.
       endpoint and why it has no v1 twin; `README.md` gains `make reindex`, and
       its stale "every push and pull request" line was corrected to match
       D-032's narrowed CI trigger.
-- [ ] **Deferred to 1.5, not dropped: the search UI and E2E journey 6**
-      (**D-035**). `docs/ROADMAP.md`'s next item introduces React Router
+- [x] **Deferred to 1.5, not dropped: the search UI and E2E journey 6**
+      (**D-035**) — **delivered in 1.5 below.** `docs/ROADMAP.md`'s next item introduces React Router
       "justified by needing a second route" — the search page *is* that route.
       Building it now would mean either pulling the router into a backend
       milestone or writing it into `frontend/app/page.tsx`, the file 1.5 and
@@ -1022,12 +1022,103 @@ check-fast` green — 247 backend tests (was 217), 97.11% combined coverage (was
 80 frontend tests, 86.87% line, unchanged. Docker portion of the split gate
 remains the host's (`scripts/autopilot-gate.sh 1`).
 
-- [ ] 1.5 React Router and TanStack Query introduced — justified by needing a
-      second route, carrying blocker B1's first instalment (ADR 0005). The
-      second route is the **search page**, deferred here from 1.4 with its E2E
-      journey (brief §6.3 journey 6) per **D-035**; `GET /api/v2/search` and
-      its generated client types are already in place, so this milestone owes
-      the router, the query layer, the page and the journey.
+### 1.5 — React Router, TanStack Query, and the search page (ADR 0005) — **DONE**
+
+Carries blocker B1's first instalment. The second route that justifies the
+router is the **search page**, deferred here from 1.4 with its E2E journey
+(brief §6.3 journey 6) per **D-035**; `GET /api/v2/search` and its generated
+client types were already in place, so this milestone owed the router, the
+query layer, the page and the journey.
+
+- [x] One exported HTML file, as ADR 0005 specifies: `frontend/app/page.tsx`
+      became the optional catch-all `frontend/app/[[...slug]]/page.tsx`, whose
+      `generateStaticParams` returns only the root. `next build` emits
+      `out/index.html` and nothing else routable; FastAPI already answers any
+      unmatched path with it (`main.py`'s `serve_frontend`), which is what
+      makes `/search?q=finance` a working deep link with no backend change.
+- [x] `frontend/app/AppRoot.tsx`: the `QueryClientProvider`, then
+      `BrowserRouter` over `/` (`Home`), `/search` (`SearchPage`) and a
+      catch-all that redirects to `/`. It renders nothing until it is running
+      in a browser (**D-040**) — the export renders this tree once in Node,
+      where `BrowserRouter` has no history to read, and a deep link hydrates
+      HTML that was prerendered for a different route. `useSyncExternalStore`
+      with differing server and client snapshots is the gate; the emitted
+      `index.html` body is therefore empty, and first paint now waits for the
+      bundle.
+- [x] `frontend/app/page.tsx` → `frontend/app/Home.tsx` (git rename, one line
+      of content changed: a `<Link>` to `/search` in the top bar). Its 28
+      `useState` hooks stay on bare `apiRequest` until 2.1 decomposes the file
+      (**D-038**); the query cache is used by the new route, not retrofitted
+      into the old one.
+- [x] `frontend/lib/query.ts`: `createQueryClient()`, one configuration —
+      `retry: false` (the wrapper throws on 401 and 422, which are not worth
+      retrying), a 30 s `staleTime`, no refetch on focus.
+- [x] `frontend/app/SearchPage.tsx`: the query lives in `?q=`, so a search is
+      linkable and the back button walks the searches you ran. Session and
+      results both read through TanStack Query, the results via
+      `useInfiniteQuery` over the v2 `next_cursor` — the first client use of
+      the pagination envelope 1.3 built. States: prompt, searching, error (the
+      API's own message), no matches, results, and "Load more results" while a
+      cursor remains.
+- [x] `frontend/lib/snippet.ts`: the API sends excerpt text plus match offsets
+      and never markup (`search.build_snippet`), so the client turns offsets
+      into runs and wraps the matched ones in `<mark>`. Pure function, tested
+      directly.
+- [x] `frontend/lib/api.ts` now raises v2's `error.message` as well as v1's
+      `detail` — the search page is the first client code to call `/api/v2/*`,
+      and without this every v2 failure read "Request failed". v1 behaviour and
+      its tests are unchanged.
+- [x] Tests, all green before commit: `app/AppRoot.test.tsx` (6 — routing at
+      each path, the redirect, the empty export shell, one exported file),
+      `app/SearchPage.test.tsx` (9 — typed search, deep-linked search,
+      highlighted match, a cleared query, a system-generated match with no
+      author, no matches, cursor walk to a second page, the v2 error message,
+      the signed-out case), `lib/snippet.test.ts` (3),
+      `lib/api.test.ts` (+3 for the envelope). `app/test-api.ts` gained the
+      search route with real keyset paging and now answers v2 failures in the
+      v2 envelope, so a page reading the wrong error shape fails there.
+      `app/page.test.tsx` → `app/Home.test.tsx`, rendering inside a
+      `MemoryRouter` the way `AppRoot` mounts it; no assertion changed.
+- [x] E2E journey 6 (`frontend/e2e/08-search.spec.ts`, 5 tests): Alex finds
+      "finance" in two opportunities, Casey — a viewer on one of them — finds
+      one, Dana finds none, a deep link to `/search?q=finance` runs the search,
+      and an unrouted path lands on the dashboard. axe runs on the results
+      page and is clean under the unchanged `DEFERRED_AXE_RULES` ratchet.
+- [x] Seed demo path extended to the UI: `make seed`'s printed tour now names
+      the Search link and `/search?q=finance` alongside the API call, and
+      `README.md` matches.
+- [x] Docs: `CLAUDE.md`'s Frontend section rewritten (the single exported file,
+      `AppRoot`, what `Home.tsx` still is, the three new `lib/` modules);
+      `docs/ARCHITECTURE.md`'s frontend bullet now says what landed in 1.5 and
+      what 2.1 still owes.
+- [x] Dependencies: `react-router` 8.4.0 and `@tanstack/react-query` 5.103.1,
+      both pinned exactly (F.8's rule). `npm audit`: 0 vulnerabilities.
+- [ ] **Known limitation, recorded not hidden (D-039): a result is not yet a
+      link into its timeline.** Nothing in the app has a URL to link to until
+      2.1 gives the opportunity view one; linking now would mean a URL that
+      agrees with the page only until the first click.
+
+Work log: single session. New: `frontend/app/[[...slug]]/page.tsx`,
+`frontend/app/AppRoot.tsx`, `frontend/app/AppRoot.test.tsx`,
+`frontend/app/SearchPage.tsx`, `frontend/app/SearchPage.test.tsx`,
+`frontend/lib/query.ts`, `frontend/lib/snippet.ts`,
+`frontend/lib/snippet.test.ts`, `frontend/e2e/08-search.spec.ts`. Renamed:
+`frontend/app/page.tsx` → `Home.tsx`, `frontend/app/page.test.tsx` →
+`Home.test.tsx`. Changed: `frontend/lib/api.ts`, `frontend/lib/api.test.ts`,
+`frontend/app/test-api.ts`, `frontend/app/globals.css`,
+`frontend/package.json`, `frontend/package-lock.json`,
+`backend/tools/seed.py`, `CLAUDE.md`, `README.md`, `docs/ARCHITECTURE.md`.
+Decisions: **D-038** (how much of TanStack Query this milestone adopts),
+**D-039** (results do not link into the timeline yet), **D-040** (the
+browser-only router mount and the empty export shell) — none flagged for human
+review; all three implement the roadmap's and ADR 0005's own ordering. Gate:
+full `make check` green — 247 backend tests, 97.11% combined coverage
+(unchanged, no backend code moved); 101 frontend tests (was 80), 88.21% line
+(was 86.87%) and 81.79% branch, both above the thresholds in
+`vitest.config.ts`, which are unchanged; 18 E2E tests (was 13), axe clean;
+`pip-audit` and `npm audit` both clean; generated client up to date. Docker
+portion of the split gate remains the host's (`scripts/autopilot-gate.sh 1`).
+
 - [ ] 1.6 Structured logging, `/api/health` detail, WAL, `VACUUM INTO` backup
       job with a tested restore (ADR 0011).
 - [ ] 1.7 Notifications inbox rework (§9, minus digests): read/unread with
@@ -1058,7 +1149,11 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
 
 ### Milestones
 
-- [ ] 2.1 Decompose `page.tsx` into routed views and feature components.
+- [ ] 2.1 Decompose `app/Home.tsx` (the former `page.tsx`) into routed views and
+      feature components, and move its reads onto the TanStack Query cache
+      introduced in 1.5 (**D-038**). Two things 1.5 left for this milestone:
+      the opportunity and its timeline get their own URL, and search results
+      then link into it (**D-039**).
       Blocker B1 lands here in full, paid for by the board view.
 - [ ] 2.2 Shared filter/sort/group model serialized to the URL; saved views
       persisted. Schema: `saved_views`.

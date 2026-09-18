@@ -536,3 +536,41 @@ returns early on a query with no words, so no request reaches it, but
 `build_snippet` is a public helper and without the guard its alternation would
 be empty and match at every position. `test_build_snippet_with_no_tokens_marks_
 nothing` pins that.
+
+## Phase 1 — milestone 1.5 (React Router, TanStack Query, the search page)
+
+The first milestone since F.7 to add frontend source: three new components and
+modules with tests (`app/AppRoot.tsx`, `app/SearchPage.tsx`, `lib/query.ts`,
+`lib/snippet.ts`), two new test files, and `lib/api.ts` extended to raise the
+v2 error envelope's message.
+
+```
+backend:  247 passed, 97.11% combined line+branch coverage (unchanged — the
+          only backend change is the printed seed tour, which test_seed.py
+          already covers)
+frontend: 101 passed (was 80), 88.21% line (was 86.87%), 81.79% branch,
+          90% functions
+          app/AppRoot.tsx    100% line, 100% branch
+          app/SearchPage.tsx 100% line, 94.73% branch
+          lib/query.ts       100% line, 100% branch
+          lib/snippet.ts     100% line, 100% branch
+          app/Home.tsx       85.43% line (unchanged file, renamed from page.tsx)
+e2e:      18 passed (was 13) — journey 6 lands with the search page
+```
+
+The thresholds in `frontend/vitest.config.ts` are unchanged (lines 85,
+statements 85, functions 85, branches 78) and the measured values are now
+further above them. They are not raised here because `app/Home.tsx`, which
+dominates the total, is rewritten in milestone 2.1; ratcheting on a number that
+is about to move would fail the gate for a reason unrelated to test quality.
+
+`SearchPage.tsx`'s two uncovered branches are the `?? ""` fallback for a form
+field that cannot be absent, and the `isFetchingNextPage` label swap, which
+needs a request held open mid-flight to observe.
+
+The two guard tests here were both confirmed to fail first (brief §6.5): the
+empty-export-shell assertion in `app/AppRoot.test.tsx` reports the rendered
+sign-in markup when the browser-only gate is removed, and the v2 envelope test
+in `lib/api.test.ts` reports "Request failed" against the old `detail`-only
+wrapper.
+

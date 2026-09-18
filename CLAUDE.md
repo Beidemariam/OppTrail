@@ -303,16 +303,35 @@ questions; the endpoint uses `require_opportunity_access`, not
 
 ### Frontend
 
-`frontend/app/page.tsx` is still the entire application — one large client
-component holding all state in `useState`. There is no router, no state library,
-and no data-fetching cache; views switch on `selectedOpportunityId`. Milestone 2.1
-is where it is decomposed into routed views.
+Next is a bundler here, not a server (ADR 0005): `output: "export"` emits one
+HTML file from the optional catch-all `app/[[...slug]]/page.tsx`, whose
+`generateStaticParams` deliberately returns only the root. FastAPI answers every
+unmatched path with that same file (`main.py`'s `serve_frontend`), so a deep
+link like `/search?q=finance` loads the shell and the client router takes over.
+Adding a second Next route would emit a second HTML file and split the SPA;
+routes go in `app/AppRoot.tsx` instead.
+
+`AppRoot` is the whole client runtime: the TanStack Query provider, then
+`BrowserRouter` over `/` (`app/Home.tsx`), `/search` (`app/SearchPage.tsx`) and
+a catch-all that redirects to `/`. It renders nothing until it is in a browser
+— the export renders this tree once in Node, where `BrowserRouter` has no
+history to read — which is also why the emitted `index.html` body is empty.
+
+`app/Home.tsx` (the former `page.tsx`) is still the rest of the application —
+one large client component holding all state in `useState`, fetching with bare
+`apiRequest` calls rather than through the query cache. Milestone 2.1 is where
+it is decomposed into routed views and moved onto TanStack Query; new work
+should not add to it.
 
 What has been pulled out of it, because each is a unit worth testing directly:
 
 - `lib/api.ts` — `apiRequest<T>()`, the only fetch wrapper
   (`credentials: "include"`, echoes the CSRF cookie on unsafe methods, throws on
-  non-2xx using the API's `detail` field).
+  non-2xx using v1's `detail` or v2's `error.message`).
+- `lib/query.ts` — `createQueryClient()`, the single TanStack Query
+  configuration (no retries: `apiRequest` throws on 401 and 422 too).
+- `lib/snippet.ts` — turns a search snippet's match offsets into runs to
+  highlight. The API sends text and offsets, never markup.
 - `lib/time.ts` — the UTC/`datetime-local` conversions at both boundaries.
 - `lib/permissions.ts` — `canManageOpportunity` / `canWriteTimeline` /
   `canChangeItem`, the client mirror of `backend/app/permissions.py`. They decide

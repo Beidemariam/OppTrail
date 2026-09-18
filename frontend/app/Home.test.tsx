@@ -2,7 +2,9 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import Home from "./page";
+import { MemoryRouter } from "react-router";
+
+import Home from "./Home";
 import {
   ALEX,
   BLAIR,
@@ -15,10 +17,16 @@ import {
 
 let api: FakeApi;
 
+// `Home` links to the search route, so it renders inside a router here the
+// same way `AppRoot` mounts it in the app (ADR 0005).
 function start(options: ConstructorParameters<typeof FakeApi>[0] = {}) {
   api = new FakeApi(options);
   api.install();
-  return render(<Home />);
+  return render(
+    <MemoryRouter>
+      <Home />
+    </MemoryRouter>,
+  );
 }
 
 /** The app is signed in and the dashboard has finished its first load. */

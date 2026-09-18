@@ -1,5 +1,7 @@
 import { vi } from "vitest";
 
+import type { components } from "../lib/api-types";
+
 /**
  * A stand-in for the OppTrail API, good enough to drive the whole page.
  *
@@ -25,6 +27,7 @@ export interface FakeApiOptions {
   notifications?: Notification[];
   shares?: Share[];
   auditLog?: AuditEntry[];
+  searchResults?: SearchResult[];
   /** Paths that should fail, mapped to `[status, detail]`. */
   failures?: Record<string, [number, string]>;
 }
@@ -180,6 +183,27 @@ export function aComment(overrides: Partial<Comment> = {}): Comment {
   };
 }
 
+type SearchResult = components["schemas"]["SearchResultPublic"];
+
+export function aSearchResult(
+  overrides: Partial<SearchResult> = {},
+): SearchResult {
+  return {
+    kind: "note",
+    id: 200,
+    opportunity_id: 10,
+    opportunity_name: "Northwind rollout",
+    entry_id: 100,
+    note_id: 200,
+    title: "Discovery call",
+    snippet: { text: "They want viewer-only for finance.", matches: [] },
+    timestamp: "2026-09-02T14:05:00Z",
+    author_id: ALEX.id,
+    author_name: ALEX.name,
+    ...overrides,
+  };
+}
+
 interface Notification {
   id: number;
   type: string;
@@ -196,6 +220,7 @@ export class FakeApi {
   notifications: Notification[];
   shares: Share[];
   auditLog: AuditEntry[];
+  searchResults: SearchResult[];
   failures: Record<string, [number, string]>;
   private nextId = 1000;
 
@@ -206,6 +231,7 @@ export class FakeApi {
     this.notifications = options.notifications ?? [];
     this.shares = options.shares ?? [];
     this.auditLog = options.auditLog ?? [];
+    this.searchResults = options.searchResults ?? [];
     this.failures = options.failures ?? {};
   }
 
@@ -237,12 +263,21 @@ export class FakeApi {
 
     const failure = this.failures[`${method} ${path.split("?")[0]}`];
     if (failure) {
-      return this.json({ detail: failure[1] }, failure[0]);
+      // v2 answers the `{"error": {...}}` envelope and v1 answers `detail`
+      // (`backend/app/errors.py`); the fake follows, so a page that reads the
+      // wrong one fails here rather than in production.
+      const body = path.startsWith("/api/v2/")
+        ? { error: { code: "error", message: failure[1] } }
+        : { detail: failure[1] };
+      return this.json(body, failure[0]);
     }
 
     const bare = path.split("?")[0];
     const segments = bare.split("/").filter(Boolean);
 
+    if (bare === "/api/v2/search") {
+      return this.searchPage(path);
+    }
     if (bare === "/api/auth/me") {
       return this.user
         ? this.json({ user: this.user })
@@ -403,5 +438,32 @@ export class FakeApi {
       { detail: `Unhandled in the fake API: ${method} ${path}` },
       500,
     );
+  }
+
+  /**
+   * The v2 keyset envelope (`backend/app/pagination.py`): a page of matches
+   * plus the cursor for the next one, `null` on the last page. The cursor here
+   * is the offset into the filtered list — opaque to the client, which is the
+   * only property the page is allowed to depend on.
+   */
+  private searchPage(path: string): Response {
+    const params = new URLSearchParams(path.split("?")[1] ?? "");
+    const query = (params.get("q") ?? "").toLowerCase();
+    const limit = Number(params.get("limit") ?? 50);
+    const offset = Number(params.get("cursor") ?? 0);
+
+    const hits = this.searchResults.filter((result) =>
+      [result.opportunity_name, result.title ?? "", result.snippet.text]
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+    );
+    const items = hits.slice(offset, offset + limit);
+    const next = offset + limit;
+
+    return this.json({
+      items,
+      next_cursor: next < hits.length ? String(next) : null,
+    });
   }
 }

@@ -33,8 +33,10 @@ make seed
 Populates the configured database with four users, five opportunities, both
 share roles, an edited note, a soft-deleted note, a mention notification and
 one stalled opportunity, then prints the sign-in details, what each user can
-see, and a search query that returns a different result for each of them. It refuses to run on a database that already has users; pass `--force` to
-add a second set.
+see, and a search query that returns a different result for each of them --
+`make seed`, sign in, then use the Search link in the top bar (or open
+`/search?q=finance` directly). It refuses to run on a database that already has
+users; pass `--force` to add a second set.
 
 ## Development
 

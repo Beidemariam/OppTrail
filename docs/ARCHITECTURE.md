@@ -53,8 +53,11 @@ path (`main.py:56-64`).
 
 - **React Router** — URL is the source of truth for opportunity, view, and filters.
 - **TanStack Query** — the only server-state cache; SSE events invalidate keys.
-- `page.tsx` decomposes into routed views and feature components. Local state lives
-  in the component that owns it.
+- `app/[[...slug]]/page.tsx` is the single exported HTML file; `app/AppRoot.tsx`
+  holds the router and the query client, and `/search` is the second route that
+  justified introducing both (milestone 1.5). `app/Home.tsx` — the former
+  `page.tsx` — decomposes into routed views and feature components in milestone
+  2.1. Local state lives in the component that owns it.
 
 ### Backend
 

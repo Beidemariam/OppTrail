@@ -369,7 +369,8 @@ def main(argv: list[str] | None = None) -> int:
         "  Globex renewal is stalled; Northwind has a system stage-change entry,\n"
         "  a mention notification for Alex, an edited note and a soft-deleted note.\n"
         "\n"
-        "  Search (GET /api/v2/search?q=finance) is scoped to what the caller can\n"
+        "  Search (GET /api/v2/search?q=finance, or the Search link in the top\n"
+        "  bar, which opens /search?q=finance) is scoped to what the caller can\n"
         "  read: Alex and Blair each get two hits in two different opportunities,\n"
         "  Casey gets only the Northwind one, and Dana gets nothing at all."
     )
