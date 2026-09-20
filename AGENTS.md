@@ -71,6 +71,8 @@ Specified in `docs/FEATURES.md`, sequenced in `docs/ROADMAP.md`:
 12. **Navigation and input** — command palette, keyboard throughout, bulk, undo
 13. **Search** — FTS5, ranked, snippeted, cross-opportunity
 14. **AI** — summarization, NL filter construction; read-only by construction
+15. **Edit history** — every edit to user content keeps the previous value, with a
+    screen the opportunity owner can read it from
 
 ## Non-goals
 
@@ -115,6 +117,14 @@ achieves.
 6. **Every non-user-initiated write is traceable** to the action that caused it —
    system entries, audit rows, and automation-generated records naming their rule.
 7. **Deletions are audited.** All four delete paths write an audit row.
+8. **Edits are recoverable.** Every user-editable field keeps its previous value,
+   attributed to who changed it and when, and the opportunity owner can read that
+   history in the UI. Destroying a record is already traceable under 5 and 7;
+   quietly rewriting one must be too. This covers opportunity fields (a deal
+   value that changes with no record is the case that prompted this), timeline
+   entries, and notes. Comments are exempt because they cannot be edited at all
+   (see the Permissions Model) — immutability serves the same end by a different
+   route.
 
 ## Technical Decisions
 

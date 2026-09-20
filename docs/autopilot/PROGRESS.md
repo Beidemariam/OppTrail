@@ -1487,6 +1487,36 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
 - [ ] 2.8 Table and calendar view — may slip to Phase 3 per the roadmap's own
       stated risk mitigation; do not treat slipping these as a blocked
       milestone.
+- [ ] 2.10 Edit history for all user-editable content, with a screen
+      (**AGENTS.md invariant 8** and v2 scope item 15, added 2026-09-20 after a
+      human user test found the gap — see D-050).
+      Today only notes keep history (`note_versions`), and nothing exposes it:
+      the frontend has zero references to versions, so `GET /api/notes/{id}/
+      versions` is unreachable outside curl. Two editable things keep no history
+      at all:
+      - **Opportunity fields.** `routes_opportunities.py:271` writes a bare
+        `UPDATE`. Only a `stage` change leaves a trace (a system timeline
+        entry); `value`, `name`, `account_name`, `currency` and
+        `expected_close_date` change with no record of the old value or who
+        changed it. A deal moving from 485,000 to 250,000 is currently
+        invisible — this is the case that prompted the requirement.
+      - **Timeline entries.** `routes_timeline.py:416` writes a bare `UPDATE`.
+        Title, body, `event_timestamp` and type are all silently overwritten.
+      Scope:
+      - Extend versioning to opportunities and timeline entries, following
+        `note_versions`' existing shape (append a row, never overwrite) so the
+        three read the same way. Needs an Alembic revision.
+      - One history view, reachable from each editable item, showing previous
+        values with author and timestamp.
+      - **Owner-only**, matching the audit log's existing rule. Note there is no
+        admin role in this system — the roles are owner, editor and viewer
+        (`permissions.py`), so "owner or admin" resolves to the opportunity
+        owner. If a wider audience should see it, that is a separate decision.
+      - The authorization matrix gains the new routes; the registry guard should
+        fail first until they are added.
+      Placed in Phase 2 because it needs a screen and Phase 2 owns the UI, and
+      because 2.1's decomposition is what makes adding a view tractable.
+
 - [ ] 2.9 Finish the `/api/v2` migration and remove v1 (**D-033**, ruled by
       the human 2026-09-17). Milestone 1.3 moved only the collection reads and
       the error envelope to v2 — the mutations and single-resource reads had no
