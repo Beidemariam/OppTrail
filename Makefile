@@ -1,4 +1,4 @@
-.PHONY: dev test test-host check check-fast e2e build docker docker-test docker-smoke seed migrate reindex backup restore frontend-deps generate-client
+.PHONY: dev test test-host check check-fast e2e build docker docker-test docker-smoke sqlite-version-check seed migrate reindex backup restore frontend-deps generate-client
 
 # Guards frontend targets against a clean checkout / empty node_modules volume
 # (see docs/autopilot/DECISIONS.md's F.2 review note — the sandbox gives the
@@ -96,6 +96,13 @@ seed:
 # autopilot sandbox; scripts/autopilot-gate.sh calls the same script.
 docker-smoke: docker
 	./scripts/docker-smoke.sh opptrail
+
+# D-045/D-046: fails loudly, naming both versions, when the image's SQLite
+# differs from the one this host develops and tests against -- see
+# docs/autopilot/DECISIONS.md. Needs a Docker socket, so it is the host
+# half's, same as docker-smoke; scripts/autopilot-gate.sh runs it too.
+sqlite-version-check: docker
+	./scripts/check-sqlite-version.sh opptrail
 
 # The application also runs this on startup, so a normal boot needs no manual
 # step; this target is for inspecting or applying revisions by hand.

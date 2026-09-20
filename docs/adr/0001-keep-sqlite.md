@@ -9,7 +9,13 @@ it: 20 users, **20 opportunities each (400 total)**, ~200 entries per opportunit
 That is 80,000 entries, 240,000 notes and 480,000 comments — **~800,000 rows in a
 ~136 MB database**, with 2-3 concurrent writers.
 
-This was seeded and benchmarked rather than estimated. Against the current schema
+This was seeded and benchmarked rather than estimated. Measured in the autopilot
+sandbox's Python (`sqlite3.sqlite_version` 3.50.4 at the time of measurement, 2026-09-16)
+— not the version the shipped Docker image runs on, which links Debian's system
+`libsqlite3` instead (3.46.1 on the `trixie` base; see D-045). That gap was three
+years wide when it was found and is now months, but it is still a gap: these
+numbers describe 3.50.4, and re-measuring on the shipped engine is what would
+make them describe production. Against the current schema
 and query shapes:
 
 | Operation | Measured (p_max) | Budget |

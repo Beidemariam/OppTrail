@@ -52,6 +52,14 @@ make test-host
 echo "--- docker build ---"
 git archive "${BRANCH}" | docker build -t "$IMAGE" -
 
+# D-046: names an environment divergence directly, by version number, instead
+# of waiting for it to surface as an unrelated test failure downstream (which
+# is exactly how phase-1-review-1.md's finding 2 was first found). Run right
+# after the build, before the suite that finding actually broke, so the cause
+# is on screen before the symptom is.
+echo "--- sqlite version agreement (host vs. image) ---"
+./scripts/check-sqlite-version.sh "$IMAGE"
+
 # ROADMAP.md Phase 1's "backend suite inside the image". The working tree is
 # already a clean checkout of this exact commit (checked above), so this can
 # build straight from it rather than archiving a second time.
@@ -72,7 +80,7 @@ commit=${SHA}
 image=${IMAGE}
 host=$(uname -srm)
 docker=$(docker --version)
-verified=host-pytest,host-vitest,docker-build,docker-test,health,csrf,signup,opportunity-create,timeline,pdf-export,frontend-served
+verified=host-pytest,host-vitest,docker-build,sqlite-version-agreement,docker-test,health,csrf,signup,opportunity-create,timeline,pdf-export,frontend-served
 at=$(date -u +%FT%TZ)
 RECEIPT
 

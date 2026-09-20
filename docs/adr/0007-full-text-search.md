@@ -9,7 +9,11 @@ subqueries across entries, notes and comments (`routes_timeline.py:148-173`). It
 cannot use an index, matches substrings inside words, has no ranking, and offers no
 snippets.
 
-Benchmarked at the confirmed scale (800,400 rows, Zipf-distributed vocabulary):
+Benchmarked at the confirmed scale (800,400 rows, Zipf-distributed vocabulary), in
+the same sandbox environment and SQLite version as ADR 0001 (3.50.4; see that
+ADR's note and D-045 in `docs/autopilot/DECISIONS.md` — the shipped image ships
+3.46.1, and the query planner these numbers depend on changed between 3.40 and
+3.46, which is why the image no longer runs the older engine):
 
 | Query term | Matches | `LIKE` | FTS5 + bm25 |
 |---|---|---|---|

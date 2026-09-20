@@ -37,3 +37,15 @@ vitest.config.ts
 **/vitest.config.ts
 vitest.setup.ts
 **/vitest.setup.ts
+# The test files themselves, not just their config. `npm run build` type-checks
+# everything tsconfig.json includes, and tsconfig excludes only node_modules --
+# so shipping *.test.tsx without vitest.setup.ts (which registers
+# @testing-library/jest-dom's matcher types) fails the build on
+# `toBeInTheDocument` not existing. Excluding both keeps the production image
+# free of test code and leaves nothing for the build to type-check.
+*.test.ts
+**/*.test.ts
+*.test.tsx
+**/*.test.tsx
+test-api.ts
+**/test-api.ts

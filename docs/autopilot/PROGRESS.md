@@ -1,4 +1,4 @@
-STATUS: REWORK phase=1
+STATUS: AWAITING_REVIEW phase=1
 
 # Autopilot Progress
 
@@ -1356,6 +1356,100 @@ tag, merge, or push from this session. `scripts/autopilot-gate.sh 1` against
 commit `83d2aeb` is required before `scripts/autopilot-accept.sh` can tag
 `phase-1-accepted`.
 
+### Rework 1 (`docs/autopilot/reviews/phase-1-review-1.md`, REJECT) — **DONE**
+
+The rejection found two failures inside `make docker-test` only (`make
+test-host` and the sandbox half of `make check` both already passed), each
+with a distinct, separately-diagnosed cause. This session addresses all
+three of the review's numbered items, but item 2 is a decision the review
+itself says not to implement unilaterally, and its non-implementation means
+the host gate is known in advance to still show one of the two original
+failures — see below and `docs/autopilot/BLOCKERS.md`.
+
+- [x] **Finding 1 — the image runs as root.** Fixed: `Dockerfile`'s
+      `backend-base` stage creates a fixed non-root user (`app`, uid/gid
+      1000); `backend-test` and `final` both `chown` the app tree (and, for
+      `final`, `/data`) to it and add `USER app` before their `CMD`. A real
+      deployment bind-mounts `./data` from the host, so the container's own
+      `chown` can't reach it — `scripts/start_linux.sh`, `start_mac.sh` and
+      `start_windows.ps1` now create `./data` (and, on Linux/macOS,
+      `chmod 0777` it) before `docker run`. **D-044.** This is what
+      `tests/test_health.py::test_health_reports_unwritable_when_the_database_file_is_read_only`
+      needed: root bypasses the permission bits the test relies on; a
+      non-root process does not. R.4 in this file's Phase R section is
+      updated to say the item moved here and there is nothing left for R.4
+      to do on it.
+- [x] **Finding 2 — SQLite is three years older in the image.** Logged, not
+      implemented, exactly as the review asked: **D-045**, flagged `needs
+      human review: Y`, recommends (a) — move the image to a base with a
+      modern SQLite — over (b) pinning development down to bookworm's
+      3.40.1, with the re-benchmarking cost of (b) named. The
+      benchmark-version question the review asked to have answered:
+      ADR 0001 and ADR 0007 were both measured in this sandbox's Python,
+      3.50.4 (re-confirmed this session), not the 3.40.1 the shipped image
+      links — both ADRs now say so inline, next to their tables. Not
+      implemented: this agent has no way to test (a) or (b) empirically here
+      (no Docker socket, and no root/`sudo` to install a second SQLite build
+      to compare query plans against — confirmed, not assumed, both fail
+      with permission errors), so a recommendation is what the brief's
+      "no clarifying questions... mark needs human review: Y" instruction
+      calls for, not an implementation.
+- [x] **Finding 3 — add a guard so this class of gap fails loudly.**
+      `scripts/check-sqlite-version.sh` (**D-046**) compares the host
+      running the gate against the image just built, printing and failing on
+      both version strings by name rather than leaving the divergence to
+      surface as an unrelated query-plan failure. Wired into
+      `scripts/autopilot-gate.sh` right after the image build (before the
+      suite finding 2's failure lives in, so the cause is on screen before
+      the symptom), a new `make sqlite-version-check` target, and
+      `.github/workflows/ci.yml`'s `docker` job.
+
+**Why this does not return to `AWAITING_REVIEW` yet.** The rework's own
+definition of done required `scripts/autopilot-gate.sh 1` to pass on the host,
+including `make docker-test`. **That is now satisfied. The human ruled D-045
+option (a) on 2026-09-20 and it is implemented** — `Dockerfile`'s two base
+images moved `bookworm-slim` → `trixie-slim` (SQLite 3.46.1).
+
+Both of the review's original failures now pass inside the image with neither
+assertion modified: the query-plan test because the FTS5 planner change that
+broke it predates 3.46, and the health test because of this rework's non-root
+`app` user (D-044). A `backend-test` image built on `trixie` runs all 258
+backend tests, and the three WeasyPrint packages install under the same names,
+so `test_pdf_export_produces_a_real_pdf` executes rather than skipping — the
+empirical check this sandbox could not perform, run on the host before the
+ruling rather than assumed.
+
+Implementing the ruling also exposed that D-046's `scripts/check-sqlite-version.sh`
+compared the host's SQLite to the image's and failed on any difference, which is
+unsatisfiable across three independently packaged environments — it would have
+failed even after the divergence it guards was fixed. It now asserts a minimum
+version floor of 3.46.1 on the image, set by measurement rather than changelog
+(**D-047**). `docs/autopilot/BLOCKERS.md` records the rework's one held-open
+item as resolved; no blockers are open.
+
+Work log: single session. Changed: `Dockerfile` (non-root `app` user in
+`backend-base`, `USER app` in `backend-test` and `final`, `/data` created and
+chowned in `final`), `scripts/start_linux.sh` / `start_mac.sh` (`mkdir -p
+data && chmod 0777 data` before `docker run`), `scripts/start_windows.ps1`
+(`New-Item` for `data`), `scripts/autopilot-gate.sh` (runs the new version
+check right after the image build; receipt's `verified=` line gains
+`sqlite-version-agreement`), `.github/workflows/ci.yml` (`docker` job gains
+`setup-uv` and the version-check step), `Makefile` (`sqlite-version-check`
+target), `docs/adr/0001-keep-sqlite.md` / `0007-full-text-search.md` (name
+the SQLite version their benchmarks were measured on). New:
+`scripts/check-sqlite-version.sh`. Decisions: **D-044** (non-root mechanism,
+not flagged — implements an already-accepted ADR 0011 item), **D-045** (the
+SQLite version gap, **needs human review: Y**, not implemented), **D-046**
+(the version-agreement guard, not flagged — a detection mechanism, takes no
+position on D-045). No test assertion touched or weakened; both originally
+failing tests still fail against the code that would break them (`test_health`
+now passes with the non-root fix; `test_search`'s query-plan test is expected
+to keep failing until D-045 is ruled and applied, per `BLOCKERS.md`). Not
+runnable in this sandbox (no Docker socket): the actual `docker build`, the
+non-root fix's effect on `test_health` inside the image, and the new
+version-check script all need `scripts/autopilot-gate.sh 1` on the host to
+confirm.
+
 ---
 
 ## Phase 2 — Pipeline Views and Keyboard Navigation
@@ -1588,9 +1682,13 @@ this phase reaches `AWAITING_REVIEW` and is accepted, the project is finished.
 - [ ] R.3 Performance: large-dataset budgets met (800k-row seed per
       `AGENTS.md`'s "Confirmed Scale"); list/timeline virtualization; indexes
       justified by measurement, not guessed.
-- [ ] R.4 Docker: multi-stage build, non-root user, pinned versions,
-      WeasyPrint dependencies, `HEALTHCHECK`, `/healthz` and `/readyz`,
-      graceful shutdown.
+- [ ] R.4 Docker: multi-stage build, pinned versions, WeasyPrint dependencies,
+      `HEALTHCHECK`, `/healthz` and `/readyz`, graceful shutdown. **Non-root
+      user moved out of this item** — pulled forward into Phase 1's rework
+      (`docs/autopilot/reviews/phase-1-review-1.md` finding 1, `DECISIONS.md`
+      D-044) after it hid a real permission bug from `/api/health`'s
+      writability probe in the image. Done there; nothing left for R.4 to do
+      on it.
 - [ ] R.5 Data safety: documented volume layout; SQLite online backup and
       restore procedure with a restore test; uploads included.
 - [ ] R.6 CI: GitHub Actions running `make check` on push to `main`, with
