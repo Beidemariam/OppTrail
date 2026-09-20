@@ -104,6 +104,30 @@ describe("the dashboard", () => {
     expect(negotiation).toHaveTextContent("1");
   });
 
+  it("virtualizes a stage column at the 400-opportunity scale (milestone 2.3)", async () => {
+    const opportunities = Array.from({ length: 400 }, (_, index) =>
+      anOpportunity({
+        id: 1000 + index,
+        name: `Deal ${index}`,
+        stage: "Negotiation",
+      }),
+    );
+
+    await renderDashboard({ opportunities });
+    await screen.findByText("Deal 0");
+
+    const negotiation = screen
+      .getByRole("heading", { name: "Negotiation" })
+      .closest("div")!;
+    expect(negotiation).toHaveTextContent("400");
+
+    const cards = screen.getAllByRole("article");
+    expect(cards.length).toBeGreaterThan(0);
+    expect(cards.length).toBeLessThan(50);
+    expect(screen.getByText("Deal 0")).toBeInTheDocument();
+    expect(screen.queryByText("Deal 399")).not.toBeInTheDocument();
+  });
+
   it("creates an opportunity from the sidebar form", async () => {
     const api = await renderDashboard();
 

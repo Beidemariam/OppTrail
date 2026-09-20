@@ -371,7 +371,9 @@ a.danger-button {
   background: #eef4f6;
   border: 1px solid var(--line);
   border-radius: 8px;
-  min-height: 360px;
+  display: flex;
+  flex-direction: column;
+  height: 480px;
   padding: 12px;
 }
 
@@ -406,9 +408,8 @@ a.danger-button {
 }
 
 .opportunity-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  flex: 1;
+  min-height: 0;
 }
 
 .opportunity-card {

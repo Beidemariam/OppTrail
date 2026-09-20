@@ -1567,9 +1567,12 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
   - [x] The board's own filtering and sorting run in the client over the list
         already fetched (`applyOpportunityView`), because
         `GET /api/opportunities` returns every readable row unpaginated —
-        **D-061** records that this moves into SQL when 2.3 paginates the
-        list, so that milestone treats it as planned rather than as a
-        regression.
+        **D-061** records that this moves into SQL when the list is
+        paginated. Correction from 2.3 (**D-063**): ROADMAP.md scopes 2.3 as
+        `VirtualList` (client-side windowed rendering) only, not a switch to
+        `/api/v2/opportunities`'s existing pagination — that move, and the
+        SQL predicate D-061 anticipated, land in 2.9 ("move the frontend
+        onto v2") instead.
   - [x] Tests: 16 backend (`tests/test_saved_views.py`, plus the timeline
         order cases in `test_timeline.py`/`test_api_v2.py` and the new matrix
         entries), 28 frontend (`lib/viewState.test.ts`, `lib/domain.test.ts`,
@@ -1600,7 +1603,73 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
   `group_by` a second value are 2.7 and 2.8; the saved-view menu is a plain
   `<select>` until 2.5 brings the design system; and the board list is not
   virtualized yet (2.3).
-- [ ] 2.3 `VirtualList` for the 400-opportunity scale.
+- [x] 2.3 `VirtualList` for the 400-opportunity scale. — **DONE**
+
+  - [x] Scope, settled first (**D-063**): D-061 (2.2) had assumed this
+        milestone would also switch the board onto `/api/v2/opportunities`'s
+        existing pagination and move `applyOpportunityView`'s predicate into
+        SQL. `docs/ROADMAP.md`'s actual 2.3 line is `VirtualList` alone, and
+        milestone 2.9 is the one that explicitly ports the frontend onto v2.
+        Implemented 2.3 as ROADMAP.md scopes it: windowed DOM rendering over
+        the list `useOpportunities` already fetches whole, data source
+        unchanged. The v2 switch stays 2.9's to do.
+  - [x] `app/VirtualList.tsx`: a generic `<T>` component wrapping
+        `@tanstack/react-virtual`'s `useVirtualizer` (added as a dependency —
+        the same library family as the TanStack Query already in use).
+        Renders only the rows within the scroll viewport plus a six-row
+        overscan; each row is measured after mount (`measureElement`), so
+        cards of different height (a stalled badge, a wrapped title) do not
+        drift out of position, and `estimateItemSize` only seeds the first
+        layout. A `gap` prop reserves space with `padding-bottom` on the row
+        wrapper rather than `margin-bottom` on the caller's markup — a
+        margin on a wrapper's only child collapses through to the wrapper
+        instead of adding to its measured height, which would have made
+        rows overlap.
+  - [x] `app/StageBoard.tsx`'s per-stage list now renders through
+        `VirtualList` instead of mapping every filtered opportunity into the
+        DOM. `.stage-column` gained a fixed height (480px, flex column) and
+        `.opportunity-list` became the flexed, scrollable viewport the
+        virtualizer measures — unbounded height meant no viewport to window
+        against. Stage counts (the number badge) still come from the full
+        filtered array, not the rendered subset.
+  - [x] Tests: `app/VirtualList.test.tsx` (4 cases) unit-tests the primitive
+        directly — small lists render every row, a 400-item list renders a
+        small windowed subset with the far end absent from the DOM, item/key
+        wiring, and the `className`/`aria-label` passthrough. `DashboardPage`
+        gained one integration case seeding 400 opportunities into one stage
+        and asserting the stage badge still reads 400 while the DOM holds
+        under 50 `article` nodes. 138 → 143 frontend tests.
+  - [x] jsdom never lays anything out, so a virtualized container's real
+        `offsetHeight` is 0 and the virtualizer (correctly) renders nothing
+        into what it measures as a zero-height viewport — confirmed by
+        watching every existing StageBoard-touching test fail this way
+        before the fix. `vitest.setup.ts` now stubs `offsetHeight`/
+        `offsetWidth` to a plausible constant for the whole suite, the
+        documented way to exercise a virtualizer under jsdom; a real browser
+        measures the actual laid-out element instead, so this changes
+        nothing about production behavior.
+  - [x] No schema change, no new endpoint, no new E2E journey: this
+        milestone is a rendering cost fix over data the app already fetches
+        the same way, and the seeded demo data is nowhere near 400 rows, so
+        the existing 24 E2E specs (unchanged) exercise the virtualized board
+        without ever hitting its windowing.
+
+  Gate: `make check` green in full (ruff, ruff format, mypy, eslint, tsc,
+  prettier, 274 backend tests — unchanged, no backend code touched — 143
+  frontend tests over the 93/93/92/85 thresholds, contract check, 24 E2E with
+  axe including the dashboard-accessibility spec against the now-virtualized
+  board, pip-audit, npm audit). Docker deferred to the host half
+  (`sandbox/README.md`).
+
+  The guard test (brief §6.5, confirmed to fail against the unfixed code
+  first): `does not mount every row for a 400-item list` in
+  `app/VirtualList.test.tsx`, which renders all 400 rows against a
+  non-virtualized stand-in and fails the `toBeLessThan(50)` assertion.
+
+  Not in this milestone, deliberately: the opportunity list still comes from
+  `GET /api/opportunities` unpaginated (2.9); the list and table views that
+  would let 400 rows appear outside stage columns are 2.7 and 2.8; and drag
+  reordering (2.7) is unaffected — cards keep their DOM `id`-derived keys.
 - [ ] 2.4 Command palette, keyboard map, bulk actions, optimistic mutations,
       undo toasts.
 - [ ] 2.5 Design tokens from `DESIGN-SYSTEM.md`, including the three

@@ -4,3 +4,19 @@ import "@testing-library/jest-dom/vitest";
 // local/UTC conversions in lib/time.ts are exactly where an off-by-an-offset
 // bug hides, and a UTC-only run would never see it.
 process.env.TZ = "America/New_York";
+
+// jsdom never lays anything out, so every element reports 0 for
+// offsetHeight/offsetWidth. @tanstack/react-virtual (StageBoard's
+// VirtualList, milestone 2.3) reads that as "the viewport is zero pixels",
+// and correctly renders nothing into it -- which would otherwise make every
+// opportunity card disappear from every test that touches the board. A
+// plausible stub is the documented way to exercise a virtualizer under
+// jsdom; a real browser measures the actual laid-out element instead.
+Object.defineProperty(window.HTMLElement.prototype, "offsetHeight", {
+  configurable: true,
+  value: 600,
+});
+Object.defineProperty(window.HTMLElement.prototype, "offsetWidth", {
+  configurable: true,
+  value: 600,
+});

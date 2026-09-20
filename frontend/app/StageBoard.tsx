@@ -3,6 +3,12 @@
 import { Link } from "react-router";
 
 import { stages, type Opportunity } from "../lib/domain";
+import { VirtualList } from "./VirtualList";
+
+// Cards vary a little (a wrapped title, a stalled badge) but not by much;
+// `VirtualList` measures the real height after mount, so this only has to be
+// close enough for the first paint's scrollbar and overscan window.
+const ESTIMATED_CARD_HEIGHT = 190;
 
 /**
  * Every opportunity the user can read, in fixed-stage columns
@@ -44,15 +50,20 @@ export function StageBoard({
             {items.length === 0 ? (
               <p className="empty-state">No opportunities</p>
             ) : (
-              <div className="opportunity-list">
-                {items.map((opportunity) => (
+              <VirtualList
+                className="opportunity-list"
+                ariaLabel={`${stage} opportunities`}
+                items={items}
+                estimateItemSize={ESTIMATED_CARD_HEIGHT}
+                gap={10}
+                getItemKey={(opportunity) => opportunity.id}
+                renderItem={(opportunity) => (
                   <article
                     className={
                       selectedId === opportunity.id
                         ? "opportunity-card selected"
                         : "opportunity-card"
                     }
-                    key={opportunity.id}
                   >
                     <div>
                       <div className="card-title-row">
@@ -110,8 +121,8 @@ export function StageBoard({
                       )}
                     </div>
                   </article>
-                ))}
-              </div>
+                )}
+              />
             )}
           </div>
         );

@@ -429,6 +429,17 @@ The units worth testing directly, each in its own module:
 - `app/MarkdownText.tsx` — note and comment bodies, rendered through
   `rehype-sanitize` with an explicit `http`/`https`/`mailto` protocol allowlist.
   Keep that allowlist if you touch the Markdown pipeline.
+- `app/VirtualList.tsx` — a generic `<T>` wrapper over
+  `@tanstack/react-virtual` (milestone 2.3, roadmap: "400 opportunities will
+  not render unvirtualized"). `StageBoard` renders each stage column through
+  it instead of mapping every filtered opportunity into the DOM; row height
+  is measured after mount, so `estimateItemSize` only has to seed the first
+  layout. jsdom never lays anything out, so `vitest.setup.ts` stubs
+  `offsetHeight`/`offsetWidth` globally — without it the virtualizer
+  (correctly) treats every test's viewport as zero pixels tall and renders
+  nothing. Data stays unpaginated (`GET /api/opportunities`, D-061); this
+  only windows what gets rendered, not what gets fetched — the switch to
+  `/api/v2/opportunities`'s pagination is milestone 2.9's (D-063).
 
 ### View state and saved views
 

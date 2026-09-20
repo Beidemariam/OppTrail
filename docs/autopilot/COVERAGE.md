@@ -780,3 +780,45 @@ entity-namespaced parameters, filtering the board sent
 `GET /api/opportunities/10/timeline?q=northwind` — the board's keyword
 silently filtering the open timeline, because both states were reading the
 same query-string field names.
+
+## Phase 2 — milestone 2.3 (`VirtualList` for the 400-opportunity scale)
+
+No backend code touched — this milestone windows DOM rendering over data the
+app already fetches the same way (D-063: the switch to `/api/v2/opportunities`'s
+pagination stays 2.9's).
+
+```
+backend:  274 passed (unchanged), 97.40% combined line+branch coverage
+          (unchanged, --cov-fail-under=90 enforced)
+frontend: 143 passed (was 138), 96.74% line (was 96.60%), 88.25% branch
+          (was 88.21%), 95.3% functions (was 95.22%)
+          thresholds unchanged at 93/93/92/85 (raised in 2.1, D-058)
+          app/VirtualList.tsx   100% line, 100% branch, 100% functions
+          app/StageBoard.tsx    100% line, 100% branch, 100% functions
+e2e:      24 passed (unchanged — no new journey; seeded demo data is nowhere
+          near 400 rows, so these exercise the virtualized board without
+          hitting its windowing), axe clean including the dashboard spec
+          against the now-virtualized board
+docker:   deferred to the host half — scripts/autopilot-gate.sh 2
+          (no Docker socket in this sandbox, per sandbox/README.md)
+```
+
+Authorization matrix unchanged (51 endpoints) — no new route.
+
+New dependency: `@tanstack/react-virtual` 3.14.13. `pip-audit`: no known
+vulnerabilities. `npm audit`: 0 vulnerabilities.
+
+The guard test for this milestone (brief §6.5, confirmed to fail against the
+unfixed code first) is `does not mount every row for a 400-item list` in
+`app/VirtualList.test.tsx`: run against a non-virtualized stand-in
+implementation, it renders all 400 rows and fails the `toBeLessThan(50)`
+assertion.
+
+One test-infrastructure change with no production effect: jsdom never lays
+anything out, so a virtualized container's real `offsetHeight` is 0 and the
+virtualizer (correctly) renders nothing into what it measures as a
+zero-height viewport. Every existing test that renders `StageBoard` failed
+this way until `vitest.setup.ts` stubbed `offsetHeight`/`offsetWidth` to a
+plausible constant for the whole suite — confirmed against the unfixed setup
+file before adding the stub, matching brief §6.5's "confirm a guard fails
+first" for the test infrastructure itself, not just the guard test above.
