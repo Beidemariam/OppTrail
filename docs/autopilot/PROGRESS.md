@@ -1481,6 +1481,74 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
       already exists (`ORDER BY` in the timeline query); the keyset cursors
       from 1.3 order on `(sort value, id)`, so a reversible direction has to
       reverse the cursor comparison too, not just the `ORDER BY`.
+- [ ] 2.3 `VirtualList` for the 400-opportunity scale.
+- [ ] 2.4 Command palette, keyboard map, bulk actions, optimistic mutations,
+      undo toasts.
+- [ ] 2.5 Design tokens from `DESIGN-SYSTEM.md`, including the three
+      corrected contrast values; Radix primitives; real dialogs replacing
+      `window.confirm` (`page.tsx:229`). **D-003 ACCEPTED by the human
+      2026-09-16 — this is now phase scope, not a proposal:** ship light and
+      dark themes together, with dark-theme parity asserted by axe contrast
+      checks on every component delivered in Phase 2.
+- [ ] 2.6 Three new entry types with icons. Schema: `timeline_entries.type`
+      CHECK extended.
+- [ ] 2.7 Board view (drag to change stage, auto-logs a system entry) and list
+      view — acceptance-critical.
+- [ ] 2.8 Table and calendar view — may slip to Phase 3 per the roadmap's own
+      stated risk mitigation; do not treat slipping these as a blocked
+      milestone.
+- [ ] 2.9 Finish the `/api/v2` migration and remove v1 (**D-033**, ruled by
+      the human 2026-09-17). Milestone 1.3 moved only the collection reads and
+      the error envelope to v2 — the mutations and single-resource reads had no
+      shape change to justify mirroring them — but `docs/ROADMAP.md`'s
+      breaking-changes table says v1 is removed at the end of Phase 2, and no
+      milestone scheduled the port that removal requires. This is that
+      milestone; the table stands as written.
+      - Port the remaining endpoints to `/api/v2`: every mutation and
+        single-resource read still served only under `/api/*`.
+      - Move the frontend onto v2. It still calls v1 paths through
+        `apiRequest`, so this lands in the same files 2.1 decomposes — which
+        is why it belongs in this phase rather than later, once those files
+        have been restructured around v1's shapes.
+      - Remove v1, including the per-table shared SQL constants 1.3 introduced
+        to keep the two versions from drifting; with v1 gone they collapse back
+        to one caller.
+      - Regenerate `frontend/lib/api-types.ts` and update the authorization
+        matrix, which currently carries entries for both surfaces. The
+        registry guard should fail first on the removed v1 routes.
+      - Confirm no v1 path survives: `grep -rn '\"/api/' backend/app` should
+        return only `/api/v2` routes and the catch-all in `main.py`.
+
+- [ ] 2.10 Edit history for all user-editable content, with a screen
+      (**AGENTS.md invariant 8** and v2 scope item 15, added 2026-09-20 after a
+      human user test found the gap — see D-050).
+      Today only notes keep history (`note_versions`), and nothing exposes it:
+      the frontend has zero references to versions, so `GET /api/notes/{id}/
+      versions` is unreachable outside curl. Two editable things keep no history
+      at all:
+      - **Opportunity fields.** `routes_opportunities.py:271` writes a bare
+        `UPDATE`. Only a `stage` change leaves a trace (a system timeline
+        entry); `value`, `name`, `account_name`, `currency` and
+        `expected_close_date` change with no record of the old value or who
+        changed it. A deal moving from 485,000 to 250,000 is currently
+        invisible — this is the case that prompted the requirement.
+      - **Timeline entries.** `routes_timeline.py:416` writes a bare `UPDATE`.
+        Title, body, `event_timestamp` and type are all silently overwritten.
+      Scope:
+      - Extend versioning to opportunities and timeline entries, following
+        `note_versions`' existing shape (append a row, never overwrite) so the
+        three read the same way. Needs an Alembic revision.
+      - One history view, reachable from each editable item, showing previous
+        values with author and timestamp.
+      - **Owner-only**, matching the audit log's existing rule. Note there is no
+        admin role in this system — the roles are owner, editor and viewer
+        (`permissions.py`), so "owner or admin" resolves to the opportunity
+        owner. If a wider audience should see it, that is a separate decision.
+      - The authorization matrix gains the new routes; the registry guard should
+        fail first until they are added.
+      Placed in Phase 2 because it needs a screen and Phase 2 owns the UI, and
+      because 2.1's decomposition is what makes adding a view tractable.
+
 - [ ] 2.11 Edit content where it is read (**AGENTS.md** v2 scope item 12,
       added 2026-09-20 from the human's Phase 1 user test — D-051). Today
       editing an entry or note scrolls the reader to a form elsewhere on the
@@ -1523,74 +1591,6 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
       grounded and useful.
       Then trim the hand-run page to the judgment checks, so a phase gate costs
       a human twenty minutes rather than an hour.
-
-- [ ] 2.3 `VirtualList` for the 400-opportunity scale.
-- [ ] 2.4 Command palette, keyboard map, bulk actions, optimistic mutations,
-      undo toasts.
-- [ ] 2.5 Design tokens from `DESIGN-SYSTEM.md`, including the three
-      corrected contrast values; Radix primitives; real dialogs replacing
-      `window.confirm` (`page.tsx:229`). **D-003 ACCEPTED by the human
-      2026-09-16 — this is now phase scope, not a proposal:** ship light and
-      dark themes together, with dark-theme parity asserted by axe contrast
-      checks on every component delivered in Phase 2.
-- [ ] 2.6 Three new entry types with icons. Schema: `timeline_entries.type`
-      CHECK extended.
-- [ ] 2.7 Board view (drag to change stage, auto-logs a system entry) and list
-      view — acceptance-critical.
-- [ ] 2.8 Table and calendar view — may slip to Phase 3 per the roadmap's own
-      stated risk mitigation; do not treat slipping these as a blocked
-      milestone.
-- [ ] 2.10 Edit history for all user-editable content, with a screen
-      (**AGENTS.md invariant 8** and v2 scope item 15, added 2026-09-20 after a
-      human user test found the gap — see D-050).
-      Today only notes keep history (`note_versions`), and nothing exposes it:
-      the frontend has zero references to versions, so `GET /api/notes/{id}/
-      versions` is unreachable outside curl. Two editable things keep no history
-      at all:
-      - **Opportunity fields.** `routes_opportunities.py:271` writes a bare
-        `UPDATE`. Only a `stage` change leaves a trace (a system timeline
-        entry); `value`, `name`, `account_name`, `currency` and
-        `expected_close_date` change with no record of the old value or who
-        changed it. A deal moving from 485,000 to 250,000 is currently
-        invisible — this is the case that prompted the requirement.
-      - **Timeline entries.** `routes_timeline.py:416` writes a bare `UPDATE`.
-        Title, body, `event_timestamp` and type are all silently overwritten.
-      Scope:
-      - Extend versioning to opportunities and timeline entries, following
-        `note_versions`' existing shape (append a row, never overwrite) so the
-        three read the same way. Needs an Alembic revision.
-      - One history view, reachable from each editable item, showing previous
-        values with author and timestamp.
-      - **Owner-only**, matching the audit log's existing rule. Note there is no
-        admin role in this system — the roles are owner, editor and viewer
-        (`permissions.py`), so "owner or admin" resolves to the opportunity
-        owner. If a wider audience should see it, that is a separate decision.
-      - The authorization matrix gains the new routes; the registry guard should
-        fail first until they are added.
-      Placed in Phase 2 because it needs a screen and Phase 2 owns the UI, and
-      because 2.1's decomposition is what makes adding a view tractable.
-
-- [ ] 2.9 Finish the `/api/v2` migration and remove v1 (**D-033**, ruled by
-      the human 2026-09-17). Milestone 1.3 moved only the collection reads and
-      the error envelope to v2 — the mutations and single-resource reads had no
-      shape change to justify mirroring them — but `docs/ROADMAP.md`'s
-      breaking-changes table says v1 is removed at the end of Phase 2, and no
-      milestone scheduled the port that removal requires. This is that
-      milestone; the table stands as written.
-      - Port the remaining endpoints to `/api/v2`: every mutation and
-        single-resource read still served only under `/api/*`.
-      - Move the frontend onto v2. It still calls v1 paths through
-        `apiRequest`, so this lands in the same files 2.1 decomposes — which
-        is why it belongs in this phase rather than later, once those files
-        have been restructured around v1's shapes.
-      - Remove v1, including the per-table shared SQL constants 1.3 introduced
-        to keep the two versions from drifting; with v1 gone they collapse back
-        to one caller.
-      - Regenerate `frontend/lib/api-types.ts` and update the authorization
-        matrix, which currently carries entries for both surfaces. The
-        registry guard should fail first on the removed v1 routes.
-      - Confirm no v1 path survives: `grep -rn '\"/api/' backend/app` should
-        return only `/api/v2` routes and the catch-all in `main.py`.
 
 ### Acceptance
 
