@@ -151,17 +151,22 @@ it is the reason ADR 0002 is a blocker rather than a nicety.
 
 ## Observability
 
-Currently zero (review H3). Minimum viable, no vendor:
+Review H3 ("currently zero") is closed by F.2 and milestone 1.6; what remains is
+Phase 5's slice, which needs ADR 0004/0009's machinery to exist first. Minimum
+viable, no vendor:
 
-- **Structured JSON logs to stdout** with a request ID, user ID, route, status and
-  duration. `routes_ai.py:43`'s bare `except Exception` must log the cause — it
-  currently discards it, in direct contradiction of `AGENTS.md` standard 4.
+- **Structured JSON logs to stdout** with a request ID, route, status and
+  duration (`logging_utils.py`, F.2). `routes_ai.py`'s OpenAI-call exception
+  handler logs the cause via `exc_info` rather than discarding it.
 - **Audit log stays separate.** It is a product feature for owners, not operations
   telemetry; do not conflate them.
-- **`/api/health` reports substance**: schema version, database writability, last
-  successful backup, IMAP poll status.
+- **`/api/health` reports substance** (milestone 1.6, `app/backup.py`,
+  `main.py`'s `health_check`): schema version read from `alembic_version`,
+  database writability (a `BEGIN IMMEDIATE` probe that rolls back), and the
+  last successful `VACUUM INTO` backup's timestamp. IMAP poll status is added
+  once ADR 0009 lands.
 - **Job outcomes recorded** in the `outbox`/job table — a silently dead scheduler is
-  the most likely v2 production failure.
+  the most likely v2 production failure. Lands with ADR 0004 in Phase 5.
 - **Inbound email ingestion log**, including rejections. Silent drops are
   unacceptable when a colleague believes they filed a note (ADR 0009).
 

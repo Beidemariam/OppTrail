@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     # 10 MiB. No endpoint accepts a file yet; `uploads.py` explains why the
     # limit is defined now.
     max_upload_bytes: int = 10 * 1024 * 1024
+    # `None` means "next to the database file" (`backup.backup_dir()`); ADR
+    # 0011's snapshots live under the same `/data` volume so they survive a
+    # container recreate without a second mount.
+    backup_dir: str | None = None
+    backup_retention_count: int = 7
 
     model_config = SettingsConfigDict(env_file="../.env", extra="ignore", validate_assignment=True)
 
@@ -43,6 +48,7 @@ class Settings(BaseSettings):
         "auth_rate_limit_attempts",
         "auth_rate_limit_window_seconds",
         "max_upload_bytes",
+        "backup_retention_count",
     )
     @classmethod
     def _must_be_positive(cls, value: int, info: ValidationInfo) -> int:

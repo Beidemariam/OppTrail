@@ -1,4 +1,4 @@
-.PHONY: dev test test-host check check-fast e2e build docker docker-test docker-smoke seed migrate reindex frontend-deps generate-client
+.PHONY: dev test test-host check check-fast e2e build docker docker-test docker-smoke seed migrate reindex backup restore frontend-deps generate-client
 
 # Guards frontend targets against a clean checkout / empty node_modules volume
 # (see docs/autopilot/DECISIONS.md's F.2 review note — the sandbox gives the
@@ -106,3 +106,15 @@ migrate:
 # keep it current, so this is for a corrupted index or a tokenizer change.
 reindex:
 	cd backend && uv run python -m tools.reindex
+
+# `VACUUM INTO` snapshot of the live database (ADR 0011). Safe to run while
+# the app is serving traffic; see app/backup.py. Prunes down to
+# BACKUP_RETENTION_COUNT (default 7) automatically.
+backup:
+	cd backend && uv run python -m tools.backup
+
+# Restores a snapshot produced by `make backup` over the live database file.
+# Stop the application first -- see app/backup.py's restore_backup docstring.
+# Usage: make restore BACKUP=backend/backups/app-20260920T140305Z.db
+restore:
+	cd backend && uv run python -m tools.restore "$(BACKUP)"

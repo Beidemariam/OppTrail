@@ -438,6 +438,13 @@ class AiAskResponse(BaseModel):
     referenced_entry_ids: list[int]
 
 
+class HealthStatus(BaseModel):
+    status: Literal["ok"]
+    schema_version: str
+    database_writable: bool
+    last_backup_at: str | None
+
+
 NotificationType = Literal[
     "share_added",
     "share_role_changed",

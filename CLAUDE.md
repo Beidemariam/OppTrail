@@ -47,6 +47,8 @@ make check-fast      # the inner-loop gate
 make check           # the full gate (Docker portion deferred to the host)
 make seed            # demo data; prints the seeded users and what each can see
 make reindex         # rebuilds the FTS5 search index from the source tables
+make backup          # VACUUM INTO snapshot, retained on a rolling window (ADR 0011)
+make restore BACKUP=path/to/app-<timestamp>.db   # stop the app first
 ```
 
 Full app (builds the frontend, packages both into one container):
@@ -217,6 +219,33 @@ New revisions go in `alembic/versions/` as explicit SQL — no ORM, `target_meta
 stays `None`. A revision that changes the schema must also update
 `tests/data/expected_schema.sql`, which the upgrade-from-empty test compares
 against.
+
+### Health and backups
+
+`GET /api/health` (`main.py`) reports substance, not just liveness (ADR 0011):
+`schema_version` (the `alembic_version` row), `database_writable` (a
+`BEGIN IMMEDIATE` that immediately rolls back — cheap, and the same lock a real
+write would need, so a read-only mount or a full disk is caught before it
+becomes a 500 somewhere else), and `last_backup_at`. Opening the connection at
+all is inside the same `try`, because `get_connection()` asserts WAL mode,
+which is itself a write — a genuinely unwritable database can fail there
+before any query runs.
+
+`app/backup.py` is `VACUUM INTO`, which snapshots a consistent copy without
+locking out writers (unlike copying `app.db`, which can capture a torn WAL
+checkpoint). `make backup` writes a timestamped snapshot to `backup_dir()`
+(default: a `backups/` directory next to the database file — `/data/backups`
+under the shipped `DATABASE_URL`) and prunes down to `BACKUP_RETENTION_COUNT`
+(default 7). `make restore BACKUP=<path>` reverses it — stop the application
+first, since it deletes the live database's `-wal`/`-shm` sidecars before
+overwriting `app.db` in place. `tests/test_backup.py` exercises the full
+round trip, not just that a snapshot file gets created: ADR 0011 requires the
+restore to be "actually exercised," not assumed.
+
+There is no scheduler wired to `make backup` yet — ADR 0004's APScheduler
+lands in Phase 5, and standing up a second scheduling mechanism ahead of it
+would be scope this milestone doesn't own. Until then, run it by hand or from
+host cron.
 
 ### Timestamps
 

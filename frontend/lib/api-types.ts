@@ -759,6 +759,20 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** HealthStatus */
+        HealthStatus: {
+            /**
+             * Status
+             * @constant
+             */
+            status: "ok";
+            /** Schema Version */
+            schema_version: string;
+            /** Database Writable */
+            database_writable: boolean;
+            /** Last Backup At */
+            last_backup_at: string | null;
+        };
         /** LoginRequest */
         LoginRequest: {
             /** Email */
@@ -2642,9 +2656,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
+                    "application/json": components["schemas"]["HealthStatus"];
                 };
             };
         };

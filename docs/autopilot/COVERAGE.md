@@ -574,3 +574,44 @@ sign-in markup when the browser-only gate is removed, and the v2 envelope test
 in `lib/api.test.ts` reports "Request failed" against the old `detail`-only
 wrapper.
 
+## Phase 1 — milestone 1.6 (`/api/health` detail, `VACUUM INTO` backups and restore)
+
+Backend-only: one new module (`app/backup.py`), `/api/health` rewritten from a
+bare `{"status": "ok"}` to a typed `HealthStatus`, two new CLI tools
+(`tools/backup.py`, `tools/restore.py`), no frontend source touched.
+
+```
+backend:  255 passed (was 247), 97.23% combined line+branch coverage
+          (was 97.11%; --cov-fail-under=90 enforced)
+          app/backup.py  100% line, 100% branch
+          app/main.py    97% line (was 93% before this milestone's own new
+                         code; app/main.py:122 pre-existing, unrelated to
+                         this change)
+frontend: 101 passed, 88.21% line, 81.79% branch (unchanged — no frontend
+          source changed; frontend/lib/api-types.ts regenerated for the new
+          HealthStatus schema, generated code carries no executable coverage)
+e2e:      18 passed (unchanged — no user-facing surface added)
+```
+
+Authorization matrix: unchanged at 46 endpoints (`/api/health` was already
+registered as a public, identity-independent surface; its response body
+changed shape but not its authorization behavior).
+
+The one branch that needed a dedicated test rather than falling out of the
+feature tests is `main.py`'s health-check failure path: `database.
+get_connection()` asserts WAL mode on every call, which is itself a write, so
+a database that is genuinely unwritable can fail before the explicit
+`BEGIN IMMEDIATE` probe ever runs (D-042). `test_health_reports_unwritable_
+when_the_database_file_is_read_only` makes the file *and* its `-wal` sidecar
+*and* the containing directory read-only — WAL means a write can land in the
+sidecar without ever touching the main file's bytes — and was confirmed to
+reproduce the uncaught `sqlite3.OperationalError` against the pre-fix code
+(only the probe wrapped in `try`/`except`) before the fix was applied, per
+brief §6.5.
+
+`tests/test_backup.py::test_restore_recovers_data_written_after_a_backup` is
+the test ADR 0011 asks for by name ("a restore procedure must be written and
+actually exercised"): back up, write more data through the real API, restore,
+and assert the write is gone and the backed-up state is back — not just that
+`restore_backup` runs without raising.
+

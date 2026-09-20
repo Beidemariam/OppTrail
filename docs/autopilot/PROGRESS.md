@@ -1119,8 +1119,85 @@ full `make check` green — 247 backend tests, 97.11% combined coverage
 `pip-audit` and `npm audit` both clean; generated client up to date. Docker
 portion of the split gate remains the host's (`scripts/autopilot-gate.sh 1`).
 
-- [ ] 1.6 Structured logging, `/api/health` detail, WAL, `VACUUM INTO` backup
-      job with a tested restore (ADR 0011).
+### 1.6 — Structured logging, `/api/health` detail, WAL, `VACUUM INTO` backup with a tested restore (ADR 0011) — **DONE**
+
+- [x] Structured logging: already delivered by F.2 (`logging_utils.py`'s
+      `JsonFormatter` and `RequestLoggingMiddleware`); confirmed still in
+      place, no change needed.
+- [x] WAL + busy timeout: already delivered by F.4 (`database.get_connection()`,
+      `tests/test_database.py`); confirmed still in place, no change needed.
+- [x] `backend/app/backup.py`: `create_backup()` runs `VACUUM INTO` against the
+      live database into a timestamped snapshot (microsecond-resolution
+      filename stamp, so two backups taken inside one wall-clock second don't
+      collide), safe to run while the app is serving traffic. `backup_dir()`
+      defaults to a `backups/` directory next to the database file (`/data/
+      backups` under the shipped `DATABASE_URL`, matching the volume layout
+      `docs/ARCHITECTURE.md` already documented) and is overridable via the
+      new `BACKUP_DIR` setting; `BACKUP_RETENTION_COUNT` (default 7) prunes
+      the oldest snapshots past that count.
+- [x] `restore_backup()`: deletes the live database's `-wal`/`-shm` sidecars
+      (stale WAL frames checked against a swapped-out main file are not safe
+      to replay) and copies the snapshot over `app.db` in place. Documented as
+      an offline operation — no in-app route calls it.
+- [x] `make backup` / `make restore BACKUP=<path>`, backed by
+      `backend/tools/backup.py` / `tools/restore.py`.
+- [x] `/api/health` rewritten from a bare `{"status": "ok"}` to a typed
+      `HealthStatus` (`schemas.py`): `schema_version` (the `alembic_version`
+      row), `database_writable` (a `BEGIN IMMEDIATE` immediately rolled back —
+      the same lock a real write needs), `last_backup_at`
+      (`backup.latest_backup_at()`). **D-042**: the whole probe, including
+      connection acquisition, is inside one `try`/`except sqlite3.
+      OperationalError` — `get_connection()` itself asserts WAL mode, which is
+      a write, so a genuinely unwritable database can fail before the explicit
+      probe runs, and the health endpoint's job is to report that rather than
+      500. Caught by its own test failing first, per brief §6.5.
+- [x] **D-041**: the backup mechanism is a script (`make backup`/`make
+      restore`, or host cron), not wired to an in-process scheduler. ADR
+      0011's decision list cites "a scheduled job (ADR 0004)," but ADR 0004's
+      APScheduler is milestone 5.1's, not yet built; standing one up early for
+      one job would be scope pulled forward from Phase 5 (brief §3.1/§9).
+      Revisit once 5.1 lands — `create_backup`/`restore_backup` need no change
+      to be called from a periodic job function.
+- [x] Authorization matrix: no change needed. `/api/health` was already
+      registered as a public, identity-independent surface (milestone 1.1);
+      its response body's shape changed, not its authorization behavior.
+- [x] `tests/test_backup.py` (6 tests) and `tests/test_health.py` (3 tests):
+      snapshot contains live data; `latest_backup_at` reports `None` for a
+      missing or empty backup directory and a canonical timestamp otherwise;
+      retention pruning keeps only the newest N; **the restore is actually
+      exercised** (ADR 0011's own words) — back up, write more data through
+      the real API, restore, assert the write is gone and the backed-up state
+      is back; a missing backup file raises; `/api/health`'s three fields are
+      asserted, including the read-only-database branch (D-042).
+- [x] `frontend/lib/api-types.ts` regenerated for the new `HealthStatus`
+      schema. No frontend source changed — nothing reads `/api/health`'s body
+      today beyond status code.
+- [x] Docs: `CLAUDE.md` gains a "Health and backups" section and the two new
+      `make` targets; `docs/ARCHITECTURE.md`'s Observability section rewritten
+      from "currently zero (review H3)" to what F.2 and this milestone closed,
+      versus what's still Phase 5's (job outcomes, IMAP poll status).
+- [x] `.env.example` gains `BACKUP_DIR` (empty default) and
+      `BACKUP_RETENTION_COUNT=7`.
+
+Work log: single session. New: `backend/app/backup.py`,
+`backend/tools/backup.py`, `backend/tools/restore.py`,
+`backend/tests/test_backup.py`, `backend/tests/test_health.py`. Changed:
+`backend/app/main.py` (`health_check` rewritten), `backend/app/schemas.py`
+(`HealthStatus`), `backend/app/settings.py` (`backup_dir`,
+`backup_retention_count`), `Makefile` (`backup`, `restore` targets),
+`.env.example`, `frontend/lib/api-types.ts` (generated), `CLAUDE.md`,
+`docs/ARCHITECTURE.md`. Decisions: **D-041** (backup mechanism is a script,
+not an early APScheduler instance; not flagged for human review — an ordering
+call inside an already-accepted ADR) and **D-042** (the writability probe
+wraps connection acquisition, not just the explicit `BEGIN IMMEDIATE`; not
+flagged for human review — a bugfix to this milestone's own new code). Gate:
+full `make check` green in the sandbox — 255 backend tests (was 247), 97.23%
+combined coverage (was 97.11%), `app/backup.py` at 100%; 101 frontend tests,
+88.21% line, 81.79% branch, unchanged (no frontend source changed); 18 E2E
+tests, axe clean, unchanged; `pip-audit` and `npm audit` both clean; generated
+client up to date. Docker portion of the split gate remains the host's
+(`scripts/autopilot-gate.sh 1`).
+
 - [ ] 1.7 Notifications inbox rework (§9, minus digests): read/unread with
       history (fixing the current `WHERE read = 0` dead end,
       `routes_notifications.py:24-37`), filtering by type, mark-all-read.
