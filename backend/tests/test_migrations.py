@@ -30,7 +30,7 @@ CANONICAL = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 # The revision `alembic upgrade head` is expected to land on. Written down
 # rather than read from the script directory, for the same reason
 # `expected_schema.sql` is: a new revision should have to say so here.
-HEAD_REVISION = "0003_notification_history"
+HEAD_REVISION = "0004_saved_views"
 
 
 @pytest.fixture

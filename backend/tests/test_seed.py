@@ -49,6 +49,7 @@ def test_seed_populates_every_shipped_feature(tmp_path) -> None:
                 "note_versions",
                 "notifications",
                 "audit_log_entries",
+                "saved_views",
             )
         }
         entry_types = {
@@ -70,7 +71,14 @@ def test_seed_populates_every_shipped_feature(tmp_path) -> None:
     assert counts["users"] == 4
     assert counts["opportunities"] == 5
     assert counts["opportunity_shares"] == 4
-    for table in ("timeline_entries", "notes", "comments", "note_versions", "audit_log_entries"):
+    for table in (
+        "timeline_entries",
+        "notes",
+        "comments",
+        "note_versions",
+        "audit_log_entries",
+        "saved_views",
+    ):
         assert counts[table] > 0, f"{table} is empty after seeding"
 
     # Every relationship the demo tour names has to be reachable.
@@ -166,6 +174,23 @@ def test_seeded_permissions_match_the_printed_tour(tmp_path) -> None:
         assert by_type["share_added"]["read_at"] is not None
         assert by_type["mention"]["read_at"] is None
         assert by_type["shared_activity"]["read_at"] is None
+
+        # The saved-views tour line (milestone 2.2): Alex's board view is
+        # shared, so Blair sees it beside their own; Blair's is private, so
+        # Alex does not see it; and the timeline view is filed under the other
+        # entity, so it does not appear in the board's list.
+        def view_names(session: CsrfClient, entity: str) -> list[str]:
+            page = session.get(f"/api/v2/saved-views?entity={entity}")
+            assert page.status_code == 200, page.text
+            return sorted(item["name"] for item in page.json()["items"])
+
+        assert view_names(alex, "opportunities") == ["Late-stage pipeline"]
+        assert view_names(blair, "opportunities") == [
+            "Blair's proposals",
+            "Late-stage pipeline",
+        ]
+        assert view_names(alex, "timeline") == ["Newest first"]
+        assert view_names(dana, "opportunities") == ["Late-stage pipeline"]
 
         # The owner-only audit log is not empty on a fresh seed.
         audit = alex.get(f"/api/opportunities/{northwind}/audit-log")

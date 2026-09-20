@@ -418,13 +418,51 @@ The units worth testing directly, each in its own module:
   `canChangeItem`, the client mirror of `backend/app/permissions.py`. They decide
   which buttons are offered, never who is allowed to do what.
 - `lib/notifications.ts` — the sentence shown for each notification type.
-- `lib/domain.ts` — the fixed stage list, the entry types, and the short names
-  for the generated schemas. One definition, because several views read them.
+- `lib/domain.ts` — the fixed stage list, the entry types, the short names for
+  the generated schemas, and the two view states (`TimelineFilters`,
+  `OpportunityViewState`) with `applyOpportunityView`, which filters and sorts
+  the already-fetched opportunity list in the client. One definition, because
+  several views read them.
+- `lib/viewState.ts` — the URL/object round trip both view states use.
 - `lib/confirm.ts` — the single `window.confirm` call. Milestone 2.5 replaces it
   with a real dialog, which is a one-file change only while it stays single.
 - `app/MarkdownText.tsx` — note and comment bodies, rendered through
   `rehype-sanitize` with an explicit `http`/`https`/`mailto` protocol allowlist.
   Keep that allowlist if you touch the Markdown pipeline.
+
+### View state and saved views
+
+The applied filter/sort set is in the URL, not in component state — that is
+what makes a view linkable, reloadable and shareable (milestone 2.2). Two of
+them are live at once, because the board stays mounted beside the open
+timeline: `OpportunityViewState` over the opportunity list and
+`TimelineFilters` over one opportunity's entries. They share the field name
+`q`, so `lib/viewState.ts` namespaces each state's parameters by the entity it
+belongs to — `opportunities.stage`, `timeline.order` — and `paramsWithState`
+merges into the existing query string rather than replacing it. Both halves
+are load bearing: without the prefix the board's keyword filters the timeline,
+and without the merge writing one state drops the other's parameters (D-059).
+The prefix is the same `entity` a saved view is filed under, so there is no
+second naming to keep in sync.
+
+A **saved view** (`saved_views`, `routes_saved_views.py`,
+`app/SavedViewsMenu.tsx`) is a named copy of one of those states, personal or
+shared, with at most one default per user per entity. Three things about it:
+
+- It is **not opportunity-scoped**, so `permissions.py` does not apply. The
+  rule is creator-only write and creator-or-shared read, and a view that is
+  neither answers 404 like everything else (existence does not leak). `shared`
+  means visible to every signed-in user — this app has no teams (D-060).
+- `filters` and `sort` are **opaque JSON**: whatever the URL held, stored as
+  key/value strings with a size cap and no schema. A new filter field is a
+  frontend change, not a migration.
+- The **partial unique index** `idx_saved_views_default_per_user` enforces the
+  one-default rule in the schema, not in application code; the routes clear
+  the previous default in the same transaction before setting a new one.
+
+The board's filtering and sorting happen **in the client**, over the list
+`GET /api/opportunities` already returns whole (D-061). That changes when
+pagination reaches this list in 2.3.
 
 `lib/api-types.ts` is generated from the OpenAPI schema; never hand-edit it.
 

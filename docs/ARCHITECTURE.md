@@ -51,7 +51,12 @@ React SPA, routed client-side, built by Next.js in static-export mode. Next is
 (ADR 0005). Deep links work because FastAPI serves `index.html` for any unmatched
 path (`main.py:56-64`).
 
-- **React Router** — URL is the source of truth for opportunity, view, and filters.
+- **React Router** — URL is the source of truth for opportunity, view, and
+  filters. Milestone 2.2 made that literal: each view state is namespaced by
+  its entity (`opportunities.stage`, `timeline.order`) so the board and the
+  open timeline can both keep their state in one query string, and a saved
+  view is a named copy of those parameters (`lib/viewState.ts`,
+  `backend/app/routes_saved_views.py`).
 - **TanStack Query** — the only server-state cache; SSE events invalidate keys.
 - `app/[[...slug]]/page.tsx` is the single exported HTML file; `app/AppRoot.tsx`
   holds the router and the query client, and `/search` is the second route that

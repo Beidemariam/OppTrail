@@ -65,6 +65,7 @@ class World:
     note_id: int
     comment_id: int
     notification_id: int
+    saved_view_id: int
 
 
 @dataclass(frozen=True)
@@ -344,6 +345,40 @@ MATRIX: dict[Endpoint, Case] = {
         body=lambda world, actor: None,
         notes="Scoped by the query: marks only the caller's own rows.",
     ),
+    Endpoint("POST", "/api/v2/saved-views"): Case(
+        expected=authenticated_only(201),
+        url=lambda world: "/api/v2/saved-views",
+        body=lambda world, actor: {"name": "Matrix new view", "entity": "opportunities"},
+        notes="Not opportunity-scoped: any signed-in user may save their own view.",
+    ),
+    Endpoint("GET", "/api/v2/saved-views"): Case(
+        expected=authenticated_only(200),
+        url=lambda world: "/api/v2/saved-views",
+        notes="Scoped by the query: own views plus anyone's shared ones.",
+    ),
+    Endpoint("PATCH", "/api/v2/saved-views/{view_id}"): Case(
+        expected={
+            "anonymous": 401,
+            "unrelated": 404,
+            "viewer": 404,
+            "editor": 404,
+            "owner": 200,
+        },
+        url=lambda world: f"/api/v2/saved-views/{world.saved_view_id}",
+        body=lambda world, actor: {"name": "Matrix view, renamed"},
+        notes="The fixture's view belongs to the owner; everyone else 404s (creator-only write).",
+    ),
+    Endpoint("DELETE", "/api/v2/saved-views/{view_id}"): Case(
+        expected={
+            "anonymous": 401,
+            "unrelated": 404,
+            "viewer": 404,
+            "editor": 404,
+            "owner": 204,
+        },
+        url=lambda world: f"/api/v2/saved-views/{world.saved_view_id}",
+        notes="Same creator-only rule as the PATCH above.",
+    ),
     Endpoint("GET", "/api/v2/search"): Case(
         expected=authenticated_only(200),
         url=lambda world: "/api/v2/search?q=discovery",
@@ -462,6 +497,11 @@ def world(tmp_path, monkeypatch) -> World:
     notifications = owner.get("/api/notifications").json()["notifications"]
     assert notifications, "expected the owner to be notified of the editor's entry"
 
+    saved_view_id = owner.post(
+        "/api/v2/saved-views",
+        json={"name": "Matrix view", "entity": "opportunities"},
+    ).json()["id"]
+
     yield World(
         clients=clients,
         user_ids=user_ids,
@@ -471,6 +511,7 @@ def world(tmp_path, monkeypatch) -> World:
         note_id=note_id,
         comment_id=comment_id,
         notification_id=notifications[0]["id"],
+        saved_view_id=saved_view_id,
     )
 
     for client in clients.values():

@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ALEX, anOpportunity } from "./test-api";
+import { ALEX, anEntry, anOpportunity } from "./test-api";
 import { findCard, renderApp, renderDashboard } from "./test-app";
 
 beforeEach(() => {
@@ -230,6 +230,211 @@ describe("the dashboard", () => {
     expect(
       await screen.findByText("Database is unavailable"),
     ).toBeInTheDocument();
+  });
+});
+
+describe("filtering, sorting and saved views (milestone 2.2)", () => {
+  it("filters the board by keyword without asking the API again", async () => {
+    const api = await renderDashboard({
+      opportunities: [
+        anOpportunity({ id: 10, name: "Northwind rollout" }),
+        anOpportunity({ id: 11, name: "Globex renewal" }),
+      ],
+    });
+    await screen.findByText("Northwind rollout");
+
+    await userEvent.type(
+      screen.getByLabelText("Filter opportunities by keyword"),
+      "globex",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+    expect(screen.queryByText("Northwind rollout")).not.toBeInTheDocument();
+    expect(screen.getByText("Globex renewal")).toBeInTheDocument();
+    // The board's filter/sort model is applied to the already-fetched list
+    // (`lib/domain.ts`'s `applyOpportunityView`), so filtering never sends a
+    // second request.
+    expect(api.callsTo("GET", "/api/opportunities")).toHaveLength(1);
+  });
+
+  it("filters and sorts using every control, then clears them", async () => {
+    await renderDashboard({
+      opportunities: [
+        anOpportunity({
+          id: 10,
+          name: "Northwind rollout",
+          stage: "Negotiation",
+          value: "100",
+          stalled: false,
+        }),
+        anOpportunity({
+          id: 11,
+          name: "Globex renewal",
+          stage: "Negotiation",
+          value: "300",
+          stalled: true,
+        }),
+      ],
+    });
+    await screen.findByText("Northwind rollout");
+
+    await userEvent.selectOptions(
+      screen.getByLabelText("Filter by stage"),
+      "Negotiation",
+    );
+    await userEvent.selectOptions(
+      screen.getByLabelText("Filter by stalled status"),
+      "Stalled only",
+    );
+    await userEvent.selectOptions(screen.getByLabelText("Sort by"), "Value");
+    await userEvent.selectOptions(
+      screen.getByLabelText("Sort direction"),
+      "Ascending",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+    expect(screen.queryByText("Northwind rollout")).not.toBeInTheDocument();
+    expect(screen.getByText("Globex renewal")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(screen.getByText("Northwind rollout")).toBeInTheDocument();
+    expect(screen.getByLabelText("Filter by stage")).toHaveValue("");
+  });
+
+  it("keeps the board filter in the URL a reload would use", async () => {
+    await renderDashboard(
+      {
+        opportunities: [
+          anOpportunity({
+            id: 10,
+            name: "Northwind rollout",
+            stage: "Negotiation",
+          }),
+          anOpportunity({ id: 11, name: "Globex renewal", stage: "Proposal" }),
+        ],
+      },
+      "/?opportunities.stage=Negotiation",
+    );
+    await screen.findByText("Northwind rollout");
+
+    expect(screen.getByLabelText("Filter by stage")).toHaveValue("Negotiation");
+    expect(screen.queryByText("Globex renewal")).not.toBeInTheDocument();
+  });
+
+  it("applies a saved opportunities view and can save the current one", async () => {
+    const api = await renderDashboard({
+      opportunities: [
+        anOpportunity({
+          id: 10,
+          name: "Northwind rollout",
+          stage: "Negotiation",
+        }),
+        anOpportunity({ id: 11, name: "Globex renewal", stage: "Proposal" }),
+      ],
+      savedViews: [
+        {
+          id: 1,
+          created_by: ALEX.id,
+          creator_name: ALEX.name,
+          name: "Negotiation only",
+          entity: "opportunities",
+          filters: { stage: "Negotiation" },
+          sort: {},
+          group_by: "stage",
+          is_shared: false,
+          is_default: false,
+          created_at: "2026-09-01T00:00:00Z",
+          updated_at: "2026-09-01T00:00:00Z",
+        },
+      ],
+    });
+    await screen.findByText("Northwind rollout");
+
+    await userEvent.selectOptions(
+      await screen.findByLabelText("Saved opportunity views"),
+      "Negotiation only",
+    );
+
+    expect(screen.queryByText("Globex renewal")).not.toBeInTheDocument();
+    expect(screen.getByText("Northwind rollout")).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save current opportunity view" }),
+    );
+    await userEvent.type(
+      screen.getByLabelText("Saved opportunity view name"),
+      "My pipeline",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save opportunity view" }),
+    );
+
+    await waitFor(() =>
+      expect(api.callsTo("POST", "/api/v2/saved-views")).toHaveLength(1),
+    );
+    expect(api.callsTo("POST", "/api/v2/saved-views")[0].body).toMatchObject({
+      name: "My pipeline",
+      entity: "opportunities",
+      filters: { stage: "Negotiation" },
+      group_by: "stage",
+    });
+  });
+});
+
+describe("two view states in one URL (milestone 2.2)", () => {
+  it("keeps the board's keyword filter out of the open timeline's query", async () => {
+    // The board and the open timeline are mounted together (D-054) and share
+    // one query string, so each has to own its own parameter names: a board
+    // keyword is not a timeline keyword.
+    const api = await renderDashboard(
+      {
+        opportunities: [anOpportunity({ id: 10, name: "Northwind rollout" })],
+        entries: [anEntry()],
+      },
+      "/opportunities/10",
+    );
+    await screen.findByRole("heading", { name: "Discovery call" });
+    const before = api.callsTo("GET", "/timeline").length;
+
+    await userEvent.type(
+      screen.getByLabelText("Filter opportunities by keyword"),
+      "northwind",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+    await waitFor(() =>
+      expect(screen.queryByText("Globex renewal")).not.toBeInTheDocument(),
+    );
+    expect(api.callsTo("GET", "q=northwind")).toHaveLength(0);
+    expect(api.callsTo("GET", "/timeline")).toHaveLength(before);
+  });
+
+  it("keeps the timeline's reading order when the board is filtered", async () => {
+    const api = await renderDashboard(
+      {
+        opportunities: [
+          anOpportunity({ id: 10, name: "Northwind rollout" }),
+          anOpportunity({ id: 11, name: "Globex renewal" }),
+        ],
+        entries: [anEntry()],
+      },
+      "/opportunities/10?timeline.order=desc",
+    );
+    await screen.findByRole("heading", { name: "Discovery call" });
+
+    await userEvent.selectOptions(
+      screen.getByLabelText("Filter by stage"),
+      "Negotiation",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+    // Writing one state into the URL must not drop the other's parameters.
+    await waitFor(() =>
+      expect(screen.getByLabelText("Timeline reading order")).toHaveValue(
+        "desc",
+      ),
+    );
+    expect(api.callsTo("GET", "order=asc")).toHaveLength(0);
   });
 });
 

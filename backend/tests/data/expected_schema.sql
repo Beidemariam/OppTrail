@@ -20,6 +20,12 @@ CREATE INDEX idx_opportunities_owner_id ON opportunities(owner_id);
 
 CREATE INDEX idx_opportunity_shares_user_id ON opportunity_shares(user_id);
 
+CREATE UNIQUE INDEX idx_saved_views_default_per_user
+    ON saved_views(created_by, entity)
+    WHERE is_default = 1 AND deleted_at IS NULL;
+
+CREATE INDEX idx_saved_views_created_by ON saved_views(created_by);
+
 CREATE INDEX idx_sessions_expires_at ON sessions(expires_at);
 
 CREATE INDEX idx_sessions_user_id ON sessions(user_id);
@@ -110,6 +116,21 @@ CREATE TABLE opportunity_shares (
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     deleted_at TEXT,
     UNIQUE (opportunity_id, user_id)
+);
+
+CREATE TABLE saved_views (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_by INTEGER NOT NULL REFERENCES users(id),
+    name TEXT NOT NULL,
+    entity TEXT NOT NULL CHECK (entity IN ('opportunities', 'timeline')),
+    filters TEXT NOT NULL DEFAULT '{}',
+    sort TEXT NOT NULL DEFAULT '{}',
+    group_by TEXT,
+    is_shared INTEGER NOT NULL DEFAULT 0 CHECK (is_shared IN (0, 1)),
+    is_default INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0, 1)),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    deleted_at TEXT
 );
 
 CREATE TABLE sessions (

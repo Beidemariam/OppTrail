@@ -137,6 +137,14 @@ def share(session: Session, opportunity_id: int, email: str, role: str) -> None:
     )
 
 
+def save_view(session: Session, **fields: Any) -> int:
+    response = check(
+        session.client.post("/api/v2/saved-views", json=fields),
+        f"saving the view {fields.get('name')!r}",
+    )
+    return int(response.json()["id"])
+
+
 def backdate_opportunity(opportunity_id: int, days: float) -> None:
     """Move an opportunity and its auto-generated "created" entry into the past.
 
@@ -343,6 +351,32 @@ def seed() -> None:
         "marking Alex's share notification read",
     )
 
+    # 7. Saved views (milestone 2.2), so both surfaces that carry a
+    #    filter/sort model open with something to apply. The filter keys are
+    #    the view state's own field names (`frontend/lib/domain.ts`), which is
+    #    also what the URL carries — one shape, no conversion.
+    save_view(
+        alex,
+        name="Late-stage pipeline",
+        entity="opportunities",
+        filters={"stage": "Negotiation", "sortField": "value", "sortDirection": "desc"},
+        group_by="stage",
+        is_shared=True,
+    )
+    save_view(
+        alex,
+        name="Newest first",
+        entity="timeline",
+        filters={"order": "desc"},
+    )
+    save_view(
+        blair,
+        name="Blair's proposals",
+        entity="opportunities",
+        filters={"stage": "Proposal"},
+        group_by="stage",
+    )
+
     for session in (alex, blair, casey):
         session.client.__exit__(None, None, None)
 
@@ -390,7 +424,14 @@ def main(argv: list[str] | None = None) -> int:
         "  inbox rework: a mention and a shared-activity notification still\n"
         "  unread, next to the Initech share notification already marked read\n"
         "  and still visible — the dead end milestone 1.7 fixed. Filter by\n"
-        "  type in the panel, or mark everything read at once."
+        "  type in the panel, or mark everything read at once.\n"
+        "\n"
+        "  Saved views (milestone 2.2) sit above the board and above an open\n"
+        "  timeline. Alex has 'Late-stage pipeline' over the board, shared, so\n"
+        "  Blair sees it too beside their own private 'Blair's proposals';\n"
+        "  'Newest first' reverses one opportunity's reading order. Applying\n"
+        "  one writes the filter into the URL, so the address bar is the view:\n"
+        "  copy it, reload it, or send it to someone with access."
     )
     return 0
 

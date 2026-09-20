@@ -514,6 +514,11 @@ export interface paths {
          *     v1 tie-breaks equal `event_timestamp`s on `created_at`, which is not unique
          *     and so cannot carry a cursor; v2 tie-breaks on the entry id, which orders
          *     identically for rows created in sequence.
+         *
+         *     `order` (D-051) reverses both the `ORDER BY` and the cursor's comparison
+         *     direction (`cursor_clause`'s `descending`) — reversing only the `ORDER BY`
+         *     would keep walking the cursor forward through what is now a descending
+         *     list and either repeat or skip rows at the page boundary.
          */
         get: operations["list_timeline_page_api_v2_opportunities__opportunity_id__timeline_get"];
         put?: never;
@@ -608,6 +613,45 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v2/saved-views": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Saved Views
+         * @description Every view the caller may apply: their own, plus anyone's shared ones.
+         */
+        get: operations["list_saved_views_api_v2_saved_views_get"];
+        put?: never;
+        /** Create Saved View */
+        post: operations["create_saved_view_api_v2_saved_views_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/saved-views/{view_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Saved View */
+        delete: operations["delete_saved_view_api_v2_saved_views__view_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Saved View */
+        patch: operations["update_saved_view_api_v2_saved_views__view_id__patch"];
         trace?: never;
     };
     "/api/health": {
@@ -1095,6 +1139,13 @@ export interface components {
             /** Next Cursor */
             next_cursor?: string | null;
         };
+        /** Page[SavedViewPublic] */
+        Page_SavedViewPublic_: {
+            /** Items */
+            items: components["schemas"]["SavedViewPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
         /** Page[SearchResultPublic] */
         Page_SearchResultPublic_: {
             /** Items */
@@ -1129,6 +1180,92 @@ export interface components {
             current_password: string;
             /** New Password */
             new_password: string;
+        };
+        /** SavedViewCreate */
+        SavedViewCreate: {
+            /** Name */
+            name: string;
+            /**
+             * Entity
+             * @enum {string}
+             */
+            entity: "opportunities" | "timeline";
+            /** Filters */
+            filters?: {
+                [key: string]: string;
+            };
+            /** Sort */
+            sort?: {
+                [key: string]: string;
+            };
+            /** Group By */
+            group_by?: string | null;
+            /**
+             * Is Shared
+             * @default false
+             */
+            is_shared: boolean;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+        };
+        /** SavedViewPublic */
+        SavedViewPublic: {
+            /** Id */
+            id: number;
+            /** Created By */
+            created_by: number;
+            /** Creator Name */
+            creator_name: string;
+            /** Name */
+            name: string;
+            /**
+             * Entity
+             * @enum {string}
+             */
+            entity: "opportunities" | "timeline";
+            /** Filters */
+            filters: {
+                [key: string]: string;
+            };
+            /** Sort */
+            sort: {
+                [key: string]: string;
+            };
+            /** Group By */
+            group_by: string | null;
+            /** Is Shared */
+            is_shared: boolean;
+            /** Is Default */
+            is_default: boolean;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+        };
+        /**
+         * SavedViewUpdate
+         * @description Every field optional: a rename does not have to resend the filters.
+         */
+        SavedViewUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Filters */
+            filters?: {
+                [key: string]: string;
+            } | null;
+            /** Sort */
+            sort?: {
+                [key: string]: string;
+            } | null;
+            /** Group By */
+            group_by?: string | null;
+            /** Is Shared */
+            is_shared?: boolean | null;
+            /** Is Default */
+            is_default?: boolean | null;
         };
         /**
          * SearchResultPublic
@@ -1857,6 +1994,7 @@ export interface operations {
                 from?: string | null;
                 to?: string | null;
                 author_id?: number | null;
+                order?: "asc" | "desc";
             };
             header?: never;
             path: {
@@ -2544,6 +2682,7 @@ export interface operations {
                 from?: string | null;
                 to?: string | null;
                 author_id?: number | null;
+                order?: "asc" | "desc";
                 limit?: number;
                 cursor?: string | null;
             };
@@ -2705,6 +2844,144 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Page_SearchResultPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_saved_views_api_v2_saved_views_get: {
+        parameters: {
+            query?: {
+                entity?: string | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_SavedViewPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_saved_view_api_v2_saved_views_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavedViewCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedViewPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_saved_view_api_v2_saved_views__view_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                view_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_saved_view_api_v2_saved_views__view_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                view_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavedViewUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedViewPublic"];
                 };
             };
             /** @description Validation Error */

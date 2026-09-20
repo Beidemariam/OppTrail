@@ -1,4 +1,5 @@
 import sqlite3
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
@@ -277,9 +278,11 @@ def list_timeline(
     from_date: str | None = Query(default=None, alias="from"),
     to_date: str | None = Query(default=None, alias="to"),
     author_id: int | None = None,
+    order: Literal["asc", "desc"] = "asc",
     user: sqlite3.Row = Depends(get_current_user),
 ) -> TimelineResponse:
     where, params = timeline_filters(opportunity_id, q, type, from_date, to_date, author_id)
+    direction = "DESC" if order == "desc" else "ASC"
 
     with db_connection() as connection:
         require_opportunity_access(connection, opportunity_id, int(user["id"]))
@@ -289,7 +292,8 @@ def list_timeline(
             FROM timeline_entries
             LEFT JOIN users ON users.id = timeline_entries.created_by
             WHERE {" AND ".join(where)}
-            ORDER BY timeline_entries.event_timestamp ASC, timeline_entries.created_at ASC
+            ORDER BY timeline_entries.event_timestamp {direction},
+                timeline_entries.created_at {direction}
             """,
             params,
         ).fetchall()
@@ -309,6 +313,7 @@ def list_timeline_page(
     from_date: str | None = Query(default=None, alias="from"),
     to_date: str | None = Query(default=None, alias="to"),
     author_id: int | None = None,
+    order: Literal["asc", "desc"] = "asc",
     user: sqlite3.Row = Depends(get_current_user),
 ) -> Page[TimelineEntryPublic]:
     """The page unit is the entry. Its notes and comments come with it whole —
@@ -319,18 +324,25 @@ def list_timeline_page(
     v1 tie-breaks equal `event_timestamp`s on `created_at`, which is not unique
     and so cannot carry a cursor; v2 tie-breaks on the entry id, which orders
     identically for rows created in sequence.
+
+    `order` (D-051) reverses both the `ORDER BY` and the cursor's comparison
+    direction (`cursor_clause`'s `descending`) — reversing only the `ORDER BY`
+    would keep walking the cursor forward through what is now a descending
+    list and either repeat or skip rows at the page boundary.
     """
     where, params = timeline_filters(opportunity_id, q, type, from_date, to_date, author_id)
+    descending = order == "desc"
     continuation, cursor_values = cursor_clause(
         page,
         "timeline_entries.event_timestamp",
         "timeline_entries.id",
-        descending=False,
+        descending=descending,
     )
     if continuation:
         where.append(continuation)
         params.extend(cursor_values)
     params.append(page.limit + 1)
+    direction = "DESC" if descending else "ASC"
 
     with db_connection() as connection:
         require_opportunity_access(connection, opportunity_id, int(user["id"]))
@@ -340,7 +352,7 @@ def list_timeline_page(
             FROM timeline_entries
             LEFT JOIN users ON users.id = timeline_entries.created_by
             WHERE {" AND ".join(where)}
-            ORDER BY timeline_entries.event_timestamp ASC, timeline_entries.id ASC
+            ORDER BY timeline_entries.event_timestamp {direction}, timeline_entries.id {direction}
             LIMIT ?
             """,
             params,

@@ -66,14 +66,20 @@ export interface Access {
   canChangeItem: (authorId: number | null) => boolean;
 }
 
-/** The timeline query parameters the filter bar sends. */
-export interface TimelineFilters {
+/**
+ * The timeline query parameters the filter bar sends, plus the reading order
+ * (D-051). Every field is a plain string because this shape is also what
+ * lives in the URL and in a saved view's `filters`
+ * (`lib/viewState.ts`) — one shape, not a conversion between two.
+ */
+export type TimelineFilters = {
   q: string;
   type: string;
   from: string;
   to: string;
   author_id: string;
-}
+  order: "asc" | "desc";
+};
 
 export const emptyTimelineFilters: TimelineFilters = {
   q: "",
@@ -81,7 +87,88 @@ export const emptyTimelineFilters: TimelineFilters = {
   from: "",
   to: "",
   author_id: "",
+  order: "asc",
 };
+
+/**
+ * The opportunity board's filter/sort model (milestone 2.2), URL-serialized
+ * the same way as `TimelineFilters`. No `groupBy` field yet: the board's only
+ * grouping is by stage, which is what makes it the board rather than the list
+ * view (2.7/2.8) — a saved view records `group_by: "stage"` as a constant
+ * (`SavedViewsMenu.tsx`) so the column exists in the schema before a second
+ * view gives it a reason to vary.
+ */
+export type OpportunityViewState = {
+  q: string;
+  stage: string;
+  stalled: "" | "true" | "false";
+  sortField: "updated_at" | "value" | "expected_close_date" | "name";
+  sortDirection: "asc" | "desc";
+};
+
+export const emptyOpportunityViewState: OpportunityViewState = {
+  q: "",
+  stage: "",
+  stalled: "",
+  sortField: "updated_at",
+  sortDirection: "desc",
+};
+
+/**
+ * Filters and sorts the already-fetched opportunity list against a view
+ * state. Client-side rather than a new query parameter on
+ * `GET /api/opportunities`, because that endpoint already returns every
+ * opportunity the caller can read unpaginated — pushing the predicate into
+ * SQL has no payload-size benefit before pagination reaches this list (2.3),
+ * and would otherwise have to be re-mirrored onto `/api/v2/opportunities` to
+ * avoid the drift `CLAUDE.md`'s "API versions" section warns against.
+ */
+export function applyOpportunityView(
+  opportunities: Opportunity[],
+  state: OpportunityViewState,
+): Opportunity[] {
+  const keyword = state.q.trim().toLowerCase();
+  const filtered = opportunities.filter((opportunity) => {
+    if (state.stage && opportunity.stage !== state.stage) {
+      return false;
+    }
+    if (state.stalled === "true" && !opportunity.stalled) {
+      return false;
+    }
+    if (state.stalled === "false" && opportunity.stalled) {
+      return false;
+    }
+    if (keyword) {
+      const haystack =
+        `${opportunity.name} ${opportunity.account_name} ${opportunity.owner_name}`.toLowerCase();
+      if (!haystack.includes(keyword)) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  const direction = state.sortDirection === "asc" ? 1 : -1;
+  return [...filtered].sort((a, b) => {
+    switch (state.sortField) {
+      case "value":
+        return (Number(a.value) - Number(b.value)) * direction;
+      case "name":
+        return a.name.localeCompare(b.name) * direction;
+      case "expected_close_date":
+        return (
+          (a.expected_close_date ?? "").localeCompare(
+            b.expected_close_date ?? "",
+          ) * direction
+        );
+      default:
+        return a.updated_at.localeCompare(b.updated_at) * direction;
+    }
+  });
+}
+
+export type SavedView = components["schemas"]["SavedViewPublic"];
+export type SavedViewEntity = SavedView["entity"];
 
 /** One turn of the read-only AI conversation about an opportunity. */
 export interface AiChatMessage {

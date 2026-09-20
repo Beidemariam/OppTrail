@@ -175,6 +175,34 @@ def test_timeline_filters_keyword_type_date_and_author(client: TestClient) -> No
     ]
 
 
+def test_timeline_order_direction(client: TestClient) -> None:
+    """D-051: the reader chooses oldest- or newest-first; `order` defaults to
+    the existing behaviour (oldest-first) so a client that never sends it sees
+    no change.
+    """
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    create_entry(
+        client,
+        opportunity["id"],
+        title="Discovery call",
+        event_timestamp=days_ago(60),
+    )
+    create_entry(
+        client,
+        opportunity["id"],
+        title="Proposal email",
+        event_timestamp=days_ago(30),
+    )
+
+    def titles(query: str) -> list[str]:
+        response = client.get(f"/api/opportunities/{opportunity['id']}/timeline{query}")
+        return [entry["title"] for entry in response.json()["entries"]]
+
+    assert titles("") == titles("?order=asc")
+    assert titles("?order=desc") == list(reversed(titles("?order=asc")))
+
+
 def test_deleting_entry_soft_deletes_related_notes_and_comments(
     client: TestClient,
 ) -> None:

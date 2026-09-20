@@ -733,3 +733,50 @@ opportunity` in `app/OpportunityPanel.test.tsx`. Run against an `AiSidebar`
 holding its transcript in `useState` — the obvious way to write it once the
 panel is per-route — it fails on the return trip, which is the behaviour
 `Home.tsx` had and D-055 keeps.
+
+
+## Phase 2 — milestone 2.2 (URL view state, saved views, timeline order)
+
+One new table and one new router (`saved_views`,
+`app/routes_saved_views.py`), the timeline's `order` parameter on both
+timeline routes, and the frontend's two view states moved into the URL.
+
+```
+backend:  274 passed (was 258), 97.40% combined line+branch coverage
+          (was 97.28%, --cov-fail-under=90 enforced)
+          app/routes_saved_views.py   100% line, 100% branch
+          app/soft_delete.py          100% line (the new saved-view helper
+                                      keeps the module's ≥95% branch floor)
+          app/schemas.py               99% line
+frontend: 138 passed (was 110), 96.60% line (was 95.76%), 88.21% branch
+          (was 88.32%), 95.22% functions (was 94.42%)
+          thresholds unchanged at 93/93/92/85 (raised in 2.1, D-058)
+          lib/viewState.ts     100% line, 100% branch
+          lib/domain.ts        100% line, 92.85% branch
+          app/SavedViewsMenu.tsx       100% line, 86.2% branch
+          app/OpportunityFilterBar.tsx 100% line, 75% branch
+e2e:      24 passed (was 19), axe clean on every screen including the newly
+          filtered board, the deferred color-contrast ratchet still failing
+          on cue
+docker:   deferred to the host half — scripts/autopilot-gate.sh 2
+          (no Docker socket in this sandbox, per sandbox/README.md)
+```
+
+Branch coverage dipped 0.11 points against 2.1 while line coverage rose: the
+two new filter bars each carry a small number of select-option branches no
+test exercises individually (`OpportunityFilterBar` at 75% branch), and the
+saved-views menu has error branches only its failure test reaches. Both stay
+well above the 85% threshold, and the floor is unchanged rather than lowered.
+
+Authorization matrix: 47 → 51 endpoints. The four new ones are the saved-view
+routes (`POST`/`GET /api/v2/saved-views`, `PATCH`/`DELETE
+/api/v2/saved-views/{id}`); the registry guard fails on any route without an
+entry, so they were added with the routes.
+
+The guard test for this milestone (brief §6.5, confirmed to fail against the
+unfixed code first) is `keeps the board's keyword filter out of the open
+timeline's query` in `app/DashboardPage.test.tsx`. Before D-059's
+entity-namespaced parameters, filtering the board sent
+`GET /api/opportunities/10/timeline?q=northwind` — the board's keyword
+silently filtering the open timeline, because both states were reading the
+same query-string field names.

@@ -1523,8 +1523,8 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
   the filters are not in the URL yet (2.2), and `window.confirm` is still the
   confirmation dialog (2.5) — it is now behind `lib/confirm.ts`, so 2.5 is a
   one-file change.
-- [ ] 2.2 Shared filter/sort/group model serialized to the URL; saved views
-      persisted. Schema: `saved_views`.
+- [x] 2.2 Shared filter/sort/group model serialized to the URL; saved views
+      persisted. Schema: `saved_views`. — **DONE**
       Includes **timeline order direction** (oldest-first / newest-first),
       raised by the human during the Phase 1 user test — see D-051. The sort
       model here was written for views over the opportunity list and did not
@@ -1535,6 +1535,71 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
       already exists (`ORDER BY` in the timeline query); the keyset cursors
       from 1.3 order on `(sort value, id)`, so a reversible direction has to
       reverse the cursor comparison too, not just the `ORDER BY`.
+
+  - [x] The applied filter/sort set lives in the URL, for both states that
+        have one: `OpportunityViewState` over the board and `TimelineFilters`
+        over one opportunity's entries (`lib/domain.ts`, `lib/viewState.ts`).
+        A reload, the back button, a deep link and an applied saved view all
+        arrive the same way — as a change to `searchParams` — so there is no
+        second persistence mechanism and nothing to keep in sync with it.
+  - [x] Both states are live at once, because the board stays mounted beside
+        the open timeline (D-054), so each one's parameters are namespaced by
+        its entity (`opportunities.stage`, `timeline.order`) and a write
+        merges into the query string rather than replacing it (**D-059**).
+        Without the prefix the board's keyword filtered the timeline too;
+        without the merge, filtering the board reset the timeline's reading
+        order. Found by the guard test named below, written to fail first.
+  - [x] Timeline reading order (**D-051**), oldest-first or newest-first, on
+        both timeline routes. `order` reverses the v2 route's cursor
+        comparison as well as the `ORDER BY` (`cursor_clause`'s `descending`),
+        which is what keeps paging correct at the page boundary rather than
+        repeating or skipping rows there.
+  - [x] Saved views: revision `20260920_0004_saved_views`,
+        `app/routes_saved_views.py` (v2 only — no v1 shape to mirror),
+        `app/SavedViewsMenu.tsx` on both surfaces. Personal or shared,
+        creator-only write, 404 rather than 403 for a view that is not the
+        caller's business, at most one default per user per entity enforced by
+        a partial unique index rather than by application code. `filters` and
+        `sort` are opaque bounded JSON so a new filter field never needs a
+        migration (**D-062**); `shared` means visible to every signed-in user,
+        which this installation has no finer unit than (**D-060**, needs human
+        review).
+  - [x] The board's own filtering and sorting run in the client over the list
+        already fetched (`applyOpportunityView`), because
+        `GET /api/opportunities` returns every readable row unpaginated —
+        **D-061** records that this moves into SQL when 2.3 paginates the
+        list, so that milestone treats it as planned rather than as a
+        regression.
+  - [x] Tests: 16 backend (`tests/test_saved_views.py`, plus the timeline
+        order cases in `test_timeline.py`/`test_api_v2.py` and the new matrix
+        entries), 28 frontend (`lib/viewState.test.ts`, `lib/domain.test.ts`,
+        and the 2.2 blocks in `DashboardPage.test.tsx` /
+        `OpportunityPanel.test.tsx`), and 5 E2E in
+        `e2e/09-saved-views.spec.ts` — the acceptance line ("survives reload
+        and is shareable by URL") walked as a user: apply, copy the URL, open
+        it clean. 258 → 274 backend, 110 → 138 frontend, 19 → 24 E2E.
+  - [x] `make seed` seeds three views (Alex's shared board view, Alex's
+        timeline view, Blair's private one) and its printed tour says so;
+        `tests/test_seed.py` asserts who sees which, so the tour stays true.
+  - [x] Docs: `CLAUDE.md` gains "View state and saved views";
+        `docs/ARCHITECTURE.md`'s React Router line now says what "URL is the
+        source of truth" resolves to.
+
+  Gate: `make check` green in full (ruff, ruff format, mypy, eslint, tsc,
+  prettier, 274 backend tests at 97.40% combined coverage, 138 frontend tests
+  over the 93/93/92/85 thresholds 2.1 raised, contract check, 24 E2E with axe,
+  pip-audit, npm audit). Docker deferred to the host half (`sandbox/README.md`).
+
+  The guard test (brief §6.5, confirmed to fail against the unfixed code
+  first): `keeps the board's keyword filter out of the open timeline's query`
+  in `app/DashboardPage.test.tsx`, which failed with a timeline request
+  carrying the board's `q=northwind` before D-059's namespacing landed.
+
+  Not in this milestone, deliberately: grouping is still only the board's
+  fixed stage columns, since the list and table views that would give
+  `group_by` a second value are 2.7 and 2.8; the saved-view menu is a plain
+  `<select>` until 2.5 brings the design system; and the board list is not
+  virtualized yet (2.3).
 - [ ] 2.3 `VirtualList` for the 400-opportunity scale.
 - [ ] 2.4 Command palette, keyboard map, bulk actions, optimistic mutations,
       undo toasts.

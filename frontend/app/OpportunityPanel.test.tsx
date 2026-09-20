@@ -194,6 +194,230 @@ describe("the timeline", () => {
       expect(within(filters).getByLabelText(/keyword/i)).toHaveValue(""),
     );
   });
+
+  it("sends the reading order chosen in the filter bar", async () => {
+    const api = await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [anEntry()],
+    });
+    await openTimeline("Northwind rollout");
+
+    const filters = (
+      await screen.findByLabelText("Filter the timeline by keyword")
+    ).closest("form") as HTMLElement;
+    await userEvent.selectOptions(
+      within(filters).getByLabelText("Timeline reading order"),
+      "Newest first",
+    );
+    await userEvent.click(
+      within(filters).getByRole("button", { name: "Filter" }),
+    );
+
+    await waitFor(() => {
+      expect(api.callsTo("GET", "order=desc")).toHaveLength(1);
+    });
+  });
+
+  it("pre-fills the reading order from a URL a reload would use", async () => {
+    // The applied filter set lives in the URL (milestone 2.2), so a fresh
+    // mount at that URL is what a reload does — no separate persistence
+    // mechanism to test.
+    const api = await renderDashboard(
+      { opportunities: [anOpportunity()], entries: [anEntry()] },
+      "/opportunities/10?timeline.order=desc",
+    );
+    await screen.findByRole("heading", { name: "Discovery call" });
+
+    expect(await screen.findByLabelText("Timeline reading order")).toHaveValue(
+      "desc",
+    );
+    expect(api.callsTo("GET", "order=desc")).toHaveLength(1);
+  });
+});
+
+describe("saved views", () => {
+  it("applies a saved view and can save the current one", async () => {
+    const api = await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [anEntry()],
+      savedViews: [
+        {
+          id: 1,
+          created_by: ALEX.id,
+          creator_name: ALEX.name,
+          name: "Newest first",
+          entity: "timeline",
+          filters: { order: "desc" },
+          sort: {},
+          group_by: null,
+          is_shared: false,
+          is_default: false,
+          created_at: "2026-09-01T00:00:00Z",
+          updated_at: "2026-09-01T00:00:00Z",
+        },
+      ],
+    });
+    await openTimeline("Northwind rollout");
+
+    await userEvent.selectOptions(
+      await screen.findByLabelText("Saved timeline views"),
+      "Newest first",
+    );
+
+    await waitFor(() => {
+      expect(api.callsTo("GET", "order=desc")).toHaveLength(1);
+    });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save current timeline view" }),
+    );
+    await userEvent.type(
+      screen.getByLabelText("Saved timeline view name"),
+      "My current filter",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save timeline view" }),
+    );
+
+    await waitFor(() =>
+      expect(api.callsTo("POST", "/api/v2/saved-views")).toHaveLength(1),
+    );
+    expect(api.callsTo("POST", "/api/v2/saved-views")[0].body).toMatchObject({
+      name: "My current filter",
+      entity: "timeline",
+      filters: { order: "desc" },
+    });
+  });
+
+  it("loads the caller's default view on the first open, not on a deep link", async () => {
+    const api = await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [anEntry()],
+      savedViews: [
+        {
+          id: 1,
+          created_by: ALEX.id,
+          creator_name: ALEX.name,
+          name: "Newest first",
+          entity: "timeline",
+          filters: { order: "desc" },
+          sort: {},
+          group_by: null,
+          is_shared: false,
+          is_default: true,
+          created_at: "2026-09-01T00:00:00Z",
+          updated_at: "2026-09-01T00:00:00Z",
+        },
+      ],
+    });
+    await openTimeline("Northwind rollout");
+
+    await waitFor(() => {
+      expect(api.callsTo("GET", "order=desc")).toHaveLength(1);
+    });
+  });
+
+  it("ignores a blank name and lets the save form be cancelled", async () => {
+    const api = await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [anEntry()],
+    });
+    await openTimeline("Northwind rollout");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save current timeline view" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save timeline view" }),
+    );
+    expect(api.callsTo("POST", "/api/v2/saved-views")).toHaveLength(0);
+
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(
+      screen.queryByLabelText("Saved timeline view name"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("marks a new view shared and default from the checkboxes", async () => {
+    const api = await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [anEntry()],
+    });
+    await openTimeline("Northwind rollout");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save current timeline view" }),
+    );
+    await userEvent.type(
+      screen.getByLabelText("Saved timeline view name"),
+      "Team default",
+    );
+    await userEvent.click(screen.getByRole("checkbox", { name: "Shared" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Default" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save timeline view" }),
+    );
+
+    await waitFor(() =>
+      expect(api.callsTo("POST", "/api/v2/saved-views")).toHaveLength(1),
+    );
+    expect(api.callsTo("POST", "/api/v2/saved-views")[0].body).toMatchObject({
+      is_shared: true,
+      is_default: true,
+    });
+  });
+
+  it("only offers to delete the caller's own views", async () => {
+    const api = await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [anEntry()],
+      savedViews: [
+        {
+          id: 1,
+          created_by: ALEX.id,
+          creator_name: ALEX.name,
+          name: "Mine",
+          entity: "timeline",
+          filters: {},
+          sort: {},
+          group_by: null,
+          is_shared: false,
+          is_default: false,
+          created_at: "2026-09-01T00:00:00Z",
+          updated_at: "2026-09-01T00:00:00Z",
+        },
+        {
+          id: 2,
+          created_by: BLAIR.id,
+          creator_name: BLAIR.name,
+          name: "Theirs",
+          entity: "timeline",
+          filters: {},
+          sort: {},
+          group_by: null,
+          is_shared: true,
+          is_default: false,
+          created_at: "2026-09-01T00:00:00Z",
+          updated_at: "2026-09-01T00:00:00Z",
+        },
+      ],
+    });
+    await openTimeline("Northwind rollout");
+
+    expect(
+      await screen.findByRole("button", { name: "Delete saved view Mine" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Delete saved view Theirs" }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Delete saved view Mine" }),
+    );
+    await waitFor(() =>
+      expect(api.callsTo("DELETE", "/api/v2/saved-views/1")).toHaveLength(1),
+    );
+  });
 });
 
 describe("what each role is offered", () => {

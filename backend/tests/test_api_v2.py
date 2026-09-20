@@ -252,6 +252,48 @@ def test_timeline_pages_apply_the_v1_filters(client: TestClient) -> None:
     assert [item["title"] for item in windowed["items"]] == ["Renewal call"]
 
 
+def walk_with_order(client: TestClient, url: str, limit: int, order: str) -> list[dict]:
+    """Like `walk`, but for a query that already needs its own `order` param —
+    `walk` always appends `?limit=`, so it cannot be reused once the URL
+    itself needs a `?`.
+    """
+    items: list[dict] = []
+    cursor: str | None = None
+    pages = 0
+    while True:
+        query = f"{url}?order={order}&limit={limit}" + (f"&cursor={cursor}" if cursor else "")
+        response = client.get(query)
+        assert response.status_code == 200, response.text
+        body = response.json()
+        items.extend(body["items"])
+        cursor = body["next_cursor"]
+        pages += 1
+        if cursor is None:
+            return items
+        assert pages < 20, "cursor walk did not terminate"
+
+
+def test_timeline_pages_reverse_with_order_desc(client: TestClient) -> None:
+    """D-051: the timeline's reading order is a URL parameter like any other,
+    and reversing it has to reverse the cursor's comparison direction, not
+    just the `ORDER BY` — walking `order=desc` one row at a time is what would
+    repeat or skip a row at the boundary if only the `ORDER BY` flipped.
+    """
+    signup(client)
+    opportunity = create_opportunity(client)
+    create_entry(client, opportunity["id"], "Pricing call", "2026-09-02T10:00:00")
+    create_entry(client, opportunity["id"], "Renewal call", "2026-09-03T10:00:00")
+
+    url = f"/api/v2/opportunities/{opportunity['id']}/timeline"
+    ascending = walk_with_order(client, url, limit=1, order="asc")
+    descending = walk_with_order(client, url, limit=1, order="desc")
+
+    assert [item["title"] for item in descending] == list(
+        reversed([item["title"] for item in ascending])
+    )
+    assert len(ascending) == 3  # the two calls above, plus "Opportunity created"
+
+
 def test_share_pages_are_ordered_by_name(client: TestClient) -> None:
     signup(client)
     opportunity = create_opportunity(client)

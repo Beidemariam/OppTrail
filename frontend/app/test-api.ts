@@ -28,6 +28,7 @@ export interface FakeApiOptions {
   shares?: Share[];
   auditLog?: AuditEntry[];
   searchResults?: SearchResult[];
+  savedViews?: SavedView[];
   /** Paths that should fail, mapped to `[status, detail]`. */
   failures?: Record<string, [number, string]>;
 }
@@ -212,6 +213,21 @@ interface Notification {
   created_at: string;
 }
 
+interface SavedView {
+  id: number;
+  created_by: number;
+  creator_name: string;
+  name: string;
+  entity: "opportunities" | "timeline";
+  filters: Record<string, string>;
+  sort: Record<string, string>;
+  group_by: string | null;
+  is_shared: boolean;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export class FakeApi {
   readonly calls: RecordedCall[] = [];
   user: FakeApiOptions["user"];
@@ -221,6 +237,7 @@ export class FakeApi {
   shares: Share[];
   auditLog: AuditEntry[];
   searchResults: SearchResult[];
+  savedViews: SavedView[];
   failures: Record<string, [number, string]>;
   private nextId = 1000;
 
@@ -232,6 +249,7 @@ export class FakeApi {
     this.shares = options.shares ?? [];
     this.auditLog = options.auditLog ?? [];
     this.searchResults = options.searchResults ?? [];
+    this.savedViews = options.savedViews ?? [];
     this.failures = options.failures ?? {};
   }
 
@@ -312,6 +330,53 @@ export class FakeApi {
         item.read_at = now;
       });
       return this.json({ marked: unread.length });
+    }
+    if (bare === "/api/v2/saved-views" && method === "GET") {
+      const params = new URLSearchParams(path.split("?")[1] ?? "");
+      const entity = params.get("entity");
+      const items = this.savedViews.filter(
+        (view) =>
+          (view.created_by === this.user?.id || view.is_shared) &&
+          (!entity || view.entity === entity),
+      );
+      return this.json({ items, next_cursor: null });
+    }
+    if (bare === "/api/v2/saved-views" && method === "POST") {
+      const created: SavedView = {
+        id: this.nextId++,
+        created_by: this.user?.id ?? ALEX.id,
+        creator_name: this.user?.name ?? ALEX.name,
+        name: body.name,
+        entity: body.entity,
+        filters: body.filters ?? {},
+        sort: body.sort ?? {},
+        group_by: body.group_by ?? null,
+        is_shared: Boolean(body.is_shared),
+        is_default: Boolean(body.is_default),
+        created_at: "2026-09-20T09:00:00Z",
+        updated_at: "2026-09-20T09:00:00Z",
+      };
+      if (created.is_default) {
+        this.savedViews.forEach((view) => {
+          if (
+            view.entity === created.entity &&
+            view.created_by === created.created_by
+          ) {
+            view.is_default = false;
+          }
+        });
+      }
+      this.savedViews.push(created);
+      return this.json(created, 201);
+    }
+    if (segments[2] === "saved-views" && method === "DELETE") {
+      const id = Number(segments[3]);
+      const found = this.savedViews.find((view) => view.id === id);
+      if (!found || found.created_by !== this.user?.id) {
+        return this.json({ detail: "Saved view not found" }, 404);
+      }
+      this.savedViews = this.savedViews.filter((view) => view.id !== id);
+      return new Response(null, { status: 204 });
     }
     if (segments[1] === "notifications" && method === "PATCH") {
       const id = Number(segments[2]);

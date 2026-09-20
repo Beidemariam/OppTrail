@@ -1,17 +1,25 @@
 "use client";
 
 import { useState } from "react";
-import { Outlet, useMatch, useNavigate } from "react-router";
+import { Outlet, useMatch, useNavigate, useSearchParams } from "react-router";
 
 import { confirmDelete } from "../lib/confirm";
-import type { Opportunity } from "../lib/domain";
+import {
+  applyOpportunityView,
+  emptyOpportunityViewState,
+  type Opportunity,
+  type OpportunityViewState,
+} from "../lib/domain";
 import {
   useDeleteOpportunity,
   useOpportunities,
   useSession,
 } from "../lib/queries";
+import { paramsWithState, stateFromParams } from "../lib/viewState";
 import { AuthPanel } from "./AuthPanel";
+import { OpportunityFilterBar } from "./OpportunityFilterBar";
 import { OpportunityForm } from "./OpportunityForm";
+import { SavedViewsMenu } from "./SavedViewsMenu";
 import { StageBoard } from "./StageBoard";
 import { TopBar } from "./TopBar";
 
@@ -33,6 +41,29 @@ export function DashboardPage() {
   // sees the segments its own path matched.
   const opened = useMatch("/opportunities/:opportunityId");
   const selectedId = opened ? Number(opened.params.opportunityId) : null;
+
+  // The board's filter/sort state lives in the URL too (milestone 2.2), the
+  // same way the timeline's does.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const viewState = stateFromParams<OpportunityViewState>(
+    searchParams,
+    emptyOpportunityViewState,
+    "opportunities",
+  );
+  function setViewState(next: OpportunityViewState) {
+    setSearchParams(
+      paramsWithState(
+        searchParams,
+        next,
+        emptyOpportunityViewState,
+        "opportunities",
+      ),
+    );
+  }
+  const visibleOpportunities = applyOpportunityView(
+    opportunities.data ?? [],
+    viewState,
+  );
 
   if (session.isPending) {
     return (
@@ -84,8 +115,16 @@ export function DashboardPage() {
             <p className="error">{deleteOpportunity.error.message}</p>
           )}
 
+          <SavedViewsMenu
+            entity="opportunities"
+            state={viewState}
+            defaults={emptyOpportunityViewState}
+            onApply={setViewState}
+          />
+          <OpportunityFilterBar state={viewState} onApply={setViewState} />
+
           <StageBoard
-            opportunities={opportunities.data ?? []}
+            opportunities={visibleOpportunities}
             selectedId={selectedId}
             onEdit={setEditing}
             onDelete={remove}

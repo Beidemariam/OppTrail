@@ -11,17 +11,27 @@ import {
 /**
  * The timeline's filter bar.
  *
- * The typed values and the applied ones are separate: the applied set is part
- * of the timeline's query key, so it asks the API exactly once per Filter
- * press rather than on every keystroke. Milestone 2.2 moves the applied set
- * into the URL.
+ * The typed draft and the applied set are still separate — the applied set is
+ * what changes the URL and the timeline query — but the draft now
+ * initializes from, and re-syncs to, the `filters` prop: a value can arrive
+ * here from typing and pressing Filter, from the back button, or from
+ * applying a saved view. Re-deriving state from a changed prop during render
+ * (rather than in an effect) is the pattern React itself recommends for this —
+ * it re-renders before paint instead of committing a stale frame first.
  */
 export function TimelineFilterBar({
+  filters,
   onApply,
 }: {
+  filters: TimelineFilters;
   onApply: (filters: TimelineFilters) => void;
 }) {
-  const [draft, setDraft] = useState<TimelineFilters>(emptyTimelineFilters);
+  const [appliedFilters, setAppliedFilters] = useState(filters);
+  const [draft, setDraft] = useState<TimelineFilters>(filters);
+  if (filters !== appliedFilters) {
+    setAppliedFilters(filters);
+    setDraft(filters);
+  }
 
   function apply(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -75,6 +85,19 @@ export function TimelineFilterBar({
           setDraft({ ...draft, author_id: event.target.value })
         }
       />
+      <select
+        aria-label="Timeline reading order"
+        value={draft.order}
+        onChange={(event) =>
+          setDraft({
+            ...draft,
+            order: event.target.value === "desc" ? "desc" : "asc",
+          })
+        }
+      >
+        <option value="asc">Oldest first</option>
+        <option value="desc">Newest first</option>
+      </select>
       <button className="primary-button" type="submit">
         Filter
       </button>

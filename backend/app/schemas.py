@@ -1,3 +1,4 @@
+import json
 from datetime import date
 from decimal import Decimal
 from typing import Literal
@@ -587,3 +588,78 @@ class SearchResultPublic(BaseModel):
     timestamp: str
     author_id: int | None
     author_name: str | None
+
+
+# --- Saved views (milestone 2.2) -------------------------------------------
+
+SavedViewEntity = Literal["opportunities", "timeline"]
+
+MAX_VIEW_PARAMS_JSON_LENGTH = 2000
+
+
+def _bounded_params(value: dict[str, str]) -> dict[str, str]:
+    """`filters`/`sort` are literally a saved `URLSearchParams` (`lib/viewState.ts`),
+    so they are validated as opaque key/value strings rather than a fixed
+    schema -- a new filter field is then a frontend change, not a migration.
+    The size cap exists only to bound one client's storage, not to interpret
+    the content.
+    """
+    if len(json.dumps(value)) > MAX_VIEW_PARAMS_JSON_LENGTH:
+        raise ValueError("Saved view parameters are too large")
+    return value
+
+
+class SavedViewCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    entity: SavedViewEntity
+    filters: dict[str, str] = Field(default_factory=dict)
+    sort: dict[str, str] = Field(default_factory=dict)
+    group_by: str | None = Field(default=None, max_length=50)
+    is_shared: bool = False
+    is_default: bool = False
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("filters", "sort")
+    @classmethod
+    def bounded_params(cls, value: dict[str, str]) -> dict[str, str]:
+        return _bounded_params(value)
+
+
+class SavedViewUpdate(BaseModel):
+    """Every field optional: a rename does not have to resend the filters."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    filters: dict[str, str] | None = None
+    sort: dict[str, str] | None = None
+    group_by: str | None = Field(default=None, max_length=50)
+    is_shared: bool | None = None
+    is_default: bool | None = None
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, value: str | None) -> str | None:
+        return value.strip() if value is not None else value
+
+    @field_validator("filters", "sort")
+    @classmethod
+    def bounded_params(cls, value: dict[str, str] | None) -> dict[str, str] | None:
+        return _bounded_params(value) if value is not None else value
+
+
+class SavedViewPublic(BaseModel):
+    id: int
+    created_by: int
+    creator_name: str
+    name: str
+    entity: SavedViewEntity
+    filters: dict[str, str]
+    sort: dict[str, str]
+    group_by: str | None
+    is_shared: bool
+    is_default: bool
+    created_at: str
+    updated_at: str

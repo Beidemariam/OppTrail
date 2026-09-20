@@ -28,6 +28,7 @@ USER_DATA_TABLES = (
     "comments",
     "notifications",
     "audit_log_entries",
+    "saved_views",
 )
 
 
@@ -79,6 +80,13 @@ def soft_delete_share(connection: sqlite3.Connection, opportunity_id: int, user_
         WHERE opportunity_id = ? AND user_id = ? AND deleted_at IS NULL
         """,
         (utc_now(), opportunity_id, user_id),
+    )
+
+
+def soft_delete_saved_view(connection: sqlite3.Connection, view_id: int) -> None:
+    connection.execute(
+        "UPDATE saved_views SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
+        (utc_now(), view_id),
     )
 
 

@@ -24,6 +24,8 @@ import type {
   AuditLogEntry,
   Opportunity,
   OpportunityShare,
+  SavedView,
+  SavedViewEntity,
   ShareRole,
   TimelineEntry,
   TimelineFilters,
@@ -37,8 +39,11 @@ type TimelineResponse = components["schemas"]["TimelineResponse"];
 type ShareListResponse = components["schemas"]["ShareListResponse"];
 type NotificationPage = components["schemas"]["Page_NotificationPublicV2_"];
 type AiAskResponse = components["schemas"]["AiAskResponse"];
+type SavedViewPage = components["schemas"]["Page_SavedViewPublic_"];
+type SavedViewCreate = components["schemas"]["SavedViewCreate"];
 
 const NOTIFICATION_PAGE_SIZE = 50;
+const SAVED_VIEW_PAGE_SIZE = 100;
 
 export const keys = {
   session: ["session"] as const,
@@ -52,6 +57,7 @@ export const keys = {
   notifications: ["notifications"] as const,
   aiConversation: (opportunityId: number) =>
     ["ai-conversation", opportunityId] as const,
+  savedViews: (entity: SavedViewEntity) => ["saved-views", entity] as const,
 };
 
 export function timelinePath(
@@ -131,6 +137,41 @@ export function useAuditLog(opportunityId: number, enabled: boolean) {
       apiRequest<AuditLogEntry[]>(
         `/api/opportunities/${opportunityId}/audit-log`,
       ),
+  });
+}
+
+/**
+ * The saved views a caller may apply to one entity's URL state: their own,
+ * plus anyone's shared ones (`backend/app/routes_saved_views.py`).
+ */
+export function useSavedViews(entity: SavedViewEntity) {
+  return useQuery<SavedView[]>({
+    queryKey: keys.savedViews(entity),
+    queryFn: () =>
+      apiRequest<SavedViewPage>(
+        `/api/v2/saved-views?entity=${entity}&limit=${SAVED_VIEW_PAGE_SIZE}`,
+      ).then((page) => page.items),
+  });
+}
+
+export function useCreateSavedView() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: SavedViewCreate) =>
+      apiRequest<SavedView>("/api/v2/saved-views", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: (created) => invalidate(client, keys.savedViews(created.entity)),
+  });
+}
+
+export function useDeleteSavedView(entity: SavedViewEntity) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (viewId: number) =>
+      apiRequest(`/api/v2/saved-views/${viewId}`, { method: "DELETE" }),
+    onSuccess: () => invalidate(client, keys.savedViews(entity)),
   });
 }
 
