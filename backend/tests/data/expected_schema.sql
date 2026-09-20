@@ -72,7 +72,11 @@ CREATE TABLE notifications (
     payload TEXT NOT NULL DEFAULT '{}',
     read INTEGER NOT NULL DEFAULT 0 CHECK (read IN (0, 1)),
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
-);
+-- `read_at`/`grouped_key` were added by ALTER TABLE (revision 0003), which
+-- rewrites sqlite_master's stored SQL by splicing the new column list in
+-- before the closing paren rather than reformatting the whole statement --
+-- hence the line break landing here instead of after a trailing comma.
+, read_at TEXT, grouped_key TEXT);
 
 CREATE TABLE opportunities (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

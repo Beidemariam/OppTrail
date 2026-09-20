@@ -4,9 +4,18 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from .auth import get_current_user
 from .database import db_connection
-from .notification_service import parse_notification_payload
+from .notification_service import (
+    mark_all_notifications_read,
+    mark_notification_read,
+    parse_notification_payload,
+)
 from .pagination import Page, PageRequest, cursor_clause, page_params, split_page
-from .schemas import NotificationListResponse, NotificationPublic
+from .schemas import (
+    NotificationListResponse,
+    NotificationMarkAllReadResponse,
+    NotificationPublic,
+    NotificationPublicV2,
+)
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 v2_router = APIRouter(prefix="/api/v2", tags=["notifications"])
@@ -18,6 +27,17 @@ def notification_from_row(row: sqlite3.Row) -> NotificationPublic:
         type=row["type"],
         payload=parse_notification_payload(row["type"], row["payload"]),
         read=bool(row["read"]),
+        created_at=row["created_at"],
+    )
+
+
+def notification_from_row_v2(row: sqlite3.Row) -> NotificationPublicV2:
+    return NotificationPublicV2(
+        id=row["id"],
+        type=row["type"],
+        payload=parse_notification_payload(row["type"], row["payload"]),
+        read_at=row["read_at"],
+        grouped_key=row["grouped_key"],
         created_at=row["created_at"],
     )
 
@@ -40,34 +60,42 @@ def list_notifications(
     return NotificationListResponse(notifications=[notification_from_row(row) for row in rows])
 
 
-@v2_router.get("/notifications", response_model=Page[NotificationPublic])
+@v2_router.get("/notifications", response_model=Page[NotificationPublicV2])
 def list_notifications_page(
     page: PageRequest = Depends(page_params),
+    type: str | None = None,
     user: sqlite3.Row = Depends(get_current_user),
-) -> Page[NotificationPublic]:
-    """The v1 list in the v2 envelope, unread-only exactly as v1 is.
-
-    Read notifications staying visible is the notifications rework (milestone
-    1.7, `docs/REVIEW.md` H2), which needs the `read_at`/`grouped_key` columns
-    this endpoint does not have yet. Changing the rows it returns here would
-    make that milestone's behaviour change invisible — the version boundary
-    carries the response *shape*, not the feature.
+) -> Page[NotificationPublicV2]:
+    """The inbox rework (milestone 1.7): full history, not unread-only, with
+    an optional filter by notification type. v1 keeps reading its own
+    unread-only query untouched -- `docs/ROADMAP.md`'s breaking-changes table
+    keeps the old behaviour there rather than changing what a client already
+    consuming it would see.
     """
+    where = ["user_id = ?"]
+    params: list[object] = [user["id"]]
+
+    if type:
+        where.append("type = ?")
+        params.append(type)
+
     continuation, cursor_values = cursor_clause(
         page,
         "created_at",
         "id",
         descending=True,
     )
-    params: list[object] = [user["id"], *cursor_values, page.limit + 1]
+    if continuation:
+        where.append(continuation)
+        params.extend(cursor_values)
+    params.append(page.limit + 1)
 
     with db_connection() as connection:
         rows = connection.execute(
             f"""
             SELECT *
             FROM notifications
-            WHERE user_id = ? AND read = 0
-            {f"AND {continuation}" if continuation else ""}
+            WHERE {" AND ".join(where)}
             ORDER BY created_at DESC, id DESC
             LIMIT ?
             """,
@@ -75,33 +103,29 @@ def list_notifications_page(
         ).fetchall()
 
     rows, next_cursor = split_page(rows, page.limit, lambda row: (row["created_at"], row["id"]))
-    return Page(items=[notification_from_row(row) for row in rows], next_cursor=next_cursor)
+    return Page(items=[notification_from_row_v2(row) for row in rows], next_cursor=next_cursor)
+
+
+@v2_router.post("/notifications/mark-all-read", response_model=NotificationMarkAllReadResponse)
+def mark_all_notifications_read_route(
+    user: sqlite3.Row = Depends(get_current_user),
+) -> NotificationMarkAllReadResponse:
+    with db_connection() as connection:
+        marked = mark_all_notifications_read(connection, int(user["id"]))
+    return NotificationMarkAllReadResponse(marked=marked)
 
 
 @router.patch("/{notification_id}/read", response_model=NotificationPublic)
-def mark_notification_read(
+def mark_notification_read_route(
     notification_id: int,
     user: sqlite3.Row = Depends(get_current_user),
 ) -> NotificationPublic:
     with db_connection() as connection:
-        row = connection.execute(
-            "SELECT * FROM notifications WHERE id = ? AND user_id = ?",
-            (notification_id, user["id"]),
-        ).fetchone()
-        if not row:
+        updated = mark_notification_read(connection, notification_id, int(user["id"]))
+        if updated is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Notification not found",
             )
-
-        connection.execute(
-            "UPDATE notifications SET read = 1 WHERE id = ? AND user_id = ?",
-            (notification_id, user["id"]),
-        )
-        connection.commit()
-        updated = connection.execute(
-            "SELECT * FROM notifications WHERE id = ? AND user_id = ?",
-            (notification_id, user["id"]),
-        ).fetchone()
 
     return notification_from_row(updated)

@@ -208,7 +208,7 @@ interface Notification {
   id: number;
   type: string;
   payload: Record<string, unknown>;
-  read: boolean;
+  read_at: string | null;
   created_at: string;
 }
 
@@ -297,14 +297,27 @@ export class FakeApi {
     }
     if (bare === "/api/notifications") {
       return this.json({
-        notifications: this.notifications.filter((item) => !item.read),
+        notifications: this.notifications
+          .filter((item) => !item.read_at)
+          .map((item) => ({ ...item, read: false })),
       });
+    }
+    if (bare === "/api/v2/notifications" && method === "GET") {
+      return this.notificationsPage(path);
+    }
+    if (bare === "/api/v2/notifications/mark-all-read" && method === "POST") {
+      const unread = this.notifications.filter((item) => !item.read_at);
+      const now = new Date().toISOString();
+      unread.forEach((item) => {
+        item.read_at = now;
+      });
+      return this.json({ marked: unread.length });
     }
     if (segments[1] === "notifications" && method === "PATCH") {
       const id = Number(segments[2]);
       const found = this.notifications.find((item) => item.id === id)!;
-      found.read = true;
-      return this.json(found);
+      found.read_at = found.read_at ?? new Date().toISOString();
+      return this.json({ ...found, read: true });
     }
     if (bare === "/api/opportunities" && method === "GET") {
       return this.json({ stages: [], opportunities: this.opportunities });
@@ -465,5 +478,17 @@ export class FakeApi {
       items,
       next_cursor: next < hits.length ? String(next) : null,
     });
+  }
+
+  /** `GET /api/v2/notifications`: full history, optionally filtered by type. */
+  private notificationsPage(path: string): Response {
+    const params = new URLSearchParams(path.split("?")[1] ?? "");
+    const type = params.get("type");
+
+    const items = this.notifications
+      .filter((item) => !type || item.type === type)
+      .map((item) => ({ ...item, grouped_key: null }));
+
+    return this.json({ items, next_cursor: null });
   }
 }

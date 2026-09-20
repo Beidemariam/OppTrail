@@ -338,6 +338,12 @@ MATRIX: dict[Endpoint, Case] = {
         url=lambda world: "/api/v2/notifications",
         notes="Scoped by the query: a user only ever reads their own rows.",
     ),
+    Endpoint("POST", "/api/v2/notifications/mark-all-read"): Case(
+        expected=authenticated_only(200),
+        url=lambda world: "/api/v2/notifications/mark-all-read",
+        body=lambda world, actor: None,
+        notes="Scoped by the query: marks only the caller's own rows.",
+    ),
     Endpoint("GET", "/api/v2/search"): Case(
         expected=authenticated_only(200),
         url=lambda world: "/api/v2/search?q=discovery",

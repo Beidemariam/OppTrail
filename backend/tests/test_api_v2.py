@@ -320,7 +320,13 @@ def test_note_version_pages_read_forwards(client: TestClient) -> None:
     assert [item["body"] for item in items] == ["First", "Second", "Third"]
 
 
-def test_notification_pages_hold_the_v1_rows(client: TestClient) -> None:
+def test_notification_pages_carry_the_same_rows_as_v1_in_the_v2_shape(client: TestClient) -> None:
+    """Milestone 1.7: unlike every other v2 collection, notifications is a
+    deliberate exception to "the boundary carries shape, not behaviour" — v2
+    answers full history in the `read_at`/`grouped_key` shape, v1 keeps
+    answering unread-only in the old `read` shape (`docs/ROADMAP.md`'s
+    breaking-changes table). Both still describe the same underlying row.
+    """
     signup(client)
     opportunity = create_opportunity(client)
     assert (
@@ -341,9 +347,94 @@ def test_notification_pages_hold_the_v1_rows(client: TestClient) -> None:
 
     login(client, "viewer@example.com")
     items, _ = walk(client, "/api/v2/notifications", limit=1)
+    v1_items = client.get("/api/notifications").json()["notifications"]
 
     assert [item["type"] for item in items] == ["share_added"]
-    assert items == client.get("/api/notifications").json()["notifications"]
+    assert [item["id"] for item in items] == [item["id"] for item in v1_items]
+    assert [item["payload"] for item in items] == [item["payload"] for item in v1_items]
+    assert items[0]["read_at"] is None
+    assert items[0]["grouped_key"] is None
+
+
+def test_v2_notification_history_survives_being_read_and_can_be_filtered_by_type(
+    client: TestClient,
+) -> None:
+    signup(client)
+    opportunity = create_opportunity(client)
+    viewer_signup = client.post(
+        "/api/auth/signup",
+        json={"email": "viewer@example.com", "password": "password123", "name": "Viewer"},
+    )
+    assert viewer_signup.status_code == 201
+    viewer_id = viewer_signup.json()["user"]["id"]
+
+    login(client, "owner@example.com")
+    client.post(
+        f"/api/opportunities/{opportunity['id']}/shares",
+        json={"email": "viewer@example.com", "role": "viewer"},
+    )
+    client.patch(
+        f"/api/opportunities/{opportunity['id']}/shares/{viewer_id}",
+        json={"role": "editor"},
+    )
+
+    login(client, "viewer@example.com")
+    before = walk(client, "/api/v2/notifications", limit=1)[0]
+    assert {item["type"] for item in before} == {"share_added", "share_role_changed"}
+
+    # Marking one read through the v1 endpoint (the only mark-read route)
+    # must not remove it from the v2 history -- that dead end is exactly
+    # what this milestone fixes.
+    unread_id = next(item["id"] for item in before if item["type"] == "share_added")
+    marked = client.patch(f"/api/notifications/{unread_id}/read")
+    assert marked.status_code == 200
+    assert marked.json()["read"] is True
+
+    after = walk(client, "/api/v2/notifications", limit=1)[0]
+    assert {item["id"] for item in after} == {item["id"] for item in before}
+    read_item = next(item for item in after if item["id"] == unread_id)
+    assert read_item["read_at"] is not None
+
+    filtered_response = client.get("/api/v2/notifications?type=share_role_changed&limit=50")
+    assert filtered_response.status_code == 200
+    filtered = filtered_response.json()["items"]
+    assert {item["type"] for item in filtered} == {"share_role_changed"}
+
+
+def test_v2_mark_all_notifications_read_is_scoped_to_the_caller(client: TestClient) -> None:
+    owner = signup(client)
+    opportunity = create_opportunity(client)
+    client.post("/api/auth/logout")
+
+    viewer = signup(client, "viewer@example.com", "Viewer")
+    client.post("/api/auth/logout")
+
+    login(client, "owner@example.com")
+    client.post(
+        f"/api/opportunities/{opportunity['id']}/shares",
+        json={"email": "viewer@example.com", "role": "viewer"},
+    )
+    client.patch(
+        f"/api/opportunities/{opportunity['id']}/shares/{viewer['id']}",
+        json={"role": "editor"},
+    )
+    client.post("/api/auth/logout")
+
+    login(client, "viewer@example.com")
+    response = client.post("/api/v2/notifications/mark-all-read")
+    assert response.status_code == 200
+    assert response.json() == {"marked": 2}
+
+    items = walk(client, "/api/v2/notifications", limit=50)[0]
+    assert all(item["read_at"] is not None for item in items)
+
+    # A second call marks nothing new -- everything is already read.
+    assert client.post("/api/v2/notifications/mark-all-read").json() == {"marked": 0}
+
+    client.post("/api/auth/logout")
+    login(client, "owner@example.com")
+    assert walk(client, "/api/v2/notifications", limit=50)[0] == []
+    assert owner["id"] == opportunity["owner_id"]
 
 
 # --- The error envelope ------------------------------------------------------

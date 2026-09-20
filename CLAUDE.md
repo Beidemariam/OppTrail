@@ -121,6 +121,7 @@ table the SQL lives in one module-level constant (`ACCESSIBLE_OPPORTUNITIES_SQL`
 `SHARE_ROWS_SQL`, `AUDIT_LOG_ROWS_SQL`, `NOTE_VERSION_ROWS_SQL`,
 `timeline_filters`) so the two cannot drift. `tests/test_api_v2.py` holds the
 envelope and cursor-walk tests, including the ones that assert v1 is untouched.
+Notifications is the one deliberate exception — see "Notifications" below.
 
 ### Request security
 
@@ -197,6 +198,34 @@ invalidates the stored terms such as a different tokenizer or a new document
 kind. Its SQL is duplicated in the revision's backfill, because a revision is
 frozen in time and must not import application code;
 `test_rebuild_reproduces_the_index_the_migration_built` fails if the two drift.
+
+### Notifications
+
+Two surfaces answer different questions about the same `notifications` rows,
+deliberately: `GET /api/notifications` (v1) is unread-only, exactly as the
+MVP shipped it; `GET /api/v2/notifications` (milestone 1.7) is the inbox
+rework — full history, optional `?type=` filter, keyset-paginated. This is
+the one place a v2 route does *not* mirror its v1 twin's rows (contrast
+`CLAUDE.md`'s "API versions" section) — `docs/ROADMAP.md`'s breaking-changes
+table keeps v1's shape frozen there on purpose, because marking a
+notification read used to make it disappear (`WHERE read = 0`), which is a
+client-visible behaviour change, not just a response-shape one.
+
+- `read_at` (nullable, `NULL` = unread) is the source of truth added by
+  revision `20260920_0003_notification_history`; the older `read` column
+  stays for v1 to keep reading. `notification_service.mark_notification_read`
+  and `mark_all_notifications_read` write both columns together — via
+  `COALESCE(read_at, ...)` so a second mark-read is idempotent — so v1's
+  column cannot drift from v2's without v1's own code changing.
+- `grouped_key` rides along unpopulated. It exists now so Phase 5's digest
+  batching (§9's "3 new comments on Acme Expansion, not three emails") is a
+  query change, not another migration.
+- Marking one notification read is still only a v1 route
+  (`PATCH /api/notifications/{id}/read`); v2 adds
+  `POST /api/v2/notifications/mark-all-read` since that has no v1 twin to
+  reuse. The frontend inbox panel (`app/Home.tsx`) reads history from v2 and
+  marks read through the same v1 PATCH — one endpoint, not two, since both
+  already operate on the same row.
 
 ### Migrations
 

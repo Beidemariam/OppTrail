@@ -530,6 +530,26 @@ class NotificationListResponse(BaseModel):
     notifications: list[NotificationPublic]
 
 
+class NotificationPublicV2(BaseModel):
+    """The inbox rework's shape (milestone 1.7): `read_at` replaces `read` as
+    the source of truth, so a client can tell not just whether a notification
+    was read but order a history by it. `grouped_key` rides along now,
+    unpopulated, ahead of Phase 5's digest batching -- see the migration's
+    docstring for why it is added before it is used.
+    """
+
+    id: int
+    type: NotificationType
+    payload: NotificationPayload
+    read_at: str | None
+    grouped_key: str | None
+    created_at: str
+
+
+class NotificationMarkAllReadResponse(BaseModel):
+    marked: int
+
+
 class SnippetMatch(BaseModel):
     """Where one matched word sits inside `SearchSnippet.text`."""
 

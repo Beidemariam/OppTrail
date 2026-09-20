@@ -245,14 +245,14 @@ describe("the dashboard", () => {
 });
 
 describe("notifications", () => {
-  it("lists unread notifications and marks one read", async () => {
+  it("lists unread notifications and marks one read without losing it from history", async () => {
     await dashboard({
       notifications: [
         {
           id: 1,
           type: "mention",
           payload: {},
-          read: false,
+          read_at: null,
           created_at: "2026-09-03T09:00:00Z",
         },
       ],
@@ -270,8 +270,65 @@ describe("notifications", () => {
     await waitFor(() =>
       expect(api.callsTo("PATCH", "/api/notifications/1/read")).toHaveLength(1),
     );
+    // Milestone 1.7's whole point: a read notification stays in the inbox
+    // (as history) instead of disappearing, unlike v1's `WHERE read = 0`.
     await waitFor(() =>
-      expect(screen.getByText("No unread notifications")).toBeInTheDocument(),
+      expect(
+        screen.getByText("You were mentioned in a timeline update."),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Mark read" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("marks every notification read and filters the inbox by type", async () => {
+    await dashboard({
+      notifications: [
+        {
+          id: 1,
+          type: "mention",
+          payload: {},
+          read_at: null,
+          created_at: "2026-09-03T09:00:00Z",
+        },
+        {
+          id: 2,
+          type: "comment",
+          payload: {},
+          read_at: null,
+          created_at: "2026-09-03T10:00:00Z",
+        },
+      ],
+    });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /Notifications/ }),
+    );
+    expect(
+      await screen.findByText("New comment on your note."),
+    ).toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByLabelText("Filter"), "Comments");
+    expect(
+      screen.queryByText("You were mentioned in a timeline update."),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("New comment on your note.")).toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByLabelText("Filter"), "All types");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Mark all read" }),
+    );
+
+    await waitFor(() =>
+      expect(
+        api.callsTo("POST", "/api/v2/notifications/mark-all-read"),
+      ).toHaveLength(1),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryAllByRole("button", { name: "Mark read" }),
+      ).toHaveLength(0),
     );
   });
 });

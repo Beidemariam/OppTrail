@@ -41,19 +41,30 @@ const entryTypes = [
 
 type EntryType = (typeof entryTypes)[number]["value"];
 
+const notificationTypeOptions = [
+  { value: "mention", label: "Mentions" },
+  { value: "comment", label: "Comments" },
+  { value: "shared_activity", label: "Activity" },
+  { value: "share_added", label: "Sharing added" },
+  { value: "share_role_changed", label: "Role changed" },
+  { value: "share_removed", label: "Sharing removed" },
+] as const;
+
+const NOTIFICATION_PAGE_SIZE = 50;
+
 type User = components["schemas"]["UserPublic"];
 type Opportunity = components["schemas"]["OpportunityPublic"];
 type OpportunityShare = components["schemas"]["SharePublic"];
 type AuditLogEntry = components["schemas"]["AuditLogEntryPublic"];
-type AppNotification = components["schemas"]["NotificationPublic"];
+type AppNotification = components["schemas"]["NotificationPublicV2"];
+type NotificationType = AppNotification["type"];
 type TimelineEntry = components["schemas"]["TimelineEntryPublic"];
 
 type AuthResponse = components["schemas"]["AuthResponse"];
 type OpportunityListResponse = components["schemas"]["OpportunityListResponse"];
 type TimelineResponse = components["schemas"]["TimelineResponse"];
 type ShareListResponse = components["schemas"]["ShareListResponse"];
-type NotificationListResponse =
-  components["schemas"]["NotificationListResponse"];
+type NotificationPage = components["schemas"]["Page_NotificationPublicV2_"];
 type AiAskResponse = components["schemas"]["AiAskResponse"];
 
 type AiChatMessage = {
@@ -159,6 +170,9 @@ export default function Home() {
   const aiChatRef = useRef<HTMLDivElement | null>(null);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [notificationTypeFilter, setNotificationTypeFilter] = useState<
+    NotificationType | ""
+  >("");
   const [noteForms, setNoteForms] = useState<Record<number, string>>({});
   const [editingNotes, setEditingNotes] = useState<Record<number, string>>({});
   const [commentForms, setCommentForms] = useState<Record<number, string>>({});
@@ -187,6 +201,23 @@ export default function Home() {
         ? (aiConversations[selectedOpportunityId] ?? [])
         : [],
     [aiConversations, selectedOpportunityId],
+  );
+  const unreadNotificationCount = useMemo(
+    () => notifications.filter((notification) => !notification.read_at).length,
+    [notifications],
+  );
+  // Filtered client-side over the loaded page: an inbox at this app's scale
+  // (20 known users) never needs a second round trip just to narrow a type
+  // the first page already holds. The server-side filter
+  // (`GET /api/v2/notifications?type=`) is what a non-UI client uses.
+  const visibleNotifications = useMemo(
+    () =>
+      notificationTypeFilter
+        ? notifications.filter(
+            (notification) => notification.type === notificationTypeFilter,
+          )
+        : notifications,
+    [notifications, notificationTypeFilter],
   );
 
   useEffect(() => {
@@ -227,9 +258,10 @@ export default function Home() {
   }
 
   async function loadNotifications() {
-    const data =
-      await apiRequest<NotificationListResponse>("/api/notifications");
-    setNotifications(data.notifications);
+    const data = await apiRequest<NotificationPage>(
+      `/api/v2/notifications?limit=${NOTIFICATION_PAGE_SIZE}`,
+    );
+    setNotifications(data.items);
   }
 
   async function loadTimeline(opportunityId = selectedOpportunityId) {
@@ -752,6 +784,22 @@ export default function Home() {
     }
   }
 
+  async function markAllNotificationsRead() {
+    setError("");
+    try {
+      await apiRequest("/api/v2/notifications/mark-all-read", {
+        method: "POST",
+      });
+      await loadNotifications();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not update notifications",
+      );
+    }
+  }
+
   async function applyTimelineFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -932,7 +980,9 @@ export default function Home() {
               }}
             >
               Notifications
-              {notifications.length > 0 && <span>{notifications.length}</span>}
+              {unreadNotificationCount > 0 && (
+                <span>{unreadNotificationCount}</span>
+              )}
             </button>
             {showNotifications && (
               <div className="notification-panel">
@@ -946,13 +996,48 @@ export default function Home() {
                     Refresh
                   </button>
                 </div>
-                {notifications.length === 0 ? (
-                  <p className="empty-state">No unread notifications</p>
+                <div className="notification-controls">
+                  <label htmlFor="notification-type-filter">Filter</label>
+                  <select
+                    id="notification-type-filter"
+                    value={notificationTypeFilter}
+                    onChange={(event) =>
+                      setNotificationTypeFilter(
+                        event.target.value as NotificationType | "",
+                      )
+                    }
+                  >
+                    <option value="">All types</option>
+                    {notificationTypeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="secondary-button compact-button"
+                    disabled={unreadNotificationCount === 0}
+                    onClick={() => void markAllNotificationsRead()}
+                  >
+                    Mark all read
+                  </button>
+                </div>
+                {visibleNotifications.length === 0 ? (
+                  <p className="empty-state">
+                    {notifications.length === 0
+                      ? "No notifications yet"
+                      : "No notifications of this type"}
+                  </p>
                 ) : (
                   <div className="notification-list">
-                    {notifications.map((notification) => (
+                    {visibleNotifications.map((notification) => (
                       <article
-                        className="notification-row"
+                        className={
+                          notification.read_at
+                            ? "notification-row is-read"
+                            : "notification-row"
+                        }
                         key={notification.id}
                       >
                         <div>
@@ -961,15 +1046,17 @@ export default function Home() {
                             {formatTimestamp(notification.created_at)}
                           </span>
                         </div>
-                        <button
-                          type="button"
-                          className="secondary-button compact-button"
-                          onClick={() =>
-                            void markNotificationRead(notification.id)
-                          }
-                        >
-                          Mark read
-                        </button>
+                        {!notification.read_at && (
+                          <button
+                            type="button"
+                            className="secondary-button compact-button"
+                            onClick={() =>
+                              void markNotificationRead(notification.id)
+                            }
+                          >
+                            Mark read
+                          </button>
+                        )}
                       </article>
                     ))}
                   </div>

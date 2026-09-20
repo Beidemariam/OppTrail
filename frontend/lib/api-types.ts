@@ -404,8 +404,8 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Mark Notification Read */
-        patch: operations["mark_notification_read_api_notifications__notification_id__read_patch"];
+        /** Mark Notification Read Route */
+        patch: operations["mark_notification_read_route_api_notifications__notification_id__read_patch"];
         trace?: never;
     };
     "/api/v2/opportunities": {
@@ -553,17 +553,32 @@ export interface paths {
         };
         /**
          * List Notifications Page
-         * @description The v1 list in the v2 envelope, unread-only exactly as v1 is.
-         *
-         *     Read notifications staying visible is the notifications rework (milestone
-         *     1.7, `docs/REVIEW.md` H2), which needs the `read_at`/`grouped_key` columns
-         *     this endpoint does not have yet. Changing the rows it returns here would
-         *     make that milestone's behaviour change invisible — the version boundary
-         *     carries the response *shape*, not the feature.
+         * @description The inbox rework (milestone 1.7): full history, not unread-only, with
+         *     an optional filter by notification type. v1 keeps reading its own
+         *     unread-only query untouched -- `docs/ROADMAP.md`'s breaking-changes table
+         *     keeps the old behaviour there rather than changing what a client already
+         *     consuming it would see.
          */
         get: operations["list_notifications_page_api_v2_notifications_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/notifications/mark-all-read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark All Notifications Read Route */
+        post: operations["mark_all_notifications_read_route_api_v2_notifications_mark_all_read_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -833,6 +848,11 @@ export interface components {
             /** Notifications */
             notifications: components["schemas"]["NotificationPublic"][];
         };
+        /** NotificationMarkAllReadResponse */
+        NotificationMarkAllReadResponse: {
+            /** Marked */
+            marked: number;
+        };
         /** NotificationPayloadComment */
         NotificationPayloadComment: {
             /** Opportunity Id */
@@ -936,6 +956,31 @@ export interface components {
             /** Created At */
             created_at: string;
         };
+        /**
+         * NotificationPublicV2
+         * @description The inbox rework's shape (milestone 1.7): `read_at` replaces `read` as
+         *     the source of truth, so a client can tell not just whether a notification
+         *     was read but order a history by it. `grouped_key` rides along now,
+         *     unpopulated, ahead of Phase 5's digest batching -- see the migration's
+         *     docstring for why it is added before it is used.
+         */
+        NotificationPublicV2: {
+            /** Id */
+            id: number;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "share_added" | "share_role_changed" | "share_removed" | "mention" | "shared_activity" | "comment";
+            /** Payload */
+            payload: components["schemas"]["NotificationPayloadShareAdded"] | components["schemas"]["NotificationPayloadShareRoleChanged"] | components["schemas"]["NotificationPayloadShareRemoved"] | components["schemas"]["NotificationPayloadMention"] | components["schemas"]["NotificationPayloadSharedActivity"] | components["schemas"]["NotificationPayloadComment"];
+            /** Read At */
+            read_at: string | null;
+            /** Grouped Key */
+            grouped_key: string | null;
+            /** Created At */
+            created_at: string;
+        };
         /** OpportunityCreate */
         OpportunityCreate: {
             /** Name */
@@ -1036,10 +1081,10 @@ export interface components {
             /** Next Cursor */
             next_cursor?: string | null;
         };
-        /** Page[NotificationPublic] */
-        Page_NotificationPublic_: {
+        /** Page[NotificationPublicV2] */
+        Page_NotificationPublicV2_: {
             /** Items */
-            items: components["schemas"]["NotificationPublic"][];
+            items: components["schemas"]["NotificationPublicV2"][];
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -2321,7 +2366,7 @@ export interface operations {
             };
         };
     };
-    mark_notification_read_api_notifications__notification_id__read_patch: {
+    mark_notification_read_route_api_notifications__notification_id__read_patch: {
         parameters: {
             query?: never;
             header?: never;
@@ -2571,6 +2616,7 @@ export interface operations {
     list_notifications_page_api_v2_notifications_get: {
         parameters: {
             query?: {
+                type?: string | null;
                 limit?: number;
                 cursor?: string | null;
             };
@@ -2588,7 +2634,38 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Page_NotificationPublic_"];
+                    "application/json": components["schemas"]["Page_NotificationPublicV2_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_all_notifications_read_route_api_v2_notifications_mark_all_read_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationMarkAllReadResponse"];
                 };
             };
             /** @description Validation Error */

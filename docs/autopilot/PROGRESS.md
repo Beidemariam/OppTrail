@@ -1198,10 +1198,119 @@ tests, axe clean, unchanged; `pip-audit` and `npm audit` both clean; generated
 client up to date. Docker portion of the split gate remains the host's
 (`scripts/autopilot-gate.sh 1`).
 
-- [ ] 1.7 Notifications inbox rework (§9, minus digests): read/unread with
-      history (fixing the current `WHERE read = 0` dead end,
-      `routes_notifications.py:24-37`), filtering by type, mark-all-read.
-      Schema: `notifications` gains `read_at`, `grouped_key`.
+### 1.7 — Notifications inbox rework (§9, minus digests) — **DONE**
+
+- [x] Schema: revision `20260920_0003_notification_history` adds
+      `notifications.read_at` (nullable, `NULL` = unread — the new source of
+      truth) and `notifications.grouped_key` (nullable, unpopulated until
+      Phase 5's digest batching). Backfill stamps `read_at = created_at` for
+      rows already `read = 1`, since the true read time was never recorded.
+      `ALTER TABLE ... ADD COLUMN` splices the new columns into
+      `sqlite_master`'s stored SQL rather than reformatting it, which is why
+      `tests/data/expected_schema.sql`'s `notifications` entry ends with a
+      line break in an unusual place — documented inline there so the next
+      schema diff isn't mistaken for a mistake. `HEAD_REVISION` in
+      `test_migrations.py` bumped to match.
+- [x] Fixed the `WHERE read = 0` dead end
+      (`routes_notifications.py:24-37` at the time the milestone was
+      written): `GET /api/v2/notifications` now answers full history, with an
+      optional `?type=` filter (same keyset pagination every v2 collection
+      uses). v1's `GET /api/notifications` is untouched — still unread-only,
+      still the `read` boolean — per `docs/ROADMAP.md`'s breaking-changes
+      table, which keeps this one v2 route from mirroring its v1 twin on
+      purpose: marking a notification read used to make it disappear, which
+      is a behaviour change a same-shape mirror would have hidden. Documented
+      as the one exception to "the boundary carries shape, not behavior" in
+      `CLAUDE.md`'s API versions section, with a pointer to the new
+      "Notifications" section for the detail.
+- [x] `notification_service.mark_notification_read` / new
+      `mark_all_notifications_read`: both write `read` and `read_at` together
+      (`COALESCE(read_at, ...)`, so a second mark-read is a no-op rather than
+      moving the timestamp), which is what keeps v1's column from drifting
+      out of agreement with v2's without any change to v1's own code. v1's
+      existing `PATCH /api/notifications/{id}/read` now calls the shared
+      helper instead of its own inline SQL — same behaviour, same 404 on a
+      notification that isn't the caller's, verified unchanged by the
+      existing test for it.
+- [x] `POST /api/v2/notifications/mark-all-read`: new, since mark-all has no
+      v1 endpoint to reuse. Scoped to the caller's own unread rows; returns
+      `{"marked": <count>}`. No v2 twin of the single mark-read route was
+      added — it would duplicate the v1 one for no behavioural gain, since
+      both already operate on the same row.
+- [x] `NotificationPublicV2` (`schemas.py`): `read_at`, `grouped_key`,
+      `type`, `payload`, `created_at`, `id` — no `read` field, since
+      `read_at` supersedes it. v1's `NotificationPublic` is untouched.
+- [x] Authorization matrix: `POST /api/v2/notifications/mark-all-read` added
+      (46 → 47), `authenticated_only(200)` like every other self-scoped
+      surface. `GET /api/v2/notifications`'s existing entry needed no change.
+- [x] `tests/test_api_v2.py`: the old identity test (v1 rows == v2 rows) is
+      no longer true by design, so it's replaced with one asserting the two
+      surfaces describe the *same row* in their two different shapes, plus
+      two new tests — history survives a v1 mark-read and can be filtered by
+      type; mark-all-read is scoped to the caller and idempotent on a second
+      call. `tests/test_migrations.py` and `tests/data/expected_schema.sql`
+      updated for the new columns (upgrade-from-empty and upgrade-from-MVP
+      both exercise the new revision).
+- [x] Frontend: `app/Home.tsx`'s notification panel now reads history from
+      `GET /api/v2/notifications` (kept, not removed, on being marked read),
+      adds a type filter (`<select>`, filtered client-side over the loaded
+      page — an inbox at this app's 20-user scale doesn't need a server round
+      trip just to narrow a type the first page already holds; the server
+      filter itself is exercised and asserted independently in the backend
+      suite) and a "Mark all read" button calling the new v2 endpoint. The
+      unread badge counts `read_at == null` in the loaded page rather than
+      array length, since the list no longer shrinks when something is read.
+      Individual mark-read still calls the existing v1 `PATCH` route — one
+      mutation endpoint, not two duplicated ones.
+- [x] `frontend/lib/notifications.ts`'s `notificationText` retyped onto
+      `NotificationPublicV2` to match what `Home.tsx` now passes it; its own
+      test needed no behavioural change (it already cast through `unknown`).
+- [x] `frontend/app/test-api.ts` (the Vitest fake): `Notification` gained
+      `read_at` in place of `read`; new handlers for `GET /api/v2/
+      notifications` (with `?type=`) and `POST /api/v2/notifications/
+      mark-all-read`; the v1 GET and PATCH handlers now derive their `read`
+      boolean from `read_at` instead of storing it separately, so the fake
+      can't drift the same way the real two-column design is built to avoid.
+      `Home.test.tsx`'s notification test renamed and extended, plus one new
+      test for the filter and mark-all-read button.
+- [x] Seed data: `tools/seed.py` marks Alex's `share_added` notification
+      (from the Initech share) read at the end of seeding, so the demo has
+      both states without a click. Printed tour gains a paragraph naming the
+      bell, the filter and the mark-all-read button.
+      `tests/test_seed.py::test_seeded_permissions_match_the_printed_tour`
+      asserts the read/unread split the tour claims.
+- [x] `frontend/lib/api-types.ts` regenerated
+      (`NotificationPublicV2`, `Page_NotificationPublicV2_`,
+      `NotificationMarkAllReadResponse`); `scripts/generate-api-client.sh
+      --check` clean.
+- [x] Docs: `CLAUDE.md` gains a "Notifications" section explaining the two
+      surfaces, the `read`/`read_at` dual-write, and why `grouped_key` exists
+      unused; the "API versions" section gets a one-line pointer to it as the
+      deliberate exception.
+
+Work log: single session. New:
+`backend/alembic/versions/20260920_0003_notification_history.py`. Changed:
+`backend/app/notification_service.py` (mark-read helpers),
+`backend/app/routes_notifications.py` (v2 history + filter + mark-all-read,
+v1 PATCH now shares the helper), `backend/app/schemas.py`
+(`NotificationPublicV2`, `NotificationMarkAllReadResponse`),
+`backend/tests/test_api_v2.py`, `backend/tests/test_authorization_matrix.py`,
+`backend/tests/test_migrations.py`, `backend/tests/data/expected_schema.sql`,
+`backend/tests/test_seed.py`, `backend/tools/seed.py`, `frontend/app/Home.tsx`,
+`frontend/app/globals.css`, `frontend/app/test-api.ts`,
+`frontend/app/Home.test.tsx`, `frontend/lib/notifications.ts`,
+`frontend/lib/api-types.ts` (generated), `CLAUDE.md`. Decisions: **D-043**
+(the mechanics of "v1 shape preserved" — a distinct `NotificationPublicV2`
+rather than additive fields on the shared model, and no v2 twin of the
+single mark-read route; not flagged for human review — implementation
+mechanics inside a decision the roadmap's breaking-changes table had already
+made). Gate: full `make check` green in the sandbox — 258 backend tests (was 255),
+97.28% combined coverage (was 97.23%), `routes_notifications.py` at 100%;
+102 frontend tests (was 101), 88.38% line / 80.86% branch (was 88.21% /
+81.79% — both still above the configured floors of 85%/78%); 18 E2E tests
+unchanged, axe clean including the notification panel with its new controls;
+`pip-audit` and `npm audit` both clean; generated client up to date. Docker
+portion of the split gate remains the host's (`scripts/autopilot-gate.sh 1`).
 
 ### Acceptance (from ROADMAP.md, all must hold before AWAITING_REVIEW)
 

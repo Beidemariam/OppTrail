@@ -158,6 +158,15 @@ def test_seeded_permissions_match_the_printed_tour(tmp_path) -> None:
         ]
         assert mentions, "the seeded @mention did not produce a notification"
 
+        # The inbox rework's tour line (milestone 1.7): one notification
+        # already read and still visible in history, next to unread ones —
+        # not the v1 dead end where reading one made it disappear.
+        alex_inbox = alex.get("/api/v2/notifications?limit=50").json()["items"]
+        by_type = {item["type"]: item for item in alex_inbox}
+        assert by_type["share_added"]["read_at"] is not None
+        assert by_type["mention"]["read_at"] is None
+        assert by_type["shared_activity"]["read_at"] is None
+
         # The owner-only audit log is not empty on a fresh seed.
         audit = alex.get(f"/api/opportunities/{northwind}/audit-log")
         assert audit.status_code == 200

@@ -288,6 +288,21 @@ a.danger-button {
   z-index: 10;
 }
 
+.notification-controls {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.notification-controls label {
+  color: var(--slate);
+  font-size: 12px;
+}
+
+.notification-controls select {
+  flex: 1;
+}
+
 .notification-list {
   display: grid;
   gap: 10px;
@@ -299,6 +314,10 @@ a.danger-button {
   display: grid;
   gap: 10px;
   padding: 10px;
+}
+
+.notification-row.is-read {
+  opacity: 0.6;
 }
 
 .notification-row strong {

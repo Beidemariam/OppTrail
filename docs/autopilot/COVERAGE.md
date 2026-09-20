@@ -615,3 +615,53 @@ actually exercised"): back up, write more data through the real API, restore,
 and assert the write is gone and the backed-up state is back — not just that
 `restore_backup` runs without raising.
 
+## Phase 1 — milestone 1.7 (notifications inbox rework)
+
+New migration (`20260920_0003_notification_history.py`), the v2 notifications
+route rewritten from a v1 mirror into the real inbox, one new v2 endpoint
+(`mark-all-read`), and the first frontend change to the notification panel
+since the MVP shipped it.
+
+```
+backend:  258 passed (was 255), 97.28% combined line+branch coverage
+          (was 97.23%; --cov-fail-under=90 enforced)
+          app/routes_notifications.py    100% line, 100% branch (was 96%/—)
+          app/notification_service.py    97% line, 97% branch — the one
+                                          uncovered branch (line 129) is
+                                          notify_mentions' "actor mentioning
+                                          themselves" skip, pre-existing and
+                                          untouched by this milestone
+frontend: 102 passed (was 101), 88.38% line (was 88.21%), 80.86% branch
+          (was 81.79% — still above the configured floor of 78%), 90.54%
+          functions
+          app/Home.tsx  85.74% line (was 85.43%) — the notification panel's
+                        new controls are exercised by the two notification
+                        tests; the drop in the overall branch percentage
+                        (81.79% -> 80.86%) is this file picking up branches
+                        (the empty-state ternary, the disabled-button
+                        condition) faster than the two new tests cover them,
+                        not a regression anywhere already covered
+e2e:      18 passed (unchanged) — 04-mentions.spec.ts and the notification
+          panel a11y test in 07-accessibility.spec.ts both re-run against the
+          rewritten panel (same button name, same `.notification-panel`
+          class, same displayed text) rather than needing new assertions
+```
+
+Authorization matrix: 46 → 47 endpoints. `POST /api/v2/notifications/
+mark-all-read` is `authenticated_only(200)`, the same shape as every other
+self-scoped-by-the-query surface (`GET /api/notifications`,
+`GET /api/v2/notifications`).
+
+The thresholds in `frontend/vitest.config.ts` (lines 85, statements 85,
+functions 85, branches 78) are unchanged and still comfortably cleared;
+not raised here for the same reason milestone 1.5 gave — `app/Home.tsx`
+dominates the total and is rewritten in milestone 2.1.
+
+The guard test for this milestone (brief §6.5: confirmed to fail against the
+unfixed code first) is `test_v2_notification_history_survives_being_read_
+and_can_be_filtered_by_type` in `backend/tests/test_api_v2.py`: run against
+the pre-milestone `list_notifications_page` (unread-only, no `read_at` field),
+the "after" assertion — that a notification marked read is still in the v2
+page — fails with a `KeyError` on `read_at`, which is the exact dead end this
+milestone closes.
+

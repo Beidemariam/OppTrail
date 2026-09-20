@@ -38,6 +38,49 @@ def parse_notification_payload(notification_type: str, raw_payload: str) -> Noti
     return cast(NotificationPayload, model.model_validate_json(raw_payload))
 
 
+def mark_notification_read(
+    connection: sqlite3.Connection,
+    notification_id: int,
+    user_id: int,
+) -> sqlite3.Row | None:
+    """Mark one notification read, scoped to its owner.
+
+    `read` and `read_at` are written together so v1's column (read-only from
+    this point on, per the notification-model breaking change in
+    `docs/ROADMAP.md`) and v2's history stay in agreement without v1's own
+    code having to change. `COALESCE` makes a second call idempotent: the
+    first read time wins, not the most recent PATCH.
+    """
+    connection.execute(
+        """
+        UPDATE notifications
+        SET read = 1, read_at = COALESCE(read_at, ?)
+        WHERE id = ? AND user_id = ?
+        """,
+        (utc_now(), notification_id, user_id),
+    )
+    connection.commit()
+    row: sqlite3.Row | None = connection.execute(
+        "SELECT * FROM notifications WHERE id = ? AND user_id = ?",
+        (notification_id, user_id),
+    ).fetchone()
+    return row
+
+
+def mark_all_notifications_read(connection: sqlite3.Connection, user_id: int) -> int:
+    """Mark every unread notification for a user read; returns the count."""
+    cursor = connection.execute(
+        """
+        UPDATE notifications
+        SET read = 1, read_at = ?
+        WHERE user_id = ? AND read_at IS NULL
+        """,
+        (utc_now(), user_id),
+    )
+    connection.commit()
+    return cursor.rowcount
+
+
 def get_accessible_user_ids(
     connection: sqlite3.Connection,
     opportunity_id: int,

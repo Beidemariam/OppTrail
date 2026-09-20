@@ -331,6 +331,18 @@ def seed() -> None:
     removed_note = add_note(alex, scratch, "Duplicate of the Contoso lead - removing.")
     check(alex.client.delete(f"/api/notes/{removed_note}"), "soft-deleting a note")
 
+    # 6. One of Alex's notifications marked read, so the inbox rework
+    #    (milestone 1.7) has both states to show without a click: history
+    #    that survives being read, next to what is still unread.
+    alex_notifications = check(
+        alex.client.get("/api/notifications"), "reading Alex's notifications"
+    ).json()["notifications"]
+    share_added = next(n for n in alex_notifications if n["type"] == "share_added")
+    check(
+        alex.client.patch(f"/api/notifications/{share_added['id']}/read"),
+        "marking Alex's share notification read",
+    )
+
     for session in (alex, blair, casey):
         session.client.__exit__(None, None, None)
 
@@ -372,7 +384,13 @@ def main(argv: list[str] | None = None) -> int:
         "  Search (GET /api/v2/search?q=finance, or the Search link in the top\n"
         "  bar, which opens /search?q=finance) is scoped to what the caller can\n"
         "  read: Alex and Blair each get two hits in two different opportunities,\n"
-        "  Casey gets only the Northwind one, and Dana gets nothing at all."
+        "  Casey gets only the Northwind one, and Dana gets nothing at all.\n"
+        "\n"
+        "  Alex's notification bell (or GET /api/v2/notifications) shows the\n"
+        "  inbox rework: a mention and a shared-activity notification still\n"
+        "  unread, next to the Initech share notification already marked read\n"
+        "  and still visible — the dead end milestone 1.7 fixed. Filter by\n"
+        "  type in the panel, or mark everything read at once."
     )
     return 0
 
