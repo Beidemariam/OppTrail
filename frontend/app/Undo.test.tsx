@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { aComment, aNote, anEntry, anOpportunity } from "./test-api";
-import { openTimeline, renderDashboard } from "./test-app";
+import { acceptConfirmation, openTimeline, renderDashboard } from "./test-app";
 import { TOAST_DURATION_MS, ToastProvider, useToasts } from "./Toasts";
 
 /**
@@ -214,11 +214,11 @@ describe("deleting an opportunity", () => {
     const api = await renderDashboard({ opportunities: [anOpportunity()] });
     const card = (await screen.findAllByRole("article"))[0];
 
-    // The one destructive action that keeps its confirmation: it cascades
-    // across a whole record (`docs/UX.md`).
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    // The one destructive action that keeps its confirmation, and the only
+    // one that makes the reader type the name back: it cascades across a whole
+    // record (`docs/UX.md`, milestone 2.5).
     await userEvent.click(within(card).getByRole("button", { name: "Delete" }));
-    expect(confirm).toHaveBeenCalled();
+    await acceptConfirmation("Northwind rollout");
 
     await waitFor(() =>
       expect(screen.queryByText("Northwind rollout")).not.toBeInTheDocument(),
@@ -241,9 +241,9 @@ describe("deleting an opportunity", () => {
       },
     });
     const card = (await screen.findAllByRole("article"))[0];
-    vi.spyOn(window, "confirm").mockReturnValue(true);
 
     await userEvent.click(within(card).getByRole("button", { name: "Delete" }));
+    await acceptConfirmation("Northwind rollout");
 
     expect(
       await screen.findByText(

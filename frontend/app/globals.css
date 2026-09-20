@@ -1,12 +1,214 @@
+/*
+ * Design tokens (milestone 2.5, docs/DESIGN-SYSTEM.md).
+ *
+ * Two rules the rest of this file obeys:
+ *
+ * 1. **A component references a role, never a brand colour.** `--teal-600` is
+ *    declared once here and read only by the role tokens below it; a rule that
+ *    wants a link colour asks for `--text-link`. That is what makes the dark
+ *    palette a swap of one block rather than an audit of every rule.
+ * 2. **A colour token is either a text token or a fill token, never both.**
+ *    The brand colours are sound as fills and unsafe as text: teal `#0f9d8c`
+ *    on white is 3.38:1 and red `#d64545` is 4.38:1, both below WCAG AA. The
+ *    `-600` variants are the darkened text-and-white-text-fill counterparts,
+ *    and they are the three corrected contrast values the roadmap names.
+ *
+ * Every pair in use is measured rather than assumed, by `lib/contrast.ts` and
+ * the assertions in `lib/contrast.test.ts`, which read this file — so a token
+ * edited to an unreadable value fails the unit suite before axe ever runs.
+ */
 :root {
-  --navy: #0b2540;
-  --teal: #0f9d8c;
-  --amber: #f2a93b;
-  --slate: #6b7280;
-  --red: #d64545;
-  --background: #f7f9fb;
-  --line: #d9e2ea;
-  --surface: #ffffff;
+  /* Brand ramp. Fills, borders and markers only. */
+  --navy-700: #0b2540;
+  --teal-500: #0f9d8c;
+  --teal-600: #0b7c6e;
+  --teal-300: #4fd0bd;
+  --amber-500: #f2a93b;
+  --amber-600: #8a5a00;
+  --amber-300: #f0b455;
+  --red-500: #d64545;
+  --red-600: #b33838;
+  --red-300: #f39a9a;
+  --green-600: #227a3a;
+  --green-300: #6fd18a;
+  --blue-600: #2a62d6;
+  --blue-300: #8fb4ff;
+  --violet-600: #5a49b8;
+  --violet-300: #b6a8f0;
+  --slate-600: #5c6673;
+  --slate-300: #a8b6c6;
+
+  /* Surfaces and text. */
+  --bg-app: #f7f9fb;
+  --bg-surface: #ffffff;
+  --bg-sunken: #eef2f6;
+  --bg-hover: #f0f4f8;
+  --bg-selected: #e6f4f2;
+  --bg-accent-soft: #e6f4f2;
+  --bg-warning: #fdf0d9;
+  --bg-highlight: #ffe9a8;
+  --bg-scrim: rgba(11, 37, 64, 0.45);
+  --border-subtle: #e3eaf0;
+  --border-strong: #d9e2ea;
+  --border-accent: var(--teal-500);
+  --border-warning: #e2b871;
+  --text-primary: #0b2540;
+  --text-secondary: #5c6673;
+  --text-inverse: #ffffff;
+  --text-link: var(--teal-600);
+  --text-danger: var(--red-600);
+  --text-warning: var(--amber-600);
+  --focus-ring: var(--teal-600);
+
+  /* Fills that carry text. Each names the text that sits on it. */
+  --fill-accent: var(--teal-600);
+  --fill-accent-text: #ffffff;
+  --fill-danger: var(--red-600);
+  --fill-danger-text: #ffffff;
+  --fill-neutral: var(--navy-700);
+  --fill-neutral-text: #ffffff;
+  --marker: var(--teal-500);
+  --marker-ring: #d9f3ee;
+
+  /* Entry-type badges and their timeline markers. Colour is never the sole
+     carrier of meaning here - every badge also shows its label. */
+  --badge-text: #ffffff;
+  --badge-call: var(--teal-600);
+  --badge-email: var(--blue-600);
+  --badge-meeting: var(--violet-600);
+  --badge-demo: var(--teal-600);
+  --badge-proposal: var(--amber-600);
+  --badge-contract: var(--green-600);
+  --badge-stage: var(--navy-700);
+  --badge-other: var(--slate-600);
+
+  /* Elevation: four steps only - flat, raised, overlay, modal. */
+  --shadow-raised: 0 10px 24px rgba(11, 37, 64, 0.06);
+  --shadow-overlay: 0 16px 40px rgba(11, 37, 64, 0.14);
+  --shadow-modal: 0 18px 40px rgba(11, 37, 64, 0.22);
+
+  /* Spacing, 4px base. Dense UI lives in the 4-12px range. */
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Type. System stack: no webfont, no render-blocking request. */
+  --font-sans:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --text-xs: 11px;
+  --line-xs: 16px;
+  --text-sm: 13px;
+  --line-sm: 18px;
+  --text-base: 15px;
+  --line-base: 22px;
+  --text-lg: 18px;
+  --line-lg: 24px;
+  --text-xl: 22px;
+  --line-xl: 28px;
+  --text-2xl: 28px;
+  --line-2xl: 34px;
+
+  /* Radii and motion. */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 999px;
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+  --motion-slow: 260ms;
+
+  color-scheme: light;
+}
+
+/*
+ * The dark palette (D-003, accepted: light and dark ship together).
+ *
+ * Role tokens only - the ramp above is unchanged, because a palette swap that
+ * also moves the brand is two changes to review instead of one. Saturated teal
+ * and amber are lightened rather than darkened here, which is why the ramp
+ * carries `-300` variants beside the `-600` text ones: on a dark surface the
+ * readable end of a hue is the light end.
+ */
+[data-theme="dark"] {
+  --bg-app: #0d1621;
+  --bg-surface: #142130;
+  --bg-sunken: #101b27;
+  --bg-hover: #1c2b3b;
+  --bg-selected: #123630;
+  --bg-accent-soft: #123630;
+  --bg-warning: #3a2b0c;
+  --bg-highlight: #4d3a0d;
+  --bg-scrim: rgba(3, 8, 14, 0.66);
+  --border-subtle: #243448;
+  --border-strong: #32455c;
+  --border-accent: var(--teal-300);
+  --border-warning: #7a5a1c;
+  --text-primary: #e8eef6;
+  --text-secondary: #a8b6c6;
+  --text-inverse: #0d1621;
+  --text-link: var(--teal-300);
+  --text-danger: var(--red-300);
+  --text-warning: var(--amber-300);
+  --focus-ring: var(--teal-300);
+
+  --fill-accent: var(--teal-300);
+  --fill-accent-text: #0d1621;
+  --fill-danger: var(--red-300);
+  --fill-danger-text: #0d1621;
+  --fill-neutral: var(--slate-300);
+  --fill-neutral-text: #0d1621;
+  --marker: var(--teal-300);
+  --marker-ring: #143b35;
+
+  --badge-text: #0d1621;
+  --badge-call: var(--teal-300);
+  --badge-email: var(--blue-300);
+  --badge-meeting: var(--violet-300);
+  --badge-demo: var(--teal-300);
+  --badge-proposal: var(--amber-300);
+  --badge-contract: var(--green-300);
+  --badge-stage: var(--slate-300);
+  --badge-other: var(--slate-300);
+
+  --shadow-raised: 0 10px 24px rgba(0, 0, 0, 0.4);
+  --shadow-overlay: 0 16px 40px rgba(0, 0, 0, 0.5);
+  --shadow-modal: 0 18px 40px rgba(0, 0, 0, 0.6);
+
+  color-scheme: dark;
+}
+
+/* Not optional in a drag-and-drop UI (docs/DESIGN-SYSTEM.md). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Named rather than repeated: every interactive element takes the same ring,
+   which the palette keeps at 3:1 against both adjacent surfaces. */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.visually-hidden {
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
 }
 
 * {
@@ -20,9 +222,11 @@ body {
 }
 
 body {
-  background: var(--background);
-  color: var(--navy);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg-app);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--line-base);
 }
 
 button,
@@ -32,8 +236,47 @@ textarea {
   font: inherit;
 }
 
+/* Every control takes the surface and text roles, so a palette swap cannot
+   leave a field white-on-white in dark mode. Checkboxes keep the native
+   rendering `color-scheme` already themes for us. */
+input:not([type="checkbox"]),
+select,
+textarea {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+}
+
 button {
   cursor: pointer;
+}
+
+/* Tabular numerals so values and counts line up column to column. */
+.opportunity-card dd,
+.meta-row,
+kbd,
+.audit-row code {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Hover and focus are the two states worth animating; everything else is a
+   layout change and reads better instant. */
+.primary-button,
+.secondary-button,
+.danger-button,
+.palette-button,
+.opportunity-card,
+.palette-option {
+  transition:
+    background-color var(--motion-fast) ease-out,
+    border-color var(--motion-fast) ease-out;
+}
+
+.secondary-button:hover:not(:disabled),
+.palette-button:hover,
+.palette-option:hover {
+  background: var(--bg-hover);
 }
 
 .auth-shell,
@@ -71,23 +314,24 @@ button {
 
 .topbar h1,
 .auth-panel h1 {
-  color: var(--navy);
+  color: var(--text-primary);
   margin: 0;
 }
 
 .auth-panel h1 {
-  font-size: 44px;
-  line-height: 1.1;
+  font-size: var(--text-2xl);
+  line-height: var(--line-2xl);
   max-width: 680px;
 }
 
 .topbar h1 {
-  font-size: 34px;
+  font-size: var(--text-2xl);
+  line-height: var(--line-2xl);
 }
 
 .eyebrow {
-  color: var(--teal);
-  font-size: 13px;
+  color: var(--text-link);
+  font-size: var(--text-xs);
   font-weight: 700;
   letter-spacing: 0;
   margin: 0 0 10px;
@@ -95,18 +339,18 @@ button {
 }
 
 .lede {
-  color: var(--slate);
-  font-size: 18px;
+  color: var(--text-secondary);
+  font-size: var(--text-lg);
   line-height: 1.6;
   margin: 18px 0 0;
   max-width: 620px;
 }
 
 .form {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: 0 12px 30px rgba(11, 37, 64, 0.06);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-raised);
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -114,15 +358,15 @@ button {
 }
 
 .form h2 {
-  font-size: 20px;
+  font-size: var(--text-lg);
   margin: 0;
 }
 
 .form label {
-  color: var(--navy);
+  color: var(--text-primary);
   display: flex;
   flex-direction: column;
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 700;
   gap: 8px;
 }
@@ -141,19 +385,19 @@ button {
 .timeline-form textarea,
 .inline-compose input,
 .stacked-form textarea {
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  color: var(--navy);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
   min-height: 42px;
   padding: 9px 11px;
 }
 
 .ai-form textarea {
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  color: var(--navy);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
   min-height: 82px;
   padding: 9px 11px;
 }
@@ -169,8 +413,8 @@ textarea {
 }
 
 .segmented {
-  background: #eef4f6;
-  border-radius: 8px;
+  background: var(--bg-sunken);
+  border-radius: var(--radius-md);
   display: grid;
   gap: 4px;
   grid-template-columns: 1fr 1fr;
@@ -180,14 +424,14 @@ textarea {
 .segmented button {
   background: transparent;
   border: 0;
-  border-radius: 6px;
-  color: var(--slate);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
   min-height: 38px;
 }
 
 .segmented button.active {
-  background: var(--surface);
-  color: var(--navy);
+  background: var(--bg-surface);
+  color: var(--text-primary);
   font-weight: 700;
 }
 
@@ -195,7 +439,7 @@ textarea {
 .secondary-button,
 .danger-button {
   align-items: center;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   display: inline-flex;
   font-weight: 700;
   justify-content: center;
@@ -215,36 +459,43 @@ a.danger-button {
 }
 
 .primary-button {
-  background: var(--teal);
-  border: 1px solid var(--teal);
-  color: #fff;
+  background: var(--fill-accent);
+  border: 1px solid var(--fill-accent);
+  color: var(--fill-accent-text);
 }
 
 .secondary-button {
-  background: #fff;
-  border: 1px solid var(--line);
-  color: var(--navy);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  color: var(--text-primary);
 }
 
 .danger-button {
-  background: #fff;
-  border: 1px solid rgba(214, 69, 69, 0.35);
-  color: var(--red);
+  background: var(--bg-surface);
+  border: 1px solid var(--text-danger);
+  color: var(--text-danger);
+}
+
+.primary-button:disabled,
+.danger-button:disabled,
+.secondary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .status,
 .error {
-  font-size: 14px;
+  font-size: var(--text-base);
   line-height: 1.4;
   margin: 0;
 }
 
 .status {
-  color: var(--slate);
+  color: var(--text-secondary);
 }
 
 .error {
-  color: var(--red);
+  color: var(--text-danger);
   font-weight: 700;
 }
 
@@ -264,19 +515,19 @@ a.danger-button {
 }
 
 .notification-button span {
-  background: var(--red);
-  border-radius: 999px;
-  color: #fff;
-  font-size: 12px;
+  background: var(--fill-danger);
+  border-radius: var(--radius-full);
+  color: var(--fill-danger-text);
+  font-size: var(--text-xs);
   min-width: 22px;
   padding: 3px 7px;
 }
 
 .notification-panel {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: 0 16px 40px rgba(11, 37, 64, 0.14);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-overlay);
   display: grid;
   gap: 12px;
   max-height: 420px;
@@ -296,8 +547,8 @@ a.danger-button {
 }
 
 .notification-controls label {
-  color: var(--slate);
-  font-size: 12px;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
 }
 
 .notification-controls select {
@@ -310,32 +561,38 @@ a.danger-button {
 }
 
 .notification-row {
-  border: 1px solid #e8eef4;
-  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
   display: grid;
   gap: 10px;
   padding: 10px;
 }
 
+/* Read rows recede without fading: `opacity` multiplies a measured contrast
+   ratio into an unmeasured one, and axe correctly failed it. The row keeps
+   the sunken surface and the secondary text role, both of which are pairs
+   `lib/contrast.test.ts` holds to AA. Read is not carried by colour alone
+   either way - an unread row is the one with a "Mark read" button. */
 .notification-row.is-read {
-  opacity: 0.6;
+  background: var(--bg-sunken);
+  color: var(--text-secondary);
 }
 
 .notification-row strong {
   display: block;
-  font-size: 14px;
+  font-size: var(--text-base);
   line-height: 1.35;
 }
 
 .notification-row span {
-  color: var(--slate);
+  color: var(--text-secondary);
   display: block;
-  font-size: 12px;
+  font-size: var(--text-xs);
   margin-top: 4px;
 }
 
 .compact-button {
-  font-size: 13px;
+  font-size: var(--text-sm);
   min-height: 34px;
   padding: 7px 10px;
 }
@@ -369,9 +626,9 @@ a.danger-button {
 }
 
 .stage-column {
-  background: #eef4f6;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
   display: flex;
   flex-direction: column;
   height: 480px;
@@ -386,16 +643,16 @@ a.danger-button {
 }
 
 .stage-header h2 {
-  font-size: 15px;
+  font-size: var(--text-base);
   line-height: 1.2;
   margin: 0;
 }
 
 .stage-header span {
-  background: var(--navy);
-  border-radius: 999px;
-  color: #fff;
-  font-size: 12px;
+  background: var(--fill-neutral);
+  border-radius: var(--radius-full);
+  color: var(--fill-neutral-text);
+  font-size: var(--text-xs);
   font-weight: 700;
   min-width: 24px;
   padding: 4px 7px;
@@ -403,8 +660,8 @@ a.danger-button {
 }
 
 .empty-state {
-  color: var(--slate);
-  font-size: 14px;
+  color: var(--text-secondary);
+  font-size: var(--text-base);
   margin: 16px 0 0;
 }
 
@@ -414,9 +671,9 @@ a.danger-button {
 }
 
 .opportunity-card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -424,13 +681,13 @@ a.danger-button {
 }
 
 .opportunity-card.selected {
-  border-color: var(--teal);
-  box-shadow: 0 0 0 2px rgba(15, 157, 140, 0.14);
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 2px var(--bg-selected);
 }
 
 .opportunity-card.checked {
-  background: rgba(15, 157, 140, 0.06);
-  border-color: var(--teal);
+  background: var(--bg-accent-soft);
+  border-color: var(--border-accent);
 }
 
 .card-checkbox {
@@ -441,7 +698,7 @@ a.danger-button {
 }
 
 .opportunity-card h3 {
-  font-size: 18px;
+  font-size: var(--text-lg);
   line-height: 1.2;
   margin: 0;
   overflow-wrap: anywhere;
@@ -456,20 +713,20 @@ a.danger-button {
 }
 
 .stalled-badge {
-  background: rgba(242, 169, 59, 0.18);
-  border: 1px solid rgba(242, 169, 59, 0.5);
-  border-radius: 999px;
-  color: #7a4d05;
+  background: var(--bg-warning);
+  border: 1px solid var(--border-warning);
+  border-radius: var(--radius-full);
+  color: var(--text-warning);
   flex: 0 0 auto;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 700;
   line-height: 1;
   padding: 5px 7px;
 }
 
 .opportunity-card p {
-  color: var(--slate);
-  font-size: 14px;
+  color: var(--text-secondary);
+  font-size: var(--text-base);
   margin: 0;
 }
 
@@ -480,12 +737,12 @@ a.danger-button {
 }
 
 .opportunity-card dt {
-  color: var(--slate);
-  font-size: 12px;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
 }
 
 .opportunity-card dd {
-  font-size: 14px;
+  font-size: var(--text-base);
   margin: 2px 0 0;
 }
 
@@ -500,10 +757,10 @@ a.danger-button {
 }
 
 .timeline-panel {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: 0 10px 24px rgba(11, 37, 64, 0.04);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-raised);
   display: grid;
   gap: 16px;
   grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
@@ -566,22 +823,22 @@ a.danger-button {
 }
 
 .sharing-panel {
-  background: #f7f9fb;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  background: var(--bg-app);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
   display: grid;
   gap: 12px;
   padding: 14px;
 }
 
 .section-heading h3 {
-  font-size: 18px;
+  font-size: var(--text-lg);
   margin: 0;
 }
 
 .section-heading span {
-  color: var(--slate);
-  font-size: 13px;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
   font-weight: 700;
 }
 
@@ -597,9 +854,9 @@ a.danger-button {
 
 .share-row {
   align-items: center;
-  background: #fff;
-  border: 1px solid #e8eef4;
-  border-radius: 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
   display: grid;
   gap: 10px;
   grid-template-columns: minmax(180px, 1fr) 150px auto;
@@ -608,13 +865,13 @@ a.danger-button {
 
 .share-row p,
 .audit-row p {
-  color: var(--slate);
-  font-size: 13px;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
   margin: 3px 0 0;
 }
 
 .audit-panel {
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--border-strong);
   padding-top: 10px;
 }
 
@@ -628,31 +885,31 @@ a.danger-button {
 }
 
 .audit-row {
-  background: #fff;
-  border: 1px solid #e8eef4;
-  border-radius: 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
   display: grid;
   gap: 4px;
   padding: 10px;
 }
 
 .audit-row span {
-  color: var(--slate);
-  font-size: 12px;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
 }
 
 .audit-row code {
-  color: #24364a;
-  font-size: 12px;
+  color: var(--text-primary);
+  font-size: var(--text-xs);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
 .ai-sidebar {
   align-self: start;
-  background: #f7f9fb;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  background: var(--bg-app);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
   display: grid;
   gap: 12px;
   grid-column: 2;
@@ -674,23 +931,23 @@ a.danger-button {
 }
 
 .ai-message {
-  border: 1px solid #e8eef4;
-  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
   display: grid;
   gap: 6px;
   padding: 10px;
 }
 
 .ai-message.user {
-  background: #fff;
+  background: var(--bg-surface);
 }
 
 .ai-message.assistant {
-  background: #eef4f6;
+  background: var(--bg-sunken);
 }
 
 .ai-message p {
-  color: #24364a;
+  color: var(--text-primary);
   line-height: 1.45;
   margin: 0;
   overflow-wrap: anywhere;
@@ -698,8 +955,8 @@ a.danger-button {
 }
 
 .ai-message span {
-  color: var(--slate);
-  font-size: 12px;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
   font-weight: 700;
 }
 
@@ -710,9 +967,9 @@ a.danger-button {
 
 .bulk-action-bar {
   align-items: center;
-  background: #f7f9fb;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  background: var(--bg-app);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
@@ -728,22 +985,22 @@ a.danger-button {
 }
 
 .bulk-action-bar p {
-  color: var(--slate);
+  color: var(--text-secondary);
   flex-basis: 100%;
-  font-size: 13px;
+  font-size: var(--text-sm);
   margin: 0;
 }
 
 .timeline-form {
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--border-strong);
   padding-bottom: 18px;
 }
 
 .timeline-form label {
-  color: var(--navy);
+  color: var(--text-primary);
   display: flex;
   flex-direction: column;
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 700;
   gap: 8px;
 }
@@ -769,7 +1026,7 @@ a.danger-button {
 }
 
 .timeline-entry:not(:last-child)::before {
-  background: var(--line);
+  background: var(--border-strong);
   bottom: -14px;
   content: "";
   left: 7px;
@@ -779,9 +1036,9 @@ a.danger-button {
 }
 
 .timeline-marker {
-  background: var(--teal);
-  border: 3px solid #d9f3ee;
-  border-radius: 999px;
+  background: var(--marker);
+  border: 3px solid var(--marker-ring);
+  border-radius: var(--radius-full);
   height: 16px;
   margin-top: 6px;
   position: relative;
@@ -791,55 +1048,54 @@ a.danger-button {
 
 .timeline-marker.email,
 .type-badge.email {
-  background: #2f6fed;
+  background: var(--badge-email);
 }
 
 .timeline-marker.meeting,
 .type-badge.meeting {
-  background: #6d5bd0;
+  background: var(--badge-meeting);
 }
 
 .timeline-marker.demo,
 .type-badge.demo {
-  background: #0f9d8c;
+  background: var(--badge-demo);
 }
 
 .timeline-marker.proposal,
 .type-badge.proposal {
-  background: var(--amber);
-  color: #2f2300;
+  background: var(--badge-proposal);
 }
 
 .timeline-marker.contract,
 .type-badge.contract {
-  background: #2fa84f;
+  background: var(--badge-contract);
 }
 
 .timeline-marker.stage_change,
 .type-badge.stage_change {
-  background: var(--navy);
+  background: var(--badge-stage);
 }
 
 .timeline-marker.other,
 .type-badge.other {
-  background: var(--slate);
+  background: var(--badge-other);
 }
 
 .timeline-entry-body {
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
   display: grid;
   gap: 12px;
   padding: 14px;
 }
 
 .timeline-entry-body h3 {
-  font-size: 18px;
+  font-size: var(--text-lg);
   margin: 8px 0;
 }
 
 .timeline-copy {
-  color: #24364a;
+  color: var(--text-primary);
   line-height: 1.5;
   margin: 0;
   overflow-wrap: anywhere;
@@ -847,7 +1103,7 @@ a.danger-button {
 }
 
 .markdown-content {
-  color: #24364a;
+  color: var(--text-primary);
   display: grid;
   gap: 6px;
   line-height: 1.5;
@@ -864,43 +1120,44 @@ a.danger-button {
 }
 
 .markdown-content a {
-  color: var(--teal);
+  color: var(--text-link);
   font-weight: 700;
 }
 
 .meta-row {
   align-items: center;
-  color: var(--slate);
+  color: var(--text-secondary);
   display: flex;
   flex-wrap: wrap;
-  font-size: 13px;
+  font-size: var(--text-sm);
   gap: 8px;
   margin: 0;
 }
 
 .type-badge,
 .system-badge {
-  border-radius: 999px;
-  color: #fff;
+  border-radius: var(--radius-full);
+  color: var(--badge-text);
   display: inline-flex;
-  font-size: 12px;
+  font-size: var(--text-xs);
   font-weight: 700;
   padding: 4px 8px;
 }
 
 .type-badge.call {
-  background: var(--teal);
+  background: var(--badge-call);
 }
 
 .system-badge {
-  background: #eef4f6;
-  color: var(--navy);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-strong);
+  color: var(--text-primary);
 }
 
 .note-block {
-  background: #f7f9fb;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  background: var(--bg-app);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
   display: grid;
   gap: 10px;
   padding: 12px;
@@ -914,9 +1171,9 @@ a.danger-button {
 
 .comment-row {
   align-items: center;
-  background: #fff;
-  border: 1px solid #e8eef4;
-  border-radius: 6px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
   display: flex;
   gap: 10px;
   justify-content: space-between;
@@ -930,7 +1187,7 @@ a.danger-button {
 }
 
 .comment-row p {
-  color: #24364a;
+  color: var(--text-primary);
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
@@ -970,9 +1227,9 @@ a.danger-button {
 }
 
 .search-result {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
   padding: 14px 16px;
 }
 
@@ -984,15 +1241,15 @@ a.danger-button {
 }
 
 .search-result-header h2 {
-  font-size: 18px;
+  font-size: var(--text-lg);
   margin: 0;
 }
 
 .search-kind {
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  color: var(--slate);
-  font-size: 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-full);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
   font-weight: 700;
   padding: 2px 10px;
   text-transform: uppercase;
@@ -1009,14 +1266,14 @@ a.danger-button {
 }
 
 .search-snippet mark {
-  background: rgba(242, 169, 59, 0.35);
-  color: inherit;
+  background: var(--bg-highlight);
+  color: var(--text-primary);
   font-weight: 700;
 }
 
 .search-result-meta {
-  color: var(--slate);
-  font-size: 13px;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
   margin: 8px 0 0;
 }
 
@@ -1028,10 +1285,10 @@ a.danger-button {
 
 .palette-button {
   align-items: center;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  color: var(--slate);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
   display: inline-flex;
   gap: 10px;
   min-height: 44px;
@@ -1039,43 +1296,90 @@ a.danger-button {
 }
 
 kbd {
-  background: var(--background);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  color: var(--navy);
+  background: var(--bg-app);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
   font-family: inherit;
-  font-size: 12px;
+  font-size: var(--text-xs);
   font-weight: 700;
   padding: 2px 6px;
   white-space: nowrap;
 }
 
+/* Radix portals the overlay and the dialog as siblings rather than nesting
+   them, so the dialog positions itself instead of being centred by the
+   backdrop (milestone 2.5). */
 .modal-backdrop {
-  align-items: flex-start;
-  background: rgba(11, 37, 64, 0.45);
-  display: flex;
+  background: var(--bg-scrim);
   inset: 0;
-  justify-content: center;
-  padding: 10vh 16px 16px;
   position: fixed;
   z-index: 20;
 }
 
 .modal {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  box-shadow: 0 18px 40px rgba(11, 37, 64, 0.22);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-modal);
+  left: 50%;
   max-height: 80vh;
   max-width: 640px;
   overflow-y: auto;
-  padding: 16px;
-  width: 100%;
+  padding: var(--space-4);
+  position: fixed;
+  top: 10vh;
+  transform: translateX(-50%);
+  width: min(640px, calc(100vw - var(--space-8)));
+  z-index: 21;
+}
+
+.confirm-dialog {
+  display: grid;
+  gap: var(--space-3);
+  top: 20vh;
+}
+
+.confirm-dialog h2 {
+  font-size: var(--text-lg);
+  line-height: var(--line-lg);
+  margin: 0;
+}
+
+.confirm-field {
+  display: flex;
+  flex-direction: column;
+  font-size: var(--text-sm);
+  gap: var(--space-2);
+}
+
+.confirm-field input {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  min-height: 42px;
+  padding: 9px 11px;
+}
+
+.confirm-actions {
+  justify-content: flex-end;
+}
+
+.theme-select {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  min-height: 44px;
+  padding: 9px 11px;
 }
 
 .palette-input {
-  border: 1px solid var(--line);
-  border-radius: 6px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
   padding: 10px 12px;
   width: 100%;
 }
@@ -1092,7 +1396,7 @@ kbd {
 }
 
 .palette-option {
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   display: flex;
   flex-direction: column;
@@ -1101,16 +1405,16 @@ kbd {
 }
 
 .palette-option.active {
-  background: rgba(15, 157, 140, 0.12);
+  background: var(--bg-accent-soft);
 }
 
 .palette-option .hint {
-  color: var(--slate);
-  font-size: 13px;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
 }
 
 .shortcut-help h3 {
-  font-size: 15px;
+  font-size: var(--text-base);
   margin: 16px 0 6px;
 }
 
@@ -1135,7 +1439,7 @@ kbd {
    the opportunity whose timeline is open. */
 .opportunity-card.focused,
 .opportunity-card:focus {
-  outline: 2px solid var(--navy);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -1146,7 +1450,7 @@ kbd {
   }
 
   .auth-panel h1 {
-    font-size: 34px;
+    font-size: var(--text-2xl);
   }
 
   .topbar {
@@ -1220,11 +1524,11 @@ kbd {
 
 .toast {
   align-items: center;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-left: 4px solid var(--teal);
-  border-radius: 8px;
-  box-shadow: 0 12px 28px rgba(11, 37, 64, 0.18);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-left: 4px solid var(--border-accent);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-overlay);
   display: flex;
   gap: 12px;
   justify-content: space-between;
@@ -1232,10 +1536,10 @@ kbd {
 }
 
 .toast.error {
-  border-left-color: var(--red);
+  border-left-color: var(--text-danger);
 }
 
 .toast p {
-  font-size: 14px;
+  font-size: var(--text-base);
   margin: 0;
 }

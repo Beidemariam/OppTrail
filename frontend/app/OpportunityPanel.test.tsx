@@ -10,7 +10,7 @@ import {
   anEntry,
   anOpportunity,
 } from "./test-api";
-import { openTimeline, renderDashboard } from "./test-app";
+import { acceptConfirmation, openTimeline, renderDashboard } from "./test-app";
 
 beforeEach(() => {
   document.cookie = "opptrail_csrf=test-token";
@@ -537,8 +537,10 @@ describe("what each role is offered", () => {
       expect(api.callsTo("PATCH", "/shares/")).toHaveLength(1),
     );
 
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    // Removing access keeps its confirmation, without a typed gate: there is
+    // no restore route for a share, but the grant can be made again (D-069).
     await userEvent.click(screen.getByRole("button", { name: "Remove" }));
+    await acceptConfirmation();
     await waitFor(() =>
       expect(api.callsTo("DELETE", "/shares/")).toHaveLength(1),
     );

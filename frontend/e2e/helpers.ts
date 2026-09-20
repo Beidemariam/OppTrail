@@ -111,17 +111,17 @@ export async function csrfToken(request: APIRequestContext) {
 /**
  * Rules whose failures are a known, tracked debt rather than a regression.
  *
- * `color-contrast` fails across the app because the palette in
- * `frontend/app/globals.css` predates any contrast requirement. Fixing it is a
- * design-token change, which the plan assigns to milestone 2.5 (design tokens)
- * and R.2 (axe clean) — not to Phase F, which ships no user-facing change.
+ * **Empty, and it is meant to stay that way.** It held `color-contrast` from
+ * Phase F (D-026), because the palette predated any contrast requirement and
+ * repainting the app inside a test-infrastructure milestone would have
+ * pre-empted the token work. Milestone 2.5 did that work — `app/globals.css`
+ * now carries the token set from `docs/DESIGN-SYSTEM.md` in both themes, and
+ * `lib/contrast.test.ts` measures every pair — so the entry came off and the
+ * gate tightened, which is what a ratchet is for.
  *
- * This list is a ratchet, not an allowlist: any violation of any *other* rule
- * fails the suite immediately, and removing an entry here is the milestone
- * that fixes it. Nothing may be added without the milestone that will remove
- * it again.
+ * Nothing may be added here without the milestone that will remove it again.
  */
-export const DEFERRED_AXE_RULES = new Set(["color-contrast"]);
+export const DEFERRED_AXE_RULES = new Set<string>();
 
 interface ReportedViolation {
   id: string;

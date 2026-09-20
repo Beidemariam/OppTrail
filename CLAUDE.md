@@ -462,12 +462,13 @@ The units worth testing directly, each in its own module:
 - `lib/keyboard.ts` — the keyboard map, and the listener that serves it. See
   "Keyboard map" below.
 - `lib/palette.ts` — the command palette's fuzzy subsequence matcher.
-- `lib/confirm.ts` — the remaining `window.confirm` calls, now down to two:
-  deleting an opportunity (which cascades across a whole record) and removing
-  someone's access (which has no restore route — re-sharing is a new grant).
-  Everything else offers Undo instead (`app/Toasts.tsx`). Milestone 2.5
-  replaces this with a real dialog, which is a one-file change only while it
-  stays single.
+- `lib/theme.ts` — light and dark as a preference resolved to one of two
+  palettes. It carries no colours: it decides which palette is in force and
+  writes `data-theme` plus `color-scheme` on `<html>`, while `app/globals.css`
+  holds both sets of role values (see "Design tokens and themes").
+- `lib/contrast.ts` — WCAG relative luminance and contrast ratio, used by
+  `lib/contrast.test.ts` to re-run `docs/DESIGN-SYSTEM.md`'s audit against the
+  tokens themselves.
 - `app/Toasts.tsx` — the toast surface and `useUndoableDelete`, the one
   definition of "delete it, and say so with a way back" (milestone 2.4b). The
   region is a `role="status"` live region, never focused, so a reader keeps
@@ -484,21 +485,37 @@ The units worth testing directly, each in its own module:
   not render unvirtualized"). `StageBoard` renders each stage column through
   it instead of mapping every filtered opportunity into the DOM; row height
   is measured after mount, so `estimateItemSize` only has to seed the first
-  layout. jsdom never lays anything out, so `vitest.setup.ts` stubs
+  layout. `activeIndex` scrolls a column to the keyboard cursor, and
+  `DashboardPage` passes it **only while the cursor was moved by the
+  keyboard** (`followCursor`, D-072): a card focused by a click is already
+  where the reader is looking, and scrolling then moves the control out from
+  under the click that focused it, between the mousedown and the mouseup. jsdom never lays anything out, so `vitest.setup.ts` stubs
   `offsetHeight`/`offsetWidth` globally — without it the virtualizer
   (correctly) treats every test's viewport as zero pixels tall and renders
   nothing. Data stays unpaginated (`GET /api/opportunities`, D-061); this
   only windows what gets rendered, not what gets fetched — the switch to
   `/api/v2/opportunities`'s pagination is milestone 2.9's (D-063).
 - `app/Modal.tsx` — the dialog shell the command palette and the shortcut
-  reference share. Focus moves in on open, Tab is trapped, `Esc` closes and
-  stops before the document-level keyboard map sees it. Returning focus is
-  part of **dismissing** (Esc, the backdrop, the Close button), not of
-  unmounting: a dialog that closes because it moved the page calls `onClose`
-  directly and focus falls to the document, so the next Tab starts at the top
-  of the screen the reader is now on (D-066). Milestone 2.5 replaces the
-  internals with Radix — a one-file change only while both dialogs stay
-  behind it.
+  reference share, on Radix's `Dialog` since 2.5. Radix owns the portal, the
+  focus trap, the ARIA wiring and hiding the rest of the page from assistive
+  technology; two rules stay this app's own. `Esc` is answered on the dialog and
+  stops before the document-level keyboard map sees it — the board is mounted
+  behind the palette and binds `Esc` itself. And returning focus is part of
+  **dismissing** (Esc, the backdrop, the Close button), not of unmounting: a
+  dialog that closes because it moved the page lets focus fall to the document,
+  so the next Tab starts at the top of the screen the reader is now on (D-066).
+  That restore runs in the unmount cleanup rather than in the dismiss handler,
+  because Radix's focus guards are still on the page while `onClose` runs and
+  whichever focuses first loses.
+- `app/ConfirmDialog.tsx` — the one place this app asks "are you sure",
+  replacing the `window.confirm` placeholder `lib/confirm.ts` held.
+  `useConfirm()` returns a promise, so the three call sites read the way the
+  `window.confirm` they replace did; Radix's `AlertDialog` is underneath. The
+  two deletes that cascade — one opportunity, and a bulk selection — carry the
+  **typed** confirmation `docs/UX.md` asks for (the name typed back for one, the
+  word `delete` for several, since no single name describes what goes). Removing
+  someone's access asks plainly: there is no restore route, but the grant can be
+  made again (D-069). Everything else offers Undo instead (`app/Toasts.tsx`).
 
 ### Keyboard map
 
@@ -568,6 +585,36 @@ The board's filtering and sorting happen **in the client**, over the list
 pagination reaches this list in 2.3.
 
 `lib/api-types.ts` is generated from the OpenAPI schema; never hand-edit it.
+
+### Design tokens and themes
+
+`app/globals.css` opens with the token set from `docs/DESIGN-SYSTEM.md`
+(milestone 2.5), and nothing below it names a colour directly. Four things are
+load bearing:
+
+- **Roles, not brands.** The brand ramp (`--teal-500/600/300` and siblings) is
+  read only by the semantic roles beneath it — surfaces, text, borders, the focus
+  ring, fills that carry text, badge colours. A rule asks for `--text-link`,
+  never for teal. That is what makes the dark palette a swap of one block
+  instead of an audit of every rule.
+- **A token is either a text token or a fill token, never both.** The brand
+  colours are sound as fills and unsafe as text: teal `#0f9d8c` on white is
+  3.38:1. The `-600` variants are the darkened counterparts — text, and fills
+  that carry white text — and they are the corrected contrast values the roadmap
+  names.
+- **Both palettes are measured, in the unit suite.** `lib/contrast.test.ts`
+  reads this stylesheet, resolves `var()` indirection, and asserts every pair the
+  app paints at AA in light *and* dark. A token edited to an unreadable value
+  fails there, naming the token, before axe renders a page. `DEFERRED_AXE_RULES`
+  in `e2e/helpers.ts` is now empty, and `e2e/07-accessibility.spec.ts` audits
+  every screen once per `prefers-color-scheme`.
+- **The theme is one attribute, resolved in JavaScript** (D-074), not a
+  `prefers-color-scheme` block: a media query cannot be added to a selector list,
+  so supporting an explicit choice that way would mean two copies of the dark
+  palette. `lib/theme.ts` resolves the stored preference against the media query,
+  `app/Theme.tsx` provides it and renders the System / Light / Dark control in
+  the header, and the export's empty shell means there is no server-rendered
+  content to flash the wrong colour (ADR 0005).
 
 ## Testing
 

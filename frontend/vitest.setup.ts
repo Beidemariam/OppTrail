@@ -20,3 +20,23 @@ Object.defineProperty(window.HTMLElement.prototype, "offsetWidth", {
   configurable: true,
   value: 600,
 });
+
+// jsdom implements no media queries, and `ThemeProvider` (milestone 2.5) asks
+// it for `prefers-color-scheme` on mount. The stub answers "light" and accepts
+// listeners; `lib/theme.test.ts` covers the resolution both ways without a
+// browser, and the E2E suite runs the real query under Playwright's
+// `emulateMedia`.
+Object.defineProperty(window, "matchMedia", {
+  configurable: true,
+  writable: true,
+  value: (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  }),
+});

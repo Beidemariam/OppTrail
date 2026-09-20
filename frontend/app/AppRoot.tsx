@@ -4,10 +4,12 @@ import { useState, useSyncExternalStore } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 
+import { ConfirmProvider } from "./ConfirmDialog";
 import { DashboardPage, NoOpportunitySelected } from "./DashboardPage";
 import { OpportunityPanel } from "./OpportunityPanel";
 import { SearchPage } from "./SearchPage";
 import { ShortcutsProvider } from "./ShortcutsProvider";
+import { ThemeProvider } from "./Theme";
 import { ToastProvider } from "./Toasts";
 import { createQueryClient } from "../lib/query";
 
@@ -29,26 +31,34 @@ const noSubscription = () => () => {};
  * is true of `ToastProvider` (milestone 2.4b): an undo toast outlives the
  * screen that raised it, so deleting the open opportunity and navigating away
  * still leaves a way back.
+ *
+ * `ThemeProvider` and `ConfirmProvider` wrap the same way for the same reason
+ * (milestone 2.5): the theme applies to the sign-in screen as much as to the
+ * board, and the confirmation dialog is asked for from three screens.
  */
 export function AppRoutes() {
   return (
-    <ToastProvider>
-      <ShortcutsProvider>
-        <Routes>
-          <Route path="/search" element={<SearchPage />} />
-          <Route path="/" element={<DashboardPage />}>
-            <Route index element={<NoOpportunitySelected />} />
-            <Route
-              path="opportunities/:opportunityId"
-              element={<OpportunityPanel />}
-            />
-          </Route>
-          {/* Any other path reached the shell through FastAPI's catch-all
+    <ThemeProvider>
+      <ToastProvider>
+        <ConfirmProvider>
+          <ShortcutsProvider>
+            <Routes>
+              <Route path="/search" element={<SearchPage />} />
+              <Route path="/" element={<DashboardPage />}>
+                <Route index element={<NoOpportunitySelected />} />
+                <Route
+                  path="opportunities/:opportunityId"
+                  element={<OpportunityPanel />}
+                />
+              </Route>
+              {/* Any other path reached the shell through FastAPI's catch-all
           rather than through a link, so there is nothing to render. */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </ShortcutsProvider>
-    </ToastProvider>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </ShortcutsProvider>
+        </ConfirmProvider>
+      </ToastProvider>
+    </ThemeProvider>
   );
 }
 

@@ -2,7 +2,6 @@
 
 import { FormEvent, useState } from "react";
 
-import { confirmDelete } from "../lib/confirm";
 import type { ShareRole } from "../lib/domain";
 import {
   useAddShare,
@@ -12,6 +11,7 @@ import {
   useUpdateShareRole,
 } from "../lib/queries";
 import { formatTimestamp } from "../lib/time";
+import { useConfirm } from "./ConfirmDialog";
 
 /**
  * Sharing and the audit log, both owner-only
@@ -26,6 +26,7 @@ export function SharingPanel({ opportunityId }: { opportunityId: number }) {
   const addShare = useAddShare(opportunityId);
   const updateRole = useUpdateShareRole(opportunityId);
   const removeShare = useRemoveShare(opportunityId);
+  const confirm = useConfirm();
 
   const rows = shares.data ?? [];
   const failure = [addShare, updateRole, removeShare].find(
@@ -102,9 +103,15 @@ export function SharingPanel({ opportunityId }: { opportunityId: number }) {
                 type="button"
                 className="danger-button"
                 onClick={() => {
-                  if (confirmDelete(`access for ${share.name}`)) {
-                    removeShare.mutate(share.user_id);
-                  }
+                  void confirm({
+                    title: `Remove ${share.name}'s access?`,
+                    description: `${share.name} loses access to this opportunity immediately. There is no undo for this one - sharing again is a new grant (D-069).`,
+                    confirmLabel: "Remove access",
+                  }).then((confirmed) => {
+                    if (confirmed) {
+                      removeShare.mutate(share.user_id);
+                    }
+                  });
                 }}
               >
                 Remove

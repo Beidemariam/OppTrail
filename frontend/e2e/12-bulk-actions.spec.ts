@@ -89,15 +89,24 @@ test("checks two cards, bulk-changes their stage, then bulk-deletes with Undo", 
   await check(firstCheckbox);
   await check(secondCheckbox);
 
-  // No typed prompt like the single-opportunity delete's (2.5's scope);
-  // `window.confirm` is still the gate bulk delete shares with it
-  // (`lib/confirm.ts`).
-  page.once("dialog", (dialog) => dialog.accept());
+  // Bulk delete shares the typed confirmation the single delete has had since
+  // milestone 2.5 (`app/ConfirmDialog.tsx`). Several at once are confirmed by
+  // the word rather than by a name, since no one name describes what goes.
   await bar.getByRole("button", { name: "Delete" }).click();
+  const confirmation = page.getByRole("alertdialog");
+  await expect(
+    confirmation.getByRole("button", { name: "Delete opportunities" }),
+  ).toBeDisabled();
+  await confirmation.getByRole("textbox").fill("delete");
+  await confirmation
+    .getByRole("button", { name: "Delete opportunities" })
+    .click();
 
   await expect(card(page, first)).toHaveCount(0);
   await expect(card(page, second)).toHaveCount(0);
-  const toast = page.locator(".toast");
+  // The stage change raised a toast of its own a moment ago and toasts last
+  // ten seconds, so this is the newest one rather than the only one.
+  const toast = page.locator(".toast").last();
   await expect(toast).toContainText("2 opportunities deleted.");
 
   await toast.getByRole("button", { name: "Undo" }).click();

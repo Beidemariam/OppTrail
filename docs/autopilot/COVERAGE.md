@@ -986,3 +986,56 @@ Two things found rather than assumed, both recorded at the milestone in
   to be Playwright's scroll-then-click sequencing rather than an application
   defect before writing `e2e/12-bulk-actions.spec.ts`'s retrying `check`
   helper around it.
+
+## Phase 2 — milestone 2.5 (design tokens, Radix dialogs, light and dark themes)
+
+```
+backend:  302 passed (unchanged), 97% combined line+branch coverage
+          (--cov-fail-under=90 enforced) — no backend change in this
+          milestone: tokens, dialogs and themes are all client-side
+frontend: 298 passed (was 280), 96.75% statements, 96.74% line, 95.11%
+          functions, 89.32% branch — thresholds raised 94/94/93/87 ->
+          96/96/94/88 and all four still clear the floor
+          lib/contrast.ts          100% line, 100% branch (new)
+          lib/theme.ts             100% line, 100% branch (new)
+          app/ConfirmDialog.tsx    100% line, 100% branch (new)
+          app/Theme.tsx            93% line — the `useSyncExternalStore`
+                                    server snapshot (`() => false`) is the
+                                    export pass's answer and no browser test
+                                    reaches it
+          app/Modal.tsx            100% line (unchanged; the internals moved
+                                    to Radix behind the same two rules)
+e2e:      42 passed (was 30) — the axe screens now run twice, once per
+          colour scheme, plus the search page, the three dialogs, and
+          13-theme.spec.ts for the switch itself
+docker:   deferred to the host half — scripts/autopilot-gate.sh 2
+          (no Docker socket in this sandbox, per sandbox/README.md)
+```
+
+`DEFERRED_AXE_RULES` is now **empty**. It held `color-contrast` from Phase F
+(D-026) against exactly this milestone; `07-accessibility.spec.ts` audits
+every screen under both `prefers-color-scheme` values with contrast included,
+and the ratchet's own guard test still stands for whatever might be added
+next. `lib/contrast.test.ts` measures 28 text pairs and 6 non-text pairs in
+each palette — 72 assertions — straight out of `app/globals.css`, so a token
+edited to an unreadable value fails the unit suite before axe sees a page.
+
+No migration, no new route, so the authorization matrix is unchanged at 56
+endpoints. `pip-audit`: no known vulnerabilities. `npm audit`: 0
+vulnerabilities, with two dependencies added (`@radix-ui/react-dialog`,
+`@radix-ui/react-alert-dialog`).
+
+Two things found rather than assumed:
+
+- **Two axe failures the palette work exposed rather than caused.**
+  `.notification-row.is-read` faded read rows with `opacity: 0.6`, which
+  multiplies a measured ratio into an unmeasured one; it now recedes with the
+  sunken surface and secondary text role, both pairs the contrast test holds
+  to AA. Colour was never the only carrier there — an unread row is the one
+  with a "Mark read" button.
+- **A real interaction defect, found by the E2E suite going red** (D-072):
+  focusing a card by clicking a control inside it moved the board's keyboard
+  cursor, which made the virtualized column scroll to it — out from under the
+  pointer, between the mousedown and the mouseup. Eight journeys failed on it
+  once the token work changed where cards sit; the fix is that the column
+  follows the cursor only when the keyboard moved it.

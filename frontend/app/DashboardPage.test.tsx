@@ -3,7 +3,13 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ALEX, anEntry, anOpportunity } from "./test-api";
-import { findCard, renderApp, renderDashboard } from "./test-app";
+import {
+  acceptConfirmation,
+  cancelConfirmation,
+  findCard,
+  renderApp,
+  renderDashboard,
+} from "./test-app";
 
 function checkboxFor(name: string) {
   return screen.getByRole("checkbox", {
@@ -178,12 +184,12 @@ describe("the dashboard", () => {
     const api = await renderDashboard({ opportunities: [anOpportunity()] });
     const card = (await screen.findAllByRole("article"))[0];
 
-    vi.spyOn(window, "confirm").mockReturnValue(false);
     await userEvent.click(within(card).getByRole("button", { name: "Delete" }));
+    await cancelConfirmation();
     expect(api.callsTo("DELETE", "/api/opportunities/10")).toHaveLength(0);
 
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     await userEvent.click(within(card).getByRole("button", { name: "Delete" }));
+    await acceptConfirmation("Northwind rollout");
     await waitFor(() =>
       expect(api.callsTo("DELETE", "/api/opportunities/10")).toHaveLength(1),
     );
@@ -198,8 +204,8 @@ describe("the dashboard", () => {
     await userEvent.click(within(card).getByRole("link", { name: "Timeline" }));
     await screen.findByText("Your role: owner");
 
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     await userEvent.click(within(card).getByRole("button", { name: "Delete" }));
+    await acceptConfirmation("Northwind rollout");
 
     expect(
       await screen.findByText("Select an opportunity to open its timeline."),
@@ -395,16 +401,18 @@ describe("bulk actions (milestone 2.4c)", () => {
     await userEvent.click(checkboxFor("First"));
     await userEvent.click(checkboxFor("Second"));
 
-    vi.spyOn(window, "confirm").mockReturnValue(false);
     await userEvent.click(
       within(bulkBar()).getByRole("button", { name: "Delete" }),
     );
+    await cancelConfirmation();
     expect(api.callsTo("POST", "/api/v2/opportunities/bulk")).toHaveLength(0);
 
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     await userEvent.click(
       within(bulkBar()).getByRole("button", { name: "Delete" }),
     );
+    // Several at once: the dialog asks for the word rather than one of the
+    // names, since no single name describes what is about to go.
+    await acceptConfirmation("delete");
 
     await waitFor(() =>
       expect(screen.queryByText("First")).not.toBeInTheDocument(),
@@ -438,10 +446,10 @@ describe("bulk actions (milestone 2.4c)", () => {
       (opportunity) => opportunity.id !== 11,
     );
 
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     await userEvent.click(
       within(bulkBar()).getByRole("button", { name: "Delete" }),
     );
+    await acceptConfirmation("delete");
 
     expect(
       await screen.findByText(

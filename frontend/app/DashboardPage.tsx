@@ -3,7 +3,6 @@
 import { useRef, useState } from "react";
 import { Outlet, useMatch, useNavigate, useSearchParams } from "react-router";
 
-import { confirmDelete } from "../lib/confirm";
 import {
   applyOpportunityView,
   boardOrder,
@@ -24,6 +23,7 @@ import {
 import { paramsWithState, stateFromParams } from "../lib/viewState";
 import { AuthPanel } from "./AuthPanel";
 import { BulkActionBar } from "./BulkActionBar";
+import { useConfirm } from "./ConfirmDialog";
 import { OpportunityFilterBar } from "./OpportunityFilterBar";
 import { OpportunityForm } from "./OpportunityForm";
 import { SavedViewsMenu } from "./SavedViewsMenu";
@@ -47,6 +47,13 @@ export function DashboardPage() {
   // `selectedId`, which is the opportunity whose timeline is open: `j` and `k`
   // walk the cards without opening anything.
   const [focusedId, setFocusedId] = useState<number | null>(null);
+  // Whether the column should scroll the focused card into view. True only
+  // while the cursor is being moved by the keyboard: `j` can land on a card
+  // that windowing has not mounted, so the list has to go and get it
+  // (`app/VirtualList.tsx`). A card focused by a click is already under the
+  // reader's pointer, and scrolling it then moves the control out from under
+  // the click that focused it (D-072).
+  const [followCursor, setFollowCursor] = useState(false);
   // The bulk-selection set (milestone 2.4c), separate again from both of the
   // above — a card can be focused, opened and checked independently.
   // `selectionAnchorId` is where a shift-click range starts, tracked on its
@@ -56,6 +63,7 @@ export function DashboardPage() {
   const [selectionAnchorId, setSelectionAnchorId] = useState<number | null>(
     null,
   );
+  const confirm = useConfirm();
   const newOpportunityRef = useRef<HTMLInputElement>(null);
   const keywordFilterRef = useRef<HTMLInputElement>(null);
   const deleteOpportunity = useDeleteOpportunity();
@@ -156,6 +164,7 @@ export function DashboardPage() {
           : ordered.length - 1
         : Math.min(Math.max(current + step, 0), ordered.length - 1);
     setFocusedId(ordered[next].id);
+    setFollowCursor(true);
   }
 
   function clearFocus() {
@@ -222,11 +231,19 @@ export function DashboardPage() {
     return <AuthPanel />;
   }
 
-  // The one destructive action that still asks first: it cascades across a
-  // whole record, and `docs/UX.md` keeps friction there deliberately. Undo is
-  // offered as well, because the restore route puts the cascade back.
-  function remove(opportunity: Opportunity) {
-    if (!confirmDelete(`"${opportunity.name}" and its entire timeline`)) {
+  // The one destructive action that still asks first, and the only one that
+  // asks the reader to type the name back: it cascades across a whole record,
+  // and `docs/UX.md` keeps friction there deliberately. Undo is offered as
+  // well, because the restore route puts the cascade back.
+  async function remove(opportunity: Opportunity) {
+    const confirmed = await confirm({
+      title: `Delete ${opportunity.name}?`,
+      description:
+        "This deletes the opportunity and its entire timeline - every entry, note and comment on it. Undo is offered for ten seconds afterwards.",
+      confirmLabel: "Delete opportunity",
+      typeToConfirm: opportunity.name,
+    });
+    if (!confirmed) {
       return;
     }
 
@@ -304,13 +321,20 @@ export function DashboardPage() {
   // Bulk delete keeps the same typed confirmation single-opportunity delete
   // does: it cascades across a whole record, multiplied by however many are
   // selected, which is more reason for the friction rather than less.
-  function bulkDelete() {
+  async function bulkDelete() {
     const ids = checkedOpportunities.map((opportunity) => opportunity.id);
-    const label =
-      checkedOpportunities.length === 1
-        ? `"${checkedOpportunities[0].name}" and its entire timeline`
-        : `${ids.length} opportunities and their entire timelines`;
-    if (!confirmDelete(label)) {
+    const single = checkedOpportunities.length === 1;
+    const confirmed = await confirm({
+      title: single
+        ? `Delete ${checkedOpportunities[0].name}?`
+        : `Delete ${ids.length} opportunities?`,
+      description: single
+        ? "This deletes the opportunity and its entire timeline. Undo is offered for ten seconds afterwards."
+        : `This deletes all ${ids.length} selected opportunities and their entire timelines. Undo is offered for ten seconds afterwards.`,
+      confirmLabel: single ? "Delete opportunity" : "Delete opportunities",
+      typeToConfirm: single ? checkedOpportunities[0].name : "delete",
+    });
+    if (!confirmed) {
       return;
     }
     bulkAction
@@ -383,8 +407,12 @@ export function DashboardPage() {
             opportunities={visibleOpportunities}
             selectedId={selectedId}
             focusedId={focusedId}
+            followCursor={followCursor}
             checkedIds={checkedIds}
-            onFocus={(opportunity) => setFocusedId(opportunity.id)}
+            onFocus={(opportunity) => {
+              setFocusedId(opportunity.id);
+              setFollowCursor(false);
+            }}
             onEdit={setEditing}
             onDelete={remove}
             onToggleChecked={toggleChecked}

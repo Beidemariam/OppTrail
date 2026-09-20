@@ -5,6 +5,7 @@ import { Link } from "react-router";
 import type { User } from "../lib/domain";
 import { useLogout } from "../lib/queries";
 import { NotificationMenu } from "./NotificationMenu";
+import { ThemeToggle } from "./Theme";
 import { useOpenCommandPalette } from "./ShortcutsProvider";
 
 /** The signed-in header: where you are, what is waiting, and the way out. */
@@ -29,6 +30,7 @@ export function TopBar({ user }: { user: User }) {
           Search
         </Link>
         <NotificationMenu />
+        <ThemeToggle />
         <span>{user.name}</span>
         <button
           type="button"

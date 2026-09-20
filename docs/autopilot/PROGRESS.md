@@ -1937,13 +1937,108 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
   bulk delete (2.5 brings Radix and replaces `lib/confirm.ts`'s remaining
   callers in one file); list and table views to reuse the selection model on
   (2.7/2.8).
-- [ ] 2.5 Design tokens from `DESIGN-SYSTEM.md`, including the three
+- [x] 2.5 Design tokens from `DESIGN-SYSTEM.md`, including the three
       corrected contrast values; Radix primitives; real dialogs replacing
-      `window.confirm` (now `lib/confirm.ts`, the single call site 2.1 left
+      `window.confirm` (was `lib/confirm.ts`, the single call site 2.1 left
       for this milestone). **D-003 ACCEPTED by the human
       2026-09-16 — this is now phase scope, not a proposal:** ship light and
       dark themes together, with dark-theme parity asserted by axe contrast
-      checks on every component delivered in Phase 2.
+      checks on every component delivered in Phase 2. — **DONE**
+
+  - [x] The token set is `app/globals.css`'s first 200 lines: the brand ramp
+        (`--teal-500/600/300` and siblings), then the semantic roles
+        `docs/DESIGN-SYSTEM.md` names — surfaces, text, borders, focus ring,
+        fills that carry text, badge colours — plus spacing on a 4px base,
+        the six-step type scale with its line heights, radii, four elevation
+        steps and the three motion durations. Two rules the stylesheet now
+        obeys: a component references a role and never a brand colour, and a
+        colour token is either a text token or a fill token, never both.
+        Every raw hex and `rgba()` outside the token blocks is gone.
+  - [x] The three corrected contrast values land as the text variants:
+        `--teal-600 #0b7c6e` (5.09 on white, was 3.38 for teal-500 as link
+        text), `--red-600 #b33838` (5.93, was 4.38 both as error text and
+        under white as a badge fill), and the same treatment for amber and
+        green where white text sits on a fill. One correction to
+        `DESIGN-SYSTEM.md`'s own audit: its `--text-secondary #6b7280` passes
+        on the app background (4.58) and **fails on the sunken surface**
+        (4.30), which is where stage columns, the sharing panel and the AI
+        sidebar put it — so the role resolves to `#5c6673` (5.18 there, 5.83
+        on white). Recorded in the document.
+  - [x] Dark theme, full parity, as one `[data-theme="dark"]` block of role
+        tokens (**D-074**): `lib/theme.ts` resolves a stored preference
+        against `prefers-color-scheme` and writes the attribute plus
+        `color-scheme`, `app/Theme.tsx` provides it and offers the three-way
+        System / Light / Dark control in the header. The media query is read
+        through `useSyncExternalStore`, so a system that switches at sunset
+        moves the app without a reload.
+  - [x] `lib/contrast.ts` + `lib/contrast.test.ts` re-run the audit
+        `DESIGN-SYSTEM.md` asks for, against the tokens themselves: the test
+        reads `app/globals.css`, resolves `var()` indirection, and asserts
+        28 text pairs at AA (4.5) and 6 non-text pairs at 3.0 **in both
+        palettes** — 72 assertions. A token edited to an unreadable value
+        fails the unit suite, naming the token, before axe ever renders a
+        page.
+  - [x] Radix `Dialog` under `app/Modal.tsx` and `AlertDialog` under the new
+        `app/ConfirmDialog.tsx` (**D-073**: those two primitives, not a
+        component library the app has no caller for). The two behaviours
+        that are this app's rather than the primitive's stay ours — Esc is
+        answered on the dialog and never reaches the board's own Esc binding,
+        and focus returns when a dialog is *dismissed* rather than when it
+        unmounts (D-066). The focus restore moved into the unmount cleanup so
+        that it is the last word: Radix's focus guards are still on the page
+        while `onClose` runs, and whichever focuses first loses.
+  - [x] `lib/confirm.ts` is deleted. `useConfirm()` returns a promise, so the
+        three call sites read the way the `window.confirm` they replace did.
+        The two deletes that cascade — one opportunity, and a bulk selection
+        — get the **typed** confirmation `docs/UX.md` asks for: the name
+        typed back for one, the word `delete` for several, since no single
+        name describes what goes. Removing someone's access keeps a plain
+        confirmation (D-069): no restore route, but nothing to type for
+        either, because the grant can be made again.
+  - [x] `DEFERRED_AXE_RULES` is empty. `color-contrast` came off the list
+        this milestone was named to clear (D-026), and
+        `e2e/07-accessibility.spec.ts` now audits every screen twice — once
+        per `prefers-color-scheme` — including the search page and the three
+        dialogs Phase 2 delivered. The ratchet's guard test stays for
+        whatever might be added next.
+  - [x] A real defect the E2E suite caught when the layout moved (**D-072**):
+        focusing a card by clicking a control inside it moved the board's
+        keyboard cursor, so the virtualized column scrolled to it — out from
+        under the pointer, between the mousedown and the mouseup, and the
+        click landed on the card's action row instead of the link. Eight
+        journeys failed on it; the fix is that the column follows the cursor
+        only when the keyboard moved it (`followCursor` in `DashboardPage`,
+        `activeIndex` in `StageBoard`). A reader clicking a card low in a
+        scrolled column lost the click the same way.
+  - [x] `.notification-row.is-read` stopped fading read rows with
+        `opacity: 0.6` — opacity multiplies a measured ratio into an
+        unmeasured one, and axe correctly failed it once contrast was in the
+        gate. It recedes with the sunken surface and secondary text role
+        instead, both pairs the contrast test holds to AA.
+  - [x] Tests: 18 new frontend (`lib/theme.test.ts`, `lib/contrast.test.ts`,
+        `app/Theme.test.tsx`, `app/ConfirmDialog.test.tsx`) and the existing
+        confirm-driven cases rewritten to drive the real dialog through two
+        new helpers in `app/test-app.tsx`; `vitest.setup.ts` gains a
+        `matchMedia` stub, for the same reason it stubs `offsetHeight`.
+        12 new E2E: the axe screens doubled across both colour schemes, plus
+        the search page, the palette, the shortcut reference, the
+        confirmation dialog, and `e2e/13-theme.spec.ts` for the switch
+        itself. 280 → 298 frontend, 30 → 42 E2E, backend unchanged at 302.
+        Thresholds raised 94/94/93/87 → 96/96/94/88.
+
+  Gate: `make check` green in full (ruff, ruff format, mypy, eslint, tsc,
+  prettier, 302 backend tests at 97% combined coverage, 298 frontend tests
+  over the raised 96/96/94/88 thresholds at 96.75/96.74/95.11/89.32
+  statements/lines/functions/branches, contract check, 42 E2E with axe —
+  contrast included, both themes — pip-audit, npm audit). Docker deferred to
+  the host half (`sandbox/README.md`).
+
+  Not in this milestone, deliberately: density modes (**D-075**, needs human
+  review — `DESIGN-SYSTEM.md` scopes compact to the table view, which is
+  2.8); the rest of `DESIGN-SYSTEM.md`'s component inventory (**D-073** —
+  each primitive arrives with the milestone that has a caller for it, and
+  `DropdownMenu` is the obvious next one, for `NotificationMenu` and
+  `SavedViewsMenu`).
 - [ ] 2.6 Three new entry types with icons. Schema: `timeline_entries.type`
       CHECK extended.
 - [ ] 2.7 Board view (drag to change stage, auto-logs a system entry) and list

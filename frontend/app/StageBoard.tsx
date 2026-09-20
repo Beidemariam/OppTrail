@@ -19,7 +19,9 @@ const ESTIMATED_CARD_HEIGHT = 190;
  *
  * `focusedId` is the keyboard's cursor over the board (milestone 2.4a). The
  * dashboard owns it because `j` and `k` cross stage columns; each column only
- * has to scroll its own card into view when the cursor lands inside it.
+ * has to scroll its own card into view when the cursor lands inside it — and
+ * only when `followCursor` says the cursor was moved by the keyboard, since
+ * a card focused by a click is already where the reader is looking (D-072).
  *
  * `checkedIds` is the bulk-selection set (milestone 2.4c) — separate from
  * both `selectedId` (the opportunity whose timeline is open) and `focusedId`
@@ -31,6 +33,7 @@ export function StageBoard({
   opportunities,
   selectedId,
   focusedId,
+  followCursor,
   checkedIds,
   onFocus,
   onEdit,
@@ -41,6 +44,7 @@ export function StageBoard({
   opportunities: Opportunity[];
   selectedId: number | null;
   focusedId: number | null;
+  followCursor: boolean;
   checkedIds: ReadonlySet<number>;
   onFocus: (opportunity: Opportunity) => void;
   onEdit: (opportunity: Opportunity) => void;
@@ -77,9 +81,13 @@ export function StageBoard({
                 items={items}
                 estimateItemSize={ESTIMATED_CARD_HEIGHT}
                 gap={10}
-                activeIndex={items.findIndex(
-                  (opportunity) => opportunity.id === focusedId,
-                )}
+                activeIndex={
+                  followCursor
+                    ? items.findIndex(
+                        (opportunity) => opportunity.id === focusedId,
+                      )
+                    : -1
+                }
                 getItemKey={(opportunity) => opportunity.id}
                 renderItem={(opportunity) => (
                   <OpportunityCard

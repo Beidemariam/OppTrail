@@ -31,6 +31,14 @@ backgrounds, borders and markers.
 
 Rule: **a colour token is either a text token or a fill token, never both.**
 
+**As built (milestone 2.5).** The tokens below live in `frontend/app/globals.css`
+and the audit above is re-run on every test run by `frontend/lib/contrast.test.ts`,
+which reads that file and measures every pair the app paints, in both palettes.
+Building it found one more failure than the table records: slate `#6B7280` passes
+on the app background (4.58) and **fails on the sunken surface `#EEF2F6`** (4.30),
+which is where the stage columns, the sharing panel and the AI sidebar put it. The
+`--text-secondary` role is therefore `#5C6673` — 5.18 on sunken, 5.83 on white.
+
 ## Tokens
 
 ### Colour semantics
@@ -39,7 +47,7 @@ Never reference a brand colour directly in a component; reference a role.
 
 ```
 --bg-app        #F7F9FB     --text-primary    #0B2540
---bg-surface    #FFFFFF     --text-secondary  #6B7280
+--bg-surface    #FFFFFF     --text-secondary  #5C6673 (see above)
 --bg-sunken     #EEF2F6     --text-inverse    #FFFFFF
 --bg-hover      #F0F4F8     --text-link       var(--teal-600)
 --bg-selected   #E6F4F2     --text-danger     var(--red-600)
@@ -92,6 +100,9 @@ Motion: `fast 120ms` (hover, focus), `base 180ms` (dropdowns, expand), `slow 260
 
 ### Density modes
 
+*Not built yet — D-075 defers both modes to the milestone that builds the table
+view they exist for (2.8). The token set that carries them is in place.*
+
 Two, user-switchable, as a root token change rather than per-component variants:
 
 - **Comfortable** — 40px rows, `text-sm`. Default.
@@ -131,6 +142,10 @@ CommandPalette.
 long list routes through it.
 
 ### Library choice
+
+*As built (2.5): `Dialog` and `AlertDialog` are adopted, behind
+`app/Modal.tsx` and `app/ConfirmDialog.tsx`. Each further primitive arrives with
+the milestone that has a caller for it (D-073).*
 
 **Headless primitives from Radix UI**, styled with the tokens above. Radix supplies
 the focus management, keyboard interaction and ARIA wiring that the current app has
