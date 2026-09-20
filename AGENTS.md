@@ -57,7 +57,8 @@ figures, not against a hypothetical future.
 
 Specified in `docs/FEATURES.md`, sequenced in `docs/ROADMAP.md`:
 
-1. **Views over one dataset** — timeline, board, list, table, calendar; saved views
+1. **Views over one dataset** — timeline, board, list, table, calendar; saved
+   views; the timeline orders oldest- or newest-first at the reader's choice
 2. **Entry model** — more types, icons, type-specific fields
 3. **Custom fields** — admin-defined, typed, on opportunities and entries
 4. **Rich content** — TipTap editor, slash commands, @mention autocomplete
@@ -68,7 +69,8 @@ Specified in `docs/FEATURES.md`, sequenced in `docs/ROADMAP.md`:
 9. **Notifications** — real inbox with history, preferences, batching
 10. **Dashboards** — pipeline, win/loss, time in stage, stalled, activity, forecast
 11. **Automations** — constrained single-hop rules
-12. **Navigation and input** — command palette, keyboard throughout, bulk, undo
+12. **Navigation and input** — command palette, keyboard throughout, bulk, undo;
+    content is edited where it is read, not in a form elsewhere on the page
 13. **Search** — FTS5, ranked, snippeted, cross-opportunity
 14. **AI** — summarization, NL filter construction; read-only by construction
 15. **Edit history** — every edit to user content keeps the previous value, with a

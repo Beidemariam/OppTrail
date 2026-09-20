@@ -1471,6 +1471,27 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
       Blocker B1 lands here in full, paid for by the board view.
 - [ ] 2.2 Shared filter/sort/group model serialized to the URL; saved views
       persisted. Schema: `saved_views`.
+      Includes **timeline order direction** (oldest-first / newest-first),
+      raised by the human during the Phase 1 user test — see D-051. The sort
+      model here was written for views over the opportunity list and did not
+      cover ordering *within* an opportunity's timeline, which is the case the
+      user hit. Reuse this model rather than adding a second mechanism: the
+      direction belongs in the URL like every other view parameter, so a
+      particular reading of a timeline can be linked to. Server-side ordering
+      already exists (`ORDER BY` in the timeline query); the keyset cursors
+      from 1.3 order on `(sort value, id)`, so a reversible direction has to
+      reverse the cursor comparison too, not just the `ORDER BY`.
+- [ ] 2.11 Edit content where it is read (**AGENTS.md** v2 scope item 12,
+      added 2026-09-20 from the human's Phase 1 user test — D-051). Today
+      editing an entry or note scrolls the reader to a form elsewhere on the
+      page, losing their place in the timeline; the further down the timeline
+      they are, the worse it gets. Entries, notes and opportunity fields should
+      become editable in place, with the surrounding context still visible.
+      Pairs with 2.4's optimistic mutations (the save should not feel like a
+      page event) and with 2.10's edit history (the same fields gain
+      versioning, so both milestones touch the same write paths — sequence them
+      together rather than editing those routes twice).
+
 - [ ] 2.3 `VirtualList` for the 400-opportunity scale.
 - [ ] 2.4 Command palette, keyboard map, bulk actions, optimistic mutations,
       undo toasts.
