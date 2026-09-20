@@ -46,7 +46,8 @@ export const shortcutGroups = [
       {
         chord: "Escape",
         keys: "Esc",
-        description: "Close what is open, or clear the focused card",
+        description:
+          "Close what is open, clear a bulk selection, or clear the focused card",
       },
     ],
   },
@@ -67,6 +68,11 @@ export const shortcutGroups = [
       { chord: "j", keys: "j", description: "Focus the next opportunity" },
       { chord: "k", keys: "k", description: "Focus the previous opportunity" },
       { chord: "e", keys: "e", description: "Edit the focused opportunity" },
+      {
+        chord: "x",
+        keys: "x",
+        description: "Toggle bulk selection of the focused opportunity",
+      },
       {
         chord: "Enter",
         keys: "Enter",

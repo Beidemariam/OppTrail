@@ -132,6 +132,7 @@ button {
 .form textarea,
 .filter-bar input,
 .filter-bar select,
+.bulk-action-bar select,
 .share-form input,
 .share-form select,
 .share-row select,
@@ -427,6 +428,18 @@ a.danger-button {
   box-shadow: 0 0 0 2px rgba(15, 157, 140, 0.14);
 }
 
+.opportunity-card.checked {
+  background: rgba(15, 157, 140, 0.06);
+  border-color: var(--teal);
+}
+
+.card-checkbox {
+  flex: 0 0 auto;
+  height: 18px;
+  margin: 2px 0 0;
+  width: 18px;
+}
+
 .opportunity-card h3 {
   font-size: 18px;
   line-height: 1.2;
@@ -693,6 +706,32 @@ a.danger-button {
 .filter-bar {
   align-items: end;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.bulk-action-bar {
+  align-items: center;
+  background: #f7f9fb;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px;
+}
+
+.bulk-action-bar span {
+  font-weight: 700;
+}
+
+.bulk-action-bar select {
+  min-height: 36px;
+}
+
+.bulk-action-bar p {
+  color: var(--slate);
+  flex-basis: 100%;
+  font-size: 13px;
+  margin: 0;
 }
 
 .timeline-form {

@@ -1,9 +1,20 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ALEX, anEntry, anOpportunity } from "./test-api";
 import { findCard, renderApp, renderDashboard } from "./test-app";
+
+function checkboxFor(name: string) {
+  return screen.getByRole("checkbox", {
+    name: `Select ${name} for bulk actions`,
+  });
+}
+
+/** Scoped so its "Delete" button is not confused with a card's own. */
+function bulkBar() {
+  return screen.getByRole("toolbar", { name: "Bulk actions" });
+}
 
 beforeEach(() => {
   document.cookie = "opptrail_csrf=test-token";
@@ -253,6 +264,189 @@ describe("the dashboard", () => {
 
     expect(
       await screen.findByText("Database is unavailable"),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("bulk actions (milestone 2.4c)", () => {
+  it("replaces the filter bar with the action bar once a card is checked", async () => {
+    await renderDashboard({ opportunities: [anOpportunity()] });
+    await findCard("Northwind rollout");
+
+    expect(screen.getByRole("button", { name: "Apply" })).toBeInTheDocument();
+
+    await userEvent.click(checkboxFor("Northwind rollout"));
+
+    expect(screen.getByText("1 selected")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Apply" }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Clear selection" }),
+    );
+
+    expect(screen.getByRole("button", { name: "Apply" })).toBeInTheDocument();
+    expect(screen.queryByText("1 selected")).not.toBeInTheDocument();
+  });
+
+  it("shift-clicks a range across the board order", async () => {
+    const opportunities = [
+      anOpportunity({
+        id: 10,
+        name: "First",
+        updated_at: "2026-09-03T00:00:00Z",
+      }),
+      anOpportunity({
+        id: 11,
+        name: "Second",
+        updated_at: "2026-09-02T00:00:00Z",
+      }),
+      anOpportunity({
+        id: 12,
+        name: "Third",
+        updated_at: "2026-09-01T00:00:00Z",
+      }),
+    ];
+    await renderDashboard({ opportunities });
+    await findCard("First");
+
+    await userEvent.click(checkboxFor("First"));
+    fireEvent.click(checkboxFor("Third"), { shiftKey: true });
+
+    expect(screen.getByText("3 selected")).toBeInTheDocument();
+    expect(checkboxFor("First")).toBeChecked();
+    expect(checkboxFor("Second")).toBeChecked();
+    expect(checkboxFor("Third")).toBeChecked();
+  });
+
+  it("disables change-stage and delete when the selection includes an opportunity the reader does not own", async () => {
+    await renderDashboard({
+      opportunities: [
+        anOpportunity({ id: 10, name: "Mine", current_user_role: "owner" }),
+        anOpportunity({
+          id: 11,
+          name: "Theirs",
+          current_user_role: "editor",
+        }),
+      ],
+    });
+    await findCard("Mine");
+
+    await userEvent.click(checkboxFor("Mine"));
+    await userEvent.click(checkboxFor("Theirs"));
+
+    expect(
+      within(bulkBar()).getByRole("button", { name: "Delete" }),
+    ).toBeDisabled();
+    expect(
+      within(bulkBar()).getByRole("button", { name: "Change stage" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText(
+        "Change stage and delete are limited to opportunities you own.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("bulk-changes the stage of every checked opportunity in one request", async () => {
+    const api = await renderDashboard({
+      opportunities: [
+        anOpportunity({ id: 10, name: "First" }),
+        anOpportunity({ id: 11, name: "Second" }),
+      ],
+    });
+    await findCard("First");
+
+    await userEvent.click(checkboxFor("First"));
+    await userEvent.click(checkboxFor("Second"));
+    await userEvent.selectOptions(
+      screen.getByLabelText("Change stage to"),
+      "Closed Won",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Change stage" }));
+
+    await waitFor(() =>
+      expect(api.callsTo("POST", "/api/v2/opportunities/bulk")).toHaveLength(1),
+    );
+    expect(
+      api.callsTo("POST", "/api/v2/opportunities/bulk")[0].body,
+    ).toMatchObject({
+      ids: [10, 11],
+      action: "set_stage",
+      stage: "Closed Won",
+    });
+    expect(
+      await screen.findByText("2 opportunities updated."),
+    ).toBeInTheDocument();
+    // The action bar clears once the request settles.
+    expect(screen.queryByText("2 selected")).not.toBeInTheDocument();
+  });
+
+  it("bulk-deletes only after the confirmation is accepted, and offers Undo", async () => {
+    const api = await renderDashboard({
+      opportunities: [
+        anOpportunity({ id: 10, name: "First" }),
+        anOpportunity({ id: 11, name: "Second" }),
+      ],
+    });
+    await findCard("First");
+
+    await userEvent.click(checkboxFor("First"));
+    await userEvent.click(checkboxFor("Second"));
+
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    await userEvent.click(
+      within(bulkBar()).getByRole("button", { name: "Delete" }),
+    );
+    expect(api.callsTo("POST", "/api/v2/opportunities/bulk")).toHaveLength(0);
+
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    await userEvent.click(
+      within(bulkBar()).getByRole("button", { name: "Delete" }),
+    );
+
+    await waitFor(() =>
+      expect(screen.queryByText("First")).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByText("Second")).not.toBeInTheDocument();
+    expect(
+      await screen.findByText("2 opportunities deleted."),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
+
+    expect(await screen.findByText("First")).toBeInTheDocument();
+    expect(await screen.findByText("Second")).toBeInTheDocument();
+  });
+
+  it("reports a partial bulk failure without losing the successful items", async () => {
+    const api = await renderDashboard({
+      opportunities: [
+        anOpportunity({ id: 10, name: "Mine" }),
+        anOpportunity({ id: 11, name: "Also mine" }),
+      ],
+    });
+    await findCard("Mine");
+    await userEvent.click(checkboxFor("Mine"));
+    await userEvent.click(checkboxFor("Also mine"));
+
+    // Simulates another actor deleting the second one between selection and
+    // the click: the bulk endpoint answers per item off server state, not
+    // off what the client still believes is selected.
+    api.opportunities = api.opportunities.filter(
+      (opportunity) => opportunity.id !== 11,
+    );
+
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    await userEvent.click(
+      within(bulkBar()).getByRole("button", { name: "Delete" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "1 opportunity deleted. 1 failed: Opportunity not found",
+      ),
     ).toBeInTheDocument();
   });
 });

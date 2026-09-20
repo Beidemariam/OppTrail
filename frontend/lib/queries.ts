@@ -427,6 +427,39 @@ export function useRestoreComment() {
   );
 }
 
+type BulkOpportunityAction = components["schemas"]["BulkOpportunityAction"];
+type BulkActionResponse = components["schemas"]["BulkActionResponse"];
+
+/**
+ * The bulk action bar's one request (milestone 2.4c, `docs/UX.md`).
+ *
+ * Not optimistic, unlike the single-item deletes (D-068 extended to the
+ * bulk case, D-071): the response is per-item — some ids may succeed and
+ * others fail — so nothing about the outcome is safe to predict before the
+ * server answers. `BulkActionBar` reads `results` to report exactly what
+ * happened and, for a delete, to offer Undo over the ids that actually went.
+ */
+export function useBulkOpportunityAction() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: BulkOpportunityAction) =>
+      apiRequest<BulkActionResponse>("/api/v2/opportunities/bulk", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    // A stage change writes a system timeline entry and a delete writes an
+    // audit row that cannot be resolved to one opportunity id (same reason
+    // `useDeleteOpportunity` invalidates the prefix rather than one key).
+    onSuccess: () =>
+      invalidate(
+        client,
+        keys.opportunities,
+        keys.allTimelines,
+        keys.allAuditLogs,
+      ),
+  });
+}
+
 export interface TimelineEntryPayload {
   type: string;
   title: string;

@@ -282,6 +282,29 @@ describe("the board under the keyboard", () => {
     expect(await findCard("Northwind rollout")).not.toHaveFocus();
   });
 
+  it("toggles bulk selection of the focused card with x, and Escape clears the selection first", async () => {
+    await renderDashboard({ opportunities: [northwind] });
+    await findCard("Northwind rollout");
+
+    await userEvent.keyboard("jx");
+    expect(
+      screen.getByRole("checkbox", {
+        name: "Select Northwind rollout for bulk actions",
+      }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole("toolbar", { name: "Bulk actions" }),
+    ).toBeInTheDocument();
+
+    // Escape clears the selection rather than the keyboard cursor, per
+    // `docs/UX.md`'s ordering — the card is still focused afterwards.
+    await userEvent.keyboard("{Escape}");
+    expect(
+      screen.queryByRole("toolbar", { name: "Bulk actions" }),
+    ).not.toBeInTheDocument();
+    expect(await findCard("Northwind rollout")).toHaveFocus();
+  });
+
   it("offers no edit for an opportunity the reader does not own", async () => {
     await renderDashboard({
       opportunities: [anOpportunity({ current_user_role: "viewer" })],

@@ -925,3 +925,64 @@ Two things the tests found rather than the design:
   delete and restore, which is also the only way those mutations can express
   it — they know the id of the thing they removed, not the opportunity it
   hung under.
+
+---
+
+## Phase 2 — milestone 2.4c (bulk actions)
+
+```
+backend:  302 passed (was 290), 97.47% combined line+branch coverage
+          (was 97.41%, --cov-fail-under=90 enforced)
+          app/routes_opportunities.py  bulk_opportunity_action: 100% line,
+                                        100% branch (both actions, the
+                                        per-item error branch, the
+                                        same-id-twice branch, the
+                                        set-stage-to-current-stage no-op)
+          app/schemas.py                99% line (unchanged; the new
+                                        BulkOpportunityAction/BulkAction
+                                        Response/BulkActionResultItem models
+                                        add no uncovered branch)
+frontend: 208 passed (was 201), 96.6% statements (was ~97%), 96.47% line,
+          95.35% functions, 88.73% branch — thresholds unchanged at
+          94/94/93/87, all four still clear the floor
+          app/BulkActionBar.tsx    100% line, 100% branch
+          app/StageBoard.tsx       100% line, 100% branch (was 84.37%/88% —
+                                    the checkbox and its onChange branch)
+          app/DashboardPage.tsx    ~91% line — the bulk handlers' error
+                                    paths (network failure on the mutation
+                                    itself, not a per-item result) are the
+                                    remaining gap, same shape as the
+                                    pre-existing uncovered lines in the
+                                    single-delete path
+e2e:      30 passed (was 29), axe clean on the open action bar
+docker:   deferred to the host half — scripts/autopilot-gate.sh 2
+          (no Docker socket in this sandbox, per sandbox/README.md)
+```
+
+Authorization matrix: 55 → 56 endpoints, the one new bulk route. It answers
+`authenticated_only(200)` in the matrix rather than a scoped owner/editor/
+viewer split, because ids in one request can span
+ownership boundaries and a single status code cannot represent that — the same
+reasoning `GET /api/v2/search` already carries. The real per-item authorization
+(owner succeeds, editor/viewer get a "forbidden" item, an unrelated id gets
+"not found") is `tests/test_bulk_actions.py`'s, not the matrix's. No migration:
+`delete` and `set_stage` are the existing `opportunities` table's existing
+columns. `pip-audit`: no known vulnerabilities. `npm audit`: 0 vulnerabilities.
+
+Two things found rather than assumed, both recorded at the milestone in
+`PROGRESS.md`:
+
+- The checkbox's shift-click detection moved from `onClick` +
+  `preventDefault` to `onChange` reading `nativeEvent.shiftKey`, after the
+  `onClick` version passed every Vitest/jsdom test and then failed in real
+  Chromium — a controlled checkbox's native toggle and React's own
+  checkbox-change wiring did not agree on which event should win once
+  `preventDefault` was in the mix. Found by running the E2E spec, not by the
+  unit suite, which is the same category of gap 2.4a's D-066 named (a defect
+  only visible in a real browser).
+- Playwright's own `.click()` on a board checkbox this far down the page
+  intermittently completed without the change handler firing, confirmed via
+  a raw CDP mouse sequence at the same coordinates (which worked every time)
+  to be Playwright's scroll-then-click sequencing rather than an application
+  defect before writing `e2e/12-bulk-actions.spec.ts`'s retrying `check`
+  helper around it.

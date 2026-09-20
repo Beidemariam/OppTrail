@@ -3,7 +3,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_serializer, field_validator
+from pydantic import BaseModel, Field, field_serializer, field_validator, model_validator
 
 from .time_utils import parse_timestamp, to_canonical
 
@@ -174,6 +174,51 @@ class OpportunityPublic(BaseModel):
 class OpportunityListResponse(BaseModel):
     stages: list[str]
     opportunities: list[OpportunityPublic]
+
+
+# --- Bulk actions (milestone 2.4c) ------------------------------------------
+
+# The board is unpaginated up to the 400-opportunity scale milestone 2.3 built
+# for (D-061), so a select-all on today's board is bounded by that, not by an
+# arbitrary request-size guess.
+BULK_ACTION_MAX_IDS = 400
+
+
+class BulkOpportunityAction(BaseModel):
+    """One request over many opportunities (`docs/UX.md`'s action bar).
+
+    Only the two actions that already exist one id at a time —
+    `update_opportunity`'s stage change and `delete_opportunity` — are
+    exposed here; D-070 explains why "assign owner", "add to view" and
+    export are not.
+    """
+
+    ids: list[int] = Field(min_length=1, max_length=BULK_ACTION_MAX_IDS)
+    action: Literal["delete", "set_stage"]
+    stage: Stage | None = None
+
+    @model_validator(mode="after")
+    def validate_stage_matches_action(self) -> "BulkOpportunityAction":
+        if self.action == "set_stage" and self.stage is None:
+            raise ValueError("stage is required for the set_stage action")
+        if self.action == "delete" and self.stage is not None:
+            raise ValueError("stage is only valid for the set_stage action")
+        return self
+
+
+class BulkActionResultItem(BaseModel):
+    """One id's outcome. `error` is the same message the single-item route
+    would have raised, so a client already reading `detail`-style permission
+    errors does not learn a second vocabulary.
+    """
+
+    id: int
+    status: Literal["ok", "error"]
+    error: str | None = None
+
+
+class BulkActionResponse(BaseModel):
+    results: list[BulkActionResultItem]
 
 
 EntryType = Literal[

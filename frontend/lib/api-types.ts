@@ -455,6 +455,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/opportunities/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk Opportunity Action
+         * @description One request over many opportunities, checked and applied one id at a
+         *     time rather than all-or-nothing (`docs/UX.md`: "report per-item failures
+         *     rather than failing wholesale"). Every id gets a result even when another
+         *     one in the same batch fails, so a caller's mixed selection of owned and
+         *     merely-shared records only loses the ones it cannot touch.
+         *
+         *     Both actions reuse an existing single-item rule rather than adding a new
+         *     one: `delete` is `delete_opportunity`'s cascade plus its audit row,
+         *     `set_stage` is `update_opportunity`'s stage branch, and both are
+         *     owner-only through the same `require_opportunity_owner` those routes call.
+         *     `docs/UX.md`'s action bar also names "assign owner", "add to view" and
+         *     export; D-070 is why this milestone ships only the two that already exist
+         *     one id at a time.
+         */
+        post: operations["bulk_opportunity_action_api_v2_opportunities_bulk_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/opportunities/{opportunity_id}/restore": {
         parameters: {
             query?: never;
@@ -901,6 +933,48 @@ export interface components {
         /** AuthResponse */
         AuthResponse: {
             user: components["schemas"]["UserPublic"];
+        };
+        /** BulkActionResponse */
+        BulkActionResponse: {
+            /** Results */
+            results: components["schemas"]["BulkActionResultItem"][];
+        };
+        /**
+         * BulkActionResultItem
+         * @description One id's outcome. `error` is the same message the single-item route
+         *     would have raised, so a client already reading `detail`-style permission
+         *     errors does not learn a second vocabulary.
+         */
+        BulkActionResultItem: {
+            /** Id */
+            id: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "error";
+            /** Error */
+            error?: string | null;
+        };
+        /**
+         * BulkOpportunityAction
+         * @description One request over many opportunities (`docs/UX.md`'s action bar).
+         *
+         *     Only the two actions that already exist one id at a time —
+         *     `update_opportunity`'s stage change and `delete_opportunity` — are
+         *     exposed here; D-070 explains why "assign owner", "add to view" and
+         *     export are not.
+         */
+        BulkOpportunityAction: {
+            /** Ids */
+            ids: number[];
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "delete" | "set_stage";
+            /** Stage */
+            stage?: ("Prospecting" | "Qualification" | "Needs Analysis" | "Proposal" | "Negotiation" | "Closed Won" | "Closed Lost") | null;
         };
         /** CommentCreate */
         CommentCreate: {
@@ -2698,6 +2772,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Page_str_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bulk_opportunity_action_api_v2_opportunities_bulk_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkOpportunityAction"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkActionResponse"];
                 };
             };
             /** @description Validation Error */

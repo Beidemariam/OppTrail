@@ -419,6 +419,23 @@ MATRIX: dict[Endpoint, Case] = {
             "can no longer see that the record exists at all."
         ),
     ),
+    # Bulk actions (milestone 2.4c). Ids can span opportunities the caller
+    # owns and ones they don't, so a single status code cannot carry per-item
+    # permission the way the single-item routes do — this answers 200 for
+    # anyone signed in and reports ok/error per id in the body instead, the
+    # same split `GET /api/v2/search` already uses below.
+    # tests/test_bulk_actions.py holds the real per-item cases: owner
+    # succeeds, editor/viewer get a "forbidden" item, an unrelated id gets
+    # "not found".
+    Endpoint("POST", "/api/v2/opportunities/bulk"): Case(
+        expected=authenticated_only(200),
+        url=lambda world: "/api/v2/opportunities/bulk",
+        body=lambda world, actor: {
+            "ids": [world.opportunity_id],
+            "action": "set_stage",
+            "stage": "Qualification",
+        },
+    ),
     Endpoint("GET", "/api/v2/search"): Case(
         expected=authenticated_only(200),
         url=lambda world: "/api/v2/search?q=discovery",

@@ -57,6 +57,8 @@ export type AppNotification = components["schemas"]["NotificationPublicV2"];
 export type NotificationType = AppNotification["type"];
 export type TimelineEntry = components["schemas"]["TimelineEntryPublic"];
 export type TimelineNote = components["schemas"]["NotePublic"];
+export type BulkActionResultItem =
+  components["schemas"]["BulkActionResultItem"];
 
 /** What the signed-in user is allowed to do inside one opportunity. */
 export interface Access {

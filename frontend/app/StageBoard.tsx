@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type KeyboardEvent } from "react";
+import { useEffect, useRef, type ChangeEvent, type KeyboardEvent } from "react";
 import { Link, useNavigate } from "react-router";
 
 import { stages, type Opportunity } from "../lib/domain";
@@ -20,21 +20,33 @@ const ESTIMATED_CARD_HEIGHT = 190;
  * `focusedId` is the keyboard's cursor over the board (milestone 2.4a). The
  * dashboard owns it because `j` and `k` cross stage columns; each column only
  * has to scroll its own card into view when the cursor lands inside it.
+ *
+ * `checkedIds` is the bulk-selection set (milestone 2.4c) — separate from
+ * both `selectedId` (the opportunity whose timeline is open) and `focusedId`
+ * (the keyboard cursor): a card can be all three, or none, independently.
+ * The board is the only multi-card surface that exists yet, so it is where
+ * the selection model lives; list and table (2.7/2.8) reuse it.
  */
 export function StageBoard({
   opportunities,
   selectedId,
   focusedId,
+  checkedIds,
   onFocus,
   onEdit,
   onDelete,
+  onToggleChecked,
+  onRangeSelect,
 }: {
   opportunities: Opportunity[];
   selectedId: number | null;
   focusedId: number | null;
+  checkedIds: ReadonlySet<number>;
   onFocus: (opportunity: Opportunity) => void;
   onEdit: (opportunity: Opportunity) => void;
   onDelete: (opportunity: Opportunity) => void;
+  onToggleChecked: (opportunity: Opportunity) => void;
+  onRangeSelect: (opportunity: Opportunity) => void;
 }) {
   return (
     /* The board scrolls horizontally, so it needs to be focusable or a
@@ -74,9 +86,12 @@ export function StageBoard({
                     opportunity={opportunity}
                     selected={selectedId === opportunity.id}
                     focused={focusedId === opportunity.id}
+                    checked={checkedIds.has(opportunity.id)}
                     onFocus={onFocus}
                     onEdit={onEdit}
                     onDelete={onDelete}
+                    onToggleChecked={onToggleChecked}
+                    onRangeSelect={onRangeSelect}
                   />
                 )}
               />
@@ -92,16 +107,22 @@ function OpportunityCard({
   opportunity,
   selected,
   focused,
+  checked,
   onFocus,
   onEdit,
   onDelete,
+  onToggleChecked,
+  onRangeSelect,
 }: {
   opportunity: Opportunity;
   selected: boolean;
   focused: boolean;
+  checked: boolean;
   onFocus: (opportunity: Opportunity) => void;
   onEdit: (opportunity: Opportunity) => void;
   onDelete: (opportunity: Opportunity) => void;
+  onToggleChecked: (opportunity: Opportunity) => void;
+  onRangeSelect: (opportunity: Opportunity) => void;
 }) {
   const cardRef = useRef<HTMLElement>(null);
   const navigate = useNavigate();
@@ -133,6 +154,23 @@ function OpportunityCard({
   if (focused) {
     classes.push("focused");
   }
+  if (checked) {
+    classes.push("checked");
+  }
+
+  // Shift-click extends the selection from the last-touched card rather
+  // than toggling this one (`docs/UX.md`: "checkbox, x, or shift-click
+  // range"). Read off `onChange` rather than `onClick` and a `preventDefault`:
+  // the checkbox is fully controlled by `checked`, so whichever ids the
+  // parent decides belong in the selection are what render checked on the
+  // next pass regardless of what the browser's own click toggled first.
+  function onCheckboxChange(event: ChangeEvent<HTMLInputElement>) {
+    if ((event.nativeEvent as MouseEvent).shiftKey) {
+      onRangeSelect(opportunity);
+    } else {
+      onToggleChecked(opportunity);
+    }
+  }
 
   return (
     <article
@@ -144,6 +182,13 @@ function OpportunityCard({
     >
       <div>
         <div className="card-title-row">
+          <input
+            type="checkbox"
+            className="card-checkbox"
+            aria-label={`Select ${opportunity.name} for bulk actions`}
+            checked={checked}
+            onChange={onCheckboxChange}
+          />
           <h3>{opportunity.name}</h3>
           {opportunity.stalled && (
             <span className="stalled-badge">Stalled</span>

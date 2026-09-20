@@ -344,6 +344,10 @@ export class FakeApi {
       return this.restore(segments[2], Number(segments[3]));
     }
 
+    if (bare === "/api/v2/opportunities/bulk" && method === "POST") {
+      return this.bulkOpportunityAction(body);
+    }
+
     if (bare === "/api/v2/search") {
       return this.searchPage(path);
     }
@@ -639,6 +643,42 @@ export class FakeApi {
       { error: { code: "not_found", message: "Nothing to restore" } },
       404,
     );
+  }
+
+  /**
+   * `POST /api/v2/opportunities/bulk`: one id at a time, like the real route
+   * (`backend/app/routes_opportunities.py`) — an id that does not exist or
+   * that the caller does not own fails on its own, and the rest still apply.
+   */
+  private bulkOpportunityAction(body: {
+    ids: number[];
+    action: "delete" | "set_stage";
+    stage?: string;
+  }): Response {
+    const results = body.ids.map((id) => {
+      const index = this.opportunities.findIndex((item) => item.id === id);
+      const found = index === -1 ? undefined : this.opportunities[index];
+      if (!found) {
+        return { id, status: "error" as const, error: "Opportunity not found" };
+      }
+      if (found.current_user_role !== "owner") {
+        return {
+          id,
+          status: "error" as const,
+          error: "Only the owner can manage this opportunity",
+        };
+      }
+      if (body.action === "delete") {
+        this.deleted.opportunities.set(id, { index, item: found });
+        this.opportunities = this.opportunities.filter(
+          (item) => item.id !== id,
+        );
+      } else {
+        found.stage = body.stage ?? found.stage;
+      }
+      return { id, status: "ok" as const, error: null };
+    });
+    return this.json({ results });
   }
 
   /**

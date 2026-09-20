@@ -10,6 +10,9 @@ from .pagination import Page, PageRequest, cursor_clause, page_params, split_pag
 from .permissions import Role, require_opportunity_access, require_opportunity_owner
 from .schemas import (
     STAGES,
+    BulkActionResponse,
+    BulkActionResultItem,
+    BulkOpportunityAction,
     OpportunityCreate,
     OpportunityListResponse,
     OpportunityPublic,
@@ -341,6 +344,79 @@ def delete_opportunity(
             },
         )
         connection.commit()
+
+
+@v2_router.post("/opportunities/bulk", response_model=BulkActionResponse)
+def bulk_opportunity_action(
+    payload: BulkOpportunityAction,
+    user: sqlite3.Row = Depends(get_current_user),
+) -> BulkActionResponse:
+    """One request over many opportunities, checked and applied one id at a
+    time rather than all-or-nothing (`docs/UX.md`: "report per-item failures
+    rather than failing wholesale"). Every id gets a result even when another
+    one in the same batch fails, so a caller's mixed selection of owned and
+    merely-shared records only loses the ones it cannot touch.
+
+    Both actions reuse an existing single-item rule rather than adding a new
+    one: `delete` is `delete_opportunity`'s cascade plus its audit row,
+    `set_stage` is `update_opportunity`'s stage branch, and both are
+    owner-only through the same `require_opportunity_owner` those routes call.
+    `docs/UX.md`'s action bar also names "assign owner", "add to view" and
+    export; D-070 is why this milestone ships only the two that already exist
+    one id at a time.
+    """
+    results: list[BulkActionResultItem] = []
+    with db_connection() as connection:
+        for opportunity_id in payload.ids:
+            try:
+                require_opportunity_owner(connection, opportunity_id, int(user["id"]))
+                row = fetch_opportunity_row(connection, opportunity_id)
+            except HTTPException as exc:
+                results.append(
+                    BulkActionResultItem(id=opportunity_id, status="error", error=str(exc.detail))
+                )
+                continue
+
+            assert row is not None
+            if payload.action == "delete":
+                soft_delete_opportunity(connection, opportunity_id)
+                create_audit_log_entry(
+                    connection=connection,
+                    opportunity_id=opportunity_id,
+                    actor_id=int(user["id"]),
+                    action="opportunity_deleted",
+                    detail={
+                        "name": row["name"],
+                        "account_name": row["account_name"],
+                        "stage": row["stage"],
+                    },
+                )
+            else:
+                assert payload.stage is not None
+                previous_stage = row["stage"]
+                connection.execute(
+                    """
+                    UPDATE opportunities
+                    SET stage = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+                    WHERE id = ? AND owner_id = ? AND deleted_at IS NULL
+                    """,
+                    (payload.stage, opportunity_id, user["id"]),
+                )
+                if payload.stage != previous_stage:
+                    create_system_timeline_entry(
+                        connection=connection,
+                        opportunity_id=opportunity_id,
+                        created_by=int(user["id"]),
+                        entry_type="stage_change",
+                        title=f"Stage changed to {payload.stage}",
+                        body=f"Stage changed from {previous_stage} to {payload.stage}.",
+                    )
+
+            results.append(BulkActionResultItem(id=opportunity_id, status="ok"))
+
+        connection.commit()
+
+    return BulkActionResponse(results=results)
 
 
 # Restore is v2-only, like every route added since milestone 1.3 that has no v1

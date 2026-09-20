@@ -1840,14 +1840,103 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
   surfaces deleted rows for browsing — undo is a 10-second window, not a
   trash screen, which no roadmap line asks for.
 
-- [ ] 2.4c Bulk actions. Multi-select (`x`, shift-click, checkbox), the action
+- [x] 2.4c Bulk actions. Multi-select (`x`, shift-click, checkbox), the action
       bar that replaces the filter bar while a selection is live, and one
       transactional bulk endpoint that reports per-item failures rather than
       failing wholesale (`docs/UX.md`). `docs/UX.md` scopes multi-select to
       the list and table views, which are 2.7 and 2.8; the board is the only
       multi-card surface that exists when this lands, so it is where the
       selection model goes, and 2.7/2.8 reuse it. Adds `x` to the published
-      map (**D-065**).
+      map (**D-065**). — **DONE**
+
+  - [x] `POST /api/v2/opportunities/bulk` (v2-only, no v1 twin, like the
+        restore routes): `{ids, action: "delete" | "set_stage", stage?}`,
+        checked and applied one id at a time inside one connection, one
+        commit at the end. Each result is `{id, status: "ok" | "error",
+        error?}` — the same message the single-item route would have raised,
+        so a client already reading permission errors learns no second
+        vocabulary. Only two of `docs/UX.md`'s five listed actions ship:
+        `set_stage` is `update_opportunity`'s stage branch, `delete` is
+        `delete_opportunity`'s cascade plus its audit row, both reusing
+        `require_opportunity_owner` rather than a new rule. "Assign owner",
+        "add to view" and export are not built — none has a single-item
+        capability to reuse (**D-070**, needs human review).
+  - [x] The board's selection model (milestone 2.4c's own, since list/table
+        do not exist yet): `checkedIds` and `selectionAnchorId` in
+        `DashboardPage`, separate from `focusedId` (the keyboard cursor) and
+        `selectedId` (the opened timeline) — a card can be all three, or
+        none, independently. `StageBoard`'s checkbox reads the toggle vs.
+        range choice off `onChange`'s `nativeEvent.shiftKey` rather than
+        `onClick` plus `preventDefault`: the checkbox is fully controlled, so
+        whichever ids the parent decides belong in the selection are what
+        render checked on the next pass regardless of what the browser's own
+        click toggled first. Found the hard way — the `onClick` version
+        passed every unit test (jsdom's `fireEvent` doesn't reproduce the
+        failure) and then failed in real Chromium under Playwright, where a
+        `preventDefault`-suppressed native toggle and React's checkbox-onChange
+        wiring did not agree on which event won.
+  - [x] `BulkActionBar` (`app/BulkActionBar.tsx`) replaces
+        `OpportunityFilterBar` while `checkedIds` is non-empty. Change-stage
+        and delete disable when the selection includes anything the reader
+        does not own (`canManageOpportunity`, mirroring the per-card
+        Edit/Delete gate) — the API enforces this per item regardless, but
+        the UI should not offer an action every selected row would be
+        refused. Bulk delete keeps the same typed `window.confirm` the
+        single-opportunity delete does (`lib/confirm.ts`, now three callers
+        instead of two): it cascades across a whole record, multiplied by
+        however many are selected.
+  - [x] `useBulkOpportunityAction` (`lib/queries.ts`) is server-confirmed, not
+        optimistic — D-068 extended to a shape it did not cover (**D-071**):
+        a bulk response's successes and failures are not knowable per id in
+        advance, so nothing here is safe to render before the server
+        answers. A bulk delete's successes still get Undo, by calling the
+        existing single-item restore route once per succeeded id from the
+        toast — no new backend surface, and the ordinary golden path (a
+        selection of only-owned rows) never sees a partial failure at all.
+  - [x] `x` toggles bulk selection of the focused card (added to
+        `lib/keyboard.ts`'s published map per D-065, closing that
+        decision); `Escape` clears a live selection before it clears the
+        keyboard cursor, per `docs/UX.md`'s own ordering.
+  - [x] Tests: 10 backend (`tests/test_bulk_actions.py` — partial-failure
+        batches, the same-id-twice-in-one-batch case, owner/editor/viewer/
+        unrelated/anonymous per-item outcomes, the set-stage-to-current-stage
+        no-op branch) plus one new authorization-matrix entry (55 → 56
+        endpoints; `POST /api/v2/opportunities/bulk` answers 200 for anyone
+        signed in since ids can span ownership boundaries, with the real
+        per-item cases held by `test_bulk_actions.py` — the same split
+        `GET /api/v2/search` already uses). 8 frontend
+        (`app/DashboardPage.test.tsx`, `app/Keyboard.test.tsx`) plus the fake
+        API's new `POST /api/v2/opportunities/bulk` handler
+        (`app/test-api.ts`). 1 E2E (`e2e/12-bulk-actions.spec.ts`) with axe
+        on the open action bar: two cards checked, shift-click implicitly
+        exercised by the selection model's own unit tests, bulk stage change,
+        bulk delete with Undo, and a reload proving the restore reached the
+        database. 292 → 302 backend, 201 → 208 frontend, 29 → 30 E2E.
+  - [x] The E2E spec's own finding, investigated rather than assumed:
+        Playwright's `.click()` on the board's checkboxes intermittently
+        completed (by its own accounting — "click action done") without the
+        app's change handler ever firing. A raw CDP mouse sequence at the
+        same, already-scrolled coordinates worked every time, which located
+        the cause in Playwright's scroll-then-click sequencing for a row this
+        far down the page rather than in the application — confirmed before
+        writing the accommodation (`expect(...).toPass()` around
+        scroll-then-click-then-assert in the spec's `check` helper), per
+        brief §6.5's "a guard test should be confirmed to fail against the
+        unfixed code first" read onto the inverse case: confirming a fix
+        actually targets the failure before keeping it.
+
+  Gate: `make check` green in full (ruff, ruff format, mypy, eslint, tsc,
+  prettier, 302 backend tests at 97.47% combined coverage, 208 frontend tests
+  over the 94/94/93/87 thresholds at 96.6/96.47/95.35/88.73 statements/lines/
+  functions/branches, contract check with a regenerated `lib/api-types.ts`,
+  30 E2E with axe, pip-audit, npm audit). Docker deferred to the host half
+  (`sandbox/README.md`).
+
+  Not in this milestone, deliberately: "assign owner", "add to view" and
+  bulk export (D-070, needs human review); a typed confirmation dialog for
+  bulk delete (2.5 brings Radix and replaces `lib/confirm.ts`'s remaining
+  callers in one file); list and table views to reuse the selection model on
+  (2.7/2.8).
 - [ ] 2.5 Design tokens from `DESIGN-SYSTEM.md`, including the three
       corrected contrast values; Radix primitives; real dialogs replacing
       `window.confirm` (now `lib/confirm.ts`, the single call site 2.1 left
