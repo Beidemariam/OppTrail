@@ -72,7 +72,8 @@ Specified in `docs/FEATURES.md`, sequenced in `docs/ROADMAP.md`:
 12. **Navigation and input** — command palette, keyboard throughout, bulk, undo;
     content is edited where it is read, not in a form elsewhere on the page
 13. **Search** — FTS5, ranked, snippeted, cross-opportunity
-14. **AI** — summarization, NL filter construction; read-only by construction
+14. **AI** — summarization, NL filter construction; read-only by construction;
+    a failure says whether it is a misconfiguration or an outage
 15. **Edit history** — every edit to user content keeps the previous value, with a
     screen the opportunity owner can read it from
 

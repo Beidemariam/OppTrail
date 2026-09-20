@@ -1728,6 +1728,26 @@ this phase reaches `AWAITING_REVIEW` and is accepted, the project is finished.
 
 - [ ] R.1 UX consistency: loading/empty/error states everywhere; responsive to
       tablet; timeline usable on mobile; design tokens applied consistently.
+      Includes **an AI failure that says which kind of failure it is**
+      (**AGENTS.md** v2 scope item 14, added 2026-09-20 — D-052). F.6 gave the
+      OpenAI client timeouts, retries and graceful failure, but every cause
+      collapses into one "AI service not available". A misconfigured
+      `OPENAI_MODEL` is a thirty-second operator fix and currently reads
+      identically to OpenAI being down — found the hard way during the Phase 1
+      user test, where a stale `gpt-oss-20b` in `.env` returned
+      `model_not_found` and the UI said only that the service was unavailable.
+      Distinguish at least: a configuration problem (bad key, unknown model,
+      404/401 from the provider), an outage or timeout, and a rejected request.
+      Say what an operator should check, without leaking the key or provider
+      internals to a viewer.
+      **Cheap enough to pull forward** if an earlier phase is already in
+      `ai_service.py` — it is placed here because R.1 owns error states, not
+      because it needs to wait.
+      Note the testing blind spot this sits in: `tests/test_ai.py`
+      monkeypatches `ask_openai` (correctly — brief §9 forbids paid calls), so
+      no test ever sends a real model name and no test can catch this class of
+      defect. Assert the *classification* of a simulated provider error rather
+      than trying to make a real call.
 - [ ] R.2 Accessibility: axe clean (2.2 AA per D-002); focus management in
       dialogs and the command palette; full keyboard operability.
 - [ ] R.3 Performance: large-dataset budgets met (800k-row seed per
