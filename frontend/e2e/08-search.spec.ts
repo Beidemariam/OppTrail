@@ -62,6 +62,24 @@ test("search spans the opportunities a user can read, and no others", async ({
   await expectNoAccessibilityViolations(page, "search results");
 });
 
+test("a result opens the timeline it was found in", async ({ page }) => {
+  // The click-through milestone 1.5 deferred because no opportunity had a URL
+  // yet (D-039). The result names its opportunity; following it has to land on
+  // that opportunity's timeline, not the dashboard.
+  await signIn(page, ALEX);
+  await page.goto("/search?q=finance");
+
+  await results(page)
+    .filter({ hasText: NORTHWIND })
+    .getByRole("link", { name: NORTHWIND })
+    .click();
+
+  await expect(page).toHaveURL(/\/opportunities\/\d+$/);
+  await expect(
+    page.locator(".timeline-panel").getByRole("heading", { name: NORTHWIND }),
+  ).toBeVisible();
+});
+
 test("a viewer sees only the match inside the opportunity shared with them", async ({
   page,
 }) => {

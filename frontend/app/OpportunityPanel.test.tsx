@@ -1,54 +1,16 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { MemoryRouter } from "react-router";
-
-import Home from "./Home";
 import {
   ALEX,
   BLAIR,
-  FakeApi,
   aComment,
   aNote,
   anEntry,
   anOpportunity,
 } from "./test-api";
-
-let api: FakeApi;
-
-// `Home` links to the search route, so it renders inside a router here the
-// same way `AppRoot` mounts it in the app (ADR 0005).
-function start(options: ConstructorParameters<typeof FakeApi>[0] = {}) {
-  api = new FakeApi(options);
-  api.install();
-  return render(
-    <MemoryRouter>
-      <Home />
-    </MemoryRouter>,
-  );
-}
-
-/** The app is signed in and the dashboard has finished its first load. */
-async function dashboard(
-  options: ConstructorParameters<typeof FakeApi>[0] = {},
-) {
-  const result = start({ user: ALEX, ...options });
-  await screen.findByRole("heading", { name: "Opportunities" });
-  return result;
-}
-
-async function openTimeline(name: string) {
-  const card = screen.getByRole("article", { name: undefined, hidden: false });
-  void card;
-  const cards = screen.getAllByRole("article");
-  const target = cards.find((candidate) =>
-    candidate.textContent?.includes(name),
-  )!;
-  await userEvent.click(
-    within(target).getByRole("button", { name: "Timeline" }),
-  );
-}
+import { openTimeline, renderDashboard } from "./test-app";
 
 beforeEach(() => {
   document.cookie = "opptrail_csrf=test-token";
@@ -59,286 +21,10 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("signed out", () => {
-  it("shows the sign-up form when the session check fails", async () => {
-    start();
-
-    expect(
-      await screen.findByRole("button", { name: "Create account" }),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText("Name")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("heading", { name: "Opportunities" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("drops the name field when switching to sign in", async () => {
-    start();
-    await screen.findByRole("button", { name: "Create account" });
-
-    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
-
-    expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Sign in" })).toHaveLength(2);
-  });
-
-  it("signs a new user up and lands them on the dashboard", async () => {
-    start({ opportunities: [anOpportunity()] });
-    await screen.findByRole("button", { name: "Create account" });
-
-    await userEvent.type(screen.getByLabelText("Name"), "Alex");
-    await userEvent.type(screen.getByLabelText("Email"), "alex@opptrail.test");
-    await userEvent.type(screen.getByLabelText("Password"), "password123");
-    await userEvent.click(
-      screen.getByRole("button", { name: "Create account" }),
-    );
-
-    expect(
-      await screen.findByRole("heading", { name: "Opportunities" }),
-    ).toBeInTheDocument();
-    expect(api.callsTo("POST", "/api/auth/signup")).toHaveLength(1);
-    expect(await screen.findByText("Northwind rollout")).toBeInTheDocument();
-  });
-
-  it("shows the API's own message when sign-in is refused", async () => {
-    start({
-      failures: { "POST /api/auth/login": [401, "Invalid email or password"] },
-    });
-    await screen.findByRole("button", { name: "Create account" });
-
-    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
-    await userEvent.type(screen.getByLabelText("Email"), "alex@opptrail.test");
-    await userEvent.type(screen.getByLabelText("Password"), "wrong-password");
-    await userEvent.click(
-      screen.getAllByRole("button", { name: "Sign in" })[1],
-    );
-
-    expect(
-      await screen.findByText("Invalid email or password"),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("heading", { name: "Opportunities" }),
-    ).not.toBeInTheDocument();
-  });
-});
-
-describe("the dashboard", () => {
-  it("groups opportunities by stage and flags the stalled one", async () => {
-    await dashboard({
-      opportunities: [
-        anOpportunity({
-          id: 10,
-          name: "Northwind rollout",
-          stage: "Negotiation",
-        }),
-        anOpportunity({
-          id: 11,
-          name: "Globex renewal",
-          stage: "Proposal",
-          stalled: true,
-        }),
-      ],
-    });
-
-    const negotiation = screen
-      .getByRole("heading", { name: "Negotiation" })
-      .closest("div")!;
-    expect(negotiation).toHaveTextContent("1");
-
-    const globex = screen
-      .getAllByRole("article")
-      .find((card) => card.textContent?.includes("Globex renewal"))!;
-    expect(within(globex).getByText("Stalled")).toBeInTheDocument();
-  });
-
-  it("creates an opportunity from the sidebar form", async () => {
-    await dashboard();
-
-    await userEvent.type(screen.getByLabelText("Opportunity"), "Contoso pilot");
-    await userEvent.type(screen.getByLabelText("Account"), "Contoso");
-    await userEvent.click(
-      screen.getByRole("button", { name: "Create opportunity" }),
-    );
-
-    await waitFor(() =>
-      expect(api.callsTo("POST", "/api/opportunities")).toHaveLength(1),
-    );
-    expect(api.callsTo("POST", "/api/opportunities")[0].body).toMatchObject({
-      name: "Contoso pilot",
-      account_name: "Contoso",
-      expected_close_date: null,
-    });
-    expect(await screen.findByText("Contoso pilot")).toBeInTheDocument();
-  });
-
-  it("surfaces a rejected create instead of clearing the form", async () => {
-    await dashboard({
-      failures: { "POST /api/opportunities": [422, "Stage is not valid"] },
-    });
-
-    await userEvent.type(screen.getByLabelText("Opportunity"), "Bad stage");
-    await userEvent.type(screen.getByLabelText("Account"), "Acme");
-    await userEvent.click(
-      screen.getByRole("button", { name: "Create opportunity" }),
-    );
-
-    expect(await screen.findByText("Stage is not valid")).toBeInTheDocument();
-    expect(screen.getByLabelText("Opportunity")).toHaveValue("Bad stage");
-  });
-
-  it("only asks the API to delete after the confirmation is accepted", async () => {
-    await dashboard({ opportunities: [anOpportunity()] });
-    const card = (await screen.findAllByRole("article"))[0];
-
-    vi.spyOn(window, "confirm").mockReturnValue(false);
-    await userEvent.click(within(card).getByRole("button", { name: "Delete" }));
-    expect(api.callsTo("DELETE", "/api/opportunities/10")).toHaveLength(0);
-
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-    await userEvent.click(within(card).getByRole("button", { name: "Delete" }));
-    await waitFor(() =>
-      expect(api.callsTo("DELETE", "/api/opportunities/10")).toHaveLength(1),
-    );
-    await waitFor(() =>
-      expect(screen.queryByText("Northwind rollout")).not.toBeInTheDocument(),
-    );
-  });
-
-  it("loads the edit form from the card and saves a stage change", async () => {
-    await dashboard({ opportunities: [anOpportunity()] });
-    const card = (await screen.findAllByRole("article"))[0];
-
-    await userEvent.click(within(card).getByRole("button", { name: "Edit" }));
-    expect(
-      screen.getByRole("heading", { name: "Edit Opportunity" }),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText("Opportunity")).toHaveValue(
-      "Northwind rollout",
-    );
-
-    await userEvent.selectOptions(screen.getByLabelText("Stage"), "Closed Won");
-    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
-
-    await waitFor(() =>
-      expect(api.callsTo("PATCH", "/api/opportunities/10")).toHaveLength(1),
-    );
-    expect(api.callsTo("PATCH", "/api/opportunities/10")[0].body).toMatchObject(
-      {
-        stage: "Closed Won",
-      },
-    );
-    expect(
-      screen.getByRole("heading", { name: "New Opportunity" }),
-    ).toBeInTheDocument();
-  });
-
-  it("signs out and clears what was on screen", async () => {
-    await dashboard({ opportunities: [anOpportunity()] });
-
-    await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
-
-    expect(
-      await screen.findByRole("button", { name: "Create account" }),
-    ).toBeInTheDocument();
-    expect(screen.queryByText("Northwind rollout")).not.toBeInTheDocument();
-  });
-});
-
-describe("notifications", () => {
-  it("lists unread notifications and marks one read without losing it from history", async () => {
-    await dashboard({
-      notifications: [
-        {
-          id: 1,
-          type: "mention",
-          payload: {},
-          read_at: null,
-          created_at: "2026-09-03T09:00:00Z",
-        },
-      ],
-    });
-
-    await userEvent.click(
-      screen.getByRole("button", { name: /Notifications/ }),
-    );
-    expect(
-      await screen.findByText("You were mentioned in a timeline update."),
-    ).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: "Mark read" }));
-
-    await waitFor(() =>
-      expect(api.callsTo("PATCH", "/api/notifications/1/read")).toHaveLength(1),
-    );
-    // Milestone 1.7's whole point: a read notification stays in the inbox
-    // (as history) instead of disappearing, unlike v1's `WHERE read = 0`.
-    await waitFor(() =>
-      expect(
-        screen.getByText("You were mentioned in a timeline update."),
-      ).toBeInTheDocument(),
-    );
-    expect(
-      screen.queryByRole("button", { name: "Mark read" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("marks every notification read and filters the inbox by type", async () => {
-    await dashboard({
-      notifications: [
-        {
-          id: 1,
-          type: "mention",
-          payload: {},
-          read_at: null,
-          created_at: "2026-09-03T09:00:00Z",
-        },
-        {
-          id: 2,
-          type: "comment",
-          payload: {},
-          read_at: null,
-          created_at: "2026-09-03T10:00:00Z",
-        },
-      ],
-    });
-
-    await userEvent.click(
-      screen.getByRole("button", { name: /Notifications/ }),
-    );
-    expect(
-      await screen.findByText("New comment on your note."),
-    ).toBeInTheDocument();
-
-    await userEvent.selectOptions(screen.getByLabelText("Filter"), "Comments");
-    expect(
-      screen.queryByText("You were mentioned in a timeline update."),
-    ).not.toBeInTheDocument();
-    expect(screen.getByText("New comment on your note.")).toBeInTheDocument();
-
-    await userEvent.selectOptions(screen.getByLabelText("Filter"), "All types");
-    await userEvent.click(
-      screen.getByRole("button", { name: "Mark all read" }),
-    );
-
-    await waitFor(() =>
-      expect(
-        api.callsTo("POST", "/api/v2/notifications/mark-all-read"),
-      ).toHaveLength(1),
-    );
-    await waitFor(() =>
-      expect(
-        screen.queryAllByRole("button", { name: "Mark read" }),
-      ).toHaveLength(0),
-    );
-  });
-});
-
 describe("the timeline", () => {
-  const opportunity = () => anOpportunity();
-
   it("shows entries, notes and comments once an opportunity is opened", async () => {
-    await dashboard({
-      opportunities: [opportunity()],
+    await renderDashboard({
+      opportunities: [anOpportunity()],
       entries: [anEntry({ notes: [aNote({ comments: [aComment()] })] })],
     });
 
@@ -351,11 +37,41 @@ describe("the timeline", () => {
     expect(screen.getByText("Agreed.")).toBeInTheDocument();
   });
 
+  it("opens the timeline a deep link arrived with", async () => {
+    await renderDashboard(
+      { opportunities: [anOpportunity()], entries: [anEntry()] },
+      "/opportunities/10",
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Discovery call" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Your role: owner")).toBeInTheDocument();
+  });
+
+  it("says so when the link names an opportunity the reader cannot see", async () => {
+    await renderDashboard(
+      { opportunities: [anOpportunity()] },
+      "/opportunities/99",
+    );
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "This opportunity is not available.",
+      }),
+    ).toBeInTheDocument();
+  });
+
   it("adds an entry, converting the local input to UTC", async () => {
-    await dashboard({ opportunities: [opportunity()], entries: [] });
+    const api = await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [],
+    });
     await openTimeline("Northwind rollout");
 
-    const form = document.querySelector("form.timeline-form") as HTMLElement;
+    const form = (
+      await screen.findByRole("button", { name: "Add Entry" })
+    ).closest("form") as HTMLElement;
     await userEvent.clear(within(form).getByLabelText("Event time"));
     await userEvent.type(
       within(form).getByLabelText("Event time"),
@@ -378,7 +94,10 @@ describe("the timeline", () => {
   });
 
   it("adds a note and a comment to an entry", async () => {
-    await dashboard({ opportunities: [opportunity()], entries: [anEntry()] });
+    await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [anEntry()],
+    });
     await openTimeline("Northwind rollout");
 
     await userEvent.type(
@@ -396,8 +115,8 @@ describe("the timeline", () => {
   });
 
   it("edits a note and shows the edit marker", async () => {
-    await dashboard({
-      opportunities: [opportunity()],
+    await renderDashboard({
+      opportunities: [anOpportunity()],
       entries: [anEntry({ notes: [aNote()] })],
     });
     await openTimeline("Northwind rollout");
@@ -418,8 +137,8 @@ describe("the timeline", () => {
   });
 
   it("offers no edit or delete on a system entry", async () => {
-    await dashboard({
-      opportunities: [opportunity()],
+    await renderDashboard({
+      opportunities: [anOpportunity()],
       entries: [
         anEntry({
           id: 101,
@@ -444,10 +163,15 @@ describe("the timeline", () => {
   });
 
   it("sends the filter values, converting the date bounds to UTC", async () => {
-    await dashboard({ opportunities: [opportunity()], entries: [anEntry()] });
+    const api = await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [anEntry()],
+    });
     await openTimeline("Northwind rollout");
 
-    const filters = document.querySelector("form.filter-bar") as HTMLElement;
+    const filters = (
+      await screen.findByLabelText("Filter the timeline by keyword")
+    ).closest("form") as HTMLElement;
     await userEvent.type(within(filters).getByLabelText(/keyword/i), "budget");
     await userEvent.type(
       within(filters).getByLabelText("Show entries from"),
@@ -474,7 +198,7 @@ describe("the timeline", () => {
 
 describe("what each role is offered", () => {
   it("gives a viewer no way to write anything", async () => {
-    await dashboard({
+    await renderDashboard({
       opportunities: [
         anOpportunity({ current_user_role: "viewer", owner_id: BLAIR.id }),
       ],
@@ -499,7 +223,7 @@ describe("what each role is offered", () => {
   });
 
   it("lets an editor change their own note but not a colleague's", async () => {
-    await dashboard({
+    await renderDashboard({
       opportunities: [
         anOpportunity({ current_user_role: "editor", owner_id: BLAIR.id }),
       ],
@@ -531,7 +255,7 @@ describe("what each role is offered", () => {
   });
 
   it("shows the owner the sharing panel and audit log", async () => {
-    await dashboard({
+    await renderDashboard({
       opportunities: [anOpportunity()],
       entries: [anEntry()],
       shares: [
@@ -562,13 +286,16 @@ describe("what each role is offered", () => {
     expect(
       await screen.findByRole("heading", { name: "Sharing" }),
     ).toBeInTheDocument();
-    expect(screen.getByText(BLAIR.email)).toBeInTheDocument();
+    expect(await screen.findByText(BLAIR.email)).toBeInTheDocument();
     expect(screen.getByText("Audit Log")).toBeInTheDocument();
     expect(screen.getByText("share_added")).toBeInTheDocument();
   });
 
   it("shares, promotes and removes a colleague", async () => {
-    await dashboard({ opportunities: [anOpportunity()], entries: [anEntry()] });
+    const api = await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [anEntry()],
+    });
     await openTimeline("Northwind rollout");
 
     await userEvent.type(
@@ -599,10 +326,15 @@ describe("what each role is offered", () => {
 
 describe("the AI panel", () => {
   it("shows the question and the answer, and the entries it cited", async () => {
-    await dashboard({ opportunities: [anOpportunity()], entries: [anEntry()] });
+    await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [anEntry()],
+    });
     await openTimeline("Northwind rollout");
 
-    const sidebar = document.querySelector(".ai-sidebar") as HTMLElement;
+    const sidebar = (
+      await screen.findByRole("heading", { name: "AI Agent" })
+    ).closest("aside") as HTMLElement;
     expect(
       within(sidebar).getByText("Ask a timeline question."),
     ).toBeInTheDocument();
@@ -622,8 +354,36 @@ describe("the AI panel", () => {
     expect(within(sidebar).getByText("Entries: 100")).toBeInTheDocument();
   });
 
+  it("keeps the conversation when the reader looks at another opportunity", async () => {
+    await renderDashboard({
+      opportunities: [
+        anOpportunity(),
+        anOpportunity({ id: 11, name: "Globex renewal", stage: "Proposal" }),
+      ],
+      entries: [anEntry()],
+    });
+    await openTimeline("Northwind rollout");
+
+    await userEvent.type(
+      await screen.findByLabelText(/Ask the read-only AI agent/),
+      "Where do we stand?",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Ask" }));
+    await screen.findByText("Answer to: Where do we stand?");
+
+    await openTimeline("Globex renewal");
+    expect(
+      await screen.findByText("Ask a timeline question."),
+    ).toBeInTheDocument();
+
+    await openTimeline("Northwind rollout");
+    expect(
+      await screen.findByText("Answer to: Where do we stand?"),
+    ).toBeInTheDocument();
+  });
+
   it("reports a failure rather than pretending there was an answer", async () => {
-    await dashboard({
+    await renderDashboard({
       opportunities: [anOpportunity()],
       entries: [anEntry()],
       failures: {
@@ -635,7 +395,9 @@ describe("the AI panel", () => {
     });
     await openTimeline("Northwind rollout");
 
-    const sidebar = document.querySelector(".ai-sidebar") as HTMLElement;
+    const sidebar = (
+      await screen.findByRole("heading", { name: "AI Agent" })
+    ).closest("aside") as HTMLElement;
     await userEvent.type(
       within(sidebar).getByLabelText(/Ask the read-only AI agent/),
       "Where do we stand?",
@@ -650,7 +412,10 @@ describe("the AI panel", () => {
 
 describe("changing and removing what is already there", () => {
   it("loads an entry into the form and saves the edit", async () => {
-    await dashboard({ opportunities: [anOpportunity()], entries: [anEntry()] });
+    const api = await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [anEntry()],
+    });
     await openTimeline("Northwind rollout");
 
     const entry = (
@@ -658,7 +423,9 @@ describe("changing and removing what is already there", () => {
     ).closest("article")!;
     await userEvent.click(within(entry).getByRole("button", { name: "Edit" }));
 
-    const form = document.querySelector("form.timeline-form") as HTMLElement;
+    const form = (
+      await screen.findByRole("button", { name: "Save Entry" })
+    ).closest("form") as HTMLElement;
     expect(within(form).getByLabelText("Title")).toHaveValue("Discovery call");
 
     await userEvent.clear(within(form).getByLabelText("Title"));
@@ -679,7 +446,10 @@ describe("changing and removing what is already there", () => {
   });
 
   it("abandons an entry edit without sending anything", async () => {
-    await dashboard({ opportunities: [anOpportunity()], entries: [anEntry()] });
+    const api = await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [anEntry()],
+    });
     await openTimeline("Northwind rollout");
 
     const entry = (
@@ -687,15 +457,23 @@ describe("changing and removing what is already there", () => {
     ).closest("article")!;
     await userEvent.click(within(entry).getByRole("button", { name: "Edit" }));
 
-    const form = document.querySelector("form.timeline-form") as HTMLElement;
+    const form = (
+      await screen.findByRole("button", { name: "Save Entry" })
+    ).closest("form") as HTMLElement;
     await userEvent.click(within(form).getByRole("button", { name: "Cancel" }));
 
-    expect(within(form).getByLabelText("Title")).toHaveValue("");
+    expect(
+      await screen.findByRole("button", { name: "Add Entry" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Title")).toHaveValue("");
     expect(api.callsTo("PATCH", "/api/timeline/100")).toHaveLength(0);
   });
 
   it("deletes an entry once the confirmation is accepted", async () => {
-    await dashboard({ opportunities: [anOpportunity()], entries: [anEntry()] });
+    const api = await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [anEntry()],
+    });
     await openTimeline("Northwind rollout");
     const entry = (
       await screen.findByRole("heading", { name: "Discovery call" })
@@ -723,7 +501,7 @@ describe("changing and removing what is already there", () => {
   });
 
   it("deletes a note and a comment", async () => {
-    await dashboard({
+    await renderDashboard({
       opportunities: [anOpportunity()],
       entries: [anEntry({ notes: [aNote({ comments: [aComment()] })] })],
     });
@@ -752,7 +530,7 @@ describe("changing and removing what is already there", () => {
   });
 
   it("abandons a note edit and leaves the text alone", async () => {
-    await dashboard({
+    const api = await renderDashboard({
       opportunities: [anOpportunity()],
       entries: [anEntry({ notes: [aNote()] })],
     });
@@ -773,7 +551,7 @@ describe("changing and removing what is already there", () => {
   });
 
   it("ignores an empty note or comment instead of posting it", async () => {
-    await dashboard({
+    const api = await renderDashboard({
       opportunities: [anOpportunity()],
       entries: [anEntry({ notes: [aNote()] })],
     });
@@ -791,7 +569,7 @@ describe("changing and removing what is already there", () => {
 
 describe("when the API refuses", () => {
   it("reports a refused entry edit", async () => {
-    await dashboard({
+    await renderDashboard({
       opportunities: [
         anOpportunity({ current_user_role: "editor", owner_id: BLAIR.id }),
       ],
@@ -805,7 +583,9 @@ describe("when the API refuses", () => {
     });
     await openTimeline("Northwind rollout");
 
-    const form = document.querySelector("form.timeline-form") as HTMLElement;
+    const form = (
+      await screen.findByRole("button", { name: "Add Entry" })
+    ).closest("form") as HTMLElement;
     await userEvent.type(within(form).getByLabelText("Title"), "Refused");
     await userEvent.click(
       within(form).getByRole("button", { name: "Add Entry" }),
@@ -817,7 +597,7 @@ describe("when the API refuses", () => {
   });
 
   it("reports a refused note edit", async () => {
-    await dashboard({
+    await renderDashboard({
       opportunities: [anOpportunity()],
       entries: [anEntry({ notes: [aNote()] })],
       failures: {
@@ -844,7 +624,7 @@ describe("when the API refuses", () => {
   });
 
   it("reports a refused delete", async () => {
-    await dashboard({
+    await renderDashboard({
       opportunities: [anOpportunity()],
       entries: [anEntry({ notes: [aNote({ comments: [aComment()] })] })],
       failures: { "DELETE /api/comments/300": [403, "Not yours to delete"] },
@@ -864,7 +644,7 @@ describe("when the API refuses", () => {
   });
 
   it("reports a timeline that will not load", async () => {
-    await dashboard({
+    await renderDashboard({
       opportunities: [anOpportunity()],
       failures: {
         "GET /api/opportunities/10/timeline": [404, "Opportunity not found"],

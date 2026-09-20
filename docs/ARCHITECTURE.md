@@ -55,9 +55,11 @@ path (`main.py:56-64`).
 - **TanStack Query** — the only server-state cache; SSE events invalidate keys.
 - `app/[[...slug]]/page.tsx` is the single exported HTML file; `app/AppRoot.tsx`
   holds the router and the query client, and `/search` is the second route that
-  justified introducing both (milestone 1.5). `app/Home.tsx` — the former
-  `page.tsx` — decomposes into routed views and feature components in milestone
-  2.1. Local state lives in the component that owns it.
+  justified introducing both (milestone 1.5). Milestone 2.1 decomposed the
+  former `page.tsx` into routed views and feature components: `/` is a layout
+  route (board and shell) with the opportunity's timeline as its child at
+  `/opportunities/:opportunityId`, and every server read and write is declared
+  in `lib/queries.ts`. Local state lives in the component that owns it.
 
 ### Backend
 

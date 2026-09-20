@@ -2,8 +2,8 @@
  * The single TanStack Query client for the app (ADR 0005).
  *
  * Server state is cached and invalidated here rather than copied into
- * component state; `app/Home.tsx` still predates this and is migrated in
- * milestone 2.1, when it is decomposed into routed views.
+ * component state. Every read and write the app makes is declared against this
+ * client in `lib/queries.ts`.
  */
 
 import { QueryClient } from "@tanstack/react-query";

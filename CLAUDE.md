@@ -223,7 +223,8 @@ client-visible behaviour change, not just a response-shape one.
 - Marking one notification read is still only a v1 route
   (`PATCH /api/notifications/{id}/read`); v2 adds
   `POST /api/v2/notifications/mark-all-read` since that has no v1 twin to
-  reuse. The frontend inbox panel (`app/Home.tsx`) reads history from v2 and
+  reuse. The frontend inbox panel (`app/NotificationMenu.tsx`) reads history
+  from v2 and
   marks read through the same v1 PATCH — one endpoint, not two, since both
   already operate on the same row.
 
@@ -370,18 +371,40 @@ Adding a second Next route would emit a second HTML file and split the SPA;
 routes go in `app/AppRoot.tsx` instead.
 
 `AppRoot` is the whole client runtime: the TanStack Query provider, then
-`BrowserRouter` over `/` (`app/Home.tsx`), `/search` (`app/SearchPage.tsx`) and
-a catch-all that redirects to `/`. It renders nothing until it is in a browser
-— the export renders this tree once in Node, where `BrowserRouter` has no
-history to read — which is also why the emitted `index.html` body is empty.
+`BrowserRouter` over `AppRoutes`. It renders nothing until it is in a browser —
+the export renders this tree once in Node, where `BrowserRouter` has no history
+to read — which is also why the emitted `index.html` body is empty.
+`AppRoutes` is exported separately so the tests mount the real route table
+inside a `MemoryRouter` (`app/test-app.tsx`) rather than a copy of it.
 
-`app/Home.tsx` (the former `page.tsx`) is still the rest of the application —
-one large client component holding all state in `useState`, fetching with bare
-`apiRequest` calls rather than through the query cache. Milestone 2.1 is where
-it is decomposed into routed views and moved onto TanStack Query; new work
-should not add to it.
+Three routes. `/search` is `app/SearchPage.tsx`; `/` is `app/DashboardPage.tsx`,
+a **layout route** with two children — the index, which is the "select an
+opportunity" panel, and `opportunities/:opportunityId`
+(`app/OpportunityPanel.tsx`). The board therefore stays mounted while the child
+route swaps the panel beside it, which is what gives an opportunity its own URL
+without reloading the list behind it (D-054). Anything else redirects to `/`.
+`OpportunityPanel` re-keys its body on the id, so filters and a half-finished
+entry edit cannot leak from one opportunity into the next.
 
-What has been pulled out of it, because each is a unit worth testing directly:
+Milestone 2.1 decomposed the former `app/Home.tsx` — 1,863 lines, 28 `useState`
+hooks, every read copied into component state — into these components, none
+over 200 lines and each holding only its own form state: `AuthPanel`, `TopBar`,
+`NotificationMenu`, `OpportunityForm`, `StageBoard`, `SharingPanel`,
+`TimelineFilterBar`, `TimelineEntryForm`, `TimelineEntryList`, `NoteBlock`,
+`AiSidebar`.
+
+**Server state does not live in components.** `lib/queries.ts` declares every
+read and write the app makes against the query cache: the query keys, the six
+reads, and each mutation with what it invalidates. A view calls a hook; a write
+invalidates a key. Do not add a bare `apiRequest` call to a component — that is
+the pattern ADR 0005 calls blocker B1, and 2.1 is what removed the last of it.
+Two things in there are worth knowing before changing them: the AI transcript is
+cache state under `["ai-conversation", id]` because it has to outlive the route
+(D-055), and the cache is dropped on *sign-in*, not sign-out, because observers
+are still mounted for one render after logout and removing their queries makes
+them refetch (D-056).
+
+The units worth testing directly, each in its own module:
 
 - `lib/api.ts` — `apiRequest<T>()`, the only fetch wrapper
   (`credentials: "include"`, echoes the CSRF cookie on unsafe methods, throws on
@@ -395,6 +418,10 @@ What has been pulled out of it, because each is a unit worth testing directly:
   `canChangeItem`, the client mirror of `backend/app/permissions.py`. They decide
   which buttons are offered, never who is allowed to do what.
 - `lib/notifications.ts` — the sentence shown for each notification type.
+- `lib/domain.ts` — the fixed stage list, the entry types, and the short names
+  for the generated schemas. One definition, because several views read them.
+- `lib/confirm.ts` — the single `window.confirm` call. Milestone 2.5 replaces it
+  with a real dialog, which is a one-file change only while it stays single.
 - `app/MarkdownText.tsx` — note and comment bodies, rendered through
   `rehype-sanitize` with an explicit `http`/`https`/`mailto` protocol allowlist.
   Keep that allowlist if you touch the Markdown pipeline.

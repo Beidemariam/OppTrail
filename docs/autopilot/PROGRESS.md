@@ -1,4 +1,4 @@
-STATUS: AWAITING_REVIEW phase=1
+STATUS: IN_PROGRESS phase=2
 
 # Autopilot Progress
 
@@ -12,6 +12,12 @@ tags exist yet — this is the project's first autopilot run).
 Phase F was accepted: `phase-F-accepted` exists at `544533d`, which is also
 where `main` and `autopilot/phase-F` sit. Base commit for `autopilot/phase-1`:
 `544533d` on `main`.
+
+Phase 1 was accepted: `phase-1-accepted` exists at `cce353c`. `main` then took
+five documentation commits from the human (invariant 8, in-place editing and
+timeline order, the AI failure message, the 2.12 test split, and the Phase 2
+milestone reordering), so the base commit for `autopilot/phase-2` is `c173946`
+on `main`, not the tag.
 
 ---
 
@@ -1463,12 +1469,60 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
 
 ### Milestones
 
-- [ ] 2.1 Decompose `app/Home.tsx` (the former `page.tsx`) into routed views and
+- [x] 2.1 Decompose `app/Home.tsx` (the former `page.tsx`) into routed views and
       feature components, and move its reads onto the TanStack Query cache
       introduced in 1.5 (**D-038**). Two things 1.5 left for this milestone:
       the opportunity and its timeline get their own URL, and search results
       then link into it (**D-039**).
-      Blocker B1 lands here in full, paid for by the board view.
+      Blocker B1 lands here in full, paid for by the board view. — **DONE**
+
+  - [x] `app/Home.tsx` (1,863 lines, 28 `useState` hooks, every read a bare
+        `apiRequest` copied into component state) is deleted. In its place:
+        `AuthPanel`, `DashboardPage`, `TopBar`, `NotificationMenu`,
+        `OpportunityForm`, `StageBoard`, `OpportunityPanel`, `SharingPanel`,
+        `TimelineFilterBar`, `TimelineEntryForm`, `TimelineEntryList`,
+        `NoteBlock`, `AiSidebar` — none over 200 lines, each holding only its
+        own form state.
+  - [x] Every read and write now goes through `lib/queries.ts`, which declares
+        the query keys, the six reads and the seventeen mutations with what
+        each invalidates. No component copies a response into `useState`; the
+        "await the write, then reload everything" pattern (ADR 0005's blocker
+        **B1**) is gone, including the two places that called
+        `loadOpportunities()` twice in a row. `lib/domain.ts` holds the stage
+        list, entry types and schema aliases the views share.
+  - [x] The opportunity has its own URL. `/opportunities/:opportunityId` is a
+        child of the dashboard layout route, so the board stays mounted beside
+        the panel and a deep link, a reload and the back button all agree with
+        the page (**D-054**). `e2e/01` asserts the reload case.
+  - [x] Search results link into the timeline they were found in
+        (`app/SearchPage.tsx`), closing the limitation **D-039** recorded as
+        the one place milestone 1.5 visibly stopped short. `SearchPage` also
+        moved onto the shared `useSession()` rather than declaring a second
+        query under the same key.
+  - [x] Tests: `app/Home.test.tsx` (35 cases) became `DashboardPage.test.tsx`
+        and `OpportunityPanel.test.tsx` with every case carried over — none
+        weakened — plus six new ones (deep link, unreachable opportunity, the
+        AI transcript surviving a navigation, the abandoned opportunity edit,
+        a failed opportunity list, and the timeline closing when its
+        opportunity is deleted). `app/test-app.tsx` mounts the real route
+        table from `AppRoot`, so a component test walks the routes the browser
+        does. 102 → 110 frontend tests; 18 → 19 E2E tests.
+  - [x] Coverage thresholds raised 85/85/85/78 → 93/93/92/85 (**D-058**), the
+        raise 1.5 and 1.7 deferred until `Home.tsx` was gone.
+  - [x] Two findings worth naming, both diagnosed rather than patched around:
+        the logout path was refetching into a just-cleared cache (**D-056**),
+        and the E2E suite was sitting exactly on the 20-attempt auth rate limit
+        so the next test anyone added would fail at sign-in (**D-057**).
+
+  Gate: `make check` green in full (ruff, ruff format, mypy, eslint, tsc,
+  prettier, 258 backend tests, 110 frontend tests over the raised thresholds,
+  contract check, 19 E2E with axe, pip-audit, npm audit). Docker deferred to
+  the host half as always (`sandbox/README.md`).
+
+  Not in this milestone, deliberately: the board still cannot be dragged (2.7),
+  the filters are not in the URL yet (2.2), and `window.confirm` is still the
+  confirmation dialog (2.5) — it is now behind `lib/confirm.ts`, so 2.5 is a
+  one-file change.
 - [ ] 2.2 Shared filter/sort/group model serialized to the URL; saved views
       persisted. Schema: `saved_views`.
       Includes **timeline order direction** (oldest-first / newest-first),
@@ -1486,7 +1540,8 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
       undo toasts.
 - [ ] 2.5 Design tokens from `DESIGN-SYSTEM.md`, including the three
       corrected contrast values; Radix primitives; real dialogs replacing
-      `window.confirm` (`page.tsx:229`). **D-003 ACCEPTED by the human
+      `window.confirm` (now `lib/confirm.ts`, the single call site 2.1 left
+      for this milestone). **D-003 ACCEPTED by the human
       2026-09-16 — this is now phase scope, not a proposal:** ship light and
       dark themes together, with dark-theme parity asserted by axe contrast
       checks on every component delivered in Phase 2.

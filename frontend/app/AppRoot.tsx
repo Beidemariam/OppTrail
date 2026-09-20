@@ -4,13 +4,40 @@ import { useState, useSyncExternalStore } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 
-import Home from "./Home";
+import { DashboardPage, NoOpportunitySelected } from "./DashboardPage";
+import { OpportunityPanel } from "./OpportunityPanel";
 import { SearchPage } from "./SearchPage";
 import { createQueryClient } from "../lib/query";
 
 /** Nothing to subscribe to; hoisted so React is not handed a new one to
  * resubscribe to on every render. */
 const noSubscription = () => () => {};
+
+/**
+ * Every route in the app (ADR 0005). Exported on its own so the tests can
+ * mount the real route table inside a `MemoryRouter` rather than a copy of it.
+ *
+ * The dashboard is a layout route: the board stays mounted and the child route
+ * decides which panel sits beside it, which is what gives an opportunity its
+ * own URL.
+ */
+export function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/search" element={<SearchPage />} />
+      <Route path="/" element={<DashboardPage />}>
+        <Route index element={<NoOpportunitySelected />} />
+        <Route
+          path="opportunities/:opportunityId"
+          element={<OpportunityPanel />}
+        />
+      </Route>
+      {/* Any other path reached the shell through FastAPI's catch-all
+          rather than through a link, so there is nothing to render. */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
 
 /**
  * Client router and query cache for the whole app (ADR 0005).
@@ -38,13 +65,7 @@ export function AppRoot() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/search" element={<SearchPage />} />
-          {/* Any other path reached the shell through FastAPI's catch-all
-              rather than through a link, so there is nothing to render. */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <AppRoutes />
       </BrowserRouter>
     </QueryClientProvider>
   );

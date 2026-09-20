@@ -696,3 +696,40 @@ above) unchanged since Phase F.
 
 Full detail and the try-it steps: `docs/autopilot/reviews/phase-1-summary.md`.
 
+
+## Phase 2 — milestone 2.1 (decompose `Home.tsx`, routed views, query cache)
+
+No backend code changed. The whole frontend changed: `app/Home.tsx` is gone and
+thirteen components plus `lib/queries.ts` and `lib/domain.ts` stand where it
+was.
+
+```
+backend:  258 passed (unchanged), 97.28% combined line+branch coverage
+          (--cov-fail-under=90 enforced). No application file touched;
+          scripts/e2e-server.sh gained one exported environment variable.
+frontend: 110 passed (was 102), 95.76% line (was 88.38%), 88.32% branch
+          (was 80.86%), 94.42% functions (was 90.54%)
+          thresholds raised 85/85/85/78 -> 93/93/92/85 (D-058)
+          lib/queries.ts    100% line, 95% branch
+          lib/domain.ts     100% line
+          every app/ component at or above 75% line, the lowest being
+          TimelineFilterBar (75%: its type, to and author-id inputs are typed
+          by no test yet) and TimelineEntryForm (80%: the follow-up date and
+          the type select)
+e2e:      19 passed (was 18), axe clean on every screen, the deferred
+          color-contrast ratchet still failing on cue
+```
+
+The jump is not new tests chasing coverage; it is the same assertions reaching
+code that was previously unreachable behind one 1,863-line component. The two
+milestones that declined to raise the thresholds (1.5, 1.7) both named this as
+the reason, so the raise lands here.
+
+Authorization matrix: 47 endpoints, unchanged — this milestone adds no route.
+
+The guard test for this milestone (brief §6.5: confirmed to fail against the
+unfixed code first) is `keeps the conversation when the reader looks at another
+opportunity` in `app/OpportunityPanel.test.tsx`. Run against an `AiSidebar`
+holding its transcript in `useState` — the obvious way to write it once the
+panel is per-route — it fails on the return trip, which is the behaviour
+`Home.tsx` had and D-055 keeps.

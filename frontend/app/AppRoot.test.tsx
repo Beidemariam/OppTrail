@@ -4,11 +4,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AppRoot } from "./AppRoot";
 import Page, { generateStaticParams } from "./[[...slug]]/page";
-import { ALEX, FakeApi, aSearchResult } from "./test-api";
+import {
+  ALEX,
+  FakeApi,
+  anEntry,
+  anOpportunity,
+  aSearchResult,
+} from "./test-api";
 
 function start(path: string) {
   const api = new FakeApi({
     user: ALEX,
+    opportunities: [anOpportunity()],
+    entries: [anEntry()],
     searchResults: [aSearchResult({ title: "Proposal sent" })],
   });
   api.install();
@@ -44,6 +52,19 @@ describe("app routing", () => {
     expect(await screen.findByText("Proposal sent")).toBeInTheDocument();
   });
 
+  it("serves one opportunity's timeline at its own URL", async () => {
+    start("/opportunities/10");
+
+    // The board is still there — the timeline is a child route beside it, not
+    // a page that replaces it.
+    expect(
+      await screen.findByRole("heading", { name: "Opportunities" }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Discovery call" }),
+    ).toBeInTheDocument();
+  });
+
   it("sends a path nothing renders back to the dashboard", async () => {
     start("/opportunities/10/board");
 
@@ -66,6 +87,15 @@ describe("app routing", () => {
     // where `BrowserRouter` has no history to read. The shell it emits is what
     // FastAPI serves for every deep link, so this has to stay empty and quiet.
     expect(renderToStaticMarkup(<AppRoot />)).toBe("");
+  });
+
+  it("links a search result into the timeline it was found in", async () => {
+    start("/search?q=finance");
+    await screen.findByText("Proposal sent");
+
+    expect(
+      screen.getByRole("link", { name: "Northwind rollout" }),
+    ).toHaveAttribute("href", "/opportunities/10");
   });
 
   it("links the dashboard to the search route", async () => {

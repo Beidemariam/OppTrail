@@ -71,7 +71,9 @@ export function entry(page: Page, title: string) {
 }
 
 export async function openTimeline(page: Page, name: string) {
-  await card(page, name).getByRole("button", { name: "Timeline" }).click();
+  // A real link, not a button: an opportunity has its own URL from milestone
+  // 2.1 onwards, and the board stays beside the panel it opens.
+  await card(page, name).getByRole("link", { name: "Timeline" }).click();
   await expect(
     page.locator(".timeline-panel").getByRole("heading", { name }),
   ).toBeVisible();

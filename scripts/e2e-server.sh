@@ -25,6 +25,12 @@ export ENVIRONMENT=development
 # what makes that structural: the AI endpoint answers 503 and the suite asserts
 # the UI's failure state rather than a model's words.
 export OPENAI_API_KEY=""
+# Every Playwright test signs in from the same address, and the suite as a
+# whole does that far more often in five minutes than the shipped limit of 20
+# allows a real person to. Raised here only, so the suite's own volume cannot
+# fail a test that is about something else; the limit itself is asserted in
+# `backend/tests/test_rate_limit.py`, against the real default.
+export AUTH_RATE_LIMIT_ATTEMPTS=200
 
 cd backend
 uv run python -m tools.seed >/dev/null

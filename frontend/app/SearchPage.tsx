@@ -1,15 +1,15 @@
 "use client";
 
 import { FormEvent } from "react";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router";
 
 import type { components } from "../lib/api-types";
 import { apiRequest } from "../lib/api";
+import { useSession } from "../lib/queries";
 import { snippetSegments } from "../lib/snippet";
 import { formatTimestamp } from "../lib/time";
 
-type AuthResponse = components["schemas"]["AuthResponse"];
 type SearchResult = components["schemas"]["SearchResultPublic"];
 type SearchResultPage = components["schemas"]["Page_SearchResultPublic_"];
 
@@ -40,14 +40,11 @@ export function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const query = (searchParams.get("q") ?? "").trim();
 
-  const session = useQuery({
-    queryKey: ["session"],
-    queryFn: () => apiRequest<AuthResponse>("/api/auth/me"),
-  });
+  const session = useSession();
 
   const results = useInfiniteQuery({
     queryKey: ["search", query],
-    enabled: query !== "" && session.data !== undefined,
+    enabled: query !== "" && Boolean(session.data),
     initialPageParam: null as string | null,
     queryFn: ({ pageParam }) =>
       apiRequest<SearchResultPage>(searchPath(query, pageParam)),
@@ -69,7 +66,7 @@ export function SearchPage() {
     );
   }
 
-  if (session.isError) {
+  if (!session.data) {
     return (
       <main className="app-shell">
         <header className="topbar">
@@ -95,7 +92,7 @@ export function SearchPage() {
           <h1>Search</h1>
         </div>
         <div className="user-block">
-          <span>{session.data.user.name}</span>
+          <span>{session.data.name}</span>
           <Link className="secondary-button" to="/">
             Opportunities
           </Link>
@@ -147,7 +144,14 @@ export function SearchPage() {
         {matches.map((match) => (
           <article className="search-result" key={`${match.kind}-${match.id}`}>
             <div className="search-result-header">
-              <h2>{match.opportunity_name}</h2>
+              {/* The result links into the timeline it was found in. Milestone
+                  1.5 shipped these as plain text because no opportunity had a
+                  URL yet (D-039); 2.1 gave them one. */}
+              <h2>
+                <Link to={`/opportunities/${match.opportunity_id}`}>
+                  {match.opportunity_name}
+                </Link>
+              </h2>
               <span className="search-kind">{kindLabels[match.kind]}</span>
             </div>
             {match.title && (

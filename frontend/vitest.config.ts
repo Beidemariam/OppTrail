@@ -23,16 +23,19 @@ export default defineConfig({
         "**/*.test.{ts,tsx}",
         // Test infrastructure, not shipped code.
         "app/test-api.ts",
+        "app/test-app.tsx",
       ],
       // Brief §6.2 sets the frontend floor at 80% line. These are the numbers
       // the suite actually reaches, kept a little under the measured value so
       // ordinary churn does not fail the gate, and never lowered: raising a
-      // threshold is how a coverage gain is kept.
+      // threshold is how a coverage gain is kept. Milestone 2.1 raised them
+      // from 85/85/85/78 — the 1,863-line `app/Home.tsx` that dominated and
+      // capped the total is gone, decomposed into components the tests reach.
       thresholds: {
-        lines: 85,
-        statements: 85,
-        functions: 85,
-        branches: 78,
+        lines: 93,
+        statements: 93,
+        functions: 92,
+        branches: 85,
       },
     },
   },

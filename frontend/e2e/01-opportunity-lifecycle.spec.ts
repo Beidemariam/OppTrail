@@ -42,6 +42,12 @@ test("sign up, create an opportunity, add entries, change stage", async ({
   await expect(timeline.locator("article.timeline-entry")).toHaveCount(1);
   await expect(timeline.getByText("Opportunity created")).toBeVisible();
 
+  // The opportunity has its own URL (milestone 2.1), so a reload keeps the
+  // reader on the timeline they were reading rather than on the dashboard.
+  await expect(page).toHaveURL(/\/opportunities\/\d+$/);
+  await page.reload();
+  await expect(timeline.getByText("Opportunity created")).toBeVisible();
+
   for (const [type, title] of [
     ["Call", "Discovery call"],
     ["Meeting", "Solution review"],
