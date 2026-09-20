@@ -873,3 +873,55 @@ the component tests start from a body that holds no focus. Recorded here
 because it is the second time in this phase that an E2E journey found
 something no unit test could (2.1's D-057 was the first) — the ratio is worth
 watching rather than assuming more component tests would have done it.
+
+---
+
+## Phase 2 — milestone 2.4b (optimistic mutations and undo toasts)
+
+```
+backend:  290 passed (was 274), 97.41% combined line+branch coverage
+          (was 97.40%, --cov-fail-under=90 enforced)
+          app/soft_delete.py       100%   line, 100%  branch (the four new
+                                   restore cascades)
+          app/routes_timeline.py   100%   line,  97%  branch
+          app/routes_opportunities.py 100% line, 100% branch
+frontend: 201 passed (was 192), 97.09% line (was 97.04%), 89.71% branch
+          (was 89.63%), 95.66% functions (was 95.67%)
+          thresholds unchanged at 94/94/93/87 — the measurement is flat
+          (+0.05 line, +0.08 branch, -0.01 functions), so there is no gain to
+          ratchet. D-058's rule is that a gain is kept, not that the floor
+          moves every milestone.
+          app/Toasts.tsx           100%   line, 100%  branch, 95.45% functions
+          lib/queries.ts           98.75% line, 80.76% branch, 98.52% functions
+e2e:      29 passed (was 27), axe clean, including the timeline with an undo
+          toast open (the live region is a new surface)
+docker:   deferred to the host half — scripts/autopilot-gate.sh 2
+          (no Docker socket in this sandbox, per sandbox/README.md)
+```
+
+Authorization matrix: 51 → 55 endpoints, the four restore routes. Each one's
+expectations are its delete twin's, because it is the same rule — except the
+opportunity restore, where a former editor and viewer get 404 rather than 403:
+deleting the opportunity deleted the share rows that made it visible to them.
+`World` gained four deleted fixtures, since there is nothing to restore about a
+live row. No new dependency; no migration. `pip-audit`: no known
+vulnerabilities. `npm audit`: 0 vulnerabilities.
+
+The guard test for this milestone (brief §6.5, confirmed to fail against the
+unfixed code first) is `removes what was deleted before the server has
+answered` in `app/Undo.test.tsx`. It holds the DELETE response open — a new
+`pending` option on the fake API, since an optimistic update is only
+observable while its request is still in flight — and asserts the comment has
+already left the DOM. With `onMutate` removed from `useDeleteComment` it fails.
+
+Two things the tests found rather than the design:
+
+- The undo toast outlives the control that raised it, so per-call mutation
+  callbacks are the wrong mechanism: deleting a note unmounts the note, and
+  TanStack Query drops `mutate(vars, { onSuccess })` when the observer has no
+  listeners left. `mutateAsync` resolves either way.
+- A delete writes an audit row, and the audit panel was showing a list fetched
+  before it. Fixed by invalidating the `["audit-log"]` prefix from every
+  delete and restore, which is also the only way those mutations can express
+  it — they know the id of the thing they removed, not the opportunity it
+  hung under.

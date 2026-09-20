@@ -339,6 +339,25 @@ def seed() -> None:
     removed_note = add_note(alex, scratch, "Duplicate of the Contoso lead - removing.")
     check(alex.client.delete(f"/api/notes/{removed_note}"), "soft-deleting a note")
 
+    # And a deletion that was taken back (milestone 2.4b), so the log shows
+    # both halves of an undo and the entry it took is readable again.
+    reinstated = add_entry(
+        alex,
+        umbrella,
+        type="call",
+        title="Qualification call",
+        body="Budget is real; timeline is not.",
+        event_timestamp=days_ago(2, hour=11),
+    )
+    check(
+        alex.client.delete(f"/api/timeline/{reinstated}"),
+        "soft-deleting a timeline entry",
+    )
+    check(
+        alex.client.post(f"/api/v2/timeline/{reinstated}/restore"),
+        "restoring the timeline entry",
+    )
+
     # 6. One of Alex's notifications marked read, so the inbox rework
     #    (milestone 1.7) has both states to show without a click: history
     #    that survives being read, next to what is still unread.
@@ -414,6 +433,9 @@ def main(argv: list[str] | None = None) -> int:
         "  Dana has access to nothing, which is the case worth checking by hand.\n"
         "  Globex renewal is stalled; Northwind has a system stage-change entry,\n"
         "  a mention notification for Alex, an edited note and a soft-deleted note.\n"
+        "  Umbrella discovery holds an undone deletion: its owner-only audit log\n"
+        "  has timeline_entry_deleted next to timeline_entry_restored, and the\n"
+        "  Qualification call entry is back on the timeline.\n"
         "\n"
         "  Search (GET /api/v2/search?q=finance, or the Search link in the top\n"
         "  bar, which opens /search?q=finance) is scoped to what the caller can\n"

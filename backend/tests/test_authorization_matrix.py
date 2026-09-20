@@ -66,6 +66,12 @@ class World:
     comment_id: int
     notification_id: int
     saved_view_id: int
+    # Deleted rows, for the restore endpoints: there is nothing to restore
+    # about a live one, and a restore of what is already here is a 404.
+    deleted_entry_id: int
+    deleted_note_id: int
+    deleted_comment_id: int
+    deleted_opportunity_id: int
 
 
 @dataclass(frozen=True)
@@ -379,6 +385,40 @@ MATRIX: dict[Endpoint, Case] = {
         url=lambda world: f"/api/v2/saved-views/{world.saved_view_id}",
         notes="Same creator-only rule as the PATCH above.",
     ),
+    # Undo (milestone 2.4b). Each restore answers exactly what its delete twin
+    # answers, because it is the same rule: the author or the opportunity owner.
+    Endpoint("POST", "/api/v2/timeline/{entry_id}/restore"): Case(
+        expected=scoped(viewer=403, editor=403, owner=204),
+        url=lambda world: f"/api/v2/timeline/{world.deleted_entry_id}/restore",
+        body=lambda world, actor: None,
+        notes="Entry authored by the owner, so the editor is not its author (D-005).",
+    ),
+    Endpoint("POST", "/api/v2/notes/{note_id}/restore"): Case(
+        expected=scoped(viewer=403, editor=403, owner=204),
+        url=lambda world: f"/api/v2/notes/{world.deleted_note_id}/restore",
+        body=lambda world, actor: None,
+    ),
+    Endpoint("POST", "/api/v2/comments/{comment_id}/restore"): Case(
+        expected=scoped(viewer=403, editor=403, owner=204),
+        url=lambda world: f"/api/v2/comments/{world.deleted_comment_id}/restore",
+        body=lambda world, actor: None,
+    ),
+    Endpoint("POST", "/api/v2/opportunities/{opportunity_id}/restore"): Case(
+        expected={
+            "anonymous": 401,
+            "unrelated": 404,
+            "viewer": 404,
+            "editor": 404,
+            "owner": 204,
+        },
+        url=lambda world: f"/api/v2/opportunities/{world.deleted_opportunity_id}/restore",
+        body=lambda world, actor: None,
+        notes=(
+            "404 rather than 403 for the shared editor and viewer, unlike DELETE: "
+            "deleting the opportunity deleted their share rows with it, so they "
+            "can no longer see that the record exists at all."
+        ),
+    ),
     Endpoint("GET", "/api/v2/search"): Case(
         expected=authenticated_only(200),
         url=lambda world: "/api/v2/search?q=discovery",
@@ -502,6 +542,46 @@ def world(tmp_path, monkeypatch) -> World:
         json={"name": "Matrix view", "entity": "opportunities"},
     ).json()["id"]
 
+    # One of each kind, authored by the owner and then deleted, so the restore
+    # endpoints have something to act on. Separate rows from the live ones
+    # above: an endpoint's expectations must not depend on another endpoint's
+    # test having run.
+    deleted_entry_id = owner.post(
+        f"/api/opportunities/{opportunity_id}/timeline",
+        json={
+            "type": "call",
+            "title": "Deleted call",
+            "body": "",
+            "event_timestamp": "2026-09-06T10:00",
+        },
+    ).json()["id"]
+    deleted_note_id = owner.post(
+        f"/api/timeline/{entry_id}/notes", json={"body": "Deleted note"}
+    ).json()["id"]
+    deleted_comment_id = owner.post(
+        f"/api/notes/{note_id}/comments", json={"body": "Deleted comment"}
+    ).json()["id"]
+    for path in (
+        f"/api/timeline/{deleted_entry_id}",
+        f"/api/notes/{deleted_note_id}",
+        f"/api/comments/{deleted_comment_id}",
+    ):
+        assert owner.delete(path).status_code == 204, path
+
+    deleted_opportunity_id = owner.post(
+        "/api/opportunities",
+        json={"name": "Matrix deleted", "account_name": "Acme", "stage": "Prospecting"},
+    ).json()["id"]
+    for actor, role in (("editor", "editor"), ("viewer", "viewer")):
+        assert (
+            owner.post(
+                f"/api/opportunities/{deleted_opportunity_id}/shares",
+                json={"email": emails[actor], "role": role},
+            ).status_code
+            == 201
+        )
+    assert owner.delete(f"/api/opportunities/{deleted_opportunity_id}").status_code == 204
+
     yield World(
         clients=clients,
         user_ids=user_ids,
@@ -512,6 +592,10 @@ def world(tmp_path, monkeypatch) -> World:
         comment_id=comment_id,
         notification_id=notifications[0]["id"],
         saved_view_id=saved_view_id,
+        deleted_entry_id=deleted_entry_id,
+        deleted_note_id=deleted_note_id,
+        deleted_comment_id=deleted_comment_id,
+        deleted_opportunity_id=deleted_opportunity_id,
     )
 
     for client in clients.values():

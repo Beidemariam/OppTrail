@@ -197,6 +197,20 @@ def test_seeded_permissions_match_the_printed_tour(tmp_path) -> None:
         assert audit.status_code == 200
         assert audit.json(), "expected share activity in the audit log"
         assert casey.get(f"/api/opportunities/{northwind}/audit-log").status_code == 403
+
+        # The tour says Umbrella holds an undone deletion: both halves in the
+        # log, and the entry back on the timeline.
+        umbrella = by_name["Umbrella discovery"]["id"]
+        actions = [
+            row["action"] for row in alex.get(f"/api/opportunities/{umbrella}/audit-log").json()
+        ]
+        assert "timeline_entry_deleted" in actions
+        assert "timeline_entry_restored" in actions
+        titles = [
+            entry["title"]
+            for entry in alex.get(f"/api/opportunities/{umbrella}/timeline").json()["entries"]
+        ]
+        assert "Qualification call" in titles
     finally:
         for client in (alex, blair, casey, dana):
             client.__exit__(None, None, None)

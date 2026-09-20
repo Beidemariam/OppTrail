@@ -54,6 +54,13 @@ export const keys = {
   allTimelines: ["timeline"] as const,
   shares: (opportunityId: number) => ["shares", opportunityId] as const,
   auditLog: (opportunityId: number) => ["audit-log", opportunityId] as const,
+  /**
+   * Every opportunity's audit log. A delete or a restore writes an audit row
+   * (`backend/app/audit_utils.py`) and knows only the id of the thing it
+   * removed, not which opportunity that hangs under — so it invalidates the
+   * prefix rather than resolving the owner first.
+   */
+  allAuditLogs: ["audit-log"] as const,
   notifications: ["notifications"] as const,
   aiConversation: (opportunityId: number) =>
     ["ai-conversation", opportunityId] as const,
@@ -218,6 +225,64 @@ function invalidate(
   );
 }
 
+/**
+ * Optimistic updates (milestone 2.4b). `docs/UX.md`: "Every mutation applies
+ * immediately, reconciles on response, and rolls back with an explanatory
+ * toast on failure."
+ *
+ * A snapshot is every affected cache entry as it was, which `onError` writes
+ * back. The timeline has one entry per filter set, all of them stale after a
+ * write, so the snapshot is a list rather than a single value.
+ */
+type Snapshot = readonly (readonly [readonly unknown[], unknown])[];
+
+function rollback(client: QueryClient, snapshot: Snapshot | undefined) {
+  snapshot?.forEach(([queryKey, data]) => client.setQueryData(queryKey, data));
+}
+
+/**
+ * Applies an edit to every cached timeline, whatever filters it was fetched
+ * under, and returns what they held before.
+ *
+ * In-flight fetches are cancelled first: one that resolves after this would
+ * overwrite the optimistic state with the server's pre-write answer.
+ */
+async function optimisticTimelines(
+  client: QueryClient,
+  update: (entries: TimelineEntry[]) => TimelineEntry[],
+): Promise<Snapshot> {
+  await client.cancelQueries({ queryKey: keys.allTimelines });
+  const snapshot = client.getQueriesData<TimelineEntry[]>({
+    queryKey: keys.allTimelines,
+  });
+  client.setQueriesData<TimelineEntry[]>(
+    { queryKey: keys.allTimelines },
+    (entries) => (entries ? update(entries) : entries),
+  );
+  return snapshot;
+}
+
+/** The same, for the one cached opportunity list. */
+async function optimisticOpportunities(
+  client: QueryClient,
+  update: (opportunities: Opportunity[]) => Opportunity[],
+): Promise<Snapshot> {
+  await client.cancelQueries({ queryKey: keys.opportunities });
+  const previous = client.getQueryData<Opportunity[]>(keys.opportunities);
+  client.setQueryData<Opportunity[]>(keys.opportunities, (opportunities) =>
+    opportunities ? update(opportunities) : opportunities,
+  );
+  return [[keys.opportunities, previous]];
+}
+
+/** Every note in a timeline, wherever it hangs, through one function. */
+function mapNotes(
+  entries: TimelineEntry[],
+  update: (notes: TimelineEntry["notes"]) => TimelineEntry["notes"],
+): TimelineEntry[] {
+  return entries.map((entry) => ({ ...entry, notes: update(entry.notes) }));
+}
+
 export interface Credentials {
   mode: "login" | "signup";
   email: string;
@@ -290,11 +355,76 @@ export function useSaveOpportunity() {
 
 export function useDeleteOpportunity() {
   const client = useQueryClient();
-  return useMutation({
+  return useMutation<unknown, Error, number, Snapshot>({
     mutationFn: (opportunityId: number) =>
       apiRequest(`/api/opportunities/${opportunityId}`, { method: "DELETE" }),
-    onSuccess: () => invalidate(client, keys.opportunities, keys.allTimelines),
+    onMutate: (opportunityId) =>
+      optimisticOpportunities(client, (opportunities) =>
+        opportunities.filter((opportunity) => opportunity.id !== opportunityId),
+      ),
+    onError: (_error, _opportunityId, snapshot) => rollback(client, snapshot),
+    onSettled: () =>
+      invalidate(
+        client,
+        keys.opportunities,
+        keys.allTimelines,
+        keys.allAuditLogs,
+      ),
   });
+}
+
+/**
+ * Undo, for each of the four things that can be deleted.
+ *
+ * Restore is a v2-only route: it has no v1 twin, like
+ * `POST /api/v2/notifications/mark-all-read` (`CLAUDE.md`, "API versions").
+ * Nothing here is optimistic — what comes back is a server-side cascade
+ * (which notes did that delete take?), so the answer is fetched rather than
+ * guessed.
+ */
+function useRestore(
+  path: (id: number) => string,
+  ...invalidated: readonly (readonly unknown[])[]
+): UseMutationResult<unknown, Error, number> {
+  const client = useQueryClient();
+  return useMutation<unknown, Error, number>({
+    mutationFn: (id: number) => apiRequest(path(id), { method: "POST" }),
+    onSuccess: () => invalidate(client, ...invalidated),
+  });
+}
+
+export function useRestoreOpportunity() {
+  return useRestore(
+    (id) => `/api/v2/opportunities/${id}/restore`,
+    keys.opportunities,
+    keys.allTimelines,
+    keys.allAuditLogs,
+  );
+}
+
+export function useRestoreTimelineEntry() {
+  return useRestore(
+    (id) => `/api/v2/timeline/${id}/restore`,
+    keys.allTimelines,
+    keys.opportunities,
+    keys.allAuditLogs,
+  );
+}
+
+export function useRestoreNote() {
+  return useRestore(
+    (id) => `/api/v2/notes/${id}/restore`,
+    keys.allTimelines,
+    keys.allAuditLogs,
+  );
+}
+
+export function useRestoreComment() {
+  return useRestore(
+    (id) => `/api/v2/comments/${id}/restore`,
+    keys.allTimelines,
+    keys.allAuditLogs,
+  );
 }
 
 export interface TimelineEntryPayload {
@@ -343,10 +473,21 @@ function useTimelineWrite<TVariables>(
 
 export function useDeleteTimelineEntry() {
   const client = useQueryClient();
-  return useMutation({
+  return useMutation<unknown, Error, number, Snapshot>({
     mutationFn: (entryId: number) =>
       apiRequest(`/api/timeline/${entryId}`, { method: "DELETE" }),
-    onSuccess: () => invalidate(client, keys.allTimelines, keys.opportunities),
+    onMutate: (entryId) =>
+      optimisticTimelines(client, (entries) =>
+        entries.filter((entry) => entry.id !== entryId),
+      ),
+    onError: (_error, _entryId, snapshot) => rollback(client, snapshot),
+    onSettled: () =>
+      invalidate(
+        client,
+        keys.allTimelines,
+        keys.opportunities,
+        keys.allAuditLogs,
+      ),
   });
 }
 
@@ -360,20 +501,51 @@ export function useAddNote() {
   );
 }
 
+/**
+ * A note edit is the one write whose result the client can predict: the body
+ * is what was typed, and the edit marker is on from the first edit onwards. A
+ * create cannot be — the server assigns the id — so those still wait.
+ */
 export function useSaveNote() {
-  return useTimelineWrite(
-    ({ noteId, body }: { noteId: number; body: string }) =>
+  const client = useQueryClient();
+  return useMutation<
+    unknown,
+    Error,
+    { noteId: number; body: string },
+    Snapshot
+  >({
+    mutationFn: ({ noteId, body }) =>
       apiRequest(`/api/notes/${noteId}`, {
         method: "PATCH",
         body: JSON.stringify({ body }),
       }),
-  );
+    onMutate: ({ noteId, body }) =>
+      optimisticTimelines(client, (entries) =>
+        mapNotes(entries, (notes) =>
+          notes.map((note) =>
+            note.id === noteId ? { ...note, body, edited: true } : note,
+          ),
+        ),
+      ),
+    onError: (_error, _variables, snapshot) => rollback(client, snapshot),
+    onSettled: () => invalidate(client, keys.allTimelines),
+  });
 }
 
 export function useDeleteNote() {
-  return useTimelineWrite((noteId: number) =>
-    apiRequest(`/api/notes/${noteId}`, { method: "DELETE" }),
-  );
+  const client = useQueryClient();
+  return useMutation<unknown, Error, number, Snapshot>({
+    mutationFn: (noteId: number) =>
+      apiRequest(`/api/notes/${noteId}`, { method: "DELETE" }),
+    onMutate: (noteId) =>
+      optimisticTimelines(client, (entries) =>
+        mapNotes(entries, (notes) =>
+          notes.filter((note) => note.id !== noteId),
+        ),
+      ),
+    onError: (_error, _noteId, snapshot) => rollback(client, snapshot),
+    onSettled: () => invalidate(client, keys.allTimelines, keys.allAuditLogs),
+  });
 }
 
 export function useAddComment() {
@@ -387,9 +559,24 @@ export function useAddComment() {
 }
 
 export function useDeleteComment() {
-  return useTimelineWrite((commentId: number) =>
-    apiRequest(`/api/comments/${commentId}`, { method: "DELETE" }),
-  );
+  const client = useQueryClient();
+  return useMutation<unknown, Error, number, Snapshot>({
+    mutationFn: (commentId: number) =>
+      apiRequest(`/api/comments/${commentId}`, { method: "DELETE" }),
+    onMutate: (commentId) =>
+      optimisticTimelines(client, (entries) =>
+        mapNotes(entries, (notes) =>
+          notes.map((note) => ({
+            ...note,
+            comments: note.comments.filter(
+              (comment) => comment.id !== commentId,
+            ),
+          })),
+        ),
+      ),
+    onError: (_error, _commentId, snapshot) => rollback(client, snapshot),
+    onSettled: () => invalidate(client, keys.allTimelines, keys.allAuditLogs),
+  });
 }
 
 /**

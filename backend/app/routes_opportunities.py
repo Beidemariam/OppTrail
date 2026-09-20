@@ -1,7 +1,7 @@
 import sqlite3
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from .audit_utils import create_audit_log_entry
 from .auth import get_current_user
@@ -15,7 +15,7 @@ from .schemas import (
     OpportunityPublic,
     OpportunityUpdate,
 )
-from .soft_delete import soft_delete_opportunity
+from .soft_delete import restore_opportunity, soft_delete_opportunity
 from .time_utils import utc_days_ago, utc_now
 from .timeline_utils import create_system_timeline_entry
 
@@ -334,6 +334,47 @@ def delete_opportunity(
             opportunity_id=opportunity_id,
             actor_id=int(user["id"]),
             action="opportunity_deleted",
+            detail={
+                "name": row["name"],
+                "account_name": row["account_name"],
+                "stage": row["stage"],
+            },
+        )
+        connection.commit()
+
+
+# Restore is v2-only, like every route added since milestone 1.3 that has no v1
+# twin to mirror. Owner-only and answered by a lookup of its own: once an
+# opportunity is deleted the share rows are deleted with it, so
+# `require_opportunity_owner` — which resolves a role through the undeleted
+# tree — cannot see it at all. Everyone who is not the owner therefore gets
+# 404, which is also the right answer: a deleted record leaks nothing.
+@v2_router.post("/opportunities/{opportunity_id}/restore", status_code=status.HTTP_204_NO_CONTENT)
+def restore_opportunity_route(
+    opportunity_id: int,
+    user: sqlite3.Row = Depends(get_current_user),
+) -> None:
+    with db_connection() as connection:
+        row = connection.execute(
+            """
+            SELECT id, name, account_name, stage, deleted_at
+            FROM opportunities
+            WHERE id = ? AND owner_id = ? AND deleted_at IS NOT NULL
+            """,
+            (opportunity_id, int(user["id"])),
+        ).fetchone()
+        if not row:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Deleted opportunity not found",
+            )
+
+        restore_opportunity(connection, opportunity_id, row["deleted_at"])
+        create_audit_log_entry(
+            connection=connection,
+            opportunity_id=opportunity_id,
+            actor_id=int(user["id"]),
+            action="opportunity_restored",
             detail={
                 "name": row["name"],
                 "account_name": row["account_name"],

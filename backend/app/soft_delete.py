@@ -1,4 +1,4 @@
-"""The one place user data is deleted.
+"""The one place user data is deleted, and the one place it comes back.
 
 Nothing in `AGENTS.md`'s data model is ever removed from the database: a
 `deleted_at` stamp is written and cascaded down the opportunity → entry → note →
@@ -6,6 +6,12 @@ comment tree, and every read filters `deleted_at IS NULL` at each level. Routes
 call the helpers here instead of writing their own `UPDATE ... SET deleted_at`,
 so the cascade is defined once and a new delete path cannot quietly forget a
 level of the tree.
+
+The `restore_*` half (milestone 2.4b) is what makes Undo a real
+`deleted_at = NULL` rather than a re-create with a new id. Each cascade stamps
+one timestamp across everything it takes, so a restore can ask for exactly that
+stamp back and leave anything deleted separately alone — which is why the
+restore helpers take the stamp as an argument rather than reading it again.
 
 `tests/test_soft_delete.py` fails the build if any module in `app/` issues a
 `DELETE FROM` against one of `USER_DATA_TABLES`.
@@ -138,4 +144,110 @@ def soft_delete_opportunity(connection: sqlite3.Connection, opportunity_id: int)
         WHERE id = ? AND deleted_at IS NULL
         """,
         (deleted_at, deleted_at, opportunity_id),
+    )
+
+
+def restore_timeline_entry(connection: sqlite3.Connection, entry_id: int, deleted_at: str) -> None:
+    """Undo one `soft_delete_timeline_entry`, and only it.
+
+    A cascade stamps a single `deleted_at` value across the tree it takes, so
+    "what did this delete remove" is answerable afterwards: the children
+    carrying that exact stamp. Restoring on the stamp rather than on the parent
+    id is what leaves a note deleted an hour earlier deleted.
+    """
+    connection.execute(
+        """
+        UPDATE comments
+        SET deleted_at = NULL
+        WHERE deleted_at = ?
+            AND note_id IN (SELECT id FROM notes WHERE entry_id = ?)
+        """,
+        (deleted_at, entry_id),
+    )
+    connection.execute(
+        "UPDATE notes SET deleted_at = NULL WHERE entry_id = ? AND deleted_at = ?",
+        (entry_id, deleted_at),
+    )
+    connection.execute(
+        "UPDATE timeline_entries SET deleted_at = NULL WHERE id = ? AND deleted_at = ?",
+        (entry_id, deleted_at),
+    )
+
+
+def restore_note(connection: sqlite3.Connection, note_id: int, deleted_at: str) -> None:
+    """Undo one `soft_delete_note`, and only it."""
+    connection.execute(
+        "UPDATE comments SET deleted_at = NULL WHERE note_id = ? AND deleted_at = ?",
+        (note_id, deleted_at),
+    )
+    connection.execute(
+        "UPDATE notes SET deleted_at = NULL WHERE id = ? AND deleted_at = ?",
+        (note_id, deleted_at),
+    )
+
+
+def restore_comment(connection: sqlite3.Connection, comment_id: int, deleted_at: str) -> None:
+    """Undo one `soft_delete_comment`."""
+    connection.execute(
+        "UPDATE comments SET deleted_at = NULL WHERE id = ? AND deleted_at = ?",
+        (comment_id, deleted_at),
+    )
+
+
+def restore_opportunity(
+    connection: sqlite3.Connection,
+    opportunity_id: int,
+    deleted_at: str,
+) -> None:
+    """Undo one `soft_delete_opportunity`, and only it.
+
+    `updated_at` moves to now rather than back to its pre-delete value: the
+    delete overwrote it, and the record really did change again here.
+    """
+    connection.execute(
+        """
+        UPDATE comments
+        SET deleted_at = NULL
+        WHERE deleted_at = ?
+            AND note_id IN (
+                SELECT notes.id
+                FROM notes
+                JOIN timeline_entries ON timeline_entries.id = notes.entry_id
+                WHERE timeline_entries.opportunity_id = ?
+            )
+        """,
+        (deleted_at, opportunity_id),
+    )
+    connection.execute(
+        """
+        UPDATE notes
+        SET deleted_at = NULL
+        WHERE deleted_at = ?
+            AND entry_id IN (SELECT id FROM timeline_entries WHERE opportunity_id = ?)
+        """,
+        (deleted_at, opportunity_id),
+    )
+    connection.execute(
+        """
+        UPDATE timeline_entries
+        SET deleted_at = NULL
+        WHERE opportunity_id = ? AND deleted_at = ?
+        """,
+        (opportunity_id, deleted_at),
+    )
+    connection.execute(
+        """
+        UPDATE opportunity_shares
+        SET deleted_at = NULL
+        WHERE opportunity_id = ? AND deleted_at = ?
+        """,
+        (opportunity_id, deleted_at),
+    )
+    connection.execute(
+        """
+        UPDATE opportunities
+        SET deleted_at = NULL, updated_at = ?
+        WHERE id = ? AND deleted_at = ?
+        """,
+        (utc_now(), opportunity_id, deleted_at),
     )

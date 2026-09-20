@@ -1756,21 +1756,89 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
   route change, which is R.2's focus-management work rather than something
   the palette should special-case.
 
-- [ ] 2.4b Optimistic mutations and undo toasts. Needs the restore path that
-      does not exist yet: `docs/FEATURES.md` §12 says undo is "a real
-      `deleted_at = NULL`, not a re-create", and `soft_delete.py` has six
-      `soft_delete_*` helpers and no inverse. So this milestone is an Alembic
-      revision's worth of nothing but new routes — restore for a timeline
-      entry, a note, a comment and an opportunity, cascading exactly what the
-      matching delete cascaded (the cascade stamps one `deleted_at` value
-      across the tree, which is what makes "restore what this delete took"
-      answerable), each writing an audit row like every other delete path, each
-      with an authorization-matrix entry. Then the toast surface, optimistic
-      `onMutate`/rollback on the mutations in `lib/queries.ts`, and
-      `docs/UX.md`'s reversal: destructive actions stop confirming and start
-      offering Undo, except opportunity deletion, which keeps its typed
-      confirmation because it cascades across a whole record. `lib/confirm.ts`
-      is the single call site that changes.
+- [x] 2.4b Optimistic mutations and undo toasts. — **DONE**
+
+  - [x] The restore path that did not exist. `soft_delete.py` had six
+        `soft_delete_*` helpers and no inverse; it now has four
+        `restore_*` ones and four v2-only routes behind them
+        (`POST /api/v2/{opportunities,timeline,notes,comments}/{id}/restore`),
+        so undo is the `deleted_at = NULL` `docs/FEATURES.md` §12 asks for
+        rather than a re-create under a new id. No migration: the column and
+        the cascade were already there.
+  - [x] A restore takes back exactly what its own delete took, keyed on the
+        single `deleted_at` stamp the cascade wrote — a note deleted an hour
+        earlier stays deleted when its entry comes back. `utc_now()` is
+        second-resolution, so two deletes in one subtree inside the same
+        second share a stamp and undo takes both; bounded, accepted and
+        documented (**D-067**), with the alternatives costed there.
+  - [x] Permission is the delete's rule exactly: author-or-owner for timeline
+        items (D-005), owner-only for an opportunity. A child cannot be
+        restored while its parent is still deleted, and restoring something
+        that is not deleted is 404. The opportunity restore answers 404 rather
+        than 403 to a former editor or viewer, because the delete took their
+        share rows with it — a deleted record leaks nothing. Four new
+        authorization-matrix entries, with deleted fixtures in `World` for
+        them to act on.
+  - [x] Undo writes its own audit row (`*_restored`) rather than removing the
+        delete's: the log is the sequence of what happened. Four new
+        `AuditAction` values and four detail models, carrying the same
+        identifying fields their delete twins do.
+  - [x] The toast surface (`app/Toasts.tsx`): a `role="status"` live region
+        that never takes focus, a 10-second window (`docs/UX.md`), an Undo and
+        a Dismiss control, and `useUndoableDelete` — one definition of "delete
+        it, and say so with a way back" that the four destructive controls
+        call with their own noun. Both legs go through `mutateAsync`: the
+        control that started the delete has usually unmounted by the time it
+        resolves, and TanStack Query drops `mutate(vars, { onSuccess })` once
+        the observer has no listeners. Found while writing the failing case,
+        not after shipping it.
+  - [x] Optimistic `onMutate`/rollback in `lib/queries.ts` for the four
+        deletes and the note edit, each snapshotting every affected cache
+        entry and writing it back in `onError`. Creates and the opportunity
+        PATCH stay server-confirmed on purpose (**D-068**): the server assigns
+        the id and normalizes `value`, so an optimistic render would be
+        contradicted often enough to read as a flicker. Deletes and restores
+        also invalidate `keys.allAuditLogs` — both write an audit row, and
+        neither knows which opportunity it belongs to — which is what the E2E
+        audit-log case caught.
+  - [x] `docs/UX.md`'s reversal: the timeline's entry, note and comment
+        deletes stopped confirming. Two `confirmDelete` callers are left, and
+        `lib/confirm.ts` says why each one is there: deleting an opportunity
+        (which cascades across a record, and 2.5 makes it the typed
+        confirmation UX.md describes) and removing someone's access, which has
+        no restore route at all — re-sharing is a new grant with its own audit
+        row (**D-069**).
+  - [x] Tests: 16 backend (`tests/test_restore.py`, plus the four matrix
+        entries), 9 frontend (`app/Undo.test.tsx`, plus the two rewritten
+        cases in `OpportunityPanel.test.tsx`), 2 E2E
+        (`e2e/11-undo.spec.ts`) with axe on the toast. 274 → 290 backend,
+        192 → 201 frontend, 27 → 29 E2E. `make seed` now seeds an undone
+        deletion on Umbrella discovery and its printed tour says so, with
+        `test_seed.py` asserting both audit rows and the restored entry.
+  - [x] One test changed rather than added, authorised by the milestone's own
+        scope rather than weakened: `deletes an entry once the confirmation is
+        accepted` asserted a confirmation this milestone deliberately removes.
+        It is now `deletes an entry without asking, and offers the way back`,
+        and it asserts `window.confirm` is never called.
+
+  Gate: `make check` green in full (ruff, ruff format, mypy, eslint, tsc,
+  prettier, 290 backend tests at 97.41% combined coverage, 201 frontend tests
+  over the 94/94/93/87 thresholds, contract check with a regenerated
+  `lib/api-types.ts`, 29 E2E with axe, pip-audit, npm audit). Docker deferred
+  to the host half (`sandbox/README.md`).
+
+  The guard test (brief §6.5, confirmed to fail against the unfixed code
+  first): `removes what was deleted before the server has answered` in
+  `app/Undo.test.tsx`, which holds the DELETE response open and asserts the
+  comment is already gone. With `onMutate` taken out of `useDeleteComment` it
+  fails — the row sits there until the server answers, which is the behaviour
+  the milestone exists to remove.
+
+  Not in this milestone, deliberately: bulk delete and its undo are 2.4c; the
+  toast is plain markup until 2.5 brings the design tokens (and the typed
+  confirmation dialog); sharing has no restore route (D-069); and nothing
+  surfaces deleted rows for browsing — undo is a 10-second window, not a
+  trash screen, which no roadmap line asks for.
 
 - [ ] 2.4c Bulk actions. Multi-select (`x`, shift-click, checkbox), the action
       bar that replaces the filter bar while a selection is live, and one

@@ -693,35 +693,84 @@ describe("changing and removing what is already there", () => {
     expect(api.callsTo("PATCH", "/api/timeline/100")).toHaveLength(0);
   });
 
-  it("deletes an entry once the confirmation is accepted", async () => {
+  // Milestone 2.4b: the timeline's destructive actions stopped confirming and
+  // started offering Undo (`docs/UX.md`). The confirmation this case used to
+  // accept is gone on purpose, not weakened away.
+  it("deletes an entry without asking, and offers the way back", async () => {
     const api = await renderDashboard({
       opportunities: [anOpportunity()],
       entries: [anEntry()],
     });
     await openTimeline("Northwind rollout");
+    const confirm = vi.spyOn(window, "confirm");
     const entry = (
       await screen.findByRole("heading", { name: "Discovery call" })
     ).closest("article")!;
 
-    vi.spyOn(window, "confirm").mockReturnValue(false);
-    await userEvent.click(
-      within(entry).getByRole("button", { name: "Delete" }),
-    );
-    expect(api.callsTo("DELETE", "/api/timeline/100")).toHaveLength(0);
-
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     await userEvent.click(
       within(entry).getByRole("button", { name: "Delete" }),
     );
 
-    await waitFor(() =>
-      expect(api.callsTo("DELETE", "/api/timeline/100")).toHaveLength(1),
-    );
+    expect(confirm).not.toHaveBeenCalled();
     await waitFor(() =>
       expect(
         screen.queryByRole("heading", { name: "Discovery call" }),
       ).not.toBeInTheDocument(),
     );
+    expect(api.callsTo("DELETE", "/api/timeline/100")).toHaveLength(1);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Undo" }));
+
+    // The same row comes back, by id: undo is a restore, not a re-create.
+    expect(
+      await screen.findByRole("heading", { name: "Discovery call" }),
+    ).toBeInTheDocument();
+    expect(api.callsTo("POST", "/api/v2/timeline/100/restore")).toHaveLength(1);
+    expect(api.callsTo("POST", "/api/opportunities/10/timeline")).toHaveLength(
+      0,
+    );
+  });
+
+  it("undoes a deleted comment and a deleted note", async () => {
+    const api = await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [anEntry({ notes: [aNote({ comments: [aComment()] })] })],
+    });
+    await openTimeline("Northwind rollout");
+
+    const comment = (await screen.findByText("Agreed.")).closest(
+      ".comment-row",
+    ) as HTMLElement;
+    await userEvent.click(
+      within(comment).getByRole("button", { name: "Delete" }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("Agreed.")).not.toBeInTheDocument(),
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: "Undo" }));
+    expect(await screen.findByText("Agreed.")).toBeInTheDocument();
+    expect(api.callsTo("POST", "/api/v2/comments/300/restore")).toHaveLength(1);
+
+    // The note's own Delete control, not one of its comments'.
+    const header = screen
+      .getByText("Budget holder is the COO.")
+      .closest("section")!
+      .querySelector(".note-header") as HTMLElement;
+    await userEvent.click(
+      within(header).getByRole("button", { name: "Delete" }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Budget holder is the COO."),
+      ).not.toBeInTheDocument(),
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: "Undo" }));
+    expect(
+      await screen.findByText("Budget holder is the COO."),
+    ).toBeInTheDocument();
+    expect(api.callsTo("POST", "/api/v2/notes/200/restore")).toHaveLength(1);
   });
 
   it("deletes a note and a comment", async () => {
@@ -730,7 +779,6 @@ describe("changing and removing what is already there", () => {
       entries: [anEntry({ notes: [aNote({ comments: [aComment()] })] })],
     });
     await openTimeline("Northwind rollout");
-    vi.spyOn(window, "confirm").mockReturnValue(true);
 
     const comment = (await screen.findByText("Agreed.")).closest(
       ".comment-row",
@@ -854,7 +902,6 @@ describe("when the API refuses", () => {
       failures: { "DELETE /api/comments/300": [403, "Not yours to delete"] },
     });
     await openTimeline("Northwind rollout");
-    vi.spyOn(window, "confirm").mockReturnValue(true);
 
     const comment = (await screen.findByText("Agreed.")).closest(
       ".comment-row",
@@ -864,7 +911,13 @@ describe("when the API refuses", () => {
     );
 
     expect(await screen.findByText("Not yours to delete")).toBeInTheDocument();
+    // Rolled back: the optimistic removal is undone by the failure, and the
+    // toast says why rather than leaving the reader with a silent no-op.
     expect(screen.getByText("Agreed.")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Could not delete the comment: Not yours to delete/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
   });
 
   it("reports a timeline that will not load", async () => {

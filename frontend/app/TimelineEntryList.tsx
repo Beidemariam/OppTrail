@@ -2,12 +2,16 @@
 
 import { useState } from "react";
 
-import { confirmDelete } from "../lib/confirm";
 import { entryTypeLabel, type Access, type TimelineEntry } from "../lib/domain";
 import { submitOnModEnter } from "../lib/keyboard";
-import { useAddNote, useDeleteTimelineEntry } from "../lib/queries";
+import {
+  useAddNote,
+  useDeleteTimelineEntry,
+  useRestoreTimelineEntry,
+} from "../lib/queries";
 import { formatTimestamp } from "../lib/time";
 import { NoteBlock } from "./NoteBlock";
+import { useUndoableDelete } from "./Toasts";
 
 /** The opportunity's history, oldest first, as the API ordered it. */
 export function TimelineEntryList({
@@ -49,6 +53,11 @@ function TimelineEntryCard({
   const [note, setNote] = useState("");
   const addNote = useAddNote();
   const deleteEntry = useDeleteTimelineEntry();
+  const remove = useUndoableDelete(
+    "Timeline entry",
+    deleteEntry,
+    useRestoreTimelineEntry(),
+  );
 
   const failure = [addNote, deleteEntry].find((mutation) => mutation.isError);
 
@@ -93,18 +102,12 @@ function TimelineEntryCard({
                 >
                   Edit
                 </button>
+                {/* No confirmation: the entry goes, and the toast offers the
+                    way back (`docs/UX.md`, milestone 2.4b). */}
                 <button
                   type="button"
                   className="danger-button"
-                  onClick={() => {
-                    if (
-                      confirmDelete(
-                        "this timeline entry, with its notes and comments",
-                      )
-                    ) {
-                      deleteEntry.mutate(entry.id);
-                    }
-                  }}
+                  onClick={() => remove(entry.id)}
                 >
                   Delete
                 </button>

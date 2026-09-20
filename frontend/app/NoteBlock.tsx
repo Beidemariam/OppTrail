@@ -2,16 +2,18 @@
 
 import { useState } from "react";
 
-import { confirmDelete } from "../lib/confirm";
 import type { Access, TimelineNote } from "../lib/domain";
 import { submitOnModEnter } from "../lib/keyboard";
 import {
   useAddComment,
   useDeleteComment,
   useDeleteNote,
+  useRestoreComment,
+  useRestoreNote,
   useSaveNote,
 } from "../lib/queries";
 import { MarkdownText } from "./MarkdownText";
+import { useUndoableDelete } from "./Toasts";
 
 /**
  * One note, its comments, and the controls the reader is allowed to see.
@@ -32,6 +34,12 @@ export function NoteBlock({
   const deleteNote = useDeleteNote();
   const addComment = useAddComment();
   const deleteComment = useDeleteComment();
+  const removeNote = useUndoableDelete("Note", deleteNote, useRestoreNote());
+  const removeComment = useUndoableDelete(
+    "Comment",
+    deleteComment,
+    useRestoreComment(),
+  );
 
   const failure = [saveNote, deleteNote, addComment, deleteComment].find(
     (mutation) => mutation.isError,
@@ -78,11 +86,7 @@ export function NoteBlock({
             <button
               type="button"
               className="danger-button"
-              onClick={() => {
-                if (confirmDelete("this note and its comments")) {
-                  deleteNote.mutate(note.id);
-                }
-              }}
+              onClick={() => removeNote(note.id)}
             >
               Delete
             </button>
@@ -129,11 +133,7 @@ export function NoteBlock({
               <button
                 type="button"
                 className="danger-button compact"
-                onClick={() => {
-                  if (confirmDelete("this comment")) {
-                    deleteComment.mutate(item.id);
-                  }
-                }}
+                onClick={() => removeComment(item.id)}
               >
                 Delete
               </button>

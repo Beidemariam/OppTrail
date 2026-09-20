@@ -31,6 +31,12 @@ export interface FakeApiOptions {
   savedViews?: SavedView[];
   /** Paths that should fail, mapped to `[status, detail]`. */
   failures?: Record<string, [number, string]>;
+  /**
+   * `"METHOD /path"` entries whose response is held until `release()` is
+   * called. An optimistic update is only observable while its request is still
+   * in flight, so a test that asserts one needs a request that stays there.
+   */
+  pending?: string[];
 }
 
 interface Opportunity {
@@ -239,7 +245,24 @@ export class FakeApi {
   searchResults: SearchResult[];
   savedViews: SavedView[];
   failures: Record<string, [number, string]>;
+  private pending: Set<string>;
+  private held = new Map<
+    string,
+    { wait: Promise<void>; release: () => void }
+  >();
   private nextId = 1000;
+  // What a delete took, so a restore can put it back where it was — the
+  // server keeps the row and clears `deleted_at` (`backend/app/soft_delete.py`),
+  // and a fake that dropped the object would make undo untestable.
+  private deleted = {
+    opportunities: new Map<number, { index: number; item: Opportunity }>(),
+    entries: new Map<number, { index: number; item: TimelineEntry }>(),
+    notes: new Map<number, { index: number; entryId: number; item: Note }>(),
+    comments: new Map<
+      number,
+      { index: number; noteId: number; item: Comment }
+    >(),
+  };
 
   constructor(options: FakeApiOptions = {}) {
     this.user = options.user ?? null;
@@ -251,6 +274,26 @@ export class FakeApi {
     this.searchResults = options.searchResults ?? [];
     this.savedViews = options.savedViews ?? [];
     this.failures = options.failures ?? {};
+    this.pending = new Set(options.pending ?? []);
+  }
+
+  /** Lets a held request finish. */
+  release(key: string): void {
+    this.gate(key).release();
+    this.pending.delete(key);
+  }
+
+  private gate(key: string) {
+    let gate = this.held.get(key);
+    if (!gate) {
+      let release = () => {};
+      const wait = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      gate = { wait, release };
+      this.held.set(key, gate);
+    }
+    return gate;
   }
 
   /** Every call made to a path, for asserting what the page asked the API to do. */
@@ -279,6 +322,10 @@ export class FakeApi {
     const body = options.body ? JSON.parse(options.body as string) : undefined;
     this.calls.push({ method, path, body });
 
+    if (this.pending.has(`${method} ${path.split("?")[0]}`)) {
+      await this.gate(`${method} ${path.split("?")[0]}`).wait;
+    }
+
     const failure = this.failures[`${method} ${path.split("?")[0]}`];
     if (failure) {
       // v2 answers the `{"error": {...}}` envelope and v1 answers `detail`
@@ -292,6 +339,10 @@ export class FakeApi {
 
     const bare = path.split("?")[0];
     const segments = bare.split("/").filter(Boolean);
+
+    if (segments[1] === "v2" && segments[4] === "restore") {
+      return this.restore(segments[2], Number(segments[3]));
+    }
 
     if (bare === "/api/v2/search") {
       return this.searchPage(path);
@@ -406,6 +457,11 @@ export class FakeApi {
         return this.json(found);
       }
       if (method === "DELETE") {
+        const index = this.opportunities.findIndex((item) => item.id === id);
+        this.deleted.opportunities.set(id, {
+          index,
+          item: this.opportunities[index],
+        });
         this.opportunities = this.opportunities.filter(
           (item) => item.id !== id,
         );
@@ -476,6 +532,8 @@ export class FakeApi {
         Object.assign(entry, body);
         return this.json(entry);
       }
+      const index = this.entries.findIndex((item) => item.id === entryId);
+      this.deleted.entries.set(entryId, { index, item: this.entries[index] });
       this.entries = this.entries.filter((item) => item.id !== entryId);
       return new Response(null, { status: 204 });
     }
@@ -499,6 +557,11 @@ export class FakeApi {
         note.edited = true;
         return this.json(note);
       }
+      this.deleted.notes.set(noteId, {
+        index: owner.notes.indexOf(note),
+        entryId: owner.id,
+        item: note,
+      });
       owner.notes = owner.notes.filter((item) => item.id !== noteId);
       return new Response(null, { status: 204 });
     }
@@ -506,6 +569,14 @@ export class FakeApi {
       const commentId = Number(segments[2]);
       for (const entry of this.entries) {
         for (const note of entry.notes) {
+          const found = note.comments.find((item) => item.id === commentId);
+          if (found) {
+            this.deleted.comments.set(commentId, {
+              index: note.comments.indexOf(found),
+              noteId: note.id,
+              item: found,
+            });
+          }
           note.comments = note.comments.filter((item) => item.id !== commentId);
         }
       }
@@ -515,6 +586,58 @@ export class FakeApi {
     return this.json(
       { detail: `Unhandled in the fake API: ${method} ${path}` },
       500,
+    );
+  }
+
+  /**
+   * `POST /api/v2/<kind>/{id}/restore`: the row comes back with its id and its
+   * place, which is what makes undo an undo rather than a re-create. Restoring
+   * something that is not deleted is a 404, as the API answers it.
+   */
+  private restore(kind: string, id: number): Response {
+    const put = <T>(list: T[], index: number, item: T) => {
+      list.splice(Math.min(index, list.length), 0, item);
+    };
+
+    const opportunity = this.deleted.opportunities.get(id);
+    if (kind === "opportunities" && opportunity) {
+      put(this.opportunities, opportunity.index, opportunity.item);
+      this.deleted.opportunities.delete(id);
+      return new Response(null, { status: 204 });
+    }
+
+    const entry = this.deleted.entries.get(id);
+    if (kind === "timeline" && entry) {
+      put(this.entries, entry.index, entry.item);
+      this.deleted.entries.delete(id);
+      return new Response(null, { status: 204 });
+    }
+
+    const note = this.deleted.notes.get(id);
+    if (kind === "notes" && note) {
+      const owner = this.entries.find((item) => item.id === note.entryId);
+      if (owner) {
+        put(owner.notes, note.index, note.item);
+        this.deleted.notes.delete(id);
+        return new Response(null, { status: 204 });
+      }
+    }
+
+    const comment = this.deleted.comments.get(id);
+    if (kind === "comments" && comment) {
+      const owner = this.entries
+        .flatMap((item) => item.notes)
+        .find((item) => item.id === comment.noteId);
+      if (owner) {
+        put(owner.comments, comment.index, comment.item);
+        this.deleted.comments.delete(id);
+        return new Response(null, { status: 204 });
+      }
+    }
+
+    return this.json(
+      { error: { code: "not_found", message: "Nothing to restore" } },
+      404,
     );
   }
 

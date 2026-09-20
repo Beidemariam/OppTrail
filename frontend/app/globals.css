@@ -1165,3 +1165,38 @@ kbd {
     grid-template-columns: 1fr;
   }
 }
+
+/* Toasts (milestone 2.4b). Bottom-left so the undo button sits near the
+   reading position rather than over the board's right-hand panel. */
+.toast-region {
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  left: 16px;
+  position: fixed;
+  width: min(380px, calc(100vw - 32px));
+  z-index: 30;
+}
+
+.toast {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--teal);
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(11, 37, 64, 0.18);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.toast.error {
+  border-left-color: var(--red);
+}
+
+.toast p {
+  font-size: 14px;
+  margin: 0;
+}

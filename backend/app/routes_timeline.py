@@ -32,6 +32,9 @@ from .schemas import (
 )
 from .search import MATCHING_ENTRY_IDS_SQL, match_expression
 from .soft_delete import (
+    restore_comment,
+    restore_note,
+    restore_timeline_entry,
     soft_delete_comment,
     soft_delete_note,
     soft_delete_timeline_entry,
@@ -135,6 +138,76 @@ def fetch_comment_context(
         JOIN opportunities ON opportunities.id = timeline_entries.opportunity_id
         WHERE comments.id = ?
             AND comments.deleted_at IS NULL
+            AND notes.deleted_at IS NULL
+            AND timeline_entries.deleted_at IS NULL
+            AND opportunities.deleted_at IS NULL
+        """,
+        (comment_id,),
+    ).fetchone()
+    return row
+
+
+def fetch_deleted_entry_context(
+    connection: sqlite3.Connection,
+    entry_id: int,
+) -> sqlite3.Row | None:
+    """A deleted entry, for the restore path.
+
+    The mirror image of `fetch_entry_context`: the row itself must be deleted,
+    and everything above it must not be. An entry whose opportunity is also
+    deleted is not restorable on its own — restoring it would put a row back
+    into a record nobody can read — so this answers `None` and the route 404s,
+    the same answer an entry that was never deleted gets.
+    """
+    row: sqlite3.Row | None = connection.execute(
+        """
+        SELECT timeline_entries.*
+        FROM timeline_entries
+        JOIN opportunities ON opportunities.id = timeline_entries.opportunity_id
+        WHERE timeline_entries.id = ?
+            AND timeline_entries.deleted_at IS NOT NULL
+            AND opportunities.deleted_at IS NULL
+        """,
+        (entry_id,),
+    ).fetchone()
+    return row
+
+
+def fetch_deleted_note_context(
+    connection: sqlite3.Connection,
+    note_id: int,
+) -> sqlite3.Row | None:
+    """A deleted note whose entry and opportunity are both still here."""
+    row: sqlite3.Row | None = connection.execute(
+        """
+        SELECT notes.*, timeline_entries.opportunity_id
+        FROM notes
+        JOIN timeline_entries ON timeline_entries.id = notes.entry_id
+        JOIN opportunities ON opportunities.id = timeline_entries.opportunity_id
+        WHERE notes.id = ?
+            AND notes.deleted_at IS NOT NULL
+            AND timeline_entries.deleted_at IS NULL
+            AND opportunities.deleted_at IS NULL
+        """,
+        (note_id,),
+    ).fetchone()
+    return row
+
+
+def fetch_deleted_comment_context(
+    connection: sqlite3.Connection,
+    comment_id: int,
+) -> sqlite3.Row | None:
+    """A deleted comment whose note, entry and opportunity are all still here."""
+    row: sqlite3.Row | None = connection.execute(
+        """
+        SELECT comments.*, timeline_entries.opportunity_id
+        FROM comments
+        JOIN notes ON notes.id = comments.note_id
+        JOIN timeline_entries ON timeline_entries.id = notes.entry_id
+        JOIN opportunities ON opportunities.id = timeline_entries.opportunity_id
+        WHERE comments.id = ?
+            AND comments.deleted_at IS NOT NULL
             AND notes.deleted_at IS NULL
             AND timeline_entries.deleted_at IS NULL
             AND opportunities.deleted_at IS NULL
@@ -518,6 +591,45 @@ def delete_timeline_entry(
         connection.commit()
 
 
+# Restore is v2-only: it has no v1 twin to mirror, the same way
+# `POST /api/v2/notifications/mark-all-read` does not (`CLAUDE.md`, "API
+# versions"). It is what makes the undo toast a real `deleted_at = NULL`
+# (`docs/FEATURES.md` §12) rather than a re-create under a new id.
+@v2_router.post("/timeline/{entry_id}/restore", status_code=status.HTTP_204_NO_CONTENT)
+def restore_timeline_entry_route(
+    entry_id: int,
+    user: sqlite3.Row = Depends(get_current_user),
+) -> None:
+    with db_connection() as connection:
+        entry = fetch_deleted_entry_context(connection, entry_id)
+        if not entry:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Deleted timeline entry not found",
+            )
+        require_delete_permission(
+            connection,
+            entry["opportunity_id"],
+            int(user["id"]),
+            entry["created_by"],
+            "Only the author or owner can restore this timeline entry",
+        )
+        restore_timeline_entry(connection, entry_id, entry["deleted_at"])
+        create_audit_log_entry(
+            connection=connection,
+            opportunity_id=entry["opportunity_id"],
+            actor_id=int(user["id"]),
+            action="timeline_entry_restored",
+            detail={
+                "entry_id": entry_id,
+                "type": entry["type"],
+                "title": entry["title"],
+                "author_id": entry["created_by"],
+            },
+        )
+        connection.commit()
+
+
 @router.post(
     "/api/timeline/{entry_id}/notes",
     response_model=NotePublic,
@@ -776,6 +888,40 @@ def delete_note(
         connection.commit()
 
 
+@v2_router.post("/notes/{note_id}/restore", status_code=status.HTTP_204_NO_CONTENT)
+def restore_note_route(
+    note_id: int,
+    user: sqlite3.Row = Depends(get_current_user),
+) -> None:
+    with db_connection() as connection:
+        note = fetch_deleted_note_context(connection, note_id)
+        if not note:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Deleted note not found",
+            )
+        require_delete_permission(
+            connection,
+            note["opportunity_id"],
+            int(user["id"]),
+            note["created_by"],
+            "Only the author or owner can restore this note",
+        )
+        restore_note(connection, note_id, note["deleted_at"])
+        create_audit_log_entry(
+            connection=connection,
+            opportunity_id=note["opportunity_id"],
+            actor_id=int(user["id"]),
+            action="note_restored",
+            detail={
+                "note_id": note_id,
+                "entry_id": note["entry_id"],
+                "author_id": note["created_by"],
+            },
+        )
+        connection.commit()
+
+
 @router.post(
     "/api/notes/{note_id}/comments",
     response_model=CommentPublic,
@@ -866,6 +1012,40 @@ def delete_comment(
             opportunity_id=comment["opportunity_id"],
             actor_id=int(user["id"]),
             action="comment_deleted",
+            detail={
+                "comment_id": comment_id,
+                "note_id": comment["note_id"],
+                "author_id": comment["created_by"],
+            },
+        )
+        connection.commit()
+
+
+@v2_router.post("/comments/{comment_id}/restore", status_code=status.HTTP_204_NO_CONTENT)
+def restore_comment_route(
+    comment_id: int,
+    user: sqlite3.Row = Depends(get_current_user),
+) -> None:
+    with db_connection() as connection:
+        comment = fetch_deleted_comment_context(connection, comment_id)
+        if not comment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Deleted comment not found",
+            )
+        require_delete_permission(
+            connection,
+            comment["opportunity_id"],
+            int(user["id"]),
+            comment["created_by"],
+            "Only the author or owner can restore this comment",
+        )
+        restore_comment(connection, comment_id, comment["deleted_at"])
+        create_audit_log_entry(
+            connection=connection,
+            opportunity_id=comment["opportunity_id"],
+            actor_id=int(user["id"]),
+            action="comment_restored",
             detail={
                 "comment_id": comment_id,
                 "note_id": comment["note_id"],

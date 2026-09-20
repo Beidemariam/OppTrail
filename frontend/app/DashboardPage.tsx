@@ -15,6 +15,7 @@ import { useKeyboardShortcuts } from "../lib/keyboard";
 import {
   useDeleteOpportunity,
   useOpportunities,
+  useRestoreOpportunity,
   useSession,
 } from "../lib/queries";
 import { paramsWithState, stateFromParams } from "../lib/viewState";
@@ -23,6 +24,7 @@ import { OpportunityFilterBar } from "./OpportunityFilterBar";
 import { OpportunityForm } from "./OpportunityForm";
 import { SavedViewsMenu } from "./SavedViewsMenu";
 import { StageBoard } from "./StageBoard";
+import { useUndoableDelete } from "./Toasts";
 import { TopBar } from "./TopBar";
 
 /**
@@ -44,6 +46,11 @@ export function DashboardPage() {
   const newOpportunityRef = useRef<HTMLInputElement>(null);
   const keywordFilterRef = useRef<HTMLInputElement>(null);
   const deleteOpportunity = useDeleteOpportunity();
+  const removeOpportunity = useUndoableDelete(
+    "Opportunity",
+    deleteOpportunity,
+    useRestoreOpportunity(),
+  );
   const navigate = useNavigate();
   // Read from the URL rather than `useParams`, which in a layout route only
   // sees the segments its own path matched.
@@ -137,20 +144,21 @@ export function DashboardPage() {
     return <AuthPanel />;
   }
 
+  // The one destructive action that still asks first: it cascades across a
+  // whole record, and `docs/UX.md` keeps friction there deliberately. Undo is
+  // offered as well, because the restore route puts the cascade back.
   function remove(opportunity: Opportunity) {
     if (!confirmDelete(`"${opportunity.name}" and its entire timeline`)) {
       return;
     }
 
-    deleteOpportunity.mutate(opportunity.id, {
-      onSuccess: () => {
-        if (editing?.id === opportunity.id) {
-          setEditing(null);
-        }
-        if (selectedId === opportunity.id) {
-          navigate("/", { replace: true });
-        }
-      },
+    removeOpportunity(opportunity.id, () => {
+      if (editing?.id === opportunity.id) {
+        setEditing(null);
+      }
+      if (selectedId === opportunity.id) {
+        navigate("/", { replace: true });
+      }
     });
   }
 

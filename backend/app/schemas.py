@@ -341,12 +341,16 @@ class ShareListResponse(BaseModel):
 
 AuditAction = Literal[
     "opportunity_deleted",
+    "opportunity_restored",
     "share_added",
     "share_role_changed",
     "share_removed",
     "timeline_entry_deleted",
+    "timeline_entry_restored",
     "note_deleted",
+    "note_restored",
     "comment_deleted",
+    "comment_restored",
 ]
 
 
@@ -394,24 +398,61 @@ class AuditDetailCommentDeleted(BaseModel):
     author_id: int
 
 
+# Undo writes its own audit row rather than removing the delete's, so the log
+# reads as the sequence of things that happened (milestone 2.4b). A restore
+# records the same identifying fields its delete did; the action name is what
+# distinguishes them.
+class AuditDetailOpportunityRestored(BaseModel):
+    name: str
+    account_name: str | None
+    stage: str
+
+
+class AuditDetailTimelineEntryRestored(BaseModel):
+    entry_id: int
+    type: EntryType
+    title: str
+    author_id: int
+
+
+class AuditDetailNoteRestored(BaseModel):
+    note_id: int
+    entry_id: int
+    author_id: int
+
+
+class AuditDetailCommentRestored(BaseModel):
+    comment_id: int
+    note_id: int
+    author_id: int
+
+
 AuditDetail = (
     AuditDetailOpportunityDeleted
+    | AuditDetailOpportunityRestored
     | AuditDetailShareAdded
     | AuditDetailShareRoleChanged
     | AuditDetailShareRemoved
     | AuditDetailTimelineEntryDeleted
+    | AuditDetailTimelineEntryRestored
     | AuditDetailNoteDeleted
+    | AuditDetailNoteRestored
     | AuditDetailCommentDeleted
+    | AuditDetailCommentRestored
 )
 
 AUDIT_DETAIL_MODELS: dict[str, type[BaseModel]] = {
     "opportunity_deleted": AuditDetailOpportunityDeleted,
+    "opportunity_restored": AuditDetailOpportunityRestored,
     "share_added": AuditDetailShareAdded,
     "share_role_changed": AuditDetailShareRoleChanged,
     "share_removed": AuditDetailShareRemoved,
     "timeline_entry_deleted": AuditDetailTimelineEntryDeleted,
+    "timeline_entry_restored": AuditDetailTimelineEntryRestored,
     "note_deleted": AuditDetailNoteDeleted,
+    "note_restored": AuditDetailNoteRestored,
     "comment_deleted": AuditDetailCommentDeleted,
+    "comment_restored": AuditDetailCommentRestored,
 }
 
 

@@ -333,7 +333,7 @@ Two separate mechanisms, both required by `AGENTS.md`:
 Any new non-user-initiated write must be traceable to the action that caused it, and
 any new delete path needs an audit row.
 
-### Soft deletes
+### Soft deletes and undo
 
 Nothing is hard-deleted. `soft_delete.py` is the only place user data is deleted:
 it stamps `deleted_at` and cascades it down the opportunity → entry → note →
@@ -341,6 +341,32 @@ comment tree, and every read query filters `deleted_at IS NULL` at each level.
 Routes call those helpers rather than writing their own `UPDATE ... SET
 deleted_at`, so a new delete path cannot quietly forget a level of the tree. Note
 edits additionally append to `note_versions` rather than overwriting.
+
+The same module holds the inverse, added by milestone 2.4b so the UI could stop
+confirming and start offering Undo (`docs/UX.md`): `restore_opportunity`,
+`restore_timeline_entry`, `restore_note`, `restore_comment`, behind
+`POST /api/v2/<kind>/{id}/restore` (v2-only — no v1 twin to mirror). Three
+things about them:
+
+- **A restore is scoped by the delete's stamp.** One cascade writes one
+  `deleted_at` value across everything it takes, so the restore asks for that
+  value back and a note deleted separately stays deleted. The route reads the
+  stamp off the row and passes it in, rather than each helper reading it again.
+  `utc_now()` is second-resolution, so two deletes in the same subtree within
+  one second share a stamp and undo takes both back — bounded and accepted
+  (D-067).
+- **A child cannot be restored while its parent is deleted**, and restoring
+  something that is not deleted is a 404, the same answer as one that never
+  existed. Permission is the delete's rule exactly: author-or-owner for
+  timeline items, and owner-only for an opportunity — where every other actor
+  gets 404, not 403, because deleting the opportunity deleted the share rows
+  that made them visible to each other.
+- **Undo writes its own audit row** (`*_restored`) rather than removing the
+  delete's: the log is the sequence of what happened.
+
+`tests/test_restore.py` holds the round trips, including the one that proves a
+restored entry is searchable again — the FTS5 UPDATE trigger already covered
+the restore transition, which is why no index code changed.
 
 `tests/test_soft_delete.py` fails the build if any module in `app/` contains a
 `DELETE FROM` against a table in `soft_delete.USER_DATA_TABLES`. `sessions` is
@@ -393,6 +419,15 @@ over 200 lines and each holding only its own form state: `AuthPanel`, `TopBar`,
 `TimelineFilterBar`, `TimelineEntryForm`, `TimelineEntryList`, `NoteBlock`,
 `AiSidebar`.
 
+**Writes are optimistic where the cache already holds what changes** (2.4b):
+the four deletes and the note edit apply in `onMutate`, snapshot what they
+overwrote, and put it back in `onError` — `docs/UX.md`'s "applies immediately,
+reconciles on response, rolls back with an explanatory toast". Creates are not,
+deliberately: the server assigns the id, so there is nothing truthful to render
+until it answers (D-068). A delete or a restore also invalidates
+`keys.allAuditLogs`, since both write an audit row and neither knows which
+opportunity the row belongs to.
+
 **Server state does not live in components.** `lib/queries.ts` declares every
 read and write the app makes against the query cache: the query keys, the six
 reads, and each mutation with what it invalidates. A view calls a hook; a write
@@ -427,8 +462,20 @@ The units worth testing directly, each in its own module:
 - `lib/keyboard.ts` — the keyboard map, and the listener that serves it. See
   "Keyboard map" below.
 - `lib/palette.ts` — the command palette's fuzzy subsequence matcher.
-- `lib/confirm.ts` — the single `window.confirm` call. Milestone 2.5 replaces it
-  with a real dialog, which is a one-file change only while it stays single.
+- `lib/confirm.ts` — the remaining `window.confirm` calls, now down to two:
+  deleting an opportunity (which cascades across a whole record) and removing
+  someone's access (which has no restore route — re-sharing is a new grant).
+  Everything else offers Undo instead (`app/Toasts.tsx`). Milestone 2.5
+  replaces this with a real dialog, which is a one-file change only while it
+  stays single.
+- `app/Toasts.tsx` — the toast surface and `useUndoableDelete`, the one
+  definition of "delete it, and say so with a way back" (milestone 2.4b). The
+  region is a `role="status"` live region, never focused, so a reader keeps
+  their place; the toast lasts `TOAST_DURATION_MS` (10 s, the window
+  `docs/UX.md` names). Both legs go through `mutateAsync`, because the control
+  that started the delete has usually unmounted by the time it resolves —
+  deleting a note unmounts the note — and TanStack Query drops
+  `mutate(vars, { onSuccess })` once the observer has no listeners.
 - `app/MarkdownText.tsx` — note and comment bodies, rendered through
   `rehype-sanitize` with an explicit `http`/`https`/`mailto` protocol allowlist.
   Keep that allowlist if you touch the Markdown pipeline.

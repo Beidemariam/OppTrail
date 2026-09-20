@@ -8,6 +8,7 @@ import { DashboardPage, NoOpportunitySelected } from "./DashboardPage";
 import { OpportunityPanel } from "./OpportunityPanel";
 import { SearchPage } from "./SearchPage";
 import { ShortcutsProvider } from "./ShortcutsProvider";
+import { ToastProvider } from "./Toasts";
 import { createQueryClient } from "../lib/query";
 
 /** Nothing to subscribe to; hoisted so React is not handed a new one to
@@ -24,25 +25,30 @@ const noSubscription = () => () => {};
  *
  * `ShortcutsProvider` wraps the table rather than sitting inside a route: the
  * command palette and the keyboard map work on every screen (milestone 2.4a),
- * and the tests mount this component, so they exercise the real one.
+ * and the tests mount this component, so they exercise the real one. The same
+ * is true of `ToastProvider` (milestone 2.4b): an undo toast outlives the
+ * screen that raised it, so deleting the open opportunity and navigating away
+ * still leaves a way back.
  */
 export function AppRoutes() {
   return (
-    <ShortcutsProvider>
-      <Routes>
-        <Route path="/search" element={<SearchPage />} />
-        <Route path="/" element={<DashboardPage />}>
-          <Route index element={<NoOpportunitySelected />} />
-          <Route
-            path="opportunities/:opportunityId"
-            element={<OpportunityPanel />}
-          />
-        </Route>
-        {/* Any other path reached the shell through FastAPI's catch-all
+    <ToastProvider>
+      <ShortcutsProvider>
+        <Routes>
+          <Route path="/search" element={<SearchPage />} />
+          <Route path="/" element={<DashboardPage />}>
+            <Route index element={<NoOpportunitySelected />} />
+            <Route
+              path="opportunities/:opportunityId"
+              element={<OpportunityPanel />}
+            />
+          </Route>
+          {/* Any other path reached the shell through FastAPI's catch-all
           rather than through a link, so there is nothing to render. */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </ShortcutsProvider>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </ShortcutsProvider>
+    </ToastProvider>
   );
 }
 

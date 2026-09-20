@@ -455,6 +455,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/opportunities/{opportunity_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore Opportunity Route */
+        post: operations["restore_opportunity_route_api_v2_opportunities__opportunity_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/opportunities/{opportunity_id}/shares": {
         parameters: {
             query?: never;
@@ -529,6 +546,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/timeline/{entry_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore Timeline Entry Route */
+        post: operations["restore_timeline_entry_route_api_v2_timeline__entry_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/notes/{note_id}/versions": {
         parameters: {
             query?: never;
@@ -543,6 +577,40 @@ export interface paths {
         get: operations["list_note_versions_page_api_v2_notes__note_id__versions_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/notes/{note_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore Note Route */
+        post: operations["restore_note_route_api_v2_notes__note_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/comments/{comment_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore Comment Route */
+        post: operations["restore_comment_route_api_v2_comments__comment_id__restore_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -696,6 +764,15 @@ export interface components {
             /** Author Id */
             author_id: number;
         };
+        /** AuditDetailCommentRestored */
+        AuditDetailCommentRestored: {
+            /** Comment Id */
+            comment_id: number;
+            /** Note Id */
+            note_id: number;
+            /** Author Id */
+            author_id: number;
+        };
         /** AuditDetailNoteDeleted */
         AuditDetailNoteDeleted: {
             /** Note Id */
@@ -705,8 +782,26 @@ export interface components {
             /** Author Id */
             author_id: number;
         };
+        /** AuditDetailNoteRestored */
+        AuditDetailNoteRestored: {
+            /** Note Id */
+            note_id: number;
+            /** Entry Id */
+            entry_id: number;
+            /** Author Id */
+            author_id: number;
+        };
         /** AuditDetailOpportunityDeleted */
         AuditDetailOpportunityDeleted: {
+            /** Name */
+            name: string;
+            /** Account Name */
+            account_name: string | null;
+            /** Stage */
+            stage: string;
+        };
+        /** AuditDetailOpportunityRestored */
+        AuditDetailOpportunityRestored: {
             /** Name */
             name: string;
             /** Account Name */
@@ -769,6 +864,20 @@ export interface components {
             /** Author Id */
             author_id: number;
         };
+        /** AuditDetailTimelineEntryRestored */
+        AuditDetailTimelineEntryRestored: {
+            /** Entry Id */
+            entry_id: number;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "call" | "email" | "meeting" | "demo" | "proposal" | "contract" | "stage_change" | "other";
+            /** Title */
+            title: string;
+            /** Author Id */
+            author_id: number;
+        };
         /** AuditLogEntryPublic */
         AuditLogEntryPublic: {
             /** Id */
@@ -783,9 +892,9 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "opportunity_deleted" | "share_added" | "share_role_changed" | "share_removed" | "timeline_entry_deleted" | "note_deleted" | "comment_deleted";
+            action: "opportunity_deleted" | "opportunity_restored" | "share_added" | "share_role_changed" | "share_removed" | "timeline_entry_deleted" | "timeline_entry_restored" | "note_deleted" | "note_restored" | "comment_deleted" | "comment_restored";
             /** Detail */
-            detail: components["schemas"]["AuditDetailOpportunityDeleted"] | components["schemas"]["AuditDetailShareAdded"] | components["schemas"]["AuditDetailShareRoleChanged"] | components["schemas"]["AuditDetailShareRemoved"] | components["schemas"]["AuditDetailTimelineEntryDeleted"] | components["schemas"]["AuditDetailNoteDeleted"] | components["schemas"]["AuditDetailCommentDeleted"];
+            detail: components["schemas"]["AuditDetailOpportunityDeleted"] | components["schemas"]["AuditDetailOpportunityRestored"] | components["schemas"]["AuditDetailShareAdded"] | components["schemas"]["AuditDetailShareRoleChanged"] | components["schemas"]["AuditDetailShareRemoved"] | components["schemas"]["AuditDetailTimelineEntryDeleted"] | components["schemas"]["AuditDetailTimelineEntryRestored"] | components["schemas"]["AuditDetailNoteDeleted"] | components["schemas"]["AuditDetailNoteRestored"] | components["schemas"]["AuditDetailCommentDeleted"] | components["schemas"]["AuditDetailCommentRestored"];
             /** Created At */
             created_at: string;
         };
@@ -2602,6 +2711,37 @@ export interface operations {
             };
         };
     };
+    restore_opportunity_route_api_v2_opportunities__opportunity_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_shares_page_api_v2_opportunities__opportunity_id__shares_get: {
         parameters: {
             query?: {
@@ -2716,6 +2856,37 @@ export interface operations {
             };
         };
     };
+    restore_timeline_entry_route_api_v2_timeline__entry_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_note_versions_page_api_v2_notes__note_id__versions_get: {
         parameters: {
             query?: {
@@ -2740,6 +2911,68 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Page_NoteVersionPublic_"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_note_route_api_v2_notes__note_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                note_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_comment_route_api_v2_comments__comment_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                comment_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
