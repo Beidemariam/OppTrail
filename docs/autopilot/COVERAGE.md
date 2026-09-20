@@ -665,3 +665,34 @@ the "after" assertion — that a notification marked read is still in the v2
 page — fails with a `KeyError` on `read_at`, which is the exact dead end this
 milestone closes.
 
+## Phase 1 — gate (end of phase, all milestones 1.1–1.7 done)
+
+No application code changed in this session — it re-ran the full sandbox
+half of the split gate (brief §3.4) at the commit milestone 1.7 left, to
+confirm the phase is ready for `AWAITING_REVIEW`. Figures are unchanged from
+the 1.7 gate above, run fresh rather than copied forward:
+
+```
+backend:  ruff check, ruff format --check, mypy app tools    all clean
+          258 passed, 97.28% combined line+branch coverage
+          (--cov-fail-under=90 enforced)
+          pip-audit                                          no known vulnerabilities
+frontend: tsc --noEmit, eslint, prettier --check              all clean
+          (1 pre-existing eslint warning, 0 errors — see phase-1-summary.md)
+          102 passed, 88.38% line / 80.86% branch / 90.54% functions
+          npm audit                                           0 vulnerabilities
+contract: scripts/generate-api-client.sh --check               up to date
+e2e:      18 passed (7 specs), axe clean on every screen it runs against,
+          including the deferred color-contrast ratchet still failing on cue
+docker:   deferred to the host half — scripts/autopilot-gate.sh 1
+          (no Docker socket in this sandbox, per sandbox/README.md)
+```
+
+Coverage floors (brief §6.2) all met: backend ≥ 90% line / ≥ 80% branch
+(97.28% combined); frontend ≥ 80% line (88.38%); the five ≥95%-branch modules
+(`permissions.py`, `audit_utils.py`, plus `auth.py`/`soft_delete.py`/
+`routes_ai.py`, all still at or above 95% per their per-milestone entries
+above) unchanged since Phase F.
+
+Full detail and the try-it steps: `docs/autopilot/reviews/phase-1-summary.md`.
+

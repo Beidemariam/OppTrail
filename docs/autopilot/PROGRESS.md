@@ -1,4 +1,4 @@
-STATUS: IN_PROGRESS phase=1
+STATUS: AWAITING_REVIEW phase=1
 
 # Autopilot Progress
 
@@ -1321,6 +1321,40 @@ portion of the split gate remains the host's (`scripts/autopilot-gate.sh 1`).
   seeded scale; deleting a note removes it from results.
 - A read notification remains visible and filterable.
 - v1 endpoints still serve the existing frontend.
+
+### Phase 1 gate and review packet — **DONE**
+
+All seven milestones (1.1–1.7, including 1.1a) complete on a clean tree at
+commit `83d2aeb`. This session made no application-code change — it re-ran
+the sandbox half of the split gate (brief §3.4) fresh against that commit
+(not copied forward from milestone 1.7's own gate) and wrote the phase
+review packet.
+
+- [x] `make check`'s sandbox-runnable portion green: `ruff check`, `ruff
+      format --check`, `mypy app tools`, frontend `tsc --noEmit`/`eslint`/
+      `prettier --check`, backend pytest (258 passed, 97.28% combined
+      line+branch coverage, `--cov-fail-under=90`), frontend vitest (102
+      passed, 88.38% line / 80.86% branch), the generated-client contract
+      check, `pip-audit` (no known vulnerabilities), `npm audit` (0
+      vulnerabilities), Playwright E2E + axe (18 passed, 7 specs, axe clean
+      including the reworked notification panel and the new search page; the
+      deferred `color-contrast` ratchet still fails on cue). Docker
+      build/smoke test named as deferred to the host, not silently skipped.
+- [x] Both of this phase's `needs human review: Y` decisions (D-033, D-036)
+      were already resolved mid-phase, before this gate — nothing open to
+      surface here.
+- [x] `docs/autopilot/COVERAGE.md`: gate entry added under "Phase 1 — gate",
+      cross-referencing the review packet rather than duplicating its detail.
+- [x] `docs/autopilot/reviews/phase-1-summary.md` written per brief §3.5's
+      seven sections.
+
+Work log: single session, gate-and-packet only. Changed:
+`docs/autopilot/PROGRESS.md` (this entry, status line), `docs/autopilot/
+COVERAGE.md` (Phase 1 gate entry). New: `docs/autopilot/reviews/
+phase-1-summary.md`. No application code touched. Per brief §3.1/§3.3: no
+tag, merge, or push from this session. `scripts/autopilot-gate.sh 1` against
+commit `83d2aeb` is required before `scripts/autopilot-accept.sh` can tag
+`phase-1-accepted`.
 
 ---
 
