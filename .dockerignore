@@ -47,5 +47,11 @@ vitest.setup.ts
 **/*.test.ts
 *.test.tsx
 **/*.test.tsx
-test-api.ts
-**/test-api.ts
+# Test helpers by convention, not by name. Listing `test-api.ts` alone broke
+# the build the moment `test-app.tsx` was added importing it: the importer
+# shipped, the import did not, and `npm run build` type-checked a module
+# that was not there.
+test-*.ts
+**/test-*.ts
+test-*.tsx
+**/test-*.tsx
