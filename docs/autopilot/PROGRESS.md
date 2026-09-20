@@ -1492,6 +1492,38 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
       versioning, so both milestones touch the same write paths — sequence them
       together rather than editing those routes twice).
 
+- [ ] 2.12 Fold the repeatable half of the manual user test into the E2E
+      suite, and keep the rest manual (**D-053**, from the Phase 1 user test).
+      Phase 2 rewrites the UI, so `frontend/e2e/`'s selectors have to be
+      revisited anyway — extending the suite while already in those files costs
+      far less than a separate pass later.
+      **Automate** (fixed right answer, so they become regression guards):
+      - Session cookie flags — `opptrail_session` is `HttpOnly`,
+        `opptrail_csrf` is not.
+      - Timeline ordering and system-generated entries carrying no edit or
+        delete control.
+      - The permission matrix as a *user* sees it: an editor offered no edit or
+        delete control on a colleague's note, a viewer offered no write control
+        anywhere, a non-member shown no trace of the opportunity. The API-level
+        matrix already exists (`test_authorization_matrix.py`); this asserts the
+        UI never offers what the API would refuse.
+      - Search access scoping — the viewer's query for a term that exists only
+        in an opportunity they cannot see returns nothing.
+      - Notification history surviving a read, and mark-all-read.
+      - Audit log completeness after a delete.
+      - **The security half of the sanitization check**: no dialog fires, the
+        `javascript:` link does not navigate. Correcting the coarser call made
+        when this was first discussed — a stored-XSS regression belongs in CI
+        whatever else stays manual, even with `sanitize.py`'s unit tests
+        already passing, because this asserts it end to end in a real browser.
+      **Keep manual** (no fixed right answer; automation would pass and tell
+      you nothing): whether timestamps read correctly in the tester's own
+      timezone, whether rendered markdown is *readable*, whether the PDF export
+      is something a person would actually send, whether an AI answer is
+      grounded and useful.
+      Then trim the hand-run page to the judgment checks, so a phase gate costs
+      a human twenty minutes rather than an hour.
+
 - [ ] 2.3 `VirtualList` for the 400-opportunity scale.
 - [ ] 2.4 Command palette, keyboard map, bulk actions, optimistic mutations,
       undo toasts.
