@@ -176,3 +176,17 @@ export interface AiChatMessage {
   body: string;
   referenced_entry_ids?: number[];
 }
+
+/**
+ * The board read as one list: stage column by stage column, and within a
+ * column in the order the view state sorted them.
+ *
+ * `j` and `k` move through this (milestone 2.4a), so the keyboard walks the
+ * cards in the order the eye does rather than in whatever order the API
+ * returned them.
+ */
+export function boardOrder(opportunities: Opportunity[]): Opportunity[] {
+  return stages.flatMap((stage) =>
+    opportunities.filter((opportunity) => opportunity.stage === stage),
+  );
+}

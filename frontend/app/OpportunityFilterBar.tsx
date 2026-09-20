@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useState, type RefObject } from "react";
 
 import {
   emptyOpportunityViewState,
@@ -25,9 +25,12 @@ const sortFields = [
  */
 export function OpportunityFilterBar({
   state,
+  keywordRef,
   onApply,
 }: {
   state: OpportunityViewState;
+  /** Where `/` puts the cursor (milestone 2.4a). */
+  keywordRef?: RefObject<HTMLInputElement | null>;
   onApply: (state: OpportunityViewState) => void;
 }) {
   const [appliedState, setAppliedState] = useState(state);
@@ -50,6 +53,7 @@ export function OpportunityFilterBar({
   return (
     <form className="filter-bar" onSubmit={apply}>
       <input
+        ref={keywordRef}
         aria-label="Filter opportunities by keyword"
         placeholder="Name, account or owner"
         value={draft.q}

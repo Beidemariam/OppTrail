@@ -1670,8 +1670,116 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
   `GET /api/opportunities` unpaginated (2.9); the list and table views that
   would let 400 rows appear outside stage columns are 2.7 and 2.8; and drag
   reordering (2.7) is unaffected — cards keep their DOM `id`-derived keys.
-- [ ] 2.4 Command palette, keyboard map, bulk actions, optimistic mutations,
-      undo toasts.
+- 2.4 Command palette, keyboard map, bulk actions, optimistic mutations,
+      undo toasts. Split into three session-sized milestones (**D-064**) —
+      the roadmap sentence is short, the work is five deliverables across
+      three layers, and two of them need backend routes that do not exist
+      (a restore endpoint for undo, a transactional bulk endpoint). Nothing
+      is added or dropped; the phase's acceptance lines are unchanged.
+
+- [x] 2.4a Command palette and keyboard map. — **DONE**
+
+  - [x] The map is one array (`lib/keyboard.ts`'s `shortcutGroups`) and
+        `Chord` is a union type derived from it, so the `?` reference screen
+        and the views that bind keys read the same declaration. A key
+        documented but never bound, or bound but never documented, is a type
+        error rather than something a user discovers (**D-065**). Published
+        now: `Ctrl K`, `?`, `g d`/`g p`/`g s`, `Ctrl Enter`, `Esc`, and the
+        board's `c`, `/`, `j`, `k`, `e`, `Enter`. Not published, because
+        nothing would answer them: `x` (bulk selection, 2.4c) and `g t`
+        (Tasks, Phase 4).
+  - [x] `useKeyboardShortcuts(bindings)` is the one listener. Each view binds
+        only the chords it can act on — the shell owns the global ones
+        (`ShortcutsProvider`), the dashboard owns the board's, and the open
+        timeline takes `c` off the dashboard so "create" means an entry while
+        a timeline is open — so two views never answer the same chord. Single
+        keys are suppressed inside inputs, textareas, selects and
+        contenteditable; `Ctrl K` and `Esc` deliberately still work there,
+        which is what `docs/UX.md` means by "from anywhere including inside
+        inputs".
+  - [x] Command palette (`app/CommandPalette.tsx`): jump to an opportunity by
+        fuzzy subsequence match, go to the dashboard or search, show the
+        shortcut reference, sign out, and fall through to full-text search for
+        any query (`/search?q=`), which is `docs/FEATURES.md` §13's "reachable
+        from the command palette". Mounted only while open, so the opportunity
+        list it jumps to is fetched on `Ctrl K` rather than on every page load
+        — and on the dashboard that is the same cache entry the board already
+        read.
+  - [x] Not keyboard-only: `TopBar` offers the palette as a button, because a
+        shortcut nobody can see is a shortcut nobody learns.
+  - [x] `app/Modal.tsx` is the dialog shell both overlays share — focus in on
+        open, Tab trapped inside, `Esc` closes and stops before the
+        document-level map sees it. Milestone 2.5 replaces its internals with
+        the Radix primitive, which stays a one-file change while both dialogs
+        sit behind it.
+  - [x] The board has a keyboard cursor: `j`/`k` walk it column by column
+        (`boardOrder` in `lib/domain.ts`, so the keyboard reads the cards in
+        the order the eye does), `e` edits the focused one, `Enter` opens its
+        timeline, `Esc` clears it. `VirtualList` gained an `activeIndex` prop
+        because windowing means the row the cursor moved to may not be in the
+        DOM at all — the list scrolls to it rather than the caller.
+  - [x] `Ctrl Enter` submits a composer: the entry form, the AI question, the
+        note editor, and the "add note"/"add comment" pairs that are not forms
+        at all. A single-line input in a form already submitted on Enter; a
+        textarea never did.
+  - [x] Tests: 24 unit (`lib/keyboard.test.ts`, `lib/palette.test.ts`), 25
+        component (`app/Keyboard.test.tsx`), 3 E2E
+        (`e2e/10-keyboard.spec.ts`), which is **critical journey 13**
+        (brief §6.3) — keyboard-only palette, opportunity, note — with axe on
+        the open palette and the reference screen. 143 → 192 frontend tests;
+        24 → 27 E2E. Coverage thresholds raised 93/93/92/85 → 94/94/93/87
+        against a measured 97.04/97.11/95.67/89.63, the ratchet D-058
+        established.
+  - [x] One defect found by the journey rather than by reasoning (**D-066**):
+        `Modal` returned focus on unmount, so jumping through the palette put
+        focus back in the form on the screen the reader had just left, and the
+        next `c` typed a literal "c" into it. Focus return is now part of
+        *dismissing* — `Esc`, the backdrop, the Close button — not of
+        unmounting.
+
+  Gate: `make check` green in full (ruff, ruff format, mypy, eslint, tsc,
+  prettier, 274 backend tests — unchanged, no backend file touched — 192
+  frontend tests over the raised thresholds, contract check, 27 E2E with axe,
+  pip-audit, npm audit). Docker deferred to the host half
+  (`sandbox/README.md`).
+
+  The guard test (brief §6.5, confirmed to fail against the unfixed code
+  first): `does not treat what the reader types as commands` in
+  `app/Keyboard.test.tsx`. With `isTypingTarget` removed from `chordFor`,
+  typing "check jack's expiry date?" into a note fires `c`, `e`, `j`, `k` and
+  `?` as commands and the note never gets typed.
+
+  Not in this milestone, deliberately: the palette's "switch view" commands
+  are the two screens that exist (2.7 and 2.8 add the rest); `x` and the
+  action bar are 2.4c; both dialogs are plain markup until 2.5 brings Radix
+  and the design tokens; and focus is not moved to the destination after a
+  route change, which is R.2's focus-management work rather than something
+  the palette should special-case.
+
+- [ ] 2.4b Optimistic mutations and undo toasts. Needs the restore path that
+      does not exist yet: `docs/FEATURES.md` §12 says undo is "a real
+      `deleted_at = NULL`, not a re-create", and `soft_delete.py` has six
+      `soft_delete_*` helpers and no inverse. So this milestone is an Alembic
+      revision's worth of nothing but new routes — restore for a timeline
+      entry, a note, a comment and an opportunity, cascading exactly what the
+      matching delete cascaded (the cascade stamps one `deleted_at` value
+      across the tree, which is what makes "restore what this delete took"
+      answerable), each writing an audit row like every other delete path, each
+      with an authorization-matrix entry. Then the toast surface, optimistic
+      `onMutate`/rollback on the mutations in `lib/queries.ts`, and
+      `docs/UX.md`'s reversal: destructive actions stop confirming and start
+      offering Undo, except opportunity deletion, which keeps its typed
+      confirmation because it cascades across a whole record. `lib/confirm.ts`
+      is the single call site that changes.
+
+- [ ] 2.4c Bulk actions. Multi-select (`x`, shift-click, checkbox), the action
+      bar that replaces the filter bar while a selection is live, and one
+      transactional bulk endpoint that reports per-item failures rather than
+      failing wholesale (`docs/UX.md`). `docs/UX.md` scopes multi-select to
+      the list and table views, which are 2.7 and 2.8; the board is the only
+      multi-card surface that exists when this lands, so it is where the
+      selection model goes, and 2.7/2.8 reuse it. Adds `x` to the published
+      map (**D-065**).
 - [ ] 2.5 Design tokens from `DESIGN-SYSTEM.md`, including the three
       corrected contrast values; Radix primitives; real dialogs replacing
       `window.confirm` (now `lib/confirm.ts`, the single call site 2.1 left

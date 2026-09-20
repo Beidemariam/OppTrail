@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router";
 
 import {
@@ -10,6 +10,7 @@ import {
   type TimelineEntry,
   type TimelineFilters,
 } from "../lib/domain";
+import { useKeyboardShortcuts } from "../lib/keyboard";
 import {
   canChangeItem,
   canManageOpportunity,
@@ -61,9 +62,15 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
     );
   }
   const [editingEntry, setEditingEntry] = useState<TimelineEntry | null>(null);
+  const entryTitleRef = useRef<HTMLInputElement>(null);
   const session = useSession();
   const opportunities = useOpportunities(true);
   const timeline = useTimeline(opportunityId, filters);
+
+  // `c` means "create the thing this screen is about", so while a timeline is
+  // open it composes an entry rather than an opportunity (milestone 2.4a).
+  // `DashboardPage` stands its own `c` down whenever this panel is mounted.
+  useKeyboardShortcuts({ c: () => entryTitleRef.current?.focus() });
 
   const opportunity =
     opportunities.data?.find((candidate) => candidate.id === opportunityId) ??
@@ -114,6 +121,7 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
           key={editingEntry?.id ?? "new"}
           opportunityId={opportunityId}
           editing={editingEntry}
+          titleRef={entryTitleRef}
           onDone={() => setEditingEntry(null)}
         />
       )}

@@ -7,6 +7,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import { DashboardPage, NoOpportunitySelected } from "./DashboardPage";
 import { OpportunityPanel } from "./OpportunityPanel";
 import { SearchPage } from "./SearchPage";
+import { ShortcutsProvider } from "./ShortcutsProvider";
 import { createQueryClient } from "../lib/query";
 
 /** Nothing to subscribe to; hoisted so React is not handed a new one to
@@ -20,22 +21,28 @@ const noSubscription = () => () => {};
  * The dashboard is a layout route: the board stays mounted and the child route
  * decides which panel sits beside it, which is what gives an opportunity its
  * own URL.
+ *
+ * `ShortcutsProvider` wraps the table rather than sitting inside a route: the
+ * command palette and the keyboard map work on every screen (milestone 2.4a),
+ * and the tests mount this component, so they exercise the real one.
  */
 export function AppRoutes() {
   return (
-    <Routes>
-      <Route path="/search" element={<SearchPage />} />
-      <Route path="/" element={<DashboardPage />}>
-        <Route index element={<NoOpportunitySelected />} />
-        <Route
-          path="opportunities/:opportunityId"
-          element={<OpportunityPanel />}
-        />
-      </Route>
-      {/* Any other path reached the shell through FastAPI's catch-all
+    <ShortcutsProvider>
+      <Routes>
+        <Route path="/search" element={<SearchPage />} />
+        <Route path="/" element={<DashboardPage />}>
+          <Route index element={<NoOpportunitySelected />} />
+          <Route
+            path="opportunities/:opportunityId"
+            element={<OpportunityPanel />}
+          />
+        </Route>
+        {/* Any other path reached the shell through FastAPI's catch-all
           rather than through a link, so there is nothing to render. */}
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </ShortcutsProvider>
   );
 }
 

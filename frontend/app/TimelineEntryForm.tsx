@@ -1,8 +1,9 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useState, type RefObject } from "react";
 
 import { entryTypes, type EntryType, type TimelineEntry } from "../lib/domain";
+import { submitFormOnModEnter } from "../lib/keyboard";
 import { useSaveTimelineEntry } from "../lib/queries";
 import {
   localInputToUtc,
@@ -45,10 +46,13 @@ function formFor(entry: TimelineEntry | null): EntryFormState {
 export function TimelineEntryForm({
   opportunityId,
   editing,
+  titleRef,
   onDone,
 }: {
   opportunityId: number;
   editing: TimelineEntry | null;
+  /** Where `c` puts the cursor while a timeline is open (milestone 2.4a). */
+  titleRef?: RefObject<HTMLInputElement | null>;
   onDone: () => void;
 }) {
   const [form, setForm] = useState(() => formFor(editing));
@@ -72,7 +76,13 @@ export function TimelineEntryForm({
   }
 
   return (
-    <form className="timeline-form" onSubmit={submit}>
+    <form
+      className="timeline-form"
+      onSubmit={submit}
+      // Ctrl Enter submits from anywhere in the form, including the textarea,
+      // where a bare Enter is a newline.
+      onKeyDown={submitFormOnModEnter()}
+    >
       <div className="timeline-form-grid">
         <label>
           Type
@@ -114,6 +124,7 @@ export function TimelineEntryForm({
       <label>
         Title
         <input
+          ref={titleRef}
           value={form.title}
           onChange={(event) => setForm({ ...form, title: event.target.value })}
           required

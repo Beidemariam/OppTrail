@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useState, type RefObject } from "react";
 
 import { stages, type Opportunity } from "../lib/domain";
 import { useSaveOpportunity } from "../lib/queries";
@@ -44,9 +44,12 @@ function formFor(opportunity: Opportunity | null): OpportunityFormState {
  */
 export function OpportunityForm({
   editing,
+  nameRef,
   onDone,
 }: {
   editing: Opportunity | null;
+  /** Where `c` puts the cursor (milestone 2.4a). */
+  nameRef?: RefObject<HTMLInputElement | null>;
   onDone: () => void;
 }) {
   const [form, setForm] = useState(() => formFor(editing));
@@ -78,6 +81,7 @@ export function OpportunityForm({
       <label>
         Opportunity
         <input
+          ref={nameRef}
           value={form.name}
           onChange={(event) => setForm({ ...form, name: event.target.value })}
           required

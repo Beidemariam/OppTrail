@@ -822,3 +822,54 @@ this way until `vitest.setup.ts` stubbed `offsetHeight`/`offsetWidth` to a
 plausible constant for the whole suite — confirmed against the unfixed setup
 file before adding the stub, matching brief §6.5's "confirm a guard fails
 first" for the test infrastructure itself, not just the guard test above.
+
+## Phase 2 — milestone 2.4a (command palette and keyboard map)
+
+No backend code touched — this milestone is navigation and input, entirely in
+`frontend/`. The backend suite is re-run by the gate unchanged, as evidence
+that it is unchanged.
+
+```
+backend:  274 passed (unchanged), 97.40% combined line+branch coverage
+          (unchanged, --cov-fail-under=90 enforced)
+frontend: 192 passed (was 143), 97.04% line (was 96.74%), 89.63% branch
+          (was 88.25%), 95.67% functions (was 95.3%)
+          thresholds raised 93/93/92/85 -> 94/94/93/87 (D-058's ratchet,
+          applied again: a coverage gain is kept by raising the floor)
+          lib/keyboard.ts          98.27% line, 97.95% branch, 100% functions
+          lib/palette.ts           100%   line, 100%   branch, 100% functions
+          app/CommandPalette.tsx   100%   line, 100%   branch, 100% functions
+          app/Modal.tsx            95.83% line, 77.77% branch, 100% functions
+          app/ShortcutsProvider.tsx 94.11% line, 100%  branch, 83.33% functions
+e2e:      27 passed (was 24), axe clean, including two new surfaces — the open
+          command palette and the keyboard reference dialog
+docker:   deferred to the host half — scripts/autopilot-gate.sh 2
+          (no Docker socket in this sandbox, per sandbox/README.md)
+```
+
+Authorization matrix unchanged (51 endpoints) — no new route. No new
+dependency: the palette and both dialogs are plain React, because 2.5 is the
+milestone that brings Radix and would otherwise have two implementations to
+replace. `pip-audit`: no known vulnerabilities. `npm audit`: 0
+vulnerabilities.
+
+**Critical journey 13** (brief §6.3, "keyboard-only: command palette →
+opportunity → add note") lands here, in `e2e/10-keyboard.spec.ts`. Every step
+after sign-in is keystrokes alone, and the note composer is reached by a
+bounded Tab walk that fails with a sentence rather than hanging if the control
+stops being reachable.
+
+The guard test for this milestone (brief §6.5, confirmed to fail against the
+unfixed code first) is `does not treat what the reader types as commands` in
+`app/Keyboard.test.tsx`. With `isTypingTarget` removed from `chordFor`, typing
+"check jack's expiry date?" into a note composer fires `c`, `e`, `j`, `k` and
+`?` as commands: the dialog opens, the edit form opens, the board's cursor
+moves, and the note never gets typed.
+
+One defect the suite did not catch and the journey did (D-066): `Modal`
+returned focus on unmount, so a palette jump put focus back into the form on
+the screen the reader had just left. Visible only in a real browser, because
+the component tests start from a body that holds no focus. Recorded here
+because it is the second time in this phase that an E2E journey found
+something no unit test could (2.1's D-057 was the first) — the ratio is worth
+watching rather than assuming more component tests would have done it.

@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
+import { submitFormOnModEnter } from "../lib/keyboard";
 import { useAiConversation, useAskAi } from "../lib/queries";
 
 /**
@@ -68,6 +69,7 @@ export function AiSidebar({ opportunityId }: { opportunityId: number }) {
           aria-label="Ask the read-only AI agent about this timeline"
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
+          onKeyDown={submitFormOnModEnter()}
           placeholder="Where do we stand?"
           rows={3}
           required

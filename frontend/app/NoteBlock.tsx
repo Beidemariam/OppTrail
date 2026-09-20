@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { confirmDelete } from "../lib/confirm";
 import type { Access, TimelineNote } from "../lib/domain";
+import { submitOnModEnter } from "../lib/keyboard";
 import {
   useAddComment,
   useDeleteComment,
@@ -95,6 +96,7 @@ export function NoteBlock({
             aria-label="Edit this note"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={submitOnModEnter(save)}
             rows={3}
           />
           <div className="inline-actions">
@@ -147,6 +149,7 @@ export function NoteBlock({
             placeholder="Add comment"
             value={comment}
             onChange={(event) => setComment(event.target.value)}
+            onKeyDown={submitOnModEnter(post)}
           />
           <button type="button" className="secondary-button" onClick={post}>
             Post

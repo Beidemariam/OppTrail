@@ -1,7 +1,7 @@
 "use client";
 
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useRef, type Key, type ReactNode } from "react";
+import { useEffect, useRef, type Key, type ReactNode } from "react";
 
 /**
  * Renders only the rows near the scrollable viewport, so a column of 400
@@ -17,6 +17,7 @@ export function VirtualList<T>({
   items,
   estimateItemSize,
   gap = 0,
+  activeIndex,
   renderItem,
   getItemKey,
   className,
@@ -28,6 +29,11 @@ export function VirtualList<T>({
    * only a margin-bottom child collapses that margin into its own, so it
    * would not be reflected in the measured row height. */
   gap?: number;
+  /** The row that must be on screen — the keyboard cursor (milestone 2.4a).
+   * Windowing means a row the reader moved to may not be mounted at all, so
+   * the list scrolls to it rather than waiting for the caller to. `-1` for a
+   * list the cursor is not currently inside. */
+  activeIndex?: number;
   renderItem: (item: T, index: number) => ReactNode;
   getItemKey: (item: T, index: number) => Key;
   className?: string;
@@ -40,6 +46,13 @@ export function VirtualList<T>({
     estimateSize: () => estimateItemSize + gap,
     overscan: 6,
   });
+
+  useEffect(() => {
+    if (activeIndex === undefined || activeIndex < 0) {
+      return;
+    }
+    virtualizer.scrollToIndex(activeIndex);
+  }, [activeIndex, virtualizer]);
 
   return (
     <div

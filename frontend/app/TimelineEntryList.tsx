@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { confirmDelete } from "../lib/confirm";
 import { entryTypeLabel, type Access, type TimelineEntry } from "../lib/domain";
+import { submitOnModEnter } from "../lib/keyboard";
 import { useAddNote, useDeleteTimelineEntry } from "../lib/queries";
 import { formatTimestamp } from "../lib/time";
 import { NoteBlock } from "./NoteBlock";
@@ -129,6 +130,7 @@ function TimelineEntryCard({
                 placeholder="Add note"
                 value={note}
                 onChange={(event) => setNote(event.target.value)}
+                onKeyDown={submitOnModEnter(add)}
               />
               <button type="button" className="secondary-button" onClick={add}>
                 Add Note

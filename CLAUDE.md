@@ -424,6 +424,9 @@ The units worth testing directly, each in its own module:
   the already-fetched opportunity list in the client. One definition, because
   several views read them.
 - `lib/viewState.ts` — the URL/object round trip both view states use.
+- `lib/keyboard.ts` — the keyboard map, and the listener that serves it. See
+  "Keyboard map" below.
+- `lib/palette.ts` — the command palette's fuzzy subsequence matcher.
 - `lib/confirm.ts` — the single `window.confirm` call. Milestone 2.5 replaces it
   with a real dialog, which is a one-file change only while it stays single.
 - `app/MarkdownText.tsx` — note and comment bodies, rendered through
@@ -440,6 +443,48 @@ The units worth testing directly, each in its own module:
   nothing. Data stays unpaginated (`GET /api/opportunities`, D-061); this
   only windows what gets rendered, not what gets fetched — the switch to
   `/api/v2/opportunities`'s pagination is milestone 2.9's (D-063).
+- `app/Modal.tsx` — the dialog shell the command palette and the shortcut
+  reference share. Focus moves in on open, Tab is trapped, `Esc` closes and
+  stops before the document-level keyboard map sees it. Returning focus is
+  part of **dismissing** (Esc, the backdrop, the Close button), not of
+  unmounting: a dialog that closes because it moved the page calls `onClose`
+  directly and focus falls to the document, so the next Tab starts at the top
+  of the screen the reader is now on (D-066). Milestone 2.5 replaces the
+  internals with Radix — a one-file change only while both dialogs stay
+  behind it.
+
+### Keyboard map
+
+`docs/UX.md` treats keyboard operation as a feature, not polish, and milestone
+2.4a is where it landed. Three things are load bearing:
+
+- **One declaration.** `lib/keyboard.ts`'s `shortcutGroups` is the array the
+  `?` reference screen renders *and* the source of the `Chord` union type the
+  views bind against (`Partial<Record<Chord, () => void>>`). A key documented
+  but never bound, or bound but never documented, is a type error. Keys whose
+  feature does not exist yet are deliberately absent rather than inert: `x`
+  arrives with bulk selection, `g t` with Phase 4's tasks (D-065).
+- **Each view binds only what it can act on.** `ShortcutsProvider` owns the
+  chords that mean the same thing everywhere (`Ctrl K`, `?`, the `g`
+  sequences); `DashboardPage` owns the board's cursor (`j`, `k`, `e`, `/`,
+  `Esc`); `OpportunityPanel` takes `c` off the dashboard while a timeline is
+  open, so "create" means an entry there and an opportunity on the board. Two
+  views never answer the same chord, and a binding cannot outlive the thing it
+  acts on.
+- **Single keys stop at a text field.** `chordFor` returns nothing for a
+  letter typed into an input, textarea, select or contenteditable —
+  `isTypingTarget` — while `Ctrl K` and `Esc` still work there, which is what
+  `docs/UX.md` means by "from anywhere including inside inputs". The guard test
+  is `does not treat what the reader types as commands` in
+  `app/Keyboard.test.tsx`; without that check, typing a note fires half the
+  map.
+
+The board's keyboard cursor (`focusedId` in `DashboardPage`) is separate from
+the opened opportunity (`selectedId`): `j` and `k` walk the cards without
+opening anything, in `boardOrder` — stage column by stage column, which is the
+order they are read in. Because the columns are virtualized, the row the
+cursor moves to may not be in the DOM, so `VirtualList` takes an `activeIndex`
+and scrolls to it.
 
 ### View state and saved views
 

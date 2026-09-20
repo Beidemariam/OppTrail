@@ -31,11 +31,13 @@ export default defineConfig({
       // threshold is how a coverage gain is kept. Milestone 2.1 raised them
       // from 85/85/85/78 — the 1,863-line `app/Home.tsx` that dominated and
       // capped the total is gone, decomposed into components the tests reach.
+      // Milestone 2.4a raised them again, from 93/93/92/85, against a measured
+      // 97.03 lines / 97.10 statements / 95.67 functions / 89.59 branches.
       thresholds: {
-        lines: 93,
-        statements: 93,
-        functions: 92,
-        branches: 85,
+        lines: 94,
+        statements: 94,
+        functions: 93,
+        branches: 87,
       },
     },
   },

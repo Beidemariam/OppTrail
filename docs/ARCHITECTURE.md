@@ -58,6 +58,11 @@ path (`main.py:56-64`).
   view is a named copy of those parameters (`lib/viewState.ts`,
   `backend/app/routes_saved_views.py`).
 - **TanStack Query** — the only server-state cache; SSE events invalidate keys.
+- **Keyboard map** — one declaration (`lib/keyboard.ts`) serves both the `?`
+  reference screen and the `Chord` union the views bind against, so a
+  documented key that nothing answers is a type error (milestone 2.4a). Each
+  view binds only the chords it can act on; single keys stop at a text field,
+  `Ctrl K` and `Esc` deliberately do not.
 - `app/[[...slug]]/page.tsx` is the single exported HTML file; `app/AppRoot.tsx`
   holds the router and the query client, and `/search` is the second route that
   justified introducing both (milestone 1.5). Milestone 2.1 decomposed the
