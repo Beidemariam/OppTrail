@@ -2043,6 +2043,42 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
       CHECK extended.
 - [ ] 2.7 Board view (drag to change stage, auto-logs a system entry) and list
       view — acceptance-critical.
+      **Layout craft is part of this milestone, not a later polish pass**
+      (human user test, 2026-09-21 — D-077). The reviewer judged the interim
+      dashboard at 2.5 and called it "clunky and messy", "not smooth or slick",
+      and said the board "requires a dedicated work to ensure the layout is as
+      beautiful as it can be". The board being scaffolding at the time is a
+      fair defence for *that* screen, but the note is a standing expectation
+      for the one this milestone builds. Passing `axe` is the floor here, not
+      the goal: 2.5's contrast audit is green and the reviewer still found the
+      result crude.
+      - The top bar was called out specifically as "really crude and messy".
+      - **The opportunity-creation form should collapse.** It occupies a large
+        share of the dashboard permanently, for an action taken rarely.
+      - Treat `docs/DESIGN-SYSTEM.md`'s spacing, rhythm and hierarchy as
+        binding here, not only its colour tokens.
+- [ ] 2.13 Rework saved-view sharing on an explicit private/shared choice
+      (**D-060 ruled by the human 2026-09-21**, informed by check 08 failing
+      the user test — D-076).
+      Today `is_shared` means visible to every signed-in user on the
+      installation, and the reviewer could not tell the two kinds of view
+      apart. The ruling: follow the pattern ClickUp uses — when saving a view,
+      the author chooses deliberately whether it is **just for me** or **for
+      everyone**, and the interface says which it is afterwards.
+      - Wording must set the right expectation about the *name* being visible
+        to others, which is the part that leaks today.
+      - **Also fix what check 08 actually exposed, which is not a bug:** a
+        shared view's filter is shared while its results stay
+        permission-filtered, so two people opening "the same view" see
+        different rows. Verified during review — Alex sees four opportunities,
+        Blair and Casey see one, because the rest are shared with nobody. That
+        is correct and must stay correct; what fails is that nothing tells the
+        reader why their shared view looks empty. An empty state that
+        distinguishes "no opportunities match this filter" from "none that you
+        can see" would have prevented the whole confusion.
+      - Sequence after 2.7 so the board's own layout work is not disturbed
+        mid-flight.
+
 - [ ] 2.8 Table and calendar view — may slip to Phase 3 per the roadmap's own
       stated risk mitigation; do not treat slipping these as a blocked
       milestone.
