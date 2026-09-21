@@ -2,7 +2,7 @@ import { expect, test, type Locator } from "@playwright/test";
 import {
   card,
   expectNoAccessibilityViolations,
-  opportunityForm,
+  createOpportunity,
   signUp,
 } from "./helpers";
 
@@ -44,12 +44,8 @@ test("checks two cards, bulk-changes their stage, then bulk-deletes with Undo", 
 
   await signUp(page, `bulk-${suffix}@opptrail.test`, "Bulk Tester");
 
-  const form = opportunityForm(page);
   for (const name of [first, second]) {
-    await form.getByLabel("Opportunity").fill(name);
-    await form.getByLabel("Account").fill("Initech");
-    await form.getByRole("button", { name: "Create opportunity" }).click();
-    await expect(card(page, name)).toBeVisible();
+    await createOpportunity(page, name, { account: "Initech" });
   }
 
   const firstCheckbox = card(page, first).getByLabel(
@@ -78,8 +74,10 @@ test("checks two cards, bulk-changes their stage, then bulk-deletes with Undo", 
   const closedWon = page
     .locator(".stage-column")
     .filter({ has: page.getByRole("heading", { name: "Closed Won" }) });
-  await expect(closedWon.getByText(first)).toBeVisible();
-  await expect(closedWon.getByText(second)).toBeVisible();
+  // By the card's own link: the name also appears in the move-to-stage
+  // control's hidden label (milestone 2.7).
+  await expect(closedWon.getByRole("link", { name: first })).toBeVisible();
+  await expect(closedWon.getByRole("link", { name: second })).toBeVisible();
   // A successful bulk action clears the selection, so the filter bar is
   // back rather than the action bar.
   await expect(page.getByRole("toolbar", { name: "Bulk actions" })).toHaveCount(

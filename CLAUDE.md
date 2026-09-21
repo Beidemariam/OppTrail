@@ -419,6 +419,44 @@ over 200 lines and each holding only its own form state: `AuthPanel`, `TopBar`,
 `TimelineFilterBar`, `TimelineEntryForm`, `TimelineEntryList`, `NoteBlock`,
 `AiSidebar`.
 
+### Two views over one list
+
+Milestone 2.7 gave the dashboard a second renderer, and the shape of that is
+worth knowing before adding a third (table and calendar are 2.8):
+
+- **`DashboardPage` filters and sorts once** (`applyOpportunityView`) and hands
+  the result to `StageBoard` or `OpportunityList`. Which one is a field on the
+  URL-serialized view state (`?opportunities.view=list`), so a view is
+  linkable, survives a reload, and is what a saved view stores beside its
+  filters. Switching costs no request and keeps the cursor, the bulk selection
+  and the filters where they were.
+- **The order the reader sees is one function**, `viewOrder` — stage column by
+  stage column on the board, sort order in the list — and `j`/`k`, `x`, `e`,
+  Enter and shift-click ranges all walk it. The card and the row render through
+  one hook, `app/useOpportunityItem.ts`, which holds the focus effect (D-072's
+  `focusin` subtlety lives there), Enter to open, and the checkbox (D-081).
+- **Every stage change is the same write.** A card dropped in another column,
+  the move-to-stage select on a card or row (`app/MoveToStage.tsx`), and the
+  `[`/`]` chords all call `DashboardPage`'s `moveToStage`, which is
+  `useChangeOpportunityStage`: a partial `PATCH {stage}`, optimistic, rolled
+  back with a toast, invalidating the timeline because the server writes the
+  `stage_change` system entry. The drag itself is the browser's own HTML5
+  drag-and-drop with no library (D-080); the dragged card is held in React
+  state rather than read back from `dataTransfer`, because a `dragover` handler
+  may not look inside the payload. Only an owner's card is draggable and only
+  an owner's card carries the select — changing an opportunity's fields is
+  owner-only, and the select is what makes the board operable without a mouse
+  (`docs/DESIGN-SYSTEM.md` calls that the requirement most likely to be
+  skipped).
+- **The create/edit form is a dialog**, not a column (D-079): opened from the
+  page header, by `c`, and by Edit on any card or row, on the same
+  `app/Modal.tsx` shell as the palette. `TopBar` therefore carries no page
+  title — the screen names itself in its own header, beside the view switcher
+  and the create button.
+- **Empty is two different answers.** `DashboardPage` renders the skeleton,
+  the "there are none yet" onboarding panel and the "your filters removed them
+  all" panel itself, so neither view component is ever asked to draw nothing.
+
 **Writes are optimistic where the cache already holds what changes** (2.4b):
 the four deletes and the note edit apply in `onMutate`, snapshot what they
 overwrote, and put it back in `onError` — `docs/UX.md`'s "applies immediately,
@@ -457,7 +495,9 @@ The units worth testing directly, each in its own module:
   the generated schemas, and the two view states (`TimelineFilters`,
   `OpportunityViewState`) with `applyOpportunityView`, which filters and sorts
   the already-fetched opportunity list in the client. One definition, because
-  several views read them.
+  several views read them. Also the three small functions the two opportunity
+  views share: `viewOrder` (reading order), `adjacentStage` (`[` and `]`, which
+  stop at the ends of the fixed list) and `formatMoney`.
 - `lib/viewState.ts` — the URL/object round trip both view states use.
 - `lib/keyboard.ts` — the keyboard map, and the listener that serves it. See
   "Keyboard map" below.
@@ -483,7 +523,8 @@ The units worth testing directly, each in its own module:
 - `app/VirtualList.tsx` — a generic `<T>` wrapper over
   `@tanstack/react-virtual` (milestone 2.3, roadmap: "400 opportunities will
   not render unvirtualized"). `StageBoard` renders each stage column through
-  it instead of mapping every filtered opportunity into the DOM; row height
+  it, and `OpportunityList` its rows, instead of mapping every filtered
+  opportunity into the DOM; row height
   is measured after mount, so `estimateItemSize` only has to seed the first
   layout. `activeIndex` scrolls a column to the keyboard cursor, and
   `DashboardPage` passes it **only while the cursor was moved by the
@@ -496,7 +537,8 @@ The units worth testing directly, each in its own module:
   only windows what gets rendered, not what gets fetched — the switch to
   `/api/v2/opportunities`'s pagination is milestone 2.9's (D-063).
 - `app/Modal.tsx` — the dialog shell the command palette and the shortcut
-  reference share, on Radix's `Dialog` since 2.5. Radix owns the portal, the
+  reference share — and, since 2.7, the opportunity create/edit form — on
+  Radix's `Dialog` since 2.5. Radix owns the portal, the
   focus trap, the ARIA wiring and hiding the rest of the page from assistive
   technology; two rules stay this app's own. `Esc` is answered on the dialog and
   stops before the document-level keyboard map sees it — the board is mounted
@@ -530,8 +572,8 @@ The units worth testing directly, each in its own module:
   arrives with bulk selection, `g t` with Phase 4's tasks (D-065).
 - **Each view binds only what it can act on.** `ShortcutsProvider` owns the
   chords that mean the same thing everywhere (`Ctrl K`, `?`, the `g`
-  sequences); `DashboardPage` owns the board's cursor (`j`, `k`, `e`, `/`,
-  `Esc`); `OpportunityPanel` takes `c` off the dashboard while a timeline is
+  sequences); `DashboardPage` owns the cursor over whichever view is on screen
+  (`j`, `k`, `e`, `x`, `/`, `[`, `]`, `Esc`); `OpportunityPanel` takes `c` off the dashboard while a timeline is
   open, so "create" means an entry there and an opportunity on the board. Two
   views never answer the same chord, and a binding cannot outlive the thing it
   acts on.
@@ -543,12 +585,14 @@ The units worth testing directly, each in its own module:
   `app/Keyboard.test.tsx`; without that check, typing a note fires half the
   map.
 
-The board's keyboard cursor (`focusedId` in `DashboardPage`) is separate from
-the opened opportunity (`selectedId`): `j` and `k` walk the cards without
-opening anything, in `boardOrder` — stage column by stage column, which is the
-order they are read in. Because the columns are virtualized, the row the
-cursor moves to may not be in the DOM, so `VirtualList` takes an `activeIndex`
-and scrolls to it.
+The keyboard cursor (`focusedId` in `DashboardPage`) is separate from the
+opened opportunity (`selectedId`): `j` and `k` walk the items without opening
+anything, in `viewOrder` — stage column by stage column on the board, sort
+order in the list, which is the order they are read in. Because both views are
+virtualized, the row the cursor moves to may not be in the DOM, so
+`VirtualList` takes an `activeIndex` and scrolls to it. `[` and `]` move the
+focused opportunity one stage either way, which is the drag done from the
+keyboard, and do nothing on an opportunity the reader does not own.
 
 ### View state and saved views
 

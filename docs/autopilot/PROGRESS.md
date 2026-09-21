@@ -2112,22 +2112,140 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
   unchanged, not raised this milestone — contract check clean). E2E, Docker,
   pip-audit and npm audit deferred to the phase-end full gate per brief
   §3.4 ("milestone commits require `make check-fast`").
-- [ ] 2.7 Board view (drag to change stage, auto-logs a system entry) and list
-      view — acceptance-critical.
+- [x] 2.7 Board view (drag to change stage, auto-logs a system entry) and list
+      view — acceptance-critical. — **DONE**
+
+  - [x] **Drag to change stage** (`frontend/app/StageBoard.tsx`). Native HTML5
+        drag-and-drop, no new dependency (**D-080**): an owner's card is
+        `draggable`, each stage column answers `dragover`/`drop`, and the drop
+        calls the same `onMoveToStage` the two keyboard paths call. The drag
+        in progress is held in React state rather than read back out of
+        `dataTransfer`, because a `dragover` handler is not permitted to look
+        inside the payload and the drag never leaves the page; `setData` is
+        still called, since Firefox starts no drag without it. Dropping a card
+        back in its own column writes nothing. Only the owner may change an
+        opportunity's fields (`require_opportunity_owner`), so only their
+        cards are draggable and only their cards carry the stage control.
+  - [x] **The keyboard alternative `docs/DESIGN-SYSTEM.md` requires**, which
+        it calls "the requirement most likely to be skipped and the one that
+        makes the board view unusable without a mouse":
+        `frontend/app/MoveToStage.tsx`, a labelled `<select>` on every owner's
+        card and row, plus `[` and `]` on the keyboard cursor — two new
+        entries in `lib/keyboard.ts`'s `shortcutGroups`, so the `?` reference
+        screen documents them by construction. Both stop at the ends of the
+        fixed stage list rather than wrapping (`adjacentStage`).
+  - [x] **One write path.** `useChangeOpportunityStage` (`lib/queries.ts`)
+        sends a partial `PATCH {stage}` — the route already updates only the
+        fields it is given — optimistically (the cache holds the card; where
+        it lands is not the server's to decide, D-068's rule), rolling back
+        and explaining in a toast on failure, and invalidating the timeline
+        because the server writes the `stage_change` system entry. The move is
+        also announced in a `role="status"` region, since the reader who moved
+        a card with the keyboard may not be watching it.
+  - [x] **List view** (`frontend/app/OpportunityList.tsx`,
+        `frontend/app/ViewSwitcher.tsx`). The same filtered, sorted array the
+        board draws, as dense virtualized rows with a header; `view` is a new
+        field on `OpportunityViewState`, so the choice is in the URL
+        (`?opportunities.view=list`), survives a reload, and is what a saved
+        view stores with its filters. Switching renderers sends no request and
+        keeps the cursor, the bulk selection and the filters exactly where
+        they were. Stage is a control in the row for an owner and a chip for
+        everyone else, because there is no column to drop into.
+  - [x] **The cursor and the selection follow the view the reader sees**
+        (**D-081**): `viewOrder(opportunities, view)` in `lib/domain.ts` —
+        column by column on the board, top to bottom in the list — and one
+        `app/useOpportunityItem.ts` hook holding the focus effect, Enter to
+        open and the shift-click checkbox that the card and the row share.
+        `DashboardPage` holds the same four pieces of state it held before.
+  - [x] **Layout craft, which D-077 made part of this milestone.** The
+        reviewer's three notes, each answered:
+        - *"The top bar is really crude and messy."* `TopBar` is now brand,
+          the palette as a search field that grows to fill the bar, then the
+          account controls pushed to the end, all on one sticky surface with
+          32px controls of equal weight (the notification bell became a ghost
+          button rather than a second bordered one). It carries no page title:
+          the screen names itself in a new page header, which also holds the
+          view switcher, the count, and the create action.
+        - *"The opportunity-creation section should be collapsible since it
+          takes so much space."* It is gone from the layout entirely
+          (**D-079**): the form moved into the Radix dialog `app/Modal.tsx`
+          already provides, opened by the header button, by `c`, and by Edit
+          on any card or row, focused on its first field. The former
+          `.dashboard-layout` two-column grid is removed, so the views and the
+          timeline panel below them get the full width.
+        - *"The board is really messy and not smooth or slick."* Cards are
+          rebuilt around a hierarchy rather than a definition list — the name
+          is the link, then account, then the value in tabular numerals, then
+          a meta line — and each column header carries its own total. The
+          filter bar was an auto-fit grid that spread five controls and two
+          buttons over three ragged rows; it is one compact wrapping toolbar
+          under a quieter saved-views line. Spacing, type scale and radii come
+          from `docs/DESIGN-SYSTEM.md`'s tokens throughout (4-12px inside
+          data, 16-24px between regions, `text-sm` as the data default).
+  - [x] **The states a view has when it has nothing to show**, which the
+        design system treats as first-class: a skeleton on first paint rather
+        than a spinner, an onboarding panel explaining what an opportunity is
+        before there is one (`docs/UX.md`'s "a new user's dashboard is not
+        blank"), and a *different* answer for filtered-to-nothing that names
+        how many are hidden and offers to clear the filters. The second of
+        those is half of what milestone 2.13 needs and was written with that
+        in mind, though 2.13 still owns the shared-view wording.
+  - [x] Opening an opportunity scrolls its timeline panel into view
+        (`app/OpportunityPanel.tsx`). With the board above it at full width,
+        a card opened from a lower column otherwise left the reader looking at
+        the thing they had just clicked away from.
+  - [x] Money is formatted in one place (`lib/domain.ts`'s `formatMoney`):
+        grouped thousands, cents only when there are any. A column total in a
+        mixed-currency stage reports the count instead of adding francs to
+        dollars, because this app stores an amount and a currency and does no
+        conversion.
+  - [x] Backend: no change needed — `PATCH /api/opportunities/{id}` already
+        wrote the `stage_change` system entry, and partial updates already
+        worked. One test added for the exact request a drag sends
+        (`test_a_stage_only_update_logs_the_change_and_leaves_the_rest_alone`),
+        since every previous test patched the stage together with another
+        field.
+  - [x] Tests: 305 backend (+1) and 344 frontend (+28). New frontend coverage
+        is the drag (drop writes the stage and announces it, a drop in its own
+        column writes nothing, a non-owner's card is neither draggable nor
+        given the control, a refused move rolls the card back with a toast),
+        the column totals, the stage control and the `[`/`]` chords, the list
+        view (switch without a refetch, open from the URL, cursor/selection/
+        filters preserved, row delete, a viewer's read-only row), the two
+        empty states, and the dialog form. E2E journey 8 (brief §6.3) lands
+        here as `frontend/e2e/14-board-views.spec.ts`: a real pointer drag
+        between columns, the system entry it writes, the keyboard move, the
+        list view under axe, and the view surviving a reload.
+        `e2e/helpers.ts` gained `createOpportunity`/`openOpportunityForm` and
+        `openTimeline` now follows the card's own name, so the six specs that
+        create an opportunity say it in one line.
+
+  Gate: `make check-fast` green (ruff, ruff format, mypy over `app` and
+  `tools`, eslint, tsc, prettier, 305 backend tests at 97.47% combined
+  coverage, 344 frontend tests at 96.74/89.16/95.54/96.71 statements/
+  branches/functions/lines against the unchanged 96/88/94/96 thresholds,
+  contract check clean). The full Playwright suite was also run for this
+  milestone rather than deferred, because the layout work moved selectors
+  the other thirteen specs use: 44 passed, axe clean on every screen in both
+  themes. Docker build and smoke test remain the host's half of the split
+  gate.
+
+  What the milestone was given to answer, kept here because it is the
+  standard the result is judged against:
+
       **Layout craft is part of this milestone, not a later polish pass**
       (human user test, 2026-09-21 — D-077). The reviewer judged the interim
       dashboard at 2.5 and called it "clunky and messy", "not smooth or slick",
       and said the board "requires a dedicated work to ensure the layout is as
-      beautiful as it can be". The board being scaffolding at the time is a
-      fair defence for *that* screen, but the note is a standing expectation
-      for the one this milestone builds. Passing `axe` is the floor here, not
-      the goal: 2.5's contrast audit is green and the reviewer still found the
-      result crude.
+      beautiful as it can be". Passing `axe` is the floor here, not the goal:
+      2.5's contrast audit is green and the reviewer still found the result
+      crude.
       - The top bar was called out specifically as "really crude and messy".
       - **The opportunity-creation form should collapse.** It occupies a large
         share of the dashboard permanently, for an action taken rarely.
       - Treat `docs/DESIGN-SYSTEM.md`'s spacing, rhythm and hierarchy as
         binding here, not only its colour tokens.
+
 - [ ] 2.13 Rework saved-view sharing on an explicit private/shared choice
       (**D-060 ruled by the human 2026-09-21**, informed by check 08 failing
       the user test — D-076).

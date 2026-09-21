@@ -43,9 +43,9 @@ export function ShortcutsProvider({ children }: { children: ReactNode }) {
           "mod+k": () => setOverlay("palette"),
           "?": () => setOverlay("shortcuts"),
           "g d": () => navigate("/"),
-          // The board is the dashboard today. It becomes a destination of its
-          // own when milestone 2.7 splits board and list views apart.
-          "g p": () => navigate("/"),
+          // The dashboard renders whichever view the URL asks for, so the
+          // pipeline is the same screen asked for its board (milestone 2.7).
+          "g p": () => navigate("/?opportunities.view=board"),
           "g s": () => navigate("/search"),
         }
       : {},

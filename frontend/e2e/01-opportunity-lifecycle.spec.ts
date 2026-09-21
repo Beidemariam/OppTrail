@@ -3,6 +3,7 @@ import {
   entryForm,
   expectNoAccessibilityViolations,
   openTimeline,
+  createOpportunity,
   opportunityForm,
   signUp,
 } from "./helpers";
@@ -23,17 +24,12 @@ test("sign up, create an opportunity, add entries, change stage", async ({
   await expect(page.locator("article.opportunity-card")).toHaveCount(0);
   await expectNoAccessibilityViolations(page, "empty dashboard");
 
-  const form = opportunityForm(page);
-  await form.getByLabel("Opportunity").fill(opportunity);
-  await form.getByLabel("Account").fill("Wonka Industries");
-  await form.getByLabel("Value").fill("75000");
-  await form.getByLabel("Currency").fill("USD");
-  await form.getByLabel("Stage").selectOption("Prospecting");
-  await form.getByRole("button", { name: "Create opportunity" }).click();
-
-  await expect(
-    page.locator("article.opportunity-card").filter({ hasText: opportunity }),
-  ).toBeVisible();
+  await createOpportunity(page, opportunity, {
+    account: "Wonka Industries",
+    value: "75000",
+    currency: "USD",
+    stage: "Prospecting",
+  });
 
   await openTimeline(page, opportunity);
 

@@ -40,10 +40,18 @@ export async function renderDashboard(
   return api;
 }
 
-/** Follows a card's timeline link, which is what gives it its own URL. */
+/** Follows a card's own name, which is the link to its timeline and is what
+ * gives an opportunity its own URL. */
 export async function openTimeline(name: string) {
   const card = await findCard(name);
-  await userEvent.click(within(card).getByRole("link", { name: "Timeline" }));
+  await userEvent.click(within(card).getByRole("link", { name }));
+}
+
+/** Opens the create/edit dialog milestone 2.7 moved the form into, and
+ * returns it. */
+export async function openOpportunityForm(name = "New opportunity") {
+  await userEvent.click(screen.getByRole("button", { name }));
+  return screen.findByRole("dialog");
 }
 
 /** The card for one opportunity, once the list behind the board has loaded. */

@@ -21,6 +21,12 @@ Object.defineProperty(window.HTMLElement.prototype, "offsetWidth", {
   value: 600,
 });
 
+// jsdom lays nothing out and so implements no scrolling either;
+// `OpportunityPanel` scrolls itself into view when an opportunity is opened
+// (milestone 2.7). The stub records nothing — what it does in a real browser
+// is asserted by the E2E suite, which has a viewport to scroll.
+window.HTMLElement.prototype.scrollIntoView = () => {};
+
 // jsdom implements no media queries, and `ThemeProvider` (milestone 2.5) asks
 // it for `prefers-color-scheme` on mount. The stub answers "light" and accepts
 // listeners; `lib/theme.test.ts` covers the resolution both ways without a

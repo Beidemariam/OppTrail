@@ -4,17 +4,21 @@ import { useRef, useState } from "react";
 import { Outlet, useMatch, useNavigate, useSearchParams } from "react-router";
 
 import {
+  adjacentStage,
   applyOpportunityView,
-  boardOrder,
   emptyOpportunityViewState,
   stages,
+  viewOrder,
   type BulkActionResultItem,
   type Opportunity,
+  type OpportunityView,
+  type Stage,
   type OpportunityViewState,
 } from "../lib/domain";
 import { useKeyboardShortcuts } from "../lib/keyboard";
 import {
   useBulkOpportunityAction,
+  useChangeOpportunityStage,
   useDeleteOpportunity,
   useOpportunities,
   useRestoreOpportunity,
@@ -24,25 +28,40 @@ import { paramsWithState, stateFromParams } from "../lib/viewState";
 import { AuthPanel } from "./AuthPanel";
 import { BulkActionBar } from "./BulkActionBar";
 import { useConfirm } from "./ConfirmDialog";
+import { Modal } from "./Modal";
 import { OpportunityFilterBar } from "./OpportunityFilterBar";
 import { OpportunityForm } from "./OpportunityForm";
+import { OpportunityList } from "./OpportunityList";
 import { SavedViewsMenu } from "./SavedViewsMenu";
 import { StageBoard } from "./StageBoard";
 import { useToasts, useUndoableDelete } from "./Toasts";
 import { TopBar } from "./TopBar";
+import { ViewSwitcher } from "./ViewSwitcher";
 
 /**
- * The dashboard: the session gate, the stage board, and the panel beside it.
+ * The dashboard: the session gate, one filtered set of opportunities drawn as
+ * a board or a list, and the timeline panel below it.
  *
  * It is the layout route for `/` and `/opportunities/:opportunityId`
- * (`AppRoot.tsx`), so the board stays mounted while the child route swaps the
+ * (`AppRoot.tsx`), so the views stay mounted while the child route swaps the
  * panel. That is what gives an opportunity its own URL without reloading the
  * list behind it.
+ *
+ * Both views are renderers over the same already-filtered array and share
+ * every piece of state around them — the cursor, the selection, the filters —
+ * so switching between them is a URL change and nothing else (milestone 2.7).
+ * The one write they share is `moveToStage`: a drag, the move-to-stage select
+ * and the `[`/`]` chords all land on it.
  */
 export function DashboardPage() {
   const session = useSession();
   const opportunities = useOpportunities(Boolean(session.data));
+  // The create/edit form is a dialog (D-079): `editing` is which opportunity
+  // it is editing, `composing` is that same dialog opened empty.
   const [editing, setEditing] = useState<Opportunity | null>(null);
+  const [composing, setComposing] = useState(false);
+  // What a stage change just did, for a reader who cannot see the card move.
+  const [announcement, setAnnouncement] = useState("");
   // The keyboard's cursor over the board (milestone 2.4a). Separate from
   // `selectedId`, which is the opportunity whose timeline is open: `j` and `k`
   // walk the cards without opening anything.
@@ -64,7 +83,6 @@ export function DashboardPage() {
     null,
   );
   const confirm = useConfirm();
-  const newOpportunityRef = useRef<HTMLInputElement>(null);
   const keywordFilterRef = useRef<HTMLInputElement>(null);
   const deleteOpportunity = useDeleteOpportunity();
   const restoreOpportunity = useRestoreOpportunity();
@@ -73,6 +91,7 @@ export function DashboardPage() {
     deleteOpportunity,
     restoreOpportunity,
   );
+  const changeStage = useChangeOpportunityStage();
   const bulkAction = useBulkOpportunityAction();
   const bulkRestoreOpportunity = useRestoreOpportunity();
   const showToast = useToasts();
@@ -104,8 +123,9 @@ export function DashboardPage() {
     opportunities.data ?? [],
     viewState,
   );
-  // Column by column, which is the order the cards are read in.
-  const ordered = boardOrder(visibleOpportunities);
+  // The order this view is read in — column by column on the board, top to
+  // bottom in the list — which is what the cursor and a range walk.
+  const ordered = viewOrder(visibleOpportunities, viewState.view);
   const checkedOpportunities = ordered.filter((opportunity) =>
     checkedIds.has(opportunity.id),
   );
@@ -147,6 +167,44 @@ export function DashboardPage() {
   function clearSelection() {
     setCheckedIds(new Set());
     setSelectionAnchorId(null);
+  }
+
+  /**
+   * The one stage-change path: a card dropped in another column, the
+   * move-to-stage select, and the `[`/`]` chords all call this.
+   *
+   * Optimistic in the cache (`useChangeOpportunityStage`), so the card is in
+   * its new column before the request lands and goes back if it fails. The
+   * move is also announced, because the reader who used the keyboard to make
+   * it may not be watching the card that moved.
+   */
+  function moveToStage(opportunity: Opportunity, stage: Stage) {
+    if (opportunity.stage === stage) {
+      return;
+    }
+    setAnnouncement(`${opportunity.name} moved to ${stage}.`);
+    changeStage
+      .mutateAsync({ id: opportunity.id, stage })
+      .catch((error: Error) => {
+        setAnnouncement("");
+        showToast({
+          message: `Could not move ${opportunity.name} to ${stage}: ${error.message}`,
+          tone: "error",
+        });
+      });
+  }
+
+  /** `[` and `]`: the focused opportunity, one stage either way. Owner-only,
+   * like every other change to an opportunity's own fields. */
+  function nudgeStage(step: 1 | -1) {
+    const focused = ordered.find((opportunity) => opportunity.id === focusedId);
+    if (!focused || focused.current_user_role !== "owner") {
+      return;
+    }
+    const stage = adjacentStage(focused.stage, step);
+    if (stage) {
+      moveToStage(focused, stage);
+    }
   }
 
   function moveFocus(step: number) {
@@ -211,10 +269,10 @@ export function DashboardPage() {
             }
           },
           "/": () => keywordFilterRef.current?.focus(),
+          "[": () => nudgeStage(-1),
+          "]": () => nudgeStage(1),
           Escape: onEscape,
-          ...(selectedId === null
-            ? { c: () => newOpportunityRef.current?.focus() }
-            : {}),
+          ...(selectedId === null ? { c: () => setComposing(true) } : {}),
         }
       : {},
   );
@@ -357,28 +415,69 @@ export function DashboardPage() {
       );
   }
 
+  const total = opportunities.data?.length ?? 0;
+  const filteredOut = total - visibleOpportunities.length;
+  const viewProps = {
+    opportunities: visibleOpportunities,
+    selectedId,
+    focusedId,
+    followCursor,
+    checkedIds,
+    onFocus: (opportunity: Opportunity) => {
+      setFocusedId(opportunity.id);
+      setFollowCursor(false);
+    },
+    onEdit: setEditing,
+    onDelete: remove,
+    onMoveToStage: moveToStage,
+    onToggleChecked: toggleChecked,
+    onRangeSelect: rangeSelect,
+  };
+
+  function closeForm() {
+    setComposing(false);
+    setEditing(null);
+  }
+
   return (
     <main className="app-shell">
       <TopBar user={session.data} />
 
-      <section className="dashboard-layout">
-        {/* Re-keyed so switching which opportunity is being edited reloads the
-            fields, and finishing an edit empties them. */}
-        <OpportunityForm
-          key={editing?.id ?? "new"}
-          editing={editing}
-          nameRef={newOpportunityRef}
-          onDone={() => setEditing(null)}
-        />
+      <section className="workspace">
+        <div className="page-header">
+          <div>
+            <h1>Opportunities</h1>
+            <p className="page-subtitle">
+              {filteredOut > 0
+                ? `${visibleOpportunities.length} of ${total} shown, ${filteredOut} filtered out`
+                : `${total} ${total === 1 ? "opportunity" : "opportunities"}`}
+            </p>
+          </div>
+          <div className="page-actions">
+            <ViewSwitcher
+              view={viewState.view}
+              onChange={(view: OpportunityView) =>
+                setViewState({ ...viewState, view })
+              }
+            />
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => setComposing(true)}
+            >
+              New opportunity
+            </button>
+          </div>
+        </div>
 
-        <section className="workspace">
-          {opportunities.isError && (
-            <p className="error">{opportunities.error.message}</p>
-          )}
-          {deleteOpportunity.isError && (
-            <p className="error">{deleteOpportunity.error.message}</p>
-          )}
+        {opportunities.isError && (
+          <p className="error">{opportunities.error.message}</p>
+        )}
+        {deleteOpportunity.isError && (
+          <p className="error">{deleteOpportunity.error.message}</p>
+        )}
 
+        <div className="view-controls">
           <SavedViewsMenu
             entity="opportunities"
             state={viewState}
@@ -402,27 +501,93 @@ export function DashboardPage() {
               onApply={setViewState}
             />
           )}
+        </div>
 
-          <StageBoard
-            opportunities={visibleOpportunities}
-            selectedId={selectedId}
-            focusedId={focusedId}
-            followCursor={followCursor}
-            checkedIds={checkedIds}
-            onFocus={(opportunity) => {
-              setFocusedId(opportunity.id);
-              setFollowCursor(false);
-            }}
-            onEdit={setEditing}
-            onDelete={remove}
-            onToggleChecked={toggleChecked}
-            onRangeSelect={rangeSelect}
-          />
+        {/* The four states this view has, in the order they are reached
+            (`docs/DESIGN-SYSTEM.md`): loading, nothing yet, nothing left
+            after filtering, and the data itself. The last two are
+            deliberately different answers — "there is none" and "you filtered
+            it out" need different next actions. */}
+        {opportunities.isPending ? (
+          <LoadingOpportunities />
+        ) : total === 0 ? (
+          <section className="onboarding-panel">
+            <h2>Track your first opportunity</h2>
+            <p>
+              An opportunity is one deal: who it is with, what it is worth, and
+              every call, email and note that moved it. Create one and its
+              timeline starts itself.
+            </p>
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => setComposing(true)}
+            >
+              New opportunity
+            </button>
+          </section>
+        ) : visibleOpportunities.length === 0 ? (
+          <section className="onboarding-panel">
+            <h2>No opportunities match these filters</h2>
+            <p>
+              All {total} of them are filtered out by the current view. Clear
+              the filters to see them again.
+            </p>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setViewState(emptyOpportunityViewState)}
+            >
+              Clear filters
+            </button>
+          </section>
+        ) : viewState.view === "list" ? (
+          <OpportunityList {...viewProps} />
+        ) : (
+          <StageBoard {...viewProps} />
+        )}
 
-          <Outlet />
-        </section>
+        {/* A stage change moves a card the reader may not be looking at, and
+            the keyboard paths move one they cannot see at all. */}
+        <p className="visually-hidden" role="status">
+          {announcement}
+        </p>
+
+        <Outlet />
       </section>
+
+      {(composing || editing) && (
+        <Modal
+          label="Opportunity"
+          title={editing ? "Edit opportunity" : "New opportunity"}
+          onClose={closeForm}
+        >
+          {/* Re-keyed so switching which opportunity is being edited reloads
+              the fields, and finishing an edit empties them. */}
+          <OpportunityForm
+            key={editing?.id ?? "new"}
+            editing={editing}
+            onDone={closeForm}
+          />
+        </Modal>
+      )}
     </main>
+  );
+}
+
+/** First paint, before the list has arrived: the shape of what is coming,
+ * rather than a spinner that makes a dense view feel slower than it is
+ * (`docs/DESIGN-SYSTEM.md`). */
+function LoadingOpportunities() {
+  return (
+    <div className="skeleton-view">
+      <p className="visually-hidden" role="status">
+        Loading opportunities
+      </p>
+      {[0, 1, 2, 3, 4, 5].map((index) => (
+        <div className="skeleton-card" key={index} aria-hidden="true" />
+      ))}
+    </div>
   );
 }
 

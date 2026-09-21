@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router";
 
 import {
@@ -62,6 +62,17 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
     );
   }
   const [editingEntry, setEditingEntry] = useState<TimelineEntry | null>(null);
+  // The views above are a full screen of board or list, so an opportunity
+  // opened from the bottom of a column would otherwise land below the fold and
+  // leave the reader looking at the thing they just clicked away from
+  // (milestone 2.7). Bound to the id rather than to every render, so reading a
+  // timeline is never interrupted by its own refetch — and declared here,
+  // above the "not available" return, because a hook after a conditional
+  // return is a hook that sometimes does not run.
+  const panelRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    panelRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [opportunityId]);
   const entryTitleRef = useRef<HTMLInputElement>(null);
   const session = useSession();
   const opportunities = useOpportunities(true);
@@ -99,7 +110,7 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
   };
 
   return (
-    <section className="timeline-panel">
+    <section className="timeline-panel" ref={panelRef}>
       <TimelineHeading
         opportunity={opportunity}
         onRefresh={() => void timeline.refetch()}

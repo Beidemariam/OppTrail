@@ -20,6 +20,22 @@ export const stages = [
   "Closed Lost",
 ] as const;
 
+/**
+ * A money figure as the views show it: grouped thousands, cents only when
+ * there are any, and the currency code in front — this app stores an amount
+ * and a currency and does no conversion, so the code is part of the number
+ * rather than decoration.
+ */
+export function formatMoney(currency: string, value: string | number): string {
+  return `${currency} ${Number(value).toLocaleString("en-US", {
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+/** The fixed stage list as a type: the generated `Opportunity["stage"]`
+ * union, named once so every stage-carrying signature reads the same. */
+export type Stage = (typeof stages)[number];
+
 export const entryTypes = [
   { value: "call", label: "Call" },
   { value: "email", label: "Email" },
@@ -96,12 +112,14 @@ export const emptyTimelineFilters: TimelineFilters = {
 };
 
 /**
- * The opportunity board's filter/sort model (milestone 2.2), URL-serialized
- * the same way as `TimelineFilters`. No `groupBy` field yet: the board's only
- * grouping is by stage, which is what makes it the board rather than the list
- * view (2.7/2.8) — a saved view records `group_by: "stage"` as a constant
- * (`SavedViewsMenu.tsx`) so the column exists in the schema before a second
- * view gives it a reason to vary.
+ * The opportunity views' shared filter/sort model (milestone 2.2),
+ * URL-serialized the same way as `TimelineFilters`. `view` is which renderer
+ * draws the result (2.7): board and list read the same filtered, sorted list
+ * and differ only in how they lay it out, which is what makes switching them
+ * a URL change rather than a second query. No `groupBy` field yet — grouping
+ * by stage is what makes the board the board — so a saved view records
+ * `group_by: "stage"` as a constant (`SavedViewsMenu.tsx`), and the column
+ * exists in the schema before a view gives it a reason to vary.
  */
 export type OpportunityViewState = {
   q: string;
@@ -109,7 +127,12 @@ export type OpportunityViewState = {
   stalled: "" | "true" | "false";
   sortField: "updated_at" | "value" | "expected_close_date" | "name";
   sortDirection: "asc" | "desc";
+  view: OpportunityView;
 };
+
+/** The two renderers milestone 2.7 ships over one filtered list. Table and
+ * calendar (2.8) join them here rather than forking the state. */
+export type OpportunityView = "board" | "list";
 
 export const emptyOpportunityViewState: OpportunityViewState = {
   q: "",
@@ -117,6 +140,7 @@ export const emptyOpportunityViewState: OpportunityViewState = {
   stalled: "",
   sortField: "updated_at",
   sortDirection: "desc",
+  view: "board",
 };
 
 /**
@@ -194,4 +218,25 @@ export function boardOrder(opportunities: Opportunity[]): Opportunity[] {
   return stages.flatMap((stage) =>
     opportunities.filter((opportunity) => opportunity.stage === stage),
   );
+}
+
+/**
+ * The reading order of whichever view is on screen, which is the order the
+ * keyboard cursor and a shift-click range both walk.
+ *
+ * The list already arrives sorted by `applyOpportunityView`, so it reads top
+ * to bottom; the board regroups that same list into stage columns, so it
+ * reads column by column (`boardOrder`).
+ */
+export function viewOrder(
+  opportunities: Opportunity[],
+  view: OpportunityView,
+): Opportunity[] {
+  return view === "list" ? opportunities : boardOrder(opportunities);
+}
+
+/** The stage one step either side of an opportunity's own, or `null` at the
+ * end of the fixed list (`AGENTS.md` invariant 6 — the list never grows). */
+export function adjacentStage(stage: Stage, step: 1 | -1): Stage | null {
+  return stages[stages.indexOf(stage) + step] ?? null;
 }

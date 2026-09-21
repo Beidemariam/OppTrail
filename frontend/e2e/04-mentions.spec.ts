@@ -3,7 +3,7 @@ import {
   entry,
   entryForm,
   openTimeline,
-  opportunityForm,
+  createOpportunity,
   signIn,
   signOut,
   signUp,
@@ -22,12 +22,11 @@ test("mentioning a colleague notifies them", async ({ page }) => {
   await signOut(page);
 
   await signUp(page, ownerEmail, "Mentioning Owner");
-  const form = opportunityForm(page);
-  await form.getByLabel("Opportunity").fill(opportunity);
-  await form.getByLabel("Account").fill("Soylent");
-  await form.getByLabel("Value").fill("9000");
-  await form.getByLabel("Currency").fill("USD");
-  await form.getByRole("button", { name: "Create opportunity" }).click();
+  await createOpportunity(page, opportunity, {
+    account: "Soylent",
+    value: "9000",
+    currency: "USD",
+  });
   await openTimeline(page, opportunity);
 
   await page.getByPlaceholder("Colleague email").fill(colleagueEmail);

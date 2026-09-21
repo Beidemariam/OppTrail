@@ -481,7 +481,16 @@ def main(argv: list[str] | None = None) -> int:
         "  Blair sees it too beside their own private 'Blair's proposals';\n"
         "  'Newest first' reverses one opportunity's reading order. Applying\n"
         "  one writes the filter into the URL, so the address bar is the view:\n"
-        "  copy it, reload it, or send it to someone with access."
+        "  copy it, reload it, or send it to someone with access.\n"
+        "\n"
+        "  The pipeline (milestone 2.7) draws that same list two ways. Drag\n"
+        "  Northwind from Negotiation to Proposal and a stage-change entry\n"
+        "  appears on its timeline; the card's stage control and the [ and ]\n"
+        "  keys do the same move without a mouse. The Board/List switch beside\n"
+        "  the title is in the URL too (?opportunities.view=list), so a saved\n"
+        "  view remembers which renderer it was saved in. Alex owns four of\n"
+        "  the five, so Initech - where Alex is a viewer - is the card with no\n"
+        "  stage control on it."
     )
     return 0
 

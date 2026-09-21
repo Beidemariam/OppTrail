@@ -27,6 +27,7 @@ import type {
   SavedView,
   SavedViewEntity,
   ShareRole,
+  Stage,
   TimelineEntry,
   TimelineFilters,
   User,
@@ -350,6 +351,42 @@ export function useSaveOpportunity() {
     // A stage change writes a system timeline entry, so the timeline is stale
     // too (`backend/app/routes_opportunities.py`).
     onSuccess: () => invalidate(client, keys.opportunities, keys.allTimelines),
+  });
+}
+
+/**
+ * Dragging a card to another stage column, and the two keyboard paths that do
+ * the same thing (milestone 2.7): the card's move-to-stage select and the
+ * `[`/`]` chords.
+ *
+ * A partial `PATCH` rather than the whole form `useSaveOpportunity` sends —
+ * the stage is the only field a move changes, and the route already updates
+ * exactly the fields it is given (`backend/app/routes_opportunities.py`).
+ * Optimistic, because the cache holds the card and where it lands is not the
+ * server's to decide; the server's own consequence, the `stage_change` system
+ * timeline entry, is not guessed and arrives with the invalidation.
+ */
+export function useChangeOpportunityStage() {
+  const client = useQueryClient();
+  return useMutation<
+    Opportunity,
+    Error,
+    { id: number; stage: Stage },
+    Snapshot
+  >({
+    mutationFn: ({ id, stage }) =>
+      apiRequest<Opportunity>(`/api/opportunities/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ stage }),
+      }),
+    onMutate: ({ id, stage }) =>
+      optimisticOpportunities(client, (opportunities) =>
+        opportunities.map((opportunity) =>
+          opportunity.id === id ? { ...opportunity, stage } : opportunity,
+        ),
+      ),
+    onError: (_error, _variables, snapshot) => rollback(client, snapshot),
+    onSettled: () => invalidate(client, keys.opportunities, keys.allTimelines),
   });
 }
 

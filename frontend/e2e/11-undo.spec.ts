@@ -4,7 +4,7 @@ import {
   entryForm,
   expectNoAccessibilityViolations,
   openTimeline,
-  opportunityForm,
+  createOpportunity,
   signUp,
 } from "./helpers";
 
@@ -24,12 +24,11 @@ test("a deleted entry comes back, with its note, and stays back", async ({
   const opportunity = `Undo ${suffix}`;
 
   await signUp(page, `undo-${suffix}@opptrail.test`, "Undo Tester");
-  const form = opportunityForm(page);
-  await form.getByLabel("Opportunity").fill(opportunity);
-  await form.getByLabel("Account").fill("Initech");
-  await form.getByLabel("Value").fill("42000");
-  await form.getByLabel("Currency").fill("USD");
-  await form.getByRole("button", { name: "Create opportunity" }).click();
+  await createOpportunity(page, opportunity, {
+    account: "Initech",
+    value: "42000",
+    currency: "USD",
+  });
   await openTimeline(page, opportunity);
 
   await entryForm(page).getByLabel("Title").fill("Security review");
@@ -75,10 +74,7 @@ test("an undone deletion is both events in the owner's audit log", async ({
   const opportunity = `Audit ${suffix}`;
 
   await signUp(page, `undo-audit-${suffix}@opptrail.test`, "Audit Tester");
-  const form = opportunityForm(page);
-  await form.getByLabel("Opportunity").fill(opportunity);
-  await form.getByLabel("Account").fill("Initech");
-  await form.getByRole("button", { name: "Create opportunity" }).click();
+  await createOpportunity(page, opportunity, { account: "Initech" });
   await openTimeline(page, opportunity);
 
   await entryForm(page).getByLabel("Title").fill("Reference call");

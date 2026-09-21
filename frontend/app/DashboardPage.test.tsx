@@ -7,6 +7,8 @@ import {
   acceptConfirmation,
   cancelConfirmation,
   findCard,
+  openOpportunityForm,
+  openTimeline,
   renderApp,
   renderDashboard,
 } from "./test-app";
@@ -145,9 +147,12 @@ describe("the dashboard", () => {
     expect(screen.queryByText("Deal 399")).not.toBeInTheDocument();
   });
 
-  it("creates an opportunity from the sidebar form", async () => {
+  it("creates an opportunity from the dialog the board opens", async () => {
     const api = await renderDashboard();
 
+    await openOpportunityForm();
+    // The dialog lands the cursor on the field the reader fills first.
+    expect(screen.getByLabelText("Opportunity")).toHaveFocus();
     await userEvent.type(screen.getByLabelText("Opportunity"), "Contoso pilot");
     await userEvent.type(screen.getByLabelText("Account"), "Contoso");
     await userEvent.click(
@@ -163,6 +168,37 @@ describe("the dashboard", () => {
       expected_close_date: null,
     });
     expect(await screen.findByText("Contoso pilot")).toBeInTheDocument();
+    // Saving closes the dialog, so the board is what the reader is left on.
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("sends every field the form collects", async () => {
+    const api = await renderDashboard();
+
+    await openOpportunityForm();
+    await userEvent.type(screen.getByLabelText("Opportunity"), "Contoso pilot");
+    await userEvent.type(screen.getByLabelText("Account"), "Contoso");
+    await userEvent.clear(screen.getByLabelText("Value"));
+    await userEvent.type(screen.getByLabelText("Value"), "42000");
+    await userEvent.clear(screen.getByLabelText("Currency"));
+    await userEvent.type(screen.getByLabelText("Currency"), "EUR");
+    await userEvent.selectOptions(screen.getByLabelText("Stage"), "Proposal");
+    await userEvent.type(screen.getByLabelText("Expected close"), "2027-03-01");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Create opportunity" }),
+    );
+
+    await waitFor(() =>
+      expect(api.callsTo("POST", "/api/opportunities")).toHaveLength(1),
+    );
+    expect(api.callsTo("POST", "/api/opportunities")[0].body).toMatchObject({
+      name: "Contoso pilot",
+      account_name: "Contoso",
+      value: "42000",
+      currency: "EUR",
+      stage: "Proposal",
+      expected_close_date: "2027-03-01",
+    });
   });
 
   it("surfaces a rejected create instead of clearing the form", async () => {
@@ -170,6 +206,7 @@ describe("the dashboard", () => {
       failures: { "POST /api/opportunities": [422, "Stage is not valid"] },
     });
 
+    await openOpportunityForm();
     await userEvent.type(screen.getByLabelText("Opportunity"), "Bad stage");
     await userEvent.type(screen.getByLabelText("Account"), "Acme");
     await userEvent.click(
@@ -200,9 +237,9 @@ describe("the dashboard", () => {
 
   it("closes the timeline of an opportunity it just deleted", async () => {
     await renderDashboard({ opportunities: [anOpportunity()] });
-    const card = await findCard("Northwind rollout");
-    await userEvent.click(within(card).getByRole("link", { name: "Timeline" }));
+    await openTimeline("Northwind rollout");
     await screen.findByText("Your role: owner");
+    const card = await findCard("Northwind rollout");
 
     await userEvent.click(within(card).getByRole("button", { name: "Delete" }));
     await acceptConfirmation("Northwind rollout");
@@ -212,13 +249,13 @@ describe("the dashboard", () => {
     ).toBeInTheDocument();
   });
 
-  it("loads the edit form from the card and saves a stage change", async () => {
+  it("loads the edit dialog from the card and saves a stage change", async () => {
     const api = await renderDashboard({ opportunities: [anOpportunity()] });
     const card = (await screen.findAllByRole("article"))[0];
 
     await userEvent.click(within(card).getByRole("button", { name: "Edit" }));
     expect(
-      screen.getByRole("heading", { name: "Edit Opportunity" }),
+      await screen.findByRole("heading", { name: "Edit opportunity" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Opportunity")).toHaveValue(
       "Northwind rollout",
@@ -233,21 +270,18 @@ describe("the dashboard", () => {
     expect(api.callsTo("PATCH", "/api/opportunities/10")[0].body).toMatchObject(
       { stage: "Closed Won" },
     );
-    expect(
-      await screen.findByRole("heading", { name: "New Opportunity" }),
-    ).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
-  it("abandons an edit and empties the form", async () => {
+  it("abandons an edit, and opens the dialog empty next time", async () => {
     await renderDashboard({ opportunities: [anOpportunity()] });
     const card = (await screen.findAllByRole("article"))[0];
 
     await userEvent.click(within(card).getByRole("button", { name: "Edit" }));
-    await userEvent.click(screen.getByRole("button", { name: "Cancel edit" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 
-    expect(
-      screen.getByRole("heading", { name: "New Opportunity" }),
-    ).toBeInTheDocument();
+    await openOpportunityForm();
     expect(screen.getByLabelText("Opportunity")).toHaveValue("");
   });
 
@@ -456,6 +490,332 @@ describe("bulk actions (milestone 2.4c)", () => {
         "1 opportunity deleted. 1 failed: Opportunity not found",
       ),
     ).toBeInTheDocument();
+  });
+});
+
+describe("moving an opportunity between stages (milestone 2.7)", () => {
+  /** jsdom has no drag machinery of its own; this is the object a real
+   * `dragstart` would carry. */
+  function dataTransfer() {
+    return {
+      setData: vi.fn(),
+      getData: vi.fn(),
+      dropEffect: "none",
+      effectAllowed: "none",
+    } as unknown as DataTransfer;
+  }
+
+  function column(stage: string) {
+    return screen
+      .getByRole("heading", { name: stage })
+      .closest<HTMLElement>(".stage-column")!;
+  }
+
+  async function dragTo(card: HTMLElement, stage: string) {
+    const transfer = dataTransfer();
+    fireEvent.dragStart(card, { dataTransfer: transfer });
+    fireEvent.dragOver(column(stage), { dataTransfer: transfer });
+    fireEvent.drop(column(stage), { dataTransfer: transfer });
+  }
+
+  it("writes the stage the card was dropped in, and announces it", async () => {
+    const api = await renderDashboard({
+      opportunities: [anOpportunity({ stage: "Prospecting" })],
+    });
+    const card = await findCard("Northwind rollout");
+
+    await dragTo(card, "Proposal");
+
+    await waitFor(() =>
+      expect(api.callsTo("PATCH", "/api/opportunities/10")).toHaveLength(1),
+    );
+    expect(api.callsTo("PATCH", "/api/opportunities/10")[0].body).toEqual({
+      stage: "Proposal",
+    });
+    // The stage change is the only field the drag sends, and the card is in
+    // its new column before the response arrives.
+    expect(within(column("Proposal")).getByText("Northwind rollout"));
+    expect(
+      screen.getByText("Northwind rollout moved to Proposal."),
+    ).toBeInTheDocument();
+  });
+
+  it("lights the column the card is over, and unlights it on the way out", async () => {
+    await renderDashboard({
+      opportunities: [anOpportunity({ stage: "Prospecting" })],
+    });
+    const card = await findCard("Northwind rollout");
+    const transfer = dataTransfer();
+
+    fireEvent.dragStart(card, { dataTransfer: transfer });
+    fireEvent.dragOver(column("Proposal"), { dataTransfer: transfer });
+    expect(column("Proposal")).toHaveClass("drop-target");
+
+    // `relatedTarget` is what the pointer entered, so leaving for something
+    // outside the column is what clears the highlight.
+    fireEvent.dragLeave(column("Proposal"), {
+      dataTransfer: transfer,
+      relatedTarget: document.body,
+    });
+    expect(column("Proposal")).not.toHaveClass("drop-target");
+  });
+
+  it("totals a column, and counts it instead when the currencies differ", async () => {
+    await renderDashboard({
+      opportunities: [
+        anOpportunity({ id: 10, stage: "Proposal", value: "1500" }),
+        anOpportunity({ id: 11, stage: "Proposal", value: "2500" }),
+        anOpportunity({
+          id: 12,
+          name: "Zurich pilot",
+          stage: "Negotiation",
+          value: "900",
+          currency: "CHF",
+        }),
+        anOpportunity({ id: 13, stage: "Negotiation", value: "100" }),
+      ],
+    });
+    await screen.findByText("Zurich pilot");
+
+    expect(within(column("Proposal")).getByText("USD 4,000"));
+    expect(within(column("Negotiation")).getByText("2 in mixed currencies"));
+  });
+
+  it("does nothing when a card is dropped back in its own column", async () => {
+    const api = await renderDashboard({
+      opportunities: [anOpportunity({ stage: "Prospecting" })],
+    });
+    const card = await findCard("Northwind rollout");
+
+    await dragTo(card, "Prospecting");
+
+    expect(api.callsTo("PATCH", "/api/opportunities/10")).toHaveLength(0);
+  });
+
+  it("offers no drag and no stage control on an opportunity the reader does not own", async () => {
+    await renderDashboard({
+      opportunities: [anOpportunity({ current_user_role: "viewer" })],
+    });
+    const card = await findCard("Northwind rollout");
+
+    expect(card).not.toHaveAttribute("draggable", "true");
+    expect(
+      screen.queryByLabelText("Move Northwind rollout to stage"),
+    ).toBeNull();
+  });
+
+  it("moves through the card's stage control, which is the keyboard path", async () => {
+    const api = await renderDashboard({
+      opportunities: [anOpportunity({ stage: "Prospecting" })],
+    });
+    await findCard("Northwind rollout");
+
+    await userEvent.selectOptions(
+      screen.getByLabelText("Move Northwind rollout to stage"),
+      "Negotiation",
+    );
+
+    await waitFor(() =>
+      expect(api.callsTo("PATCH", "/api/opportunities/10")).toHaveLength(1),
+    );
+    expect(api.callsTo("PATCH", "/api/opportunities/10")[0].body).toEqual({
+      stage: "Negotiation",
+    });
+  });
+
+  it("puts the card back and explains when the move is refused", async () => {
+    await renderDashboard({
+      opportunities: [anOpportunity({ stage: "Prospecting" })],
+      failures: {
+        "PATCH /api/opportunities/10": [403, "Only the owner may do that"],
+      },
+    });
+    const card = await findCard("Northwind rollout");
+
+    await dragTo(card, "Proposal");
+
+    expect(
+      await screen.findByText(
+        "Could not move Northwind rollout to Proposal: Only the owner may do that",
+      ),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        within(column("Prospecting")).getByText("Northwind rollout"),
+      ).toBeInTheDocument(),
+    );
+  });
+});
+
+describe("the list view (milestone 2.7)", () => {
+  const twoDeals = [
+    anOpportunity({
+      id: 10,
+      name: "Northwind rollout",
+      stage: "Negotiation",
+      updated_at: "2026-09-02T10:00:00Z",
+    }),
+    anOpportunity({
+      id: 11,
+      name: "Globex renewal",
+      stage: "Proposal",
+      updated_at: "2026-09-03T10:00:00Z",
+    }),
+  ];
+
+  it("switches renderer without asking the API again", async () => {
+    const api = await renderDashboard({ opportunities: twoDeals });
+    await screen.findByText("Northwind rollout");
+
+    await userEvent.click(screen.getByRole("button", { name: "List" }));
+
+    // One list, drawn twice: no second request, and the stage columns are
+    // gone.
+    expect(api.callsTo("GET", "/api/opportunities")).toHaveLength(1);
+    expect(
+      screen.queryByRole("region", {
+        name: "Opportunities grouped by stage",
+      }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("region", { name: "Opportunities" }),
+    ).toBeInTheDocument();
+    // Linkable: the choice of renderer is in the URL, not in component
+    // state, so a reload and a shared link both land on the list.
+    expect(screen.getByRole("button", { name: "List" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("opens in the list when the URL asks for it, in the sorted order", async () => {
+    await renderDashboard(
+      { opportunities: twoDeals },
+      "/?opportunities.view=list",
+    );
+
+    const rows = await screen.findAllByRole("article");
+    // Sorted by last activity, newest first, which is the default sort.
+    expect(rows[0]).toHaveTextContent("Globex renewal");
+    expect(rows[1]).toHaveTextContent("Northwind rollout");
+  });
+
+  it("keeps the cursor, the selection and the filters across the switch", async () => {
+    await renderDashboard({ opportunities: twoDeals });
+    await screen.findByText("Northwind rollout");
+
+    await userEvent.type(
+      screen.getByLabelText("Filter opportunities by keyword"),
+      "globex",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+    await userEvent.keyboard("jx");
+    await userEvent.click(screen.getByRole("button", { name: "List" }));
+
+    expect(screen.queryByText("Northwind rollout")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("checkbox", {
+        name: "Select Globex renewal for bulk actions",
+      }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole("toolbar", { name: "Bulk actions" }),
+    ).toBeInTheDocument();
+  });
+
+  it("moves a row's stage through the same control the card uses", async () => {
+    const api = await renderDashboard(
+      { opportunities: [anOpportunity({ stage: "Prospecting" })] },
+      "/?opportunities.view=list",
+    );
+    await screen.findByText("Northwind rollout");
+
+    await userEvent.selectOptions(
+      screen.getByLabelText("Move Northwind rollout to stage"),
+      "Proposal",
+    );
+
+    await waitFor(() =>
+      expect(api.callsTo("PATCH", "/api/opportunities/10")).toHaveLength(1),
+    );
+  });
+
+  it("deletes from a row, behind the same typed confirmation a card asks for", async () => {
+    const api = await renderDashboard(
+      { opportunities: [anOpportunity()] },
+      "/?opportunities.view=list",
+    );
+    const row = await findCard("Northwind rollout");
+
+    await userEvent.click(within(row).getByRole("button", { name: "Delete" }));
+    await acceptConfirmation("Northwind rollout");
+
+    await waitFor(() =>
+      expect(api.callsTo("DELETE", "/api/opportunities/10")).toHaveLength(1),
+    );
+  });
+
+  it("shows a viewer the stage without offering to change it", async () => {
+    await renderDashboard(
+      { opportunities: [anOpportunity({ current_user_role: "viewer" })] },
+      "/?opportunities.view=list",
+    );
+
+    const row = await findCard("Northwind rollout");
+    expect(within(row).getByText("Negotiation")).toBeInTheDocument();
+    expect(within(row).queryByRole("button", { name: "Edit" })).toBeNull();
+    expect(
+      screen.queryByLabelText("Move Northwind rollout to stage"),
+    ).toBeNull();
+  });
+});
+
+describe("what the dashboard shows when it has nothing to show", () => {
+  it("explains what an opportunity is before there is one", async () => {
+    await renderDashboard({ opportunities: [] });
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Track your first opportunity",
+      }),
+    ).toBeInTheDocument();
+    // The board is not drawn as seven empty columns.
+    expect(
+      screen.queryByRole("region", {
+        name: "Opportunities grouped by stage",
+      }),
+    ).toBeNull();
+
+    // The panel's own button opens the same dialog the header's does.
+    await userEvent.click(
+      screen.getAllByRole("button", { name: "New opportunity" })[1],
+    );
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("distinguishes filtered-to-nothing from nothing, and clears the filter", async () => {
+    await renderDashboard({ opportunities: [anOpportunity()] });
+    await screen.findByText("Northwind rollout");
+
+    await userEvent.type(
+      screen.getByLabelText("Filter opportunities by keyword"),
+      "nothing matches this",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+    expect(
+      screen.getByRole("heading", {
+        name: "No opportunities match these filters",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("0 of 1 shown, 1 filtered out"),
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Clear filters" }),
+    );
+    expect(await screen.findByText("Northwind rollout")).toBeInTheDocument();
   });
 });
 

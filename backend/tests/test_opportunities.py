@@ -89,6 +89,38 @@ def test_owner_can_create_list_get_update_and_delete_opportunity(
     assert missing.status_code == 404
 
 
+def test_a_stage_only_update_logs_the_change_and_leaves_the_rest_alone(
+    client: TestClient,
+) -> None:
+    """The request a board drag sends (milestone 2.7).
+
+    The frontend moves a card by `PATCH`ing the stage on its own rather than
+    resubmitting the whole form, so the fields nobody touched must come back
+    unchanged and the move must still leave the system entry behind that makes
+    it visible on the timeline.
+    """
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+
+    moved = client.patch(
+        f"/api/opportunities/{opportunity['id']}",
+        json={"stage": "Proposal"},
+    )
+    assert moved.status_code == 200
+    assert moved.json()["stage"] == "Proposal"
+    assert moved.json()["value"] == opportunity["value"]
+    assert moved.json()["name"] == opportunity["name"]
+    assert moved.json()["expected_close_date"] == opportunity["expected_close_date"]
+
+    timeline = client.get(f"/api/opportunities/{opportunity['id']}/timeline")
+    stage_changes = [
+        entry for entry in timeline.json()["entries"] if entry["type"] == "stage_change"
+    ]
+    assert [entry["title"] for entry in stage_changes] == ["Stage changed to Proposal"]
+    assert stage_changes[0]["body"] == "Stage changed from Prospecting to Proposal."
+    assert stage_changes[0]["system_generated"]
+
+
 def test_non_owner_cannot_view_or_mutate_opportunity(client: TestClient) -> None:
     signup(client, "owner@example.com", "Owner")
     opportunity = create_opportunity(client)

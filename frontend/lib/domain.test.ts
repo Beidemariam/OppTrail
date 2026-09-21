@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  adjacentStage,
   applyOpportunityView,
   emptyOpportunityViewState,
+  formatMoney,
+  viewOrder,
   type Opportunity,
 } from "./domain";
 
@@ -130,5 +133,35 @@ describe("applyOpportunityView", () => {
         sortDirection: "asc",
       }).map((item) => item.id),
     ).toEqual([2, 1]);
+  });
+});
+
+describe("the shared formatting and ordering helpers (milestone 2.7)", () => {
+  it("groups thousands and keeps cents only when there are any", () => {
+    expect(formatMoney("USD", "185000.00")).toBe("USD 185,000");
+    expect(formatMoney("EUR", "1234.5")).toBe("EUR 1,234.5");
+    expect(formatMoney("GBP", 0)).toBe("GBP 0");
+  });
+
+  it("reads the list in sort order and the board in stage order", () => {
+    const opportunities = [
+      anOpportunity({ id: 1, stage: "Negotiation" }),
+      anOpportunity({ id: 2, stage: "Prospecting" }),
+    ];
+
+    expect(viewOrder(opportunities, "list").map((item) => item.id)).toEqual([
+      1, 2,
+    ]);
+    // Prospecting is the first column, so the board reads it first.
+    expect(viewOrder(opportunities, "board").map((item) => item.id)).toEqual([
+      2, 1,
+    ]);
+  });
+
+  it("stops at both ends of the fixed stage list", () => {
+    expect(adjacentStage("Proposal", 1)).toBe("Negotiation");
+    expect(adjacentStage("Proposal", -1)).toBe("Needs Analysis");
+    expect(adjacentStage("Prospecting", -1)).toBeNull();
+    expect(adjacentStage("Closed Lost", 1)).toBeNull();
   });
 });

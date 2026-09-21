@@ -4,7 +4,7 @@ import {
   entry,
   entryForm,
   openTimeline,
-  opportunityForm,
+  createOpportunity,
   signIn,
   signOut,
   signUp,
@@ -27,12 +27,11 @@ test("viewer is read-only, editor can write, comments stay immutable", async ({
   await signOut(page);
 
   await signUp(page, ownerEmail, "Owner Tester");
-  const form = opportunityForm(page);
-  await form.getByLabel("Opportunity").fill(opportunity);
-  await form.getByLabel("Account").fill("Stark Industries");
-  await form.getByLabel("Value").fill("30000");
-  await form.getByLabel("Currency").fill("USD");
-  await form.getByRole("button", { name: "Create opportunity" }).click();
+  await createOpportunity(page, opportunity, {
+    account: "Stark Industries",
+    value: "30000",
+    currency: "USD",
+  });
   await openTimeline(page, opportunity);
 
   await entryForm(page).getByLabel("Title").fill("Kickoff");

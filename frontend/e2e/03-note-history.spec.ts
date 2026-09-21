@@ -3,7 +3,7 @@ import {
   entry,
   entryForm,
   openTimeline,
-  opportunityForm,
+  createOpportunity,
   signUp,
 } from "./helpers";
 
@@ -24,12 +24,11 @@ test("editing a note marks it as edited and keeps the previous version", async (
   const opportunity = `History ${suffix}`;
 
   await signUp(page, `history-${suffix}@opptrail.test`, "History Tester");
-  const form = opportunityForm(page);
-  await form.getByLabel("Opportunity").fill(opportunity);
-  await form.getByLabel("Account").fill("Cyberdyne");
-  await form.getByLabel("Value").fill("15000");
-  await form.getByLabel("Currency").fill("USD");
-  await form.getByRole("button", { name: "Create opportunity" }).click();
+  await createOpportunity(page, opportunity, {
+    account: "Cyberdyne",
+    value: "15000",
+    currency: "USD",
+  });
   await openTimeline(page, opportunity);
 
   await entryForm(page).getByLabel("Title").fill("Pricing conversation");

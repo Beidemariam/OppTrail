@@ -1,33 +1,61 @@
 "use client";
 
-import { useEffect, useRef, type ChangeEvent, type KeyboardEvent } from "react";
-import { Link, useNavigate } from "react-router";
+import { useState, type DragEvent } from "react";
+import { Link } from "react-router";
 
-import { stages, type Opportunity } from "../lib/domain";
+import {
+  formatMoney,
+  stages,
+  type Opportunity,
+  type Stage,
+} from "../lib/domain";
+import { MoveToStage } from "./MoveToStage";
+import { useOpportunityItem } from "./useOpportunityItem";
 import { VirtualList } from "./VirtualList";
 
 // Cards vary a little (a wrapped title, a stalled badge) but not by much;
 // `VirtualList` measures the real height after mount, so this only has to be
 // close enough for the first paint's scrollbar and overscan window.
-const ESTIMATED_CARD_HEIGHT = 190;
+const ESTIMATED_CARD_HEIGHT = 150;
+
+/** What the board and the list both need from the dashboard: the three
+ * selection states, and what to do when an item is acted on. */
+export interface OpportunityViewProps {
+  opportunities: Opportunity[];
+  selectedId: number | null;
+  focusedId: number | null;
+  followCursor: boolean;
+  checkedIds: ReadonlySet<number>;
+  onFocus: (opportunity: Opportunity) => void;
+  onEdit: (opportunity: Opportunity) => void;
+  onDelete: (opportunity: Opportunity) => void;
+  onMoveToStage: (opportunity: Opportunity, stage: Stage) => void;
+  onToggleChecked: (opportunity: Opportunity) => void;
+  onRangeSelect: (opportunity: Opportunity) => void;
+}
 
 /**
- * Every opportunity the user can read, in fixed-stage columns
- * (`AGENTS.md` invariant 6). Presentational: the dashboard owns what happens
- * when a card is edited or deleted, and the timeline link is a real URL
- * because an opportunity is addressable from milestone 2.1 onwards.
+ * The pipeline board: every opportunity the user can read, in fixed-stage
+ * columns (`AGENTS.md` invariant 6), with drag to change stage (milestone
+ * 2.7).
  *
- * `focusedId` is the keyboard's cursor over the board (milestone 2.4a). The
- * dashboard owns it because `j` and `k` cross stage columns; each column only
- * has to scroll its own card into view when the cursor lands inside it — and
- * only when `followCursor` says the cursor was moved by the keyboard, since
- * a card focused by a click is already where the reader is looking (D-072).
+ * **A drag is the same write as every other stage change.** It calls
+ * `onMoveToStage`, which is what the card's move-to-stage select and the
+ * `[`/`]` chords call too — one path to `PATCH`, so the system timeline entry
+ * the server writes cannot depend on how the reader asked. Only the owner may
+ * change an opportunity's fields, so only their cards are draggable and only
+ * their cards carry the select; a column still accepts a drop from any card
+ * it is offered, because the drag could not have started otherwise.
+ *
+ * `focusedId` is the keyboard's cursor (milestone 2.4a). The dashboard owns it
+ * because `j` and `k` cross stage columns; each column only has to scroll its
+ * own card into view when the cursor lands inside it — and only when
+ * `followCursor` says the cursor was moved by the keyboard, since a card
+ * focused by a click is already where the reader is looking (D-072).
  *
  * `checkedIds` is the bulk-selection set (milestone 2.4c) — separate from
- * both `selectedId` (the opportunity whose timeline is open) and `focusedId`
- * (the keyboard cursor): a card can be all three, or none, independently.
- * The board is the only multi-card surface that exists yet, so it is where
- * the selection model lives; list and table (2.7/2.8) reuse it.
+ * both `selectedId` (the opportunity whose timeline is open) and `focusedId`:
+ * a card can be all three, or none, independently.
  */
 export function StageBoard({
   opportunities,
@@ -38,20 +66,25 @@ export function StageBoard({
   onFocus,
   onEdit,
   onDelete,
+  onMoveToStage,
   onToggleChecked,
   onRangeSelect,
-}: {
-  opportunities: Opportunity[];
-  selectedId: number | null;
-  focusedId: number | null;
-  followCursor: boolean;
-  checkedIds: ReadonlySet<number>;
-  onFocus: (opportunity: Opportunity) => void;
-  onEdit: (opportunity: Opportunity) => void;
-  onDelete: (opportunity: Opportunity) => void;
-  onToggleChecked: (opportunity: Opportunity) => void;
-  onRangeSelect: (opportunity: Opportunity) => void;
-}) {
+}: OpportunityViewProps) {
+  // The drag in progress, held here rather than read back off `dataTransfer`:
+  // `dragover` is not allowed to read the payload (only `drop` is), and the
+  // column needs to know whose drag this is to refuse its own cards.
+  const [dragging, setDragging] = useState<Opportunity | null>(null);
+  const [dragOverStage, setDragOverStage] = useState<string | null>(null);
+
+  function onDrop(stage: Stage) {
+    const moved = dragging;
+    setDragging(null);
+    setDragOverStage(null);
+    if (moved && moved.stage !== stage) {
+      onMoveToStage(moved, stage);
+    }
+  }
+
   return (
     /* The board scrolls horizontally, so it needs to be focusable or a
        keyboard-only user cannot reach the stages past the fold
@@ -65,22 +98,54 @@ export function StageBoard({
         const items = opportunities.filter(
           (opportunity) => opportunity.stage === stage,
         );
+        const value = items.reduce(
+          (total, opportunity) => total + Number(opportunity.value),
+          0,
+        );
         return (
-          <div className="stage-column" key={stage}>
+          <div
+            className={`stage-column${dragOverStage === stage ? " drop-target" : ""}`}
+            key={stage}
+            onDragOver={(event: DragEvent<HTMLDivElement>) => {
+              if (!dragging) {
+                return;
+              }
+              // Without this the browser refuses the drop, which is what makes
+              // a drag target a drop target.
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "move";
+              setDragOverStage(stage);
+            }}
+            onDragLeave={(event: DragEvent<HTMLDivElement>) => {
+              // Leaving for a child of this column is not leaving the column.
+              if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+                setDragOverStage((current) =>
+                  current === stage ? null : current,
+                );
+              }
+            }}
+            onDrop={(event: DragEvent<HTMLDivElement>) => {
+              event.preventDefault();
+              onDrop(stage);
+            }}
+          >
             <div className="stage-header">
               <h2>{stage}</h2>
-              <span>{items.length}</span>
+              <span className="stage-count">{items.length}</span>
+              <p className="stage-total">{formatTotal(items, value)}</p>
             </div>
 
             {items.length === 0 ? (
-              <p className="empty-state">No opportunities</p>
+              <p className="empty-state">
+                {dragging ? "Drop here to move" : "Nothing in this stage"}
+              </p>
             ) : (
               <VirtualList
                 className="opportunity-list"
                 ariaLabel={`${stage} opportunities`}
                 items={items}
                 estimateItemSize={ESTIMATED_CARD_HEIGHT}
-                gap={10}
+                gap={8}
                 activeIndex={
                   followCursor
                     ? items.findIndex(
@@ -95,9 +160,16 @@ export function StageBoard({
                     selected={selectedId === opportunity.id}
                     focused={focusedId === opportunity.id}
                     checked={checkedIds.has(opportunity.id)}
+                    dragging={dragging?.id === opportunity.id}
+                    onDragStart={setDragging}
+                    onDragEnd={() => {
+                      setDragging(null);
+                      setDragOverStage(null);
+                    }}
                     onFocus={onFocus}
                     onEdit={onEdit}
                     onDelete={onDelete}
+                    onMoveToStage={onMoveToStage}
                     onToggleChecked={onToggleChecked}
                     onRangeSelect={onRangeSelect}
                   />
@@ -111,14 +183,32 @@ export function StageBoard({
   );
 }
 
+/** A column's weight, which is what a pipeline board is read for. The
+ * currency is the first card's: this app has no conversion, so a column of
+ * mixed currencies reports the count alone rather than adding them up. */
+function formatTotal(items: Opportunity[], value: number): string {
+  if (items.length === 0) {
+    return "";
+  }
+  const currency = items[0].currency;
+  if (items.some((opportunity) => opportunity.currency !== currency)) {
+    return `${items.length} in mixed currencies`;
+  }
+  return formatMoney(currency, value);
+}
+
 function OpportunityCard({
   opportunity,
   selected,
   focused,
   checked,
+  dragging,
+  onDragStart,
+  onDragEnd,
   onFocus,
   onEdit,
   onDelete,
+  onMoveToStage,
   onToggleChecked,
   onRangeSelect,
 }: {
@@ -126,130 +216,88 @@ function OpportunityCard({
   selected: boolean;
   focused: boolean;
   checked: boolean;
+  dragging: boolean;
+  onDragStart: (opportunity: Opportunity) => void;
+  onDragEnd: () => void;
   onFocus: (opportunity: Opportunity) => void;
   onEdit: (opportunity: Opportunity) => void;
   onDelete: (opportunity: Opportunity) => void;
+  onMoveToStage: (opportunity: Opportunity, stage: Stage) => void;
   onToggleChecked: (opportunity: Opportunity) => void;
   onRangeSelect: (opportunity: Opportunity) => void;
 }) {
-  const cardRef = useRef<HTMLElement>(null);
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const card = cardRef.current;
-    // Guarded on `contains`, not on equality: once the reader has tabbed to a
-    // control inside the focused card, taking focus back to the card itself
-    // would trap them.
-    if (focused && card && !card.contains(document.activeElement)) {
-      card.focus();
-    }
-  }, [focused]);
-
-  function onKeyDown(event: KeyboardEvent<HTMLElement>) {
-    // Enter opens the card the cursor is on. Bound here rather than in the
-    // document-level map because the card is what has focus, and a global
-    // Enter binding would swallow every button press on the page.
-    if (event.key === "Enter" && event.target === cardRef.current) {
-      event.preventDefault();
-      navigate(`/opportunities/${opportunity.id}`);
-    }
-  }
-
-  const classes = ["opportunity-card"];
-  if (selected) {
-    classes.push("selected");
-  }
-  if (focused) {
-    classes.push("focused");
-  }
-  if (checked) {
-    classes.push("checked");
-  }
-
-  // Shift-click extends the selection from the last-touched card rather
-  // than toggling this one (`docs/UX.md`: "checkbox, x, or shift-click
-  // range"). Read off `onChange` rather than `onClick` and a `preventDefault`:
-  // the checkbox is fully controlled by `checked`, so whichever ids the
-  // parent decides belong in the selection are what render checked on the
-  // next pass regardless of what the browser's own click toggled first.
-  function onCheckboxChange(event: ChangeEvent<HTMLInputElement>) {
-    if ((event.nativeEvent as MouseEvent).shiftKey) {
-      onRangeSelect(opportunity);
-    } else {
-      onToggleChecked(opportunity);
-    }
-  }
+  const owns = opportunity.current_user_role === "owner";
+  const { itemProps, checkboxProps } = useOpportunityItem({
+    className: `opportunity-card${dragging ? " dragging" : ""}`,
+    opportunity,
+    selected,
+    focused,
+    checked,
+    onFocus,
+    onToggleChecked,
+    onRangeSelect,
+  });
 
   return (
     <article
-      className={classes.join(" ")}
-      ref={cardRef}
-      tabIndex={-1}
-      onKeyDown={onKeyDown}
-      onFocus={() => onFocus(opportunity)}
+      {...itemProps}
+      draggable={owns}
+      onDragStart={(event: DragEvent<HTMLElement>) => {
+        // Firefox starts no drag at all without a payload, even one nothing
+        // reads back: the move itself is carried in React state, because a
+        // `dragover` handler is not allowed to look inside `dataTransfer`.
+        event.dataTransfer.setData("text/plain", String(opportunity.id));
+        event.dataTransfer.effectAllowed = "move";
+        onDragStart(opportunity);
+      }}
+      onDragEnd={onDragEnd}
     >
-      <div>
-        <div className="card-title-row">
-          <input
-            type="checkbox"
-            className="card-checkbox"
-            aria-label={`Select ${opportunity.name} for bulk actions`}
-            checked={checked}
-            onChange={onCheckboxChange}
-          />
-          <h3>{opportunity.name}</h3>
-          {opportunity.stalled && (
-            <span className="stalled-badge">Stalled</span>
-          )}
-        </div>
-        <p>{opportunity.account_name}</p>
+      <div className="card-title-row">
+        <input className="card-checkbox" {...checkboxProps} />
+        <h3>
+          {/* Not natively draggable: an anchor drags its own URL, which would
+              start a drag the board is not part of. */}
+          <Link draggable={false} to={`/opportunities/${opportunity.id}`}>
+            {opportunity.name}
+          </Link>
+        </h3>
+        {opportunity.stalled && <span className="stalled-badge">Stalled</span>}
       </div>
-      <dl>
-        <div>
-          <dt>Value</dt>
-          <dd>
-            {opportunity.currency} {opportunity.value}
-          </dd>
+      <p className="card-account">{opportunity.account_name}</p>
+      <p className="card-value">
+        {formatMoney(opportunity.currency, opportunity.value)}
+      </p>
+      <p className="card-meta">
+        <span>
+          {opportunity.owner_name}
+          {owns ? "" : ` (you are a ${opportunity.current_user_role})`}
+        </span>
+        <span aria-hidden="true">·</span>
+        <span>
+          {opportunity.expected_close_date
+            ? `Closes ${opportunity.expected_close_date}`
+            : "No close date"}
+        </span>
+      </p>
+      {owns && (
+        <div className="card-actions">
+          <MoveToStage opportunity={opportunity} onMove={onMoveToStage} />
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => onEdit(opportunity)}
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            className="ghost-button danger"
+            onClick={() => onDelete(opportunity)}
+          >
+            Delete
+          </button>
         </div>
-        <div>
-          <dt>Owner</dt>
-          <dd>{opportunity.owner_name}</dd>
-        </div>
-        <div>
-          <dt>Your role</dt>
-          <dd>{opportunity.current_user_role}</dd>
-        </div>
-        <div>
-          <dt>Close</dt>
-          <dd>{opportunity.expected_close_date ?? "Not set"}</dd>
-        </div>
-      </dl>
-      <div className="card-actions">
-        <Link
-          className="primary-button"
-          to={`/opportunities/${opportunity.id}`}
-        >
-          Timeline
-        </Link>
-        {opportunity.current_user_role === "owner" && (
-          <>
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => onEdit(opportunity)}
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              className="danger-button"
-              onClick={() => onDelete(opportunity)}
-            >
-              Delete
-            </button>
-          </>
-        )}
-      </div>
+      )}
     </article>
   );
 }

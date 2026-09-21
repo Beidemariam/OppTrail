@@ -275,9 +275,15 @@ describe("the board under the keyboard", () => {
     await userEvent.keyboard("je");
 
     expect(
-      screen.getByRole("heading", { name: "Edit Opportunity" }),
+      await screen.findByRole("heading", { name: "Edit opportunity" }),
     ).toBeInTheDocument();
+    expect(screen.getByLabelText("Opportunity")).toHaveValue(
+      "Northwind rollout",
+    );
 
+    // The first Escape closes the dialog, the second clears the cursor.
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     await userEvent.keyboard("{Escape}");
     expect(await findCard("Northwind rollout")).not.toHaveFocus();
   });
@@ -313,9 +319,52 @@ describe("the board under the keyboard", () => {
 
     await userEvent.keyboard("je");
 
-    expect(
-      screen.getByRole("heading", { name: "New Opportunity" }),
-    ).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("moves the focused opportunity a stage either way with [ and ]", async () => {
+    const api = await renderDashboard({ opportunities: [northwind] });
+    await findCard("Northwind rollout");
+
+    // Northwind is in Negotiation; ] is Closed Won, [ is back to Proposal.
+    await userEvent.keyboard("j]");
+    await waitFor(() =>
+      expect(api.callsTo("PATCH", "/api/opportunities/10")).toHaveLength(1),
+    );
+    expect(api.callsTo("PATCH", "/api/opportunities/10")[0].body).toEqual({
+      stage: "Closed Won",
+    });
+
+    // `[[` is how user-event types a literal `[`.
+    await userEvent.keyboard("[[");
+    await waitFor(() =>
+      expect(api.callsTo("PATCH", "/api/opportunities/10")).toHaveLength(2),
+    );
+    expect(api.callsTo("PATCH", "/api/opportunities/10")[1].body).toEqual({
+      stage: "Negotiation",
+    });
+  });
+
+  it("stops at the ends of the fixed stage list", async () => {
+    const api = await renderDashboard({
+      opportunities: [anOpportunity({ stage: "Prospecting" })],
+    });
+    await findCard("Northwind rollout");
+
+    await userEvent.keyboard("j[[");
+
+    expect(api.callsTo("PATCH", "/api/opportunities/10")).toHaveLength(0);
+  });
+
+  it("does not move an opportunity the reader does not own", async () => {
+    const api = await renderDashboard({
+      opportunities: [anOpportunity({ current_user_role: "editor" })],
+    });
+    await findCard("Northwind rollout");
+
+    await userEvent.keyboard("j]");
+
+    expect(api.callsTo("PATCH", "/api/opportunities/10")).toHaveLength(0);
   });
 
   it("opens the focused card's timeline with Enter", async () => {
@@ -368,7 +417,7 @@ describe("with a timeline open", () => {
     await userEvent.keyboard("c");
 
     expect(screen.getByLabelText("Title")).toHaveFocus();
-    expect(screen.getByLabelText("Opportunity")).not.toHaveFocus();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("submits the entry composer on Ctrl Enter", async () => {

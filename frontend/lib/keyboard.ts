@@ -35,7 +35,7 @@ export const shortcutGroups = [
       {
         chord: "g p",
         keys: "g then p",
-        description: "Go to the pipeline board, which is the dashboard today",
+        description: "Go to the pipeline board",
       },
       { chord: "g s", keys: "g then s", description: "Go to search" },
       {
@@ -77,6 +77,16 @@ export const shortcutGroups = [
         chord: "Enter",
         keys: "Enter",
         description: "Open the focused opportunity's timeline",
+      },
+      {
+        chord: "[",
+        keys: "[",
+        description: "Move the focused opportunity back one stage",
+      },
+      {
+        chord: "]",
+        keys: "]",
+        description: "Move the focused opportunity on one stage",
       },
     ],
   },

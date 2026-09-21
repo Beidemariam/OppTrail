@@ -43,10 +43,49 @@ export async function signOut(page: Page) {
   await expect(page.locator(".auth-panel")).toBeVisible();
 }
 
-/** The "New Opportunity" sidebar form. Scoped because several of its field
- * labels ("Stage", "Value") also appear as text elsewhere on the dashboard. */
+/** The create/edit form, which milestone 2.7 moved into a dialog. Scoped
+ * because several of its field labels ("Stage", "Value") also appear as text
+ * elsewhere on the dashboard. */
 export function opportunityForm(page: Page) {
-  return page.locator("form.sidebar-form");
+  return page.locator("form.opportunity-form");
+}
+
+/** Opens that dialog from the page header, and hands back the form in it. */
+export async function openOpportunityForm(page: Page) {
+  await page.getByRole("button", { name: "New opportunity" }).first().click();
+  await expect(opportunityForm(page)).toBeVisible();
+  return opportunityForm(page);
+}
+
+/**
+ * Creates one opportunity through the dialog and waits for its card, which is
+ * the first step of most of these journeys.
+ */
+export async function createOpportunity(
+  page: Page,
+  name: string,
+  fields: {
+    account?: string;
+    value?: string;
+    currency?: string;
+    stage?: string;
+  } = {},
+) {
+  const form = await openOpportunityForm(page);
+  await form.getByLabel("Opportunity").fill(name);
+  await form.getByLabel("Account").fill(fields.account ?? "Initech");
+  if (fields.value) {
+    await form.getByLabel("Value").fill(fields.value);
+  }
+  if (fields.currency) {
+    await form.getByLabel("Currency").fill(fields.currency);
+  }
+  if (fields.stage) {
+    await form.getByLabel("Stage").selectOption(fields.stage);
+  }
+  await form.getByRole("button", { name: "Create opportunity" }).click();
+  await expect(form).toBeHidden();
+  await expect(card(page, name)).toBeVisible();
 }
 
 /** The "Add Entry" form inside an open timeline. */
@@ -71,9 +110,10 @@ export function entry(page: Page, title: string) {
 }
 
 export async function openTimeline(page: Page, name: string) {
-  // A real link, not a button: an opportunity has its own URL from milestone
-  // 2.1 onwards, and the board stays beside the panel it opens.
-  await card(page, name).getByRole("link", { name: "Timeline" }).click();
+  // The card's own name is the link: a real link, not a button, because an
+  // opportunity has its own URL from milestone 2.1 onwards and the board
+  // stays beside the panel it opens.
+  await card(page, name).getByRole("link", { name }).click();
   await expect(
     page.locator(".timeline-panel").getByRole("heading", { name }),
   ).toBeVisible();

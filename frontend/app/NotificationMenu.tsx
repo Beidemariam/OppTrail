@@ -36,7 +36,7 @@ export function NotificationMenu() {
     <div className="notification-menu">
       <button
         type="button"
-        className="secondary-button notification-button"
+        className="ghost-button notification-button"
         onClick={() => {
           setOpen(!open);
           void notifications.refetch();

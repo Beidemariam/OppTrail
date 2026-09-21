@@ -1071,3 +1071,42 @@ colour alone" for entry types and lists `EntryTypeBadge` as an unbuilt domain
 component — scoping icons to only the three new types (the roadmap
 sentence's literal reading) would have left 8 of 11 types colour-only.
 Logged as **D-078** (needs human review) and built for all eleven.
+
+## Phase 2 — milestone 2.7 (board drag, list view, dashboard layout)
+
+```
+backend:  305 passed (was 304), 97.47% combined line+branch coverage
+          (--cov-fail-under=90 enforced) — one new test, for the exact
+          request a drag sends: a stage-only PATCH logs the system entry and
+          leaves every other field alone
+frontend: 344 passed (was 316), 96.74% statements, 96.71% line, 95.54%
+          functions, 89.16% branch — thresholds unchanged at 96/96/94/88
+          app/StageBoard.tsx        93.0% line, 90.6% branch (rewritten)
+          app/OpportunityList.tsx   80.0% line, 75.0% branch (new)
+          app/MoveToStage.tsx       100%  line, 100%  branch (new)
+          app/ViewSwitcher.tsx      100%  line, 100%  branch (new)
+          app/useOpportunityItem.ts 100%  line, 100%  branch (new)
+e2e:      44 passed (was 41) — run in full for this milestone rather than
+          deferred, because the layout work moved selectors thirteen other
+          specs use. New: e2e/14-board-views.spec.ts, critical journey 8
+          (brief §6.3) — a real pointer drag between stage columns and the
+          system entry it writes, the keyboard move, and the list view.
+          axe clean on every screen in both themes; DEFERRED_AXE_RULES
+          stays empty.
+docker:   deferred to the host half — scripts/autopilot-gate.sh 2
+          (no Docker socket in this sandbox, per sandbox/README.md)
+```
+
+No migration and no new route this milestone, so the authorization matrix is
+unchanged: a drag is `PATCH /api/opportunities/{id}` with one field, already
+owner-only through `require_opportunity_owner` and already in the matrix.
+`pip-audit`/`npm audit`: not re-run (`make check-fast` plus E2E; the audits
+belong to the phase-end `make check` per brief §3.4). No new dependency —
+the drag is the browser's own (D-080).
+
+Two coverage notes worth keeping. `OpportunityList.tsx`'s uncovered lines are
+the virtualizer's own render callbacks, the same shape already uncovered in
+`StageBoard.tsx`. And the board's empty-list branch was deleted rather than
+tested: `DashboardPage` answers an empty view itself, with two different
+answers ("there are none yet" and "your filters removed them all"), so the
+view components can never be asked to draw nothing.

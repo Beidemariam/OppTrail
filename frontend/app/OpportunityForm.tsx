@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState, type RefObject } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 
 import { stages, type Opportunity } from "../lib/domain";
 import { useSaveOpportunity } from "../lib/queries";
@@ -38,22 +38,35 @@ function formFor(opportunity: Opportunity | null): OpportunityFormState {
 }
 
 /**
- * The sidebar form, which creates an opportunity or edits the one the board
- * handed it. The parent owns which opportunity is being edited and re-keys
- * this component on it, so the fields reload without an effect watching props.
+ * Creates an opportunity, or edits the one the board handed it.
+ *
+ * It lives in a dialog from milestone 2.7 rather than in a permanent sidebar
+ * column (D-079): creating an opportunity is a rare action, and the form was
+ * holding a third of the dashboard open for it. The parent owns which
+ * opportunity is being edited and re-keys this component on it, so the fields
+ * reload without an effect watching props — and the heading is the dialog's
+ * (`app/Modal.tsx`), not a second one inside the form. Nothing here cancels
+ * either: the dialog's own Close, Esc and backdrop already do, and a second
+ * button beside them saying the same thing is the clutter this milestone is
+ * removing.
  */
 export function OpportunityForm({
   editing,
-  nameRef,
   onDone,
 }: {
   editing: Opportunity | null;
-  /** Where `c` puts the cursor (milestone 2.4a). */
-  nameRef?: RefObject<HTMLInputElement | null>;
   onDone: () => void;
 }) {
   const [form, setForm] = useState(() => formFor(editing));
   const save = useSaveOpportunity();
+  const nameRef = useRef<HTMLInputElement>(null);
+
+  // The dialog opens on `c`, on Edit, and on the New opportunity button, and
+  // in all three the first thing to do is name it. Radix would otherwise land
+  // focus on the dialog's Close button.
+  useEffect(() => {
+    nameRef.current?.focus();
+  }, []);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -75,9 +88,7 @@ export function OpportunityForm({
   }
 
   return (
-    <form className="form sidebar-form" onSubmit={submit}>
-      <h2>{editing ? "Edit Opportunity" : "New Opportunity"}</h2>
-
+    <form className="form opportunity-form" onSubmit={submit}>
       <label>
         Opportunity
         <input
@@ -151,14 +162,11 @@ export function OpportunityForm({
         />
       </label>
 
-      <button className="primary-button" type="submit">
-        {editing ? "Save changes" : "Create opportunity"}
-      </button>
-      {editing && (
-        <button className="secondary-button" type="button" onClick={onDone}>
-          Cancel edit
+      <div className="form-actions">
+        <button className="primary-button" type="submit">
+          {editing ? "Save changes" : "Create opportunity"}
         </button>
-      )}
+      </div>
       {save.isPending && (
         <p className="status">
           {editing ? "Updating opportunity..." : "Creating opportunity..."}

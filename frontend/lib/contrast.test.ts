@@ -62,6 +62,8 @@ const textPairs: Array<[string, string, string]> = [
   ["meta text on a card", "--text-secondary", "--bg-surface"],
   ["meta text on a sunken panel", "--text-secondary", "--bg-sunken"],
   ["meta text on a selected card", "--text-secondary", "--bg-selected"],
+  ["body copy on a checked card", "--text-primary", "--bg-accent-soft"],
+  ["meta text on a checked card", "--text-secondary", "--bg-accent-soft"],
   ["a link on the app background", "--text-link", "--bg-app"],
   ["a link on a card", "--text-link", "--bg-surface"],
   ["a link on a sunken panel", "--text-link", "--bg-sunken"],
@@ -93,6 +95,7 @@ const nonTextPairs: Array<[string, string, string]> = [
   ["the focus ring on a modal", "--focus-ring", "--bg-surface"],
   ["a timeline marker on a card", "--marker", "--bg-surface"],
   ["a selected card's border", "--border-accent", "--bg-surface"],
+  ["the column a card would drop into", "--border-accent", "--bg-app"],
 ];
 
 describe.each([
