@@ -1039,3 +1039,35 @@ Two things found rather than assumed:
   pointer, between the mousedown and the mouseup. Eight journeys failed on it
   once the token work changed where cards sit; the fix is that the column
   follows the cursor only when the keyboard moved it.
+
+## Phase 2 — milestone 2.6 (three new entry types, entry-type icons)
+
+```
+backend:  304 passed (was 302), 97.47% combined line+branch coverage
+          (--cov-fail-under=90 enforced) — the two new tests exercise the
+          rebuilt CHECK constraint end-to-end: the three new types accepted
+          and filterable, an unrecognized type still rejected with a 422
+frontend: 316 passed (was 298), 96.76% statements, 96.75% line, 95.13%
+          functions, 89.32% branch — thresholds unchanged at 96/96/94/88,
+          not raised this milestone (small, well-covered addition; the
+          measured value moved only fractionally)
+          app/EntryTypeBadge.tsx   100% line, 100% branch (new)
+e2e:      unchanged this milestone (deferred to the phase-end full gate,
+          brief §3.4) — no new journey, no existing one touches the badge
+          markup in a way its own text content wouldn't still satisfy
+docker:   deferred to the host half — scripts/autopilot-gate.sh 2
+          (no Docker socket in this sandbox, per sandbox/README.md)
+```
+
+One migration this milestone — the project's first table rebuild rather than
+an additive column, since SQLite has no `ALTER TABLE ... ADD CHECK`
+(`backend/alembic/versions/20260921_0005_entry_types.py`). No new route, so
+the authorization matrix is unchanged. `pip-audit`/`npm audit`: not re-run
+this milestone (`make check-fast` only; deferred to the phase-end `make
+check` per brief §3.4).
+
+Found rather than assumed: `docs/DESIGN-SYSTEM.md` already commits to "never
+colour alone" for entry types and lists `EntryTypeBadge` as an unbuilt domain
+component — scoping icons to only the three new types (the roadmap
+sentence's literal reading) would have left 8 of 11 types colour-only.
+Logged as **D-078** (needs human review) and built for all eleven.

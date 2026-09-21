@@ -890,7 +890,7 @@ export interface components {
              * Type
              * @enum {string}
              */
-            type: "call" | "email" | "meeting" | "demo" | "proposal" | "contract" | "stage_change" | "other";
+            type: "call" | "email" | "meeting" | "demo" | "proposal" | "contract" | "stage_change" | "other" | "site_visit" | "objection" | "competitor_intel";
             /** Title */
             title: string;
             /** Author Id */
@@ -904,7 +904,7 @@ export interface components {
              * Type
              * @enum {string}
              */
-            type: "call" | "email" | "meeting" | "demo" | "proposal" | "contract" | "stage_change" | "other";
+            type: "call" | "email" | "meeting" | "demo" | "proposal" | "contract" | "stage_change" | "other" | "site_visit" | "objection" | "competitor_intel";
             /** Title */
             title: string;
             /** Author Id */
@@ -1566,7 +1566,7 @@ export interface components {
              * @default other
              * @enum {string}
              */
-            type: "call" | "email" | "meeting" | "demo" | "proposal" | "contract" | "stage_change" | "other";
+            type: "call" | "email" | "meeting" | "demo" | "proposal" | "contract" | "stage_change" | "other" | "site_visit" | "objection" | "competitor_intel";
             /** Title */
             title: string;
             /**
@@ -1589,7 +1589,7 @@ export interface components {
              * Type
              * @enum {string}
              */
-            type: "call" | "email" | "meeting" | "demo" | "proposal" | "contract" | "stage_change" | "other";
+            type: "call" | "email" | "meeting" | "demo" | "proposal" | "contract" | "stage_change" | "other" | "site_visit" | "objection" | "competitor_intel";
             /** Title */
             title: string;
             /** Body */
@@ -1612,7 +1612,7 @@ export interface components {
         /** TimelineEntryUpdate */
         TimelineEntryUpdate: {
             /** Type */
-            type?: ("call" | "email" | "meeting" | "demo" | "proposal" | "contract" | "stage_change" | "other") | null;
+            type?: ("call" | "email" | "meeting" | "demo" | "proposal" | "contract" | "stage_change" | "other" | "site_visit" | "objection" | "competitor_intel") | null;
             /** Title */
             title?: string | null;
             /** Body */

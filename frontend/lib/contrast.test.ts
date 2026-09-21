@@ -80,6 +80,9 @@ const textPairs: Array<[string, string, string]> = [
   ["a contract badge", "--badge-text", "--badge-contract"],
   ["a stage-change badge", "--badge-text", "--badge-stage"],
   ["an other badge", "--badge-text", "--badge-other"],
+  ["a site-visit badge", "--badge-text", "--badge-site-visit"],
+  ["an objection badge", "--badge-text", "--badge-objection"],
+  ["a competitor-intel badge", "--badge-text", "--badge-competitor-intel"],
 ];
 
 /** Pairs carrying meaning without text: focus rings, markers, borders. */

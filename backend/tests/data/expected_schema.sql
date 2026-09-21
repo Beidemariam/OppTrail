@@ -140,19 +140,15 @@ CREATE TABLE sessions (
     expires_at TEXT NOT NULL
 );
 
-CREATE TABLE timeline_entries (
+-- Revision 0005_entry_types rebuilt this table to widen the CHECK constraint
+-- (SQLite has no `ALTER TABLE ... ADD CHECK`), renaming a scratch table into
+-- place rather than the original out of the way -- see the revision's
+-- docstring. SQLite double-quotes a table's name in its own stored SQL after
+-- a rename, which every other table here never goes through.
+CREATE TABLE "timeline_entries" (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     opportunity_id INTEGER NOT NULL REFERENCES opportunities(id),
-    type TEXT NOT NULL CHECK (type IN (
-        'call',
-        'email',
-        'meeting',
-        'demo',
-        'proposal',
-        'contract',
-        'stage_change',
-        'other'
-    )),
+    type TEXT NOT NULL CHECK (type IN ('call', 'email', 'meeting', 'demo', 'proposal', 'contract', 'stage_change', 'other', 'site_visit', 'objection', 'competitor_intel')),
     title TEXT NOT NULL,
     body TEXT NOT NULL DEFAULT '',
     event_timestamp TEXT NOT NULL,

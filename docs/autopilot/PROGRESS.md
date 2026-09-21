@@ -2039,8 +2039,79 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
   each primitive arrives with the milestone that has a caller for it, and
   `DropdownMenu` is the obvious next one, for `NotificationMenu` and
   `SavedViewsMenu`).
-- [ ] 2.6 Three new entry types with icons. Schema: `timeline_entries.type`
-      CHECK extended.
+- [x] 2.6 Three new entry types with icons. Schema: `timeline_entries.type`
+      CHECK extended. — **DONE**
+
+  - [x] Three new types: `site_visit`, `objection`, `competitor_intel`
+        (`backend/app/schemas.py`'s `EntryType` literal). The roadmap's own
+        target list (`demo`, `proposal sent`, `quote revised`, `objection`,
+        `competitor intel`, `internal note`, `task`) overlaps the shipped
+        eight everywhere except these three — `task` is deliberately not
+        one of them, since Phase 4 gives tasks their own model rather than a
+        timeline entry type.
+  - [x] Migration `backend/alembic/versions/20260921_0005_entry_types.py`
+        (`0005_entry_types`, head revision, `test_migrations.py`). SQLite has
+        no `ALTER TABLE ... ADD CHECK`, so this is the project's first table
+        rebuild rather than an additive column — build a scratch table with
+        the widened `CHECK`, copy every row by named column (not
+        `SELECT *`: a pre-Alembic bridged database's `system_generated`
+        column is physically out of declared order, per
+        `database.bridge_pre_alembic_database`, and a positional copy would
+        have silently shifted values), drop the original, rename the scratch
+        table into place, then recreate the one index and the three FTS5
+        search triggers the drop took with it. `downgrade()` rebuilds back to
+        the original eight. `tests/data/expected_schema.sql` updated to
+        match — the rebuilt table's stored SQL double-quotes its own name,
+        which no other table here goes through, and is called out in a
+        comment so the next schema diff doesn't read it as a typo.
+  - [x] `frontend/lib/domain.ts`'s `entryTypes` gained the three; every
+        caller that already iterates the array — the entry-creation type
+        `<select>` (`TimelineEntryForm.tsx`) and the timeline filter bar
+        (`TimelineFilterBar.tsx`) — picked them up with no further change.
+        `frontend/lib/api-types.ts` regenerated
+        (`scripts/generate-api-client.sh --check` clean).
+  - [x] **Icons — scoped wider than the roadmap sentence's literal reading,
+        logged as D-078 (needs human review).** "Three new entry types with
+        icons" could mean icons on only the three; `docs/DESIGN-SYSTEM.md`
+        already states "never colour alone — every stage and entry type also
+        carries an icon and a text label" and lists `EntryTypeBadge` as an
+        unbuilt domain component, so shipping icons on 3 of 11 types would
+        leave the other 8 exactly as colour-only as before while looking
+        finished. Built `frontend/app/EntryTypeBadge.tsx`: one hand-drawn
+        inline SVG glyph per entry type (no new dependency — the codebase had
+        no icon library and no prior `<svg>` under `app/` to extend instead),
+        `aria-hidden` since the label sitting next to it in the badge already
+        names the type. `TimelineEntryList.tsx`'s type badge now renders
+        `EntryTypeBadge` instead of a bare label span; the timeline marker
+        dot is unchanged (decorative, redundant with the badge beside it).
+        Three new badge colour tokens (`--badge-site-visit`,
+        `--badge-objection`, `--badge-competitor-intel`, reusing green/red/
+        violet from the existing ramp) added to both the light and dark
+        blocks in `globals.css`, and to `lib/contrast.test.ts`'s pair table —
+        the audit is a hand-maintained list of what the stylesheet actually
+        paints, so a new badge is invisible to it until named there.
+  - [x] `backend/tools/seed.py`: Northwind gains one entry of each new type
+        (site visit by Alex, objection by Blair, competitor intel by Alex),
+        and the printed tour names them. `test_seed.py` (asserts the printed
+        tour) passes unchanged in content, re-verified against the new text.
+  - [x] `docs/PLAN.md`'s TimelineEntry field list updated with the three new
+        values.
+  - [x] Tests: 2 backend
+        (`test_the_three_new_entry_types_are_accepted_and_filterable`,
+        `test_an_unrecognized_entry_type_is_rejected` — the CHECK constraint
+        still rejects an unknown type with a 422, not a 500). 18 frontend:
+        `app/EntryTypeBadge.test.tsx` (12 — every type pairs its icon with
+        its label and gets a distinct glyph shape) plus 6 new
+        `lib/contrast.test.ts` cases (the three new badges, light and dark)
+        for the three new colour tokens. 304 backend / 316 frontend tests.
+
+  Gate: `make check-fast` green (ruff, ruff format, mypy — `app` and
+  `tools` — eslint, tsc, prettier, 304 backend tests at 97.47% combined
+  coverage, 316 frontend tests at 96.76/89.32/95.13/96.75
+  statements/branches/functions/lines against the 96/88/94/96 thresholds —
+  unchanged, not raised this milestone — contract check clean). E2E, Docker,
+  pip-audit and npm audit deferred to the phase-end full gate per brief
+  §3.4 ("milestone commits require `make check-fast`").
 - [ ] 2.7 Board view (drag to change stage, auto-logs a system entry) and list
       view — acceptance-critical.
       **Layout craft is part of this milestone, not a later polish pass**

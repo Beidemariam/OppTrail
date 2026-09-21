@@ -175,6 +175,60 @@ def test_timeline_filters_keyword_type_date_and_author(client: TestClient) -> No
     ]
 
 
+def test_the_three_new_entry_types_are_accepted_and_filterable(client: TestClient) -> None:
+    """Milestone 2.6: `site_visit`, `objection` and `competitor_intel` join the
+    eight the MVP shipped -- additive, so the eight already covered elsewhere
+    in this file are untouched.
+    """
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    create_entry(
+        client,
+        opportunity["id"],
+        title="Toured the warehouse",
+        entry_type="site_visit",
+        event_timestamp=days_ago(5),
+    )
+    create_entry(
+        client,
+        opportunity["id"],
+        title="Pricing pushback",
+        entry_type="objection",
+        event_timestamp=days_ago(4),
+    )
+    create_entry(
+        client,
+        opportunity["id"],
+        title="Evaluating a rival vendor",
+        entry_type="competitor_intel",
+        event_timestamp=days_ago(3),
+    )
+
+    for entry_type, title in (
+        ("site_visit", "Toured the warehouse"),
+        ("objection", "Pricing pushback"),
+        ("competitor_intel", "Evaluating a rival vendor"),
+    ):
+        response = client.get(f"/api/opportunities/{opportunity['id']}/timeline?type={entry_type}")
+        assert [entry["title"] for entry in response.json()["entries"]] == [title]
+
+
+def test_an_unrecognized_entry_type_is_rejected(client: TestClient) -> None:
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+
+    rejected = client.post(
+        f"/api/opportunities/{opportunity['id']}/timeline",
+        json={
+            "type": "carrier_pigeon",
+            "title": "Not a real type",
+            "event_timestamp": "2026-09-01T10:00:00",
+        },
+    )
+
+    assert rejected.status_code == 422
+
+
 def test_timeline_order_direction(client: TestClient) -> None:
     """D-051: the reader chooses oldest- or newest-first; `order` defaults to
     the existing behaviour (oldest-first) so a client that never sends it sees

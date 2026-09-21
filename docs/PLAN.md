@@ -39,9 +39,11 @@ system simple per the coding standards.
 
 **TimelineEntry**
 - id, opportunity_id, type (`call` | `email` | `meeting` | `demo` | `proposal` |
-  `contract` | `stage_change` | `other`), title, body, event_timestamp
-  (editable — when the event happened), created_by, created_at (immutable —
-  when it was logged), follow_up_date (nullable), deleted_at (nullable)
+  `contract` | `stage_change` | `other` | `site_visit` | `objection` |
+  `competitor_intel` — the last three added by Phase 2 milestone 2.6), title,
+  body, event_timestamp (editable — when the event happened), created_by,
+  created_at (immutable — when it was logged), follow_up_date (nullable),
+  deleted_at (nullable)
 
 **Note**
 - id, entry_id, body, created_by, created_at, updated_at, edited (bool),

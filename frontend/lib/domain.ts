@@ -29,6 +29,9 @@ export const entryTypes = [
   { value: "contract", label: "Contract" },
   { value: "stage_change", label: "Stage Change" },
   { value: "other", label: "Other" },
+  { value: "site_visit", label: "Site Visit" },
+  { value: "objection", label: "Objection" },
+  { value: "competitor_intel", label: "Competitor Intel" },
 ] as const;
 
 export type EntryType = (typeof entryTypes)[number]["value"];

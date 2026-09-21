@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { entryTypeLabel, type Access, type TimelineEntry } from "../lib/domain";
+import type { Access, TimelineEntry } from "../lib/domain";
 import { submitOnModEnter } from "../lib/keyboard";
 import {
   useAddNote,
@@ -10,6 +10,7 @@ import {
   useRestoreTimelineEntry,
 } from "../lib/queries";
 import { formatTimestamp } from "../lib/time";
+import { EntryTypeBadge } from "./EntryTypeBadge";
 import { NoteBlock } from "./NoteBlock";
 import { useUndoableDelete } from "./Toasts";
 
@@ -79,9 +80,7 @@ function TimelineEntryCard({
         <div className="timeline-entry-header">
           <div>
             <div className="meta-row">
-              <span className={`type-badge ${entry.type}`}>
-                {entryTypeLabel(entry.type)}
-              </span>
+              <EntryTypeBadge type={entry.type} />
               {entry.system_generated && (
                 <span className="system-badge">System</span>
               )}

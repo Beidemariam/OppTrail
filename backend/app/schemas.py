@@ -230,6 +230,9 @@ EntryType = Literal[
     "contract",
     "stage_change",
     "other",
+    "site_visit",
+    "objection",
+    "competitor_intel",
 ]
 
 

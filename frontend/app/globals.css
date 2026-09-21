@@ -81,6 +81,9 @@
   --badge-contract: var(--green-600);
   --badge-stage: var(--navy-700);
   --badge-other: var(--slate-600);
+  --badge-site-visit: var(--green-600);
+  --badge-objection: var(--red-600);
+  --badge-competitor-intel: var(--violet-600);
 
   /* Elevation: four steps only - flat, raised, overlay, modal. */
   --shadow-raised: 0 10px 24px rgba(11, 37, 64, 0.06);
@@ -176,6 +179,9 @@
   --badge-contract: var(--green-300);
   --badge-stage: var(--slate-300);
   --badge-other: var(--slate-300);
+  --badge-site-visit: var(--green-300);
+  --badge-objection: var(--red-300);
+  --badge-competitor-intel: var(--violet-300);
 
   --shadow-raised: 0 10px 24px rgba(0, 0, 0, 0.4);
   --shadow-overlay: 0 16px 40px rgba(0, 0, 0, 0.5);
@@ -1081,6 +1087,21 @@ a.danger-button {
   background: var(--badge-other);
 }
 
+.timeline-marker.site_visit,
+.type-badge.site_visit {
+  background: var(--badge-site-visit);
+}
+
+.timeline-marker.objection,
+.type-badge.objection {
+  background: var(--badge-objection);
+}
+
+.timeline-marker.competitor_intel,
+.type-badge.competitor_intel {
+  background: var(--badge-competitor-intel);
+}
+
 .timeline-entry-body {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
@@ -1136,12 +1157,18 @@ a.danger-button {
 
 .type-badge,
 .system-badge {
+  align-items: center;
   border-radius: var(--radius-full);
   color: var(--badge-text);
   display: inline-flex;
   font-size: var(--text-xs);
   font-weight: 700;
+  gap: 4px;
   padding: 4px 8px;
+}
+
+.entry-type-icon {
+  flex-shrink: 0;
 }
 
 .type-badge.call {

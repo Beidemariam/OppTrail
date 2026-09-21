@@ -251,6 +251,32 @@ def seed() -> None:
         event_timestamp=days_ago(2, hour=11),
     )
 
+    # Milestone 2.6's three new entry types, each with its own icon.
+    add_entry(
+        alex,
+        northwind,
+        type="site_visit",
+        title="Toured the Northwind warehouse",
+        body="Saw the manual intake process the timeline view would replace.",
+        event_timestamp=days_ago(17, hour=11),
+    )
+    add_entry(
+        blair,
+        northwind,
+        type="objection",
+        title="Procurement pushed back on price",
+        body="Wants a 15% discount for a three-year term instead of two.",
+        event_timestamp=days_ago(9, hour=15),
+    )
+    add_entry(
+        alex,
+        northwind,
+        type="competitor_intel",
+        title="Evaluating a rival vendor in parallel",
+        body="Their champion mentioned a bake-off against a spreadsheet-plus-CRM combo.",
+        event_timestamp=days_ago(5, hour=10),
+    )
+
     # Stage change: the system timeline entry is written by the API, not here.
     check(
         alex.client.patch(f"/api/opportunities/{northwind}", json={"stage": "Negotiation"}),
@@ -432,7 +458,9 @@ def main(argv: list[str] | None = None) -> int:
         "  Casey is a viewer on Northwind and Globex - every write is refused.\n"
         "  Dana has access to nothing, which is the case worth checking by hand.\n"
         "  Globex renewal is stalled; Northwind has a system stage-change entry,\n"
-        "  a mention notification for Alex, an edited note and a soft-deleted note.\n"
+        "  a mention notification for Alex, an edited note and a soft-deleted note,\n"
+        "  plus milestone 2.6's three newest entry types -- site visit, objection,\n"
+        "  competitor intel -- each with its own icon on the timeline.\n"
         "  Umbrella discovery holds an undone deletion: its owner-only audit log\n"
         "  has timeline_entry_deleted next to timeline_entry_restored, and the\n"
         "  Qualification call entry is back on the timeline.\n"
