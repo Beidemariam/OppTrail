@@ -259,9 +259,11 @@ describe("saved views", () => {
     });
     await openTimeline("Northwind rollout");
 
+    // By value: the option's text now carries the view's visibility too
+    // (milestone 2.13), so its name alone no longer identifies it.
     await userEvent.selectOptions(
       await screen.findByLabelText("Saved timeline views"),
-      "Newest first",
+      "1",
     );
 
     await waitFor(() => {
@@ -272,12 +274,10 @@ describe("saved views", () => {
       screen.getByRole("button", { name: "Save current timeline view" }),
     );
     await userEvent.type(
-      screen.getByLabelText("Saved timeline view name"),
+      screen.getByLabelText("View name"),
       "My current filter",
     );
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save timeline view" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Save view" }));
 
     await waitFor(() =>
       expect(api.callsTo("POST", "/api/v2/saved-views")).toHaveLength(1),
@@ -317,7 +317,7 @@ describe("saved views", () => {
     });
   });
 
-  it("ignores a blank name and lets the save form be cancelled", async () => {
+  it("ignores a blank name and lets the save dialog be cancelled", async () => {
     const api = await renderDashboard({
       opportunities: [anOpportunity()],
       entries: [anEntry()],
@@ -327,18 +327,17 @@ describe("saved views", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Save current timeline view" }),
     );
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save timeline view" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Save view" }));
     expect(api.callsTo("POST", "/api/v2/saved-views")).toHaveLength(0);
 
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(
-      screen.queryByLabelText("Saved timeline view name"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("View name")).not.toBeInTheDocument();
   });
 
-  it("marks a new view shared and default from the checkboxes", async () => {
+  it("saves a view for everyone from the explicit visibility choice", async () => {
+    // Milestone 2.13 (D-076): the author chooses between "just for me" and
+    // "everyone" at the moment of saving, instead of a bare `Shared`
+    // checkbox that said nothing about what sharing does.
     const api = await renderDashboard({
       opportunities: [anOpportunity()],
       entries: [anEntry()],
@@ -348,26 +347,30 @@ describe("saved views", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Save current timeline view" }),
     );
-    await userEvent.type(
-      screen.getByLabelText("Saved timeline view name"),
-      "Team default",
-    );
-    await userEvent.click(screen.getByRole("checkbox", { name: "Shared" }));
-    await userEvent.click(screen.getByRole("checkbox", { name: "Default" }));
+    await userEvent.type(screen.getByLabelText("View name"), "Team default");
+    expect(screen.getByRole("radio", { name: "Just for me" })).toBeChecked();
+    await userEvent.click(screen.getByRole("radio", { name: "Everyone" }));
     await userEvent.click(
-      screen.getByRole("button", { name: "Save timeline view" }),
+      screen.getByRole("checkbox", { name: "Open this view by default" }),
     );
+    await userEvent.click(screen.getByRole("button", { name: "Save view" }));
 
     await waitFor(() =>
       expect(api.callsTo("POST", "/api/v2/saved-views")).toHaveLength(1),
     );
     expect(api.callsTo("POST", "/api/v2/saved-views")[0].body).toMatchObject({
+      name: "Team default",
       is_shared: true,
       is_default: true,
     });
   });
 
-  it("only offers to delete the caller's own views", async () => {
+  it("keeps editing and deleting behind Manage, and only for the caller's own views", async () => {
+    // D-082: the list used to carry a `Delete "<name>"` button per view,
+    // permanently on screen. `AGENTS.md`'s Design bar now puts destructive
+    // controls behind a manage affordance, and the API agrees about who may
+    // use them - a shared view is applied by everyone and edited by its
+    // creator.
     const api = await renderDashboard({
       opportunities: [anOpportunity()],
       entries: [anEntry()],
@@ -404,19 +407,202 @@ describe("saved views", () => {
     });
     await openTimeline("Northwind rollout");
 
+    await screen.findByRole("button", { name: "Manage timeline views" });
     expect(
-      await screen.findByRole("button", { name: "Delete saved view Mine" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Delete saved view Theirs" }),
+      screen.queryByRole("button", { name: "Delete view Mine" }),
     ).not.toBeInTheDocument();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Delete saved view Mine" }),
+      screen.getByRole("button", { name: "Manage timeline views" }),
+    );
+    expect(
+      await screen.findByRole("button", { name: "Delete view Mine" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Delete view Theirs" }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Delete view Mine" }),
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Delete view" }),
     );
     await waitFor(() =>
       expect(api.callsTo("DELETE", "/api/v2/saved-views/1")).toHaveLength(1),
     );
+  });
+
+  it("renames a view and shares it from the manage dialog", async () => {
+    const api = await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [anEntry()],
+      savedViews: [
+        {
+          id: 1,
+          created_by: ALEX.id,
+          creator_name: ALEX.name,
+          name: "Mine",
+          entity: "timeline",
+          filters: { order: "desc" },
+          sort: {},
+          group_by: null,
+          is_shared: false,
+          is_default: false,
+          created_at: "2026-09-01T00:00:00Z",
+          updated_at: "2026-09-01T00:00:00Z",
+        },
+      ],
+    });
+    await openTimeline("Northwind rollout");
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Manage timeline views" }),
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Edit view Mine" }),
+    );
+    await userEvent.clear(screen.getByLabelText("View name"));
+    await userEvent.type(screen.getByLabelText("View name"), "Newest first");
+    await userEvent.click(screen.getByRole("radio", { name: "Everyone" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() =>
+      expect(api.callsTo("PATCH", "/api/v2/saved-views/1")).toHaveLength(1),
+    );
+    expect(api.callsTo("PATCH", "/api/v2/saved-views/1")[0].body).toMatchObject(
+      { name: "Newest first", is_shared: true },
+    );
+    // The filters are left alone unless the reader asks for the ones on
+    // screen, so renaming a view cannot silently repoint it.
+    expect(
+      api.callsTo("PATCH", "/api/v2/saved-views/1")[0].body,
+    ).not.toHaveProperty("filters");
+  });
+
+  it("points a view at the filters on screen only when asked", async () => {
+    const api = await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [anEntry()],
+      savedViews: [
+        {
+          id: 1,
+          created_by: ALEX.id,
+          creator_name: ALEX.name,
+          name: "Mine",
+          entity: "timeline",
+          filters: {},
+          sort: {},
+          group_by: null,
+          is_shared: true,
+          is_default: false,
+          created_at: "2026-09-01T00:00:00Z",
+          updated_at: "2026-09-01T00:00:00Z",
+        },
+      ],
+    });
+    await openTimeline("Northwind rollout");
+
+    await userEvent.selectOptions(
+      await screen.findByLabelText("Timeline reading order"),
+      "desc",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Filter" }));
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Manage timeline views" }),
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Edit view Mine" }),
+    );
+    await userEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Replace its filters with the ones on screen now",
+      }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() =>
+      expect(api.callsTo("PATCH", "/api/v2/saved-views/1")).toHaveLength(1),
+    );
+    expect(api.callsTo("PATCH", "/api/v2/saved-views/1")[0].body).toMatchObject(
+      { filters: { order: "desc" } },
+    );
+  });
+
+  it("says a shared view goes for everyone before it goes", async () => {
+    await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [anEntry()],
+      savedViews: [
+        {
+          id: 1,
+          created_by: ALEX.id,
+          creator_name: ALEX.name,
+          name: "Everyone's",
+          entity: "timeline",
+          filters: { order: "desc" },
+          sort: {},
+          group_by: null,
+          is_shared: true,
+          is_default: false,
+          created_at: "2026-09-01T00:00:00Z",
+          updated_at: "2026-09-01T00:00:00Z",
+        },
+      ],
+    });
+    await openTimeline("Northwind rollout");
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Manage timeline views" }),
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Delete view Everyone's" }),
+    );
+    expect(screen.getByText(/Delete it for everyone\?/)).toBeInTheDocument();
+
+    // And the question can be answered no.
+    await userEvent.click(screen.getByRole("button", { name: "Keep it" }));
+    expect(
+      await screen.findByRole("button", { name: "Delete view Everyone's" }),
+    ).toBeInTheDocument();
+  });
+
+  it("says which view is applied and that a colleague's shows fewer rows", async () => {
+    // The whole of D-076: a shared view shares its filters, not its results.
+    await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [anEntry()],
+      savedViews: [
+        {
+          id: 2,
+          created_by: BLAIR.id,
+          creator_name: BLAIR.name,
+          name: "Newest first",
+          entity: "timeline",
+          filters: { order: "desc" },
+          sort: {},
+          group_by: null,
+          is_shared: true,
+          is_default: false,
+          created_at: "2026-09-01T00:00:00Z",
+          updated_at: "2026-09-01T00:00:00Z",
+        },
+      ],
+    });
+    await openTimeline("Northwind rollout");
+
+    await userEvent.selectOptions(
+      await screen.findByLabelText("Saved timeline views"),
+      "2",
+    );
+
+    const applied = await screen.findByText(/Showing/);
+    expect(applied).toHaveTextContent("Newest first");
+    expect(applied).toHaveTextContent(`shared by ${BLAIR.name}`);
+    expect(
+      screen.getByText(/shared the filters, not the opportunities/),
+    ).toBeInTheDocument();
   });
 });
 

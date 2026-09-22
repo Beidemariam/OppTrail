@@ -18,6 +18,10 @@ import {
  * applying a saved view. Re-deriving state from a changed prop during render
  * (rather than in an effect) is the pattern React itself recommends for this —
  * it re-renders before paint instead of committing a stale frame first.
+ *
+ * Each control carries a visible name beside its `aria-label` for the reason
+ * `OpportunityFilterBar` explains (milestone 2.13, **D-082**): a row of
+ * unlabelled dropdowns is a control the reader cannot identify.
  */
 export function TimelineFilterBar({
   filters,
@@ -45,59 +49,77 @@ export function TimelineFilterBar({
 
   return (
     <form className="filter-bar" onSubmit={apply}>
-      <input
-        aria-label="Filter the timeline by keyword"
-        placeholder="Keyword"
-        value={draft.q}
-        onChange={(event) => setDraft({ ...draft, q: event.target.value })}
-      />
-      <select
-        aria-label="Filter the timeline by entry type"
-        value={draft.type}
-        onChange={(event) => setDraft({ ...draft, type: event.target.value })}
-      >
-        <option value="">All types</option>
-        {entryTypes.map((entryType) => (
-          <option key={entryType.value} value={entryType.value}>
-            {entryType.label}
-          </option>
-        ))}
-      </select>
-      <input
-        aria-label="Show entries from"
-        type="datetime-local"
-        value={draft.from}
-        onChange={(event) => setDraft({ ...draft, from: event.target.value })}
-      />
-      <input
-        aria-label="Show entries up to"
-        type="datetime-local"
-        value={draft.to}
-        onChange={(event) => setDraft({ ...draft, to: event.target.value })}
-      />
-      <input
-        aria-label="Filter the timeline by author id"
-        type="number"
-        min="1"
-        placeholder="Author ID"
-        value={draft.author_id}
-        onChange={(event) =>
-          setDraft({ ...draft, author_id: event.target.value })
-        }
-      />
-      <select
-        aria-label="Timeline reading order"
-        value={draft.order}
-        onChange={(event) =>
-          setDraft({
-            ...draft,
-            order: event.target.value === "desc" ? "desc" : "asc",
-          })
-        }
-      >
-        <option value="asc">Oldest first</option>
-        <option value="desc">Newest first</option>
-      </select>
+      <label className="filter-field grow">
+        Keyword
+        <input
+          aria-label="Filter the timeline by keyword"
+          placeholder="Anything written in an entry"
+          value={draft.q}
+          onChange={(event) => setDraft({ ...draft, q: event.target.value })}
+        />
+      </label>
+      <label className="filter-field">
+        Type
+        <select
+          aria-label="Filter the timeline by entry type"
+          value={draft.type}
+          onChange={(event) => setDraft({ ...draft, type: event.target.value })}
+        >
+          <option value="">All types</option>
+          {entryTypes.map((entryType) => (
+            <option key={entryType.value} value={entryType.value}>
+              {entryType.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="filter-field">
+        From
+        <input
+          aria-label="Show entries from"
+          type="datetime-local"
+          value={draft.from}
+          onChange={(event) => setDraft({ ...draft, from: event.target.value })}
+        />
+      </label>
+      <label className="filter-field">
+        Up to
+        <input
+          aria-label="Show entries up to"
+          type="datetime-local"
+          value={draft.to}
+          onChange={(event) => setDraft({ ...draft, to: event.target.value })}
+        />
+      </label>
+      <label className="filter-field">
+        Author ID
+        <input
+          aria-label="Filter the timeline by author id"
+          type="number"
+          min="1"
+          placeholder="Author ID"
+          value={draft.author_id}
+          onChange={(event) =>
+            setDraft({ ...draft, author_id: event.target.value })
+          }
+        />
+      </label>
+      <label className="filter-field">
+        Order
+        <select
+          aria-label="Timeline reading order"
+          value={draft.order}
+          onChange={(event) =>
+            setDraft({
+              ...draft,
+              order: event.target.value === "desc" ? "desc" : "asc",
+            })
+          }
+        >
+          <option value="asc">Oldest first</option>
+          <option value="desc">Newest first</option>
+        </select>
+      </label>
       <button className="primary-button" type="submit">
         Filter
       </button>

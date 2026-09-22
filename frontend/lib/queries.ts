@@ -42,6 +42,7 @@ type NotificationPage = components["schemas"]["Page_NotificationPublicV2_"];
 type AiAskResponse = components["schemas"]["AiAskResponse"];
 type SavedViewPage = components["schemas"]["Page_SavedViewPublic_"];
 type SavedViewCreate = components["schemas"]["SavedViewCreate"];
+type SavedViewUpdate = components["schemas"]["SavedViewUpdate"];
 
 const NOTIFICATION_PAGE_SIZE = 50;
 const SAVED_VIEW_PAGE_SIZE = 100;
@@ -171,6 +172,24 @@ export function useCreateSavedView() {
         body: JSON.stringify(payload),
       }),
     onSuccess: (created) => invalidate(client, keys.savedViews(created.entity)),
+  });
+}
+
+/**
+ * Rename a saved view, or change who can use it and whether it opens by
+ * default (milestone 2.13). The manage dialog is the only caller: editing a
+ * view is a deliberate act taken from one place, not a control beside every
+ * name (`AGENTS.md`'s Design bar).
+ */
+export function useUpdateSavedView(entity: SavedViewEntity) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...payload }: SavedViewUpdate & { id: number }) =>
+      apiRequest<SavedView>(`/api/v2/saved-views/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: () => invalidate(client, keys.savedViews(entity)),
   });
 }
 

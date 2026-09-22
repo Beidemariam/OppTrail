@@ -4,10 +4,33 @@ import {
   adjacentStage,
   applyOpportunityView,
   emptyOpportunityViewState,
+  emptyTimelineFilters,
   formatMoney,
+  matchesSavedView,
+  savedViewLabel,
+  savedViewVisibility,
   viewOrder,
   type Opportunity,
+  type SavedView,
 } from "./domain";
+
+function aSavedView(overrides: Partial<SavedView> = {}): SavedView {
+  return {
+    id: 1,
+    created_by: 1,
+    creator_name: "Alex Morgan",
+    name: "Newest first",
+    entity: "timeline",
+    filters: {},
+    sort: {},
+    group_by: null,
+    is_shared: false,
+    is_default: false,
+    created_at: "2026-09-01T00:00:00Z",
+    updated_at: "2026-09-01T00:00:00Z",
+    ...overrides,
+  };
+}
 
 function anOpportunity(overrides: Partial<Opportunity> = {}): Opportunity {
   return {
@@ -163,5 +186,52 @@ describe("the shared formatting and ordering helpers (milestone 2.7)", () => {
     expect(adjacentStage("Proposal", -1)).toBe("Needs Analysis");
     expect(adjacentStage("Prospecting", -1)).toBeNull();
     expect(adjacentStage("Closed Lost", 1)).toBeNull();
+  });
+});
+
+describe("what a saved view is, said in words (milestone 2.13)", () => {
+  it("reads one flag as the three facts it actually carries", () => {
+    // D-076: `is_shared` is one boolean, but "mine and private", "mine and
+    // everyone's" and "someone else's" are three different things to be told.
+    expect(savedViewVisibility(aSavedView(), 1)).toBe("private");
+    expect(savedViewVisibility(aSavedView({ is_shared: true }), 1)).toBe(
+      "shared with everyone",
+    );
+    expect(savedViewVisibility(aSavedView({ is_shared: true }), 2)).toBe(
+      "shared by Alex Morgan",
+    );
+  });
+
+  it("names a view with its default marker and its visibility", () => {
+    expect(savedViewLabel(aSavedView({ is_default: true }), 1)).toBe(
+      "Newest first (default) - private",
+    );
+    expect(savedViewLabel(aSavedView({ is_shared: true }), 2)).toBe(
+      "Newest first - shared by Alex Morgan",
+    );
+  });
+
+  it("recognises the view the filters on screen amount to", () => {
+    // Nothing records which view is applied - applying one only writes its
+    // filters into the URL - so the applied view is the one the state
+    // matches, and changing any filter stops it matching.
+    const view = aSavedView({ filters: { order: "desc" } });
+    expect(
+      matchesSavedView(
+        view,
+        { ...emptyTimelineFilters, order: "desc" },
+        emptyTimelineFilters,
+      ),
+    ).toBe(true);
+    expect(
+      matchesSavedView(
+        view,
+        { ...emptyTimelineFilters, order: "desc", q: "acme" },
+        emptyTimelineFilters,
+      ),
+    ).toBe(false);
+    expect(
+      matchesSavedView(view, emptyTimelineFilters, emptyTimelineFilters),
+    ).toBe(false);
   });
 });

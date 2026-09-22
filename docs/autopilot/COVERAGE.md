@@ -1110,3 +1110,35 @@ the virtualizer's own render callbacks, the same shape already uncovered in
 tested: `DashboardPage` answers an empty view itself, with two different
 answers ("there are none yet" and "your filters removed them all"), so the
 view components can never be asked to draw nothing.
+
+## Phase 2 — milestone 2.13 (saved-view sharing, view management, labelled controls)
+
+```
+backend:  unchanged — 305 passed, 97.47% combined line+branch
+          (--cov-fail-under=90 enforced). No schema and no route change:
+          PATCH /api/v2/saved-views/{id} shipped with 2.2 and this is its
+          first caller, so it was already in the authorization matrix.
+frontend: 354 passed (was 344), 96.54% statements, 96.51% line, 95.22%
+          functions, 89.23% branch — thresholds unchanged at 96/96/94/88
+          app/SavedViewsMenu.tsx     94.7% line, 92.3% branch (rewritten)
+          app/ManageSavedViews.tsx   new
+          app/SavedViewFields.tsx    new
+          lib/domain.ts              100%  line, 95%   branch
+e2e:      46 passed (was 44). New in e2e/09-saved-views.spec.ts: a view
+          saved for everyone and read back by the colleague it reaches, and
+          the manage-dialog rename/delete round trip with axe over the open
+          dialog. axe clean; DEFERRED_AXE_RULES stays empty.
+docker:   deferred to the host half — scripts/autopilot-gate.sh 2
+          (no Docker socket in this sandbox, per sandbox/README.md)
+```
+
+`pip-audit` and `npm audit` were run for this milestone (full `make check`,
+not just `check-fast`) and are clean. No new dependency.
+
+One finding worth keeping, because it is a rule rather than a fix: nesting
+`app/ConfirmDialog.tsx` (Radix `AlertDialog`) inside `app/Modal.tsx` (Radix
+`Dialog`) does not stack. The two focus traps pull focus from each other, and
+the vitest worker aborted with SIGABRT after 165,066 `Maximum call stack size
+exceeded` errors in `HTMLButtonElement.focus`. The delete confirmation moved
+into the row instead (**D-083**); `useConfirm` is for a question raised from
+the page, not from inside another dialog.

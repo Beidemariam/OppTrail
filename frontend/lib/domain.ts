@@ -199,6 +199,65 @@ export function applyOpportunityView(
 export type SavedView = components["schemas"]["SavedViewPublic"];
 export type SavedViewEntity = SavedView["entity"];
 
+/** Which state a saved view belongs to, in the words the interface uses. Both
+ * menus render one of these at once (the board's and the open timeline's), so
+ * every label they write says which. */
+export function savedViewEntityLabel(entity: SavedViewEntity): string {
+  return entity === "opportunities" ? "opportunity" : "timeline";
+}
+
+/**
+ * What a saved view's `is_shared` flag means to the person reading it
+ * (milestone 2.13, **D-076**).
+ *
+ * `is_shared` is one boolean, but it reads as three different facts depending
+ * on who is looking: my private view, my view that everyone can apply, and
+ * someone else's view that reached me. The reviewer who failed check 08 could
+ * not tell the first two apart and had no way to know the third was not their
+ * own, so the words are defined once here and used everywhere a view is
+ * named -- the dropdown, the applied-view line, and the manage dialog.
+ */
+export function savedViewVisibility(
+  view: SavedView,
+  userId: number | undefined,
+): string {
+  if (view.created_by !== userId) {
+    return `shared by ${view.creator_name}`;
+  }
+  return view.is_shared ? "shared with everyone" : "private";
+}
+
+/**
+ * The view's name as one line: what it is called, whether it opens by
+ * default, and who can use it.
+ */
+export function savedViewLabel(
+  view: SavedView,
+  userId: number | undefined,
+): string {
+  const marker = view.is_default ? " (default)" : "";
+  return `${view.name}${marker} - ${savedViewVisibility(view, userId)}`;
+}
+
+/**
+ * Whether a view state is exactly what a saved view holds, which is how the
+ * board knows which view is applied: nothing records that, because applying
+ * one only writes its filters into the URL (milestone 2.2), and the URL is
+ * the whole mechanism behind a shareable view. Comparing instead of tracking
+ * also means the line goes away by itself the moment a filter is changed.
+ *
+ * Two views with identical filters are indistinguishable here and the first
+ * wins -- they are the same question asked twice, under two names.
+ */
+export function matchesSavedView<T extends Record<string, string>>(
+  view: SavedView,
+  state: T,
+  defaults: T,
+): boolean {
+  const applied = { ...defaults, ...(view.filters as Partial<T>) };
+  return Object.keys(defaults).every((key) => applied[key] === state[key]);
+}
+
 /** One turn of the read-only AI conversation about an opportunity. */
 export interface AiChatMessage {
   role: "user" | "assistant";

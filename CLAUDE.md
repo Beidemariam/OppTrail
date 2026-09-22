@@ -624,6 +624,41 @@ shared, with at most one default per user per entity. Three things about it:
   one-default rule in the schema, not in application code; the routes clear
   the previous default in the same transaction before setting a new one.
 
+What a shared view shares is its **filters, not its rows** — every list it
+feeds is permission-filtered per reader, so two people applying one view see
+different opportunities, and that is correct. Milestone 2.13 is the wording
+that stops it being a surprise (**D-076**, **D-082**), and it is all in the
+frontend — the storage and the routes were already right:
+
+- `lib/domain.ts` holds the vocabulary in one place —
+  `savedViewVisibility` reads the single `is_shared` flag as the three facts
+  it carries (mine and private, mine and everyone's, someone else's),
+  `savedViewLabel` is the dropdown line, and `matchesSavedView` is how the
+  strip knows which view is applied. Nothing records that: applying a view
+  only writes its filters into the URL, which is the whole mechanism behind a
+  shareable view, so the applied view is recognised by comparing — and the
+  line therefore disappears by itself when a filter changes.
+- The visibility choice is **explicit at save time** (`SavedViewFields.tsx`),
+  in a dialog, with the sentence that sharing publishes the view's *name* to
+  every signed-in user while its results stay permission-filtered.
+- **Editing and deleting live in `ManageSavedViews.tsx`**, not beside every
+  name — `AGENTS.md`'s Design bar. The delete confirms **in the row** rather
+  than through `app/ConfirmDialog.tsx`: that is a second modal layer, and two
+  Radix focus traps over one page fight for focus instead of stacking (it
+  recursed until the test worker aborted).
+- Both of the dashboard's empty answers say the set being filtered is what
+  *this* reader may see, which is the sentence that would have prevented the
+  original confusion.
+
+Each filter and sort control carries a **visible caption as well as its
+`aria-label`** (`OpportunityFilterBar`, `TimelineFilterBar`). The caption is
+the short word and the `aria-label` stays the longer sentence that tells the
+board's bar from the timeline's, so both stay addressable while the screen
+says what each control is. One consequence for tests: a control is now
+reachable by either string, so a query for a caption the app uses twice
+(`Stage`, in the filter bar and in the opportunity dialog) has to be scoped to
+one of them.
+
 The board's filtering and sorting happen **in the client**, over the list
 `GET /api/opportunities` already returns whole (D-061). That changes when
 pagination reaches this list in 2.3.

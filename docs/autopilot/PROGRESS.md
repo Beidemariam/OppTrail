@@ -2246,7 +2246,7 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
       - Treat `docs/DESIGN-SYSTEM.md`'s spacing, rhythm and hierarchy as
         binding here, not only its colour tokens.
 
-- [ ] 2.13 Rework saved-view sharing on an explicit private/shared choice
+- [x] 2.13 Rework saved-view sharing on an explicit private/shared choice
       (**D-060 ruled by the human 2026-09-21**, informed by check 08 failing
       the user test — D-076).
       Today `is_shared` means visible to every signed-in user on the
@@ -2278,6 +2278,67 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
         one is which by looking at them."* Scoped in rather than deferred
         because a control nobody can identify is a comprehension failure, not
         polish.
+      — **DONE**
+
+  - [x] **The visibility choice is made, not defaulted.** Saving a view now
+        opens a dialog (`app/SavedViewFields.tsx` on `app/Modal.tsx`) with a
+        name, a two-option choice — *Just for me* / *Everyone* — and the
+        default flag, replacing the bare `Shared` checkbox. The sentence under
+        the choice carries the part that leaked: sharing publishes the view's
+        **name** to every signed-in user, and its results stay
+        permission-filtered, so a shared view can show a colleague fewer rows
+        than it shows its author.
+  - [x] **The interface says which kind of view it is, afterwards.**
+        `lib/domain.ts` holds the vocabulary once — `savedViewVisibility`
+        reads the single `is_shared` flag as the three facts it carries
+        (private, shared with everyone, shared by someone else),
+        `savedViewLabel` is the dropdown line. A new line under the strip
+        names the view the filters on screen amount to, with its kind, and
+        tells a reader applying a colleague's view that the filters travelled
+        and the rows did not. Which view is applied is **recognised, not
+        tracked** (`matchesSavedView`, D-085): applying one only writes its
+        filters into the URL, so comparing is what keeps the line honest and
+        makes it disappear when a filter changes.
+  - [x] **The empty states distinguish the two causes** (the half of D-076
+        that would have prevented the whole confusion). "Nothing yet" now says
+        deals other people own appear here once they share them; "filtered to
+        nothing" says a view never widens what you can read, so the same view
+        can show a colleague rows that are not here.
+  - [x] **Editing and managing, with the delete control off the dashboard**
+        (D-082). `app/ManageSavedViews.tsx` is a dialog listing the caller's
+        own views — the rule `routes_saved_views.py` already enforces — with
+        rename, the same visibility choice, the default flag, an opt-in
+        "Replace its filters with the ones on screen now" (D-086) and delete.
+        The per-view `Delete "<name>"` buttons are gone from the always-visible
+        strip. Deleting confirms **in the row** rather than through
+        `app/ConfirmDialog.tsx`: nesting Radix's `AlertDialog` inside Radix's
+        `Dialog` put two focus traps over one page and recursed until the test
+        worker aborted (D-083). No backend change — `PATCH
+        /api/v2/saved-views/{id}` shipped in 2.2 and had no caller;
+        `lib/queries.ts` gained `useUpdateSavedView`.
+  - [x] **Every filter and sort control says what it is.** Both bars wrap each
+        control in a label with a visible caption, keeping the longer
+        `aria-label` as the accessible name (D-084) — so the screen reads and
+        every existing selector still resolves. One consequence recorded in
+        `CLAUDE.md`: a caption the app uses twice (`Stage`) now needs its query
+        scoped.
+  - [x] Tests: `lib/domain.test.ts` covers the three helpers directly;
+        `app/OpportunityPanel.test.tsx` covers the visibility choice, the
+        manage dialog's rename, the opt-in filter replacement, the shared
+        view's delete wording and the applied-view line; `DashboardPage.test`
+        covers the dialog save flow, both empty-state sentences and the
+        manage dialog with nothing in it. `e2e/09-saved-views.spec.ts` gains
+        two journeys — a view saved for everyone, read back by the colleague
+        it reaches, and the manage-dialog rename/delete round trip with axe
+        over the open dialog.
+
+  Gate: `make check` green in the sandbox — ruff, ruff format, mypy over
+  `app` and `tools`, eslint, tsc, prettier, the backend suite at its
+  unchanged coverage, 354 frontend tests at 96.54/89.23/95.22/96.51
+  statements/branches/functions/lines against the unchanged 96/88/94/96
+  thresholds, contract check clean, `pip-audit` and `npm audit` clean, and
+  46 Playwright tests passing with axe clean. Docker build and smoke test
+  remain the host's half of the split gate.
 
 - [ ] 2.8 Table and calendar view — may slip to Phase 3 per the roadmap's own
       stated risk mitigation; do not treat slipping these as a blocked

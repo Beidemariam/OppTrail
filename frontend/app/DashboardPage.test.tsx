@@ -182,7 +182,12 @@ describe("the dashboard", () => {
     await userEvent.type(screen.getByLabelText("Value"), "42000");
     await userEvent.clear(screen.getByLabelText("Currency"));
     await userEvent.type(screen.getByLabelText("Currency"), "EUR");
-    await userEvent.selectOptions(screen.getByLabelText("Stage"), "Proposal");
+    // Scoped to the dialog: the board's filter bar behind it now carries a
+    // visible "Stage" caption of its own (milestone 2.13).
+    await userEvent.selectOptions(
+      within(screen.getByRole("dialog")).getByLabelText("Stage"),
+      "Proposal",
+    );
     await userEvent.type(screen.getByLabelText("Expected close"), "2027-03-01");
     await userEvent.click(
       screen.getByRole("button", { name: "Create opportunity" }),
@@ -261,7 +266,10 @@ describe("the dashboard", () => {
       "Northwind rollout",
     );
 
-    await userEvent.selectOptions(screen.getByLabelText("Stage"), "Closed Won");
+    await userEvent.selectOptions(
+      within(screen.getByRole("dialog")).getByLabelText("Stage"),
+      "Closed Won",
+    );
     await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() =>
@@ -817,6 +825,34 @@ describe("what the dashboard shows when it has nothing to show", () => {
     );
     expect(await screen.findByText("Northwind rollout")).toBeInTheDocument();
   });
+
+  // D-076: nothing told the reviewer why their colleague's shared view looked
+  // emptier than its author's. Both empty answers now say that a view filters
+  // the opportunities this reader can read and nothing wider, which is the
+  // sentence that would have prevented the confusion.
+  it("says an empty board can be someone else's full one", async () => {
+    await renderDashboard({ opportunities: [] });
+    expect(
+      await screen.findByText(/appear here once they share them with you/),
+    ).toBeInTheDocument();
+  });
+
+  it("says that the set being filtered is only what this reader may see", async () => {
+    await renderDashboard({ opportunities: [anOpportunity()] });
+    await screen.findByText("Northwind rollout");
+    await userEvent.type(
+      screen.getByLabelText("Filter opportunities by keyword"),
+      "nothing matches this",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+    expect(
+      screen.getByText(/A view never widens what you can read/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/it filters the one opportunity you own/),
+    ).toBeInTheDocument();
+  });
 });
 
 describe("filtering, sorting and saved views (milestone 2.2)", () => {
@@ -936,9 +972,11 @@ describe("filtering, sorting and saved views (milestone 2.2)", () => {
     });
     await screen.findByText("Northwind rollout");
 
+    // By value: the option's text now carries the view's visibility too
+    // (milestone 2.13), so its name alone no longer identifies it.
     await userEvent.selectOptions(
       await screen.findByLabelText("Saved opportunity views"),
-      "Negotiation only",
+      "1",
     );
 
     expect(screen.queryByText("Globex renewal")).not.toBeInTheDocument();
@@ -947,13 +985,8 @@ describe("filtering, sorting and saved views (milestone 2.2)", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Save current opportunity view" }),
     );
-    await userEvent.type(
-      screen.getByLabelText("Saved opportunity view name"),
-      "My pipeline",
-    );
-    await userEvent.click(
-      screen.getByRole("button", { name: "Save opportunity view" }),
-    );
+    await userEvent.type(screen.getByLabelText("View name"), "My pipeline");
+    await userEvent.click(screen.getByRole("button", { name: "Save view" }));
 
     await waitFor(() =>
       expect(api.callsTo("POST", "/api/v2/saved-views")).toHaveLength(1),
@@ -964,6 +997,18 @@ describe("filtering, sorting and saved views (milestone 2.2)", () => {
       filters: { stage: "Negotiation" },
       group_by: "stage",
     });
+  });
+
+  it("tells a reader with no saved views how to make one", async () => {
+    await renderDashboard({ opportunities: [anOpportunity()] });
+    await screen.findByText("Northwind rollout");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Manage opportunity views" }),
+    );
+    expect(
+      await screen.findByText(/You have not saved an? opportunity view yet/),
+    ).toBeInTheDocument();
   });
 });
 

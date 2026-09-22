@@ -1333,7 +1333,7 @@ a.danger-button {
    auto-fit grid, which spread five controls and two buttons over three ragged
    rows and read as the loudest thing on the dashboard (milestone 2.7). */
 .filter-bar {
-  align-items: center;
+  align-items: flex-end;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
@@ -1343,12 +1343,33 @@ a.danger-button {
   padding: var(--space-2);
 }
 
-.filter-bar input {
+/* Each control is wrapped in its own label now (milestone 2.13), so the
+   widths belong to the field rather than to the input inside it. */
+.filter-field {
+  color: var(--text-secondary);
+  display: flex;
+  flex: 0 1 148px;
+  flex-direction: column;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  gap: 3px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.filter-field.grow {
   flex: 1 1 200px;
 }
 
-.filter-bar select {
-  flex: 0 1 148px;
+/* The control keeps the reading treatment; only its name is the small
+   uppercase one. */
+.filter-field input,
+.filter-field select {
+  color: var(--text-primary);
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  width: 100%;
 }
 
 .filter-bar input,
@@ -1375,6 +1396,105 @@ a.danger-button {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+}
+
+/* Which saved view the filters on screen amount to, and what kind of view it
+   is: the reviewer who failed check 08 could not tell their own view from one
+   a colleague shared (D-076). */
+.applied-view {
+  align-items: center;
+  color: var(--text-secondary);
+  display: flex;
+  font-size: var(--text-sm);
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.applied-view strong {
+  color: var(--text-primary);
+}
+
+.view-badge {
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  padding: 1px var(--space-2);
+  white-space: nowrap;
+}
+
+/* Sentences under a control that set an expectation the control itself
+   cannot: who will see a shared view's name, why a view can look different to
+   a colleague. */
+.field-hint {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--line-sm);
+  margin: 0;
+  max-width: 62ch;
+}
+
+.saved-views .applied-view,
+.saved-views .field-hint {
+  flex-basis: 100%;
+}
+
+.stacked-field {
+  display: flex;
+  flex-direction: column;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  gap: var(--space-1);
+}
+
+.choice-group {
+  border: 0;
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+}
+
+.choice-group legend {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  padding: 0;
+}
+
+.choice {
+  align-items: center;
+  display: flex;
+  font-size: var(--text-sm);
+  font-weight: 400;
+  gap: var(--space-2);
+}
+
+/* The manage dialog: the only place a view is edited or deleted, so the list
+   on the dashboard carries no controls at all (AGENTS.md, Design bar). */
+.manage-views {
+  display: grid;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.manage-views > li + li {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--space-2);
+}
+
+.manage-view-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.manage-view-name {
+  flex: 1 1 auto;
+  font-weight: 700;
 }
 
 .saved-views > label {

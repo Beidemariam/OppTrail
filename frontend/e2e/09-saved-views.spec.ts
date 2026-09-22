@@ -31,6 +31,21 @@ function entries(page: Page) {
   return page.locator(".timeline-list article.timeline-entry");
 }
 
+/**
+ * Applies a saved view by name.
+ *
+ * By value rather than by label: since milestone 2.13 an option reads
+ * "<name> - shared by <creator>", so the name alone is no longer the option's
+ * label -- which is the point of the change.
+ */
+async function applySavedView(page: Page, name: string) {
+  const menu = page.getByLabel("Saved opportunity views");
+  const value = await menu
+    .locator("option", { hasText: name })
+    .getAttribute("value");
+  await menu.selectOption(value);
+}
+
 test("a board filter is in the URL and survives a reload", async ({ page }) => {
   await signIn(page, ALEX);
   await expect(cards(page)).toHaveCount(5);
@@ -57,9 +72,7 @@ test("a saved view is applied from the menu and is shareable by URL", async ({
 }) => {
   await signIn(page, ALEX);
 
-  await page
-    .getByLabel("Saved opportunity views")
-    .selectOption({ label: LATE_STAGE_VIEW });
+  await applySavedView(page, LATE_STAGE_VIEW);
 
   await expect(cards(page)).toHaveCount(1);
   await expect(cards(page)).toContainText(NORTHWIND);
@@ -138,9 +151,11 @@ test("a default view applies itself on a later visit", async ({ page }) => {
   await page
     .getByRole("button", { name: "Save current opportunity view" })
     .click();
-  await page.getByLabel("Saved opportunity view name").fill("My default");
-  await page.getByRole("checkbox", { name: "Default" }).check();
-  await page.getByRole("button", { name: "Save opportunity view" }).click();
+  await page.getByLabel("View name").fill("My default");
+  await page
+    .getByRole("checkbox", { name: "Open this view by default" })
+    .check();
+  await page.getByRole("button", { name: "Save view" }).click();
 
   await expect(
     page.getByLabel("Saved opportunity views").locator("option"),
@@ -151,4 +166,81 @@ test("a default view applies itself on a later visit", async ({ page }) => {
   await page.goto("/");
   await expect(page).toHaveURL(/opportunities\.stage=Negotiation/);
   await expect(page.getByLabel("Filter by stage")).toHaveValue("Negotiation");
+});
+
+test("a view is saved for everyone deliberately, and says so afterwards", async ({
+  page,
+}) => {
+  // Milestone 2.13 (D-076): the author chooses at save time whether a view is
+  // theirs or everyone's, and the interface says which it is afterwards -- to
+  // the author and, differently, to the colleague it reaches. The reviewer who
+  // failed check 08 could tell neither.
+  const suffix = Math.random().toString(36).slice(2, 8);
+  const name = `Shared ${suffix}`;
+  await signIn(page, ALEX);
+
+  await page.getByLabel("Filter by stage").selectOption("Negotiation");
+  await page.getByRole("button", { name: "Apply" }).click();
+  await expect(cards(page)).toHaveCount(1);
+
+  await page
+    .getByRole("button", { name: "Save current opportunity view" })
+    .click();
+  await page.getByLabel("View name").fill(name);
+  await page.getByRole("radio", { name: "Everyone" }).check();
+  await page.getByRole("button", { name: "Save view" }).click();
+
+  await expect(
+    page.getByLabel("Saved opportunity views").locator("option"),
+  ).toContainText([`${name} - shared with everyone`]);
+
+  // The colleague is told whose view it is, and that its filters travelled
+  // while its rows did not.
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await signIn(page, BLAIR);
+  await applySavedView(page, name);
+
+  await expect(page.locator(".applied-view")).toContainText(name);
+  await expect(page.locator(".applied-view")).toContainText("shared by");
+  await expect(page.locator(".saved-views")).toContainText(
+    "shared the filters, not the opportunities",
+  );
+});
+
+test("editing and deleting a view live behind Manage", async ({ page }) => {
+  // D-082: the per-view delete control is off the dashboard. Renaming is what
+  // replaces deleting and re-saving, which is the clunkiness the same review
+  // reported.
+  const suffix = Math.random().toString(36).slice(2, 8);
+  await signUp(page, `manage-${suffix}@opptrail.test`, "View Manager");
+
+  await page
+    .getByRole("button", { name: "Save current opportunity view" })
+    .click();
+  await page.getByLabel("View name").fill("First name");
+  await page.getByRole("button", { name: "Save view" }).click();
+
+  await expect(
+    page.getByRole("button", { name: "Delete view First name" }),
+  ).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Manage opportunity views" }).click();
+  await expectNoAccessibilityViolations(page, "the manage views dialog");
+  await page.getByRole("button", { name: "Edit view First name" }).click();
+  await page.getByLabel("View name").fill("Second name");
+  await page.getByRole("button", { name: "Save changes" }).click();
+
+  await expect(
+    page.getByRole("button", { name: "Delete view Second name" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Delete view Second name" }).click();
+  await page.getByRole("button", { name: "Delete view", exact: true }).click();
+
+  await expect(page.locator(".manage-views")).toHaveCount(0);
+  await page.getByRole("button", { name: "Close" }).click();
+  // The seed's shared views stay in the list, which is the point of them; it
+  // is this user's own view that has gone.
+  await expect(page.getByLabel("Saved opportunity views")).not.toContainText(
+    "Second name",
+  );
 });

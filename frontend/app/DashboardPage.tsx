@@ -507,7 +507,11 @@ export function DashboardPage() {
             (`docs/DESIGN-SYSTEM.md`): loading, nothing yet, nothing left
             after filtering, and the data itself. The last two are
             deliberately different answers — "there is none" and "you filtered
-            it out" need different next actions. */}
+            it out" need different next actions. Both of them also say that
+            the set being filtered is what this reader may see, which is what
+            D-076 found missing: a shared view shares its filters and not its
+            rows, so an empty screen has two possible causes and the reader
+            was told neither. */}
         {opportunities.isPending ? (
           <LoadingOpportunities />
         ) : total === 0 ? (
@@ -517,6 +521,11 @@ export function DashboardPage() {
               An opportunity is one deal: who it is with, what it is worth, and
               every call, email and note that moved it. Create one and its
               timeline starts itself.
+            </p>
+            <p>
+              Deals owned by other people appear here once they share them with
+              you, so this screen can be empty while your colleagues&rsquo; are
+              not.
             </p>
             <button
               type="button"
@@ -530,8 +539,14 @@ export function DashboardPage() {
           <section className="onboarding-panel">
             <h2>No opportunities match these filters</h2>
             <p>
-              All {total} of them are filtered out by the current view. Clear
-              the filters to see them again.
+              All {total} of the opportunities you can see are filtered out by
+              the current view. Clear the filters to see them again.
+            </p>
+            <p>
+              A view never widens what you can read: it filters the{" "}
+              {total === 1 ? "one opportunity" : `${total} opportunities`} you
+              own or that someone shared with you. The same view can therefore
+              show a colleague rows that are not here.
             </p>
             <button
               type="button"

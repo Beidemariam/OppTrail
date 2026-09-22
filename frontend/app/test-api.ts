@@ -424,6 +424,32 @@ export class FakeApi {
       this.savedViews.push(created);
       return this.json(created, 201);
     }
+    if (segments[2] === "saved-views" && method === "PATCH") {
+      const id = Number(segments[3]);
+      const found = this.savedViews.find((view) => view.id === id);
+      if (!found || found.created_by !== this.user?.id) {
+        return this.json({ detail: "Saved view not found" }, 404);
+      }
+      if (body.is_default) {
+        this.savedViews.forEach((view) => {
+          if (
+            view.entity === found.entity &&
+            view.created_by === found.created_by
+          ) {
+            view.is_default = false;
+          }
+        });
+      }
+      Object.assign(found, {
+        name: body.name ?? found.name,
+        filters: body.filters ?? found.filters,
+        sort: body.sort ?? found.sort,
+        group_by: body.group_by ?? found.group_by,
+        is_shared: body.is_shared ?? found.is_shared,
+        is_default: body.is_default ?? found.is_default,
+      });
+      return this.json(found);
+    }
     if (segments[2] === "saved-views" && method === "DELETE") {
       const id = Number(segments[3]);
       const found = this.savedViews.find((view) => view.id === id);
