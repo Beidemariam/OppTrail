@@ -77,6 +77,21 @@ Specified in `docs/FEATURES.md`, sequenced in `docs/ROADMAP.md`:
 15. **Edit history** — every edit to user content keeps the previous value, with a
     screen the opportunity owner can read it from
 
+## Design bar
+
+Minimal and clean, in every UI decision — not as a finishing pass. The
+reference point the product owner named is ClickUp: sleek, uncluttered,
+nothing on screen that does not earn its place. Two consequences that have
+already come up in review:
+
+- Destructive controls do not sit permanently on screen. Put them behind a
+  manage or edit affordance rather than beside every item.
+- Every control says what it is. A row of unlabelled popovers is a
+  comprehension failure, not a styling preference.
+
+Passing the accessibility audit is the floor, not the goal: milestone 2.5
+closed the contrast ratchet and the result was still judged crude.
+
 ## Non-goals
 
 Would make this a **project management tool**: subtasks, dependencies, Gantt,

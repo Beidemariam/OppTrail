@@ -2267,6 +2267,17 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
         can see" would have prevented the whole confusion.
       - Sequence after 2.7 so the board's own layout work is not disturbed
         mid-flight.
+      **Also fix, from the 2.7 review (D-082):**
+      - **A way to edit and manage views**, and remove the per-view `delete`
+        control from the always-visible list. The reviewer: *"we don't need to
+        have the delete each view control displayed. keep it minimalistic and
+        clean in all UI design decisions."* Destructive actions belong behind a
+        manage affordance — see `AGENTS.md`'s Design bar, added from this note.
+      - **Label the filter and sort controls.** The reviewer: *"the filter and
+        sort windows are just a series of windows and you wouldn't know which
+        one is which by looking at them."* Scoped in rather than deferred
+        because a control nobody can identify is a comprehension failure, not
+        polish.
 
 - [ ] 2.8 Table and calendar view — may slip to Phase 3 per the roadmap's own
       stated risk mitigation; do not treat slipping these as a blocked
@@ -2534,6 +2545,13 @@ this phase reaches `AWAITING_REVIEW` and is accepted, the project is finished.
 
 - [ ] R.1 UX consistency: loading/empty/error states everywhere; responsive to
       tablet; timeline usable on mobile; design tokens applied consistently.
+      **Carries the deliberate refinement pass against `AGENTS.md`'s Design
+      bar** (D-082). The 2.7 review read: *"It has improved significantly but
+      my expectation is UI at the level of ClickUp. Sleek, minimalistic, and
+      clean."* The concrete items from that review are fixed in 2.13; this is
+      the standing gap between "correct and consistent" and "sleek", which is
+      a sustained pass over the whole surface rather than a milestone's worth
+      of fixes, and is the work this milestone exists to do.
       Includes **an AI failure that says which kind of failure it is**
       (**AGENTS.md** v2 scope item 14, added 2026-09-20 — D-052). F.6 gave the
       OpenAI client timeouts, retries and graceful failure, but every cause
