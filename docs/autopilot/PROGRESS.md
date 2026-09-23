@@ -2447,6 +2447,25 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
   calendar all read one flat sorted list); the table's cells are read-only
   (2.11); the calendar has no follow-up layer (Phase 4); and the frontend
   still calls v1 paths (2.9).
+- [ ] 2.9a Reset view state on sign-out (**D-087**, from the 2.8 review).
+      `useLogout` (`lib/queries.ts:335`) clears the session from the cache and
+      nothing else — it never navigates. Because 2.2 deliberately serializes
+      view state into the query string so a reading is linkable
+      (`?opportunities.view=table&opportunities.stage=Negotiation`), signing
+      out of one account and into another **in the same tab** leaves the first
+      user's parameters in the address bar, and the second user's first screen
+      renders through them.
+      The reviewer hit this and reasonably read it as a private saved view
+      leaking to another user. It is not: verified against the running app,
+      Alex receives the private view `Table Negotiation` and Casey does not,
+      so `is_shared` is honoured server-side and permission filtering holds.
+      What carried over was the *view configuration* in the URL, not the saved
+      view. Fix it anyway — one user's working state must not survive into
+      another's session, it makes a private view look exposed, and whoever
+      signs in next lands on a filtered screen with no idea why.
+      Note the comment already on `useLogout` explaining why the *cache* is
+      deliberately not cleared there; the URL reset is a separate concern and
+      should not disturb that reasoning.
 - [ ] 2.9 Finish the `/api/v2` migration and remove v1 (**D-033**, ruled by
       the human 2026-09-17). Milestone 1.3 moved only the collection reads and
       the error envelope to v2 — the mutations and single-resource reads had no
