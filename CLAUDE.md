@@ -88,12 +88,13 @@ websockets, no ORM — raw `sqlite3` with `Row` factory throughout.
 ### Backend layout (`backend/app`)
 
 Routers are split by domain and all mounted in `main.py`: `routes_auth`,
-`routes_opportunities`, `routes_sharing` (also owns the audit log endpoint),
+`routes_opportunities` (also owns the merged activity log),
+`routes_sharing` (also owns the audit log endpoint),
 `routes_timeline` (entries, notes, comments, note versions), `routes_ai`,
 `routes_export`, `routes_notifications`, `routes_search`. Shared logic lives in small
 helper modules rather than a service layer: `permissions.py`, `time_utils.py`,
 `audit_utils.py`, `timeline_utils.py`, `notification_service.py`, `ai_service.py`,
-`export_service.py`, `search.py`.
+`export_service.py`, `search.py`, `versioning.py`, `activity.py`.
 
 ### One API surface
 
@@ -336,7 +337,9 @@ Two separate mechanisms, both required by `AGENTS.md`:
   `timeline_entry_deleted`, `note_deleted`, `comment_deleted`).
 
 Any new non-user-initiated write must be traceable to the action that caused it, and
-any new delete path needs an audit row.
+any new delete path needs an audit row. Both, plus the edit history below, are
+read together by the activity log (milestone 3.0) — a new mechanism that records
+what happened to an opportunity belongs in `app/activity.py` as well.
 
 ### Edit history
 
@@ -373,6 +376,45 @@ editable thing adds a `VersionedTable` there rather than a fourth `INSERT`.
   and the read hook arrives as a prop. Version 1 renders as the whole state,
   every later one as only what it moved. The button sits beside the exports on
   the opportunity, and on each entry and note, rendered only for the owner.
+
+### One activity log
+
+The three mechanisms above answer "who did what when" for one opportunity, and
+until milestone 3.0 no screen joined them: system entries were read inside the
+timeline, audit rows inside the sharing panel, versions one item at a time
+(**D-101**, raised by the human at the Phase 2 gate). `GET
+/api/v2/opportunities/{id}/activity` is the join, in `app/activity.py`, and it
+adds no table — every row it returns already existed.
+
+- **A row keeps the visibility of the source it came from.** System entries go
+  to anyone with access, because they are already on the timeline; audit rows
+  and version rows stay owner-only (`AGENTS.md` invariant 7, D-096). So the
+  route is `require_opportunity_access` and the *rows* are what the role
+  decides — an editor asking what happened gets the events they may read
+  rather than a 403. Widening that (showing a non-owner that an edit
+  happened, which an edit marker already says) is **D-102**, left for the
+  human.
+- **An event appears once.** Sharing writes both a system entry and an audit
+  row, so `SHARE_ACTIONS` is dropped from the feed and the audit log endpoint
+  keeps them. An opportunity edit reaches the feed only if it moved a field
+  other than `stage`, because a stage change already writes its own system
+  entry. Version 1 is excluded everywhere by the join to the preceding
+  version — it is the creation baseline, not an edit (D-097).
+- **The id is `rank * ACTIVITY_STRIDE + source row id`**, five id spaces held
+  a trillion apart, in the spirit of `search.py`'s FTS5 rowid. The rank leads
+  because it is also the tie-break: every timestamp is second-resolution
+  (D-067), so one action's rows share one, and ranking system entry → version
+  → audit row reads them back in the order that action performed them.
+- **Five queries merged in Python, not one `UNION`.** The branches share only
+  actor and time. Each is asked for `limit + 1` rows past the cursor, which is
+  exactly enough for the merged page to be exact, and the whole feed is read
+  through `fetchAll` into `app/ActivityDialog.tsx` — one Modal, one sentence
+  per row from `lib/activity.ts`, which is to this what `lib/notifications.ts`
+  is to the inbox. `lib/domain.ts`'s `VersionField.field` is what keeps the
+  sentence's field names and the history screen's labels the same words.
+
+A comment being posted is the one event no mechanism records (comments are
+immutable, so they have no version table); its deletion is in the audit half.
 
 ### Editing where content is read
 
@@ -602,11 +644,11 @@ until it answers (D-068). A delete or a restore also invalidates
 opportunity the row belongs to.
 
 **Server state does not live in components.** `lib/queries.ts` declares every
-read and write the app makes against the query cache: the query keys, the six
+read and write the app makes against the query cache: the query keys, the seven
 reads, and each mutation with what it invalidates. A view calls a hook; a write
 invalidates a key. Do not add a bare `apiRequest` call to a component — that is
 the pattern ADR 0005 calls blocker B1, and 2.1 is what removed the last of it.
-Four of the reads go through `fetchAll`, which walks `next_cursor` to the last
+Five of the reads go through `fetchAll`, which walks `next_cursor` to the last
 page: the API paginates every collection, and the board's cursor, its bulk
 selection and the calendar's month are all derived from the whole filtered
 list rather than from a window of it (**D-093**). The other two ask for one
@@ -633,6 +675,9 @@ The units worth testing directly, each in its own module:
   `canChangeItem`, the client mirror of `backend/app/permissions.py`. They decide
   which buttons are offered, never who is allowed to do what.
 - `lib/notifications.ts` — the sentence shown for each notification type.
+- `lib/activity.ts` — the same job for the activity log's three kinds of
+  event, and `versionFieldLabel`, which reads a changed column's name off the
+  history screen's own declaration rather than a second list.
 - `lib/domain.ts` — the fixed stage list, the entry types, the short names for
   the generated schemas, and the two view states (`TimelineFilters`,
   `OpportunityViewState`) with `applyOpportunityView`, which filters and sorts

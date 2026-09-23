@@ -193,6 +193,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/opportunities/{opportunity_id}/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Activity Page
+         * @description Who did what when, in one chronological list (milestone 3.0, D-101).
+         *
+         *     Open to every role, and the *rows* are what the role decides: system
+         *     entries for anyone with access, plus the audit and version halves for the
+         *     owner, each keeping the rule it already had (`app/activity.py`). That is
+         *     why this is not `require_opportunity_owner` — an editor asking what
+         *     happened gets the events they may read rather than a 403.
+         */
+        get: operations["list_activity_page_api_v2_opportunities__opportunity_id__activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/opportunities/bulk": {
         parameters: {
             query?: never;
@@ -737,6 +763,86 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * ActivityAuditEvent
+         * @description An audit log row — a deletion or a restore. Owner-only, like the log.
+         */
+        ActivityAuditEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            source: "audit_log";
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "opportunity_deleted" | "opportunity_restored" | "share_added" | "share_role_changed" | "share_removed" | "timeline_entry_deleted" | "timeline_entry_restored" | "note_deleted" | "note_restored" | "comment_deleted" | "comment_restored";
+            /** Detail */
+            detail: components["schemas"]["AuditDetailOpportunityDeleted"] | components["schemas"]["AuditDetailOpportunityRestored"] | components["schemas"]["AuditDetailShareAdded"] | components["schemas"]["AuditDetailShareRoleChanged"] | components["schemas"]["AuditDetailShareRemoved"] | components["schemas"]["AuditDetailTimelineEntryDeleted"] | components["schemas"]["AuditDetailTimelineEntryRestored"] | components["schemas"]["AuditDetailNoteDeleted"] | components["schemas"]["AuditDetailNoteRestored"] | components["schemas"]["AuditDetailCommentDeleted"] | components["schemas"]["AuditDetailCommentRestored"];
+        };
+        /**
+         * ActivityEditEvent
+         * @description A version row, read as the edit that produced it.
+         *
+         *     `changed_fields` names the columns this version moved against the one
+         *     before it, in the order `app/versioning.py` declares them. The values
+         *     themselves are not here: what they said is the history screen's answer
+         *     (`GET .../versions`), and this row is the occurrence.
+         */
+        ActivityEditEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            source: "version";
+            /**
+             * Target
+             * @enum {string}
+             */
+            target: "opportunity" | "timeline_entry" | "note";
+            /** Target Id */
+            target_id: number;
+            /** Version Number */
+            version_number: number;
+            /** Changed Fields */
+            changed_fields: string[];
+        };
+        /** ActivityEventPublic */
+        ActivityEventPublic: {
+            /** Id */
+            id: number;
+            /** Opportunity Id */
+            opportunity_id: number;
+            /** Occurred At */
+            occurred_at: string;
+            /** Actor Id */
+            actor_id: number | null;
+            /** Actor Name */
+            actor_name: string | null;
+            /** Detail */
+            detail: components["schemas"]["ActivitySystemEvent"] | components["schemas"]["ActivityAuditEvent"] | components["schemas"]["ActivityEditEvent"];
+        };
+        /**
+         * ActivitySystemEvent
+         * @description A system timeline entry — created, stage changed, sharing changed.
+         *
+         *     Carries the sentence the timeline already shows, so the feed and the
+         *     timeline say the same thing about the same event.
+         */
+        ActivitySystemEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            source: "system_entry";
+            /** Entry Id */
+            entry_id: number;
+            /** Title */
+            title: string;
+            /** Body */
+            body: string;
+        };
         /** AiAskRequest */
         AiAskRequest: {
             /** Question */
@@ -1258,6 +1364,13 @@ export interface components {
             editor_name: string;
             /** Created At */
             created_at: string;
+        };
+        /** Page[ActivityEventPublic] */
+        Page_ActivityEventPublic_: {
+            /** Items */
+            items: components["schemas"]["ActivityEventPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
         };
         /** Page[AuditLogEntryPublic] */
         Page_AuditLogEntryPublic_: {
@@ -2050,6 +2163,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Page_OpportunityVersionPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_activity_page_api_v2_opportunities__opportunity_id__activity_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_ActivityEventPublic_"];
                 };
             };
             /** @description Validation Error */

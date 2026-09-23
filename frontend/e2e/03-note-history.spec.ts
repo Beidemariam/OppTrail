@@ -117,3 +117,72 @@ test("an opportunity's history keeps the value an edit replaced", async ({
   await expect(versions.first()).toContainText("USD 485,000");
   await expect(versions.nth(1)).toContainText("USD 485,000 to USD 250,000");
 });
+
+/**
+ * Milestone 3.0: the three mechanisms read as one list.
+ *
+ * The point of the journey is that a reader asking "who did what when" finds
+ * one screen rather than three — so this drives an event of each kind through
+ * the real stack (a system entry from creating the deal, a version row from
+ * editing it, an audit row from deleting an entry) and reads them back off
+ * the one dialog, in order.
+ */
+test("the activity log merges what was recorded, edited and deleted", async ({
+  page,
+}) => {
+  const suffix = Math.random().toString(36).slice(2, 8);
+  const opportunity = `Merged log ${suffix}`;
+
+  await signUp(page, `activity-${suffix}@opptrail.test`, "Activity Tester");
+  await createOpportunity(page, opportunity, {
+    account: "Umbrella",
+    value: "90000",
+    currency: "USD",
+  });
+  await openTimeline(page, opportunity);
+
+  await entryForm(page).getByLabel("Title").fill("Kickoff call");
+  await entryForm(page).getByRole("button", { name: "Add Entry" }).click();
+  const kickoff = entry(page, "Kickoff call");
+  await expect(kickoff).toBeVisible();
+
+  // An edit to a field the timeline does not narrate: nothing but the version
+  // row records this one, which is what made it invisible before 3.0.
+  const form = page.locator("form.opportunity-form");
+  await page
+    .locator("article.opportunity-card")
+    .filter({ hasText: opportunity })
+    .first()
+    .getByRole("button", { name: "Edit" })
+    .click();
+  await form.getByLabel("Value").fill("120000");
+  await form.getByRole("button", { name: "Save changes" }).click();
+  await expect(form).toBeHidden();
+
+  await kickoff.getByRole("button", { name: "Delete" }).first().click();
+  await expect(page.getByRole("heading", { name: "Kickoff call" })).toHaveCount(
+    0,
+  );
+
+  // Exact: since 2.11 the heading's own fields are edit triggers named by
+  // their value (D-100), so a deal whose name contains this word would
+  // otherwise match two buttons in this region.
+  await page
+    .locator(".timeline-heading")
+    .getByRole("button", { name: "Activity", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByRole("heading", { name: "Activity log" }),
+  ).toBeVisible();
+
+  const events = dialog.locator("li.activity-event");
+  await expect(events).toHaveCount(3);
+  await expect(events.first()).toContainText(
+    `${opportunity} was created for Umbrella.`,
+  );
+  await expect(events.nth(1)).toContainText(
+    "changed Value on this opportunity",
+  );
+  await expect(events.nth(2)).toContainText("deleted the entry");
+});

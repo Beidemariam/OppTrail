@@ -229,6 +229,23 @@ def test_seeded_permissions_match_the_printed_tour(tmp_path) -> None:
             "162000",
         ]
         assert blair.get(f"/api/v2/opportunities/{northwind}/versions").status_code == 403
+
+        # The activity tour line (milestone 3.0): the three mechanisms in one
+        # list, and offered to an editor rather than refused — with the rows
+        # their role may read, which is the system-entry half.
+        feed = alex.get(f"/api/v2/opportunities/{northwind}/activity")
+        assert feed.status_code == 200
+        alex_sources = {event["detail"]["source"] for event in feed.json()["items"]}
+        assert alex_sources == {"system_entry", "version"}
+
+        blair_feed = blair.get(f"/api/v2/opportunities/{northwind}/activity")
+        assert blair_feed.status_code == 200
+        assert {event["detail"]["source"] for event in blair_feed.json()["items"]} == {
+            "system_entry"
+        }
+
+        umbrella_feed = alex.get(f"/api/v2/opportunities/{umbrella}/activity").json()["items"]
+        assert "audit_log" in {event["detail"]["source"] for event in umbrella_feed}
     finally:
         for client in (alex, blair, casey, dana):
             client.__exit__(None, None, None)

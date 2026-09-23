@@ -1,7 +1,7 @@
 import json
 from datetime import date
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, field_serializer, field_validator, model_validator
 
@@ -541,6 +541,70 @@ class AuditLogEntryPublic(BaseModel):
     action: AuditAction
     detail: AuditDetail
     created_at: str
+
+
+# --- Unified activity log (milestone 3.0) ----------------------------------
+
+# One row of the merged log, discriminated on which mechanism recorded it
+# (`app/activity.py`). The three shapes are kept apart rather than flattened
+# into one wide model with everything nullable: a reader of the generated
+# client should not have to discover by experiment that `version_number` is
+# absent on an audit row.
+
+
+class ActivitySystemEvent(BaseModel):
+    """A system timeline entry — created, stage changed, sharing changed.
+
+    Carries the sentence the timeline already shows, so the feed and the
+    timeline say the same thing about the same event.
+    """
+
+    source: Literal["system_entry"] = "system_entry"
+    entry_id: int
+    title: str
+    body: str
+
+
+class ActivityAuditEvent(BaseModel):
+    """An audit log row — a deletion or a restore. Owner-only, like the log."""
+
+    source: Literal["audit_log"] = "audit_log"
+    action: AuditAction
+    detail: AuditDetail
+
+
+class ActivityEditEvent(BaseModel):
+    """A version row, read as the edit that produced it.
+
+    `changed_fields` names the columns this version moved against the one
+    before it, in the order `app/versioning.py` declares them. The values
+    themselves are not here: what they said is the history screen's answer
+    (`GET .../versions`), and this row is the occurrence.
+    """
+
+    source: Literal["version"] = "version"
+    target: Literal["opportunity", "timeline_entry", "note"]
+    target_id: int
+    version_number: int
+    changed_fields: list[str]
+
+
+# Discriminated rather than inferred: the tag is what a client switches on,
+# and it is what puts a `oneOf` with a mapping into the OpenAPI schema so the
+# generated TypeScript narrows on `detail.source` instead of on field presence.
+ActivityDetail = Annotated[
+    ActivitySystemEvent | ActivityAuditEvent | ActivityEditEvent,
+    Field(discriminator="source"),
+]
+
+
+class ActivityEventPublic(BaseModel):
+    id: int
+    opportunity_id: int
+    occurred_at: str
+    actor_id: int | None
+    actor_name: str | None
+    detail: ActivityDetail
 
 
 class AiAskRequest(BaseModel):

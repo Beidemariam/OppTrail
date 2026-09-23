@@ -349,6 +349,17 @@ MATRIX: dict[Endpoint, Case] = {
         url=lambda world: f"/api/v2/notes/{world.note_id}/versions",
         notes="Open to every role until 2.10 gave the three histories one rule.",
     ),
+    # --- Unified activity log (milestone 3.0) -----------------------------
+    Endpoint("GET", "/api/v2/opportunities/{opportunity_id}/activity"): Case(
+        expected=scoped(viewer=200, editor=200, owner=200),
+        url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/activity",
+        notes=(
+            "Answered for every role, and the role decides the rows rather "
+            "than the status: system entries for anyone with access, the "
+            "audit and version halves only for the owner (D-101). "
+            "tests/test_activity.py holds which rows each one gets."
+        ),
+    ),
     Endpoint("GET", "/api/v2/notifications"): Case(
         expected=authenticated_only(200),
         url=lambda world: "/api/v2/notifications",

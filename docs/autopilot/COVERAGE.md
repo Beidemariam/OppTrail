@@ -1442,3 +1442,44 @@ Authorization-matrix endpoints: 47 (Phase 1 gate) → 52 (saved views, the
 four restore routes, the bulk-action endpoint, three edit-history reads).
 
 Full detail and the try-it steps: `docs/autopilot/reviews/phase-2-summary.md`.
+
+## Phase 3 — milestone 3.0 (one activity log per opportunity)
+
+One new backend module (`app/activity.py`, 100% line and branch), one new
+frontend module (`lib/activity.ts`) and one new component
+(`app/ActivityDialog.tsx`). No migration and no new table — the milestone is a
+read over rows that already existed, which is also why the coverage picture
+barely moves: the new code is small and entirely exercised.
+
+```
+backend:  ruff check, ruff format --check, mypy app tools    all clean
+          355 passed (338 at the Phase 2 gate; +16 in the new
+          tests/test_activity.py, +1 authorization-matrix endpoint)
+          97.36% combined line+branch (--cov-fail-under=90 enforced)
+          app/activity.py                    100% line, 100% branch
+          the six ≥95%-branch modules (permissions, audit_utils, auth,
+          soft_delete, routes_ai, versioning) all still at 100%
+          pip-audit                                          no known vulnerabilities
+frontend: tsc --noEmit, eslint, prettier --check              all clean
+          (the same 2 pre-existing warnings, 0 errors)
+          442 passed (429 at the Phase 2 gate; +10 lib/activity.test.ts,
+          +3 app/Activity.test.tsx)
+          97.12% statements / 91.27% branch / 95.75% functions / 97.09% line
+          (thresholds 96/96/95/90 all met)
+          npm audit                                           0 vulnerabilities
+contract: scripts/generate-api-client.sh --check               up to date
+e2e:      58 passed (17 specs; +1 journey in 03-note-history.spec.ts),
+          axe clean, the deferred-rule ratchet still empty
+docker:   deferred to the host half — scripts/autopilot-gate.sh 3
+          (no Docker socket in this sandbox, per sandbox/README.md)
+```
+
+Coverage floors (brief §6.2) all met: backend ≥ 90% line / ≥ 80% branch
+(97.36% combined); frontend ≥ 80% line (97.09%); the ≥95%-branch modules at
+100%.
+
+Authorization-matrix endpoints: 52 (Phase 2 gate) → 53
+(`GET /api/v2/opportunities/{id}/activity`, the one route this milestone adds).
+It is the first read in the matrix whose expectation is 200 for every role and
+whose *rows* differ by role instead — `tests/test_activity.py` is where that
+distinction is held, since the matrix asserts status codes.

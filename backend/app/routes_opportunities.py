@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from .activity import fetch_activity_page
 from .audit_utils import create_audit_log_entry
 from .auth import get_current_user
 from .database import db_connection
@@ -10,6 +11,7 @@ from .pagination import Page, PageRequest, cursor_clause, page_params, split_pag
 from .permissions import Role, require_opportunity_access, require_opportunity_owner
 from .schemas import (
     STAGES,
+    ActivityEventPublic,
     BulkActionResponse,
     BulkActionResultItem,
     BulkOpportunityAction,
@@ -383,6 +385,30 @@ def list_opportunity_versions_page(
 
     rows, next_cursor = split_page(rows, page.limit, lambda row: (row["version_number"], row["id"]))
     return Page(items=[opportunity_version_from_row(row) for row in rows], next_cursor=next_cursor)
+
+
+@router.get(
+    "/opportunities/{opportunity_id}/activity",
+    response_model=Page[ActivityEventPublic],
+)
+def list_activity_page(
+    opportunity_id: int,
+    page: PageRequest = Depends(page_params),
+    user: sqlite3.Row = Depends(get_current_user),
+) -> Page[ActivityEventPublic]:
+    """Who did what when, in one chronological list (milestone 3.0, D-101).
+
+    Open to every role, and the *rows* are what the role decides: system
+    entries for anyone with access, plus the audit and version halves for the
+    owner, each keeping the rule it already had (`app/activity.py`). That is
+    why this is not `require_opportunity_owner` — an editor asking what
+    happened gets the events they may read rather than a 403.
+    """
+    with db_connection() as connection:
+        role = require_opportunity_access(connection, opportunity_id, int(user["id"]))
+        items, next_cursor = fetch_activity_page(connection, opportunity_id, role, page)
+
+    return Page(items=items, next_cursor=next_cursor)
 
 
 @router.delete("/opportunities/{opportunity_id}", status_code=status.HTTP_204_NO_CONTENT)

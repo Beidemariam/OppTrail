@@ -157,6 +157,12 @@ across all of it (`docs/ARCHITECTURE.md`, "Pagination" / "Error shapes"):
 **Audit Log**
 - `GET /api/v2/opportunities/{id}/audit-log` — owner only
 
+**Activity log**
+- `GET /api/v2/opportunities/{id}/activity` — the system entries, the audit
+  rows and the version rows as one chronological list (milestone 3.0). Any
+  role may ask; each row keeps the visibility of the source it came from, so
+  a non-owner is answered with the system-entry half rather than refused.
+
 **Search**
 - `GET /api/v2/search` — ranked, snippeted matches in entries, notes and
   comments across every opportunity the caller can read, with the timeline's

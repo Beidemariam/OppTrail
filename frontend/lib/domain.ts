@@ -93,21 +93,37 @@ export type TimelineEntryVersion =
   components["schemas"]["TimelineEntryVersionPublic"];
 export type NoteVersion = components["schemas"]["NoteVersionPublic"];
 
-/** One versioned field: what to call it, and how to read it off a version. */
+/**
+ * One versioned field: which column it is, what to call it, and how to read it
+ * off a version.
+ *
+ * `field` is the column name `backend/app/versioning.py` snapshots under. The
+ * history screen never needs it — it reads values — but the activity log is
+ * given only the names of the columns an edit moved (milestone 3.0), and
+ * naming them a second time there is how the two screens would come to call
+ * the same field different things.
+ */
 export interface VersionField<VersionT> {
+  field: string;
   label: string;
   read: (version: VersionT) => string;
 }
 
 export const opportunityVersionFields: VersionField<OpportunityVersion>[] = [
-  { label: "Name", read: (version) => version.name },
-  { label: "Account", read: (version) => version.account_name },
+  { field: "name", label: "Name", read: (version) => version.name },
   {
+    field: "account_name",
+    label: "Account",
+    read: (version) => version.account_name,
+  },
+  {
+    field: "value",
     label: "Value",
     read: (version) => formatMoney(version.currency, version.value),
   },
-  { label: "Stage", read: (version) => version.stage },
+  { field: "stage", label: "Stage", read: (version) => version.stage },
   {
+    field: "expected_close_date",
     label: "Close date",
     read: (version) => version.expected_close_date ?? "Not set",
   },
@@ -115,18 +131,31 @@ export const opportunityVersionFields: VersionField<OpportunityVersion>[] = [
 
 export const timelineEntryVersionFields: VersionField<TimelineEntryVersion>[] =
   [
-    { label: "Type", read: (version) => entryTypeLabel(version.type) },
-    { label: "Title", read: (version) => version.title },
-    { label: "Details", read: (version) => version.body || "No details" },
-    { label: "Event time", read: (version) => version.event_timestamp },
     {
+      field: "type",
+      label: "Type",
+      read: (version) => entryTypeLabel(version.type),
+    },
+    { field: "title", label: "Title", read: (version) => version.title },
+    {
+      field: "body",
+      label: "Details",
+      read: (version) => version.body || "No details",
+    },
+    {
+      field: "event_timestamp",
+      label: "Event time",
+      read: (version) => version.event_timestamp,
+    },
+    {
+      field: "follow_up_date",
       label: "Follow up",
       read: (version) => version.follow_up_date ?? "Not set",
     },
   ];
 
 export const noteVersionFields: VersionField<NoteVersion>[] = [
-  { label: "Body", read: (version) => version.body },
+  { field: "body", label: "Body", read: (version) => version.body },
 ];
 
 /**

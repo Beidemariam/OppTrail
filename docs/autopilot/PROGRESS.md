@@ -1,4 +1,4 @@
-STATUS: AWAITING_REVIEW phase=2
+STATUS: IN_PROGRESS phase=3
 
 # Autopilot Progress
 
@@ -18,6 +18,10 @@ five documentation commits from the human (invariant 8, in-place editing and
 timeline order, the AI failure message, the 2.12 test split, and the Phase 2
 milestone reordering), so the base commit for `autopilot/phase-2` is `c173946`
 on `main`, not the tag.
+
+Phase 2 was accepted: `phase-2-accepted` exists at `cc8aa21`, which is also
+where `main` and `autopilot/phase-2` sit. Base commit for `autopilot/phase-3`:
+`cc8aa21` on `main`.
 
 ---
 
@@ -3068,7 +3072,7 @@ each other.
 
 ### Milestones
 
-- [ ] 3.0 One activity log per opportunity (**D-098**, raised by the human at
+- [x] 3.0 One activity log per opportunity (**D-101**, raised by the human at
       the Phase 2 gate). Today "who did what when" is scattered across three
       mechanisms that never meet: **system timeline entries** (created, stage
       changed, sharing changed), **audit log rows** (deletions and share
@@ -3124,6 +3128,63 @@ each other.
       `export_service.render_export_html` currently escapes bodies as plain
       text).
 - [ ] 3.6 If table/calendar views slipped from Phase 2, land them here.
+
+### 3.0 One activity log per opportunity (D-101) — **DONE**
+
+`GET /api/v2/opportunities/{id}/activity` merges the three mechanisms that
+record what happens to an opportunity, and `app/ActivityDialog.tsx` is the one
+screen that reads them. No migration: every row it returns already existed —
+the milestone is a read and a join, which is why D-101 chose it over widening
+the audit log.
+
+- [x] **Backend** — `backend/app/activity.py` (new): five queries, one merge.
+      System timeline entries, audit rows, and the three version tables read
+      as edits. Each source is asked for `limit + 1` rows past the cursor,
+      which is exactly enough for the merged page to be exact; a `UNION` was
+      rejected because the branches share only actor and time and would have
+      to be projected through anonymous columns and unpacked again.
+- [x] **Who sees what** (**D-102**, the design question D-101 named) — each
+      row keeps the visibility of its source: system entries for anyone with
+      access, audit and version rows for the owner. The route is
+      `require_opportunity_access`, so an editor is answered with the events
+      they may read rather than refused. Recorded `needs human review: Y`
+      with the alternative (widen the edit *occurrence* to every reader,
+      which an edit marker already discloses) — that is a product call, not
+      one to take between gates.
+- [x] **Every event appears once** (**D-103**) — three named exclusions: the
+      `share_*` audit rows (the system entry beside them says the same thing
+      to more readers), an opportunity version that moved nothing but
+      `stage` (its `stage_change` system entry already reports it), and
+      version 1 everywhere (the creation baseline, not an edit — D-097).
+- [x] **One order across five id spaces** (**D-104**) — the feed id is
+      `rank * ACTIVITY_STRIDE + source row id`. The first implementation used
+      `search.py`'s `row id * base + code` shape and read wrongly inside a
+      second: the E2E journey showed an entry deleted before the opportunity
+      was created, because second-resolution timestamps (D-067) tie and the
+      tie-break was "whichever table had the smaller row id". Ranking the
+      source first — system entry, versions, audit row — puts one action's
+      rows in the order it performed them.
+- [x] **Schemas** — `ActivitySystemEvent` / `ActivityAuditEvent` /
+      `ActivityEditEvent`, discriminated on `source`, so the generated client
+      narrows on `detail.source` rather than on field presence. Regenerated
+      `frontend/lib/api-types.ts`.
+- [x] **Frontend** — `lib/activity.ts` writes the sentence (the same job
+      `lib/notifications.ts` does for the inbox), `lib/queries.ts` gains
+      `useActivity` and invalidates the feed wherever it already invalidated
+      a history or an audit log, and the Activity button sits beside the
+      exports for every role. `VersionField` gained `field` so the sentence's
+      field names come from the history screen's own declaration rather than
+      a second list of labels.
+- [x] **Tests** — `backend/tests/test_activity.py` (16), the
+      authorization-matrix row, `lib/activity.test.ts` (10),
+      `app/Activity.test.tsx` (3), and a third journey in
+      `e2e/03-note-history.spec.ts` driving one event of each kind through
+      the real stack. `make seed`'s printed tour gained the activity
+      paragraph and `test_seed.py` holds it true.
+
+Gate: `make check` green (Docker half deferred to the host per the split
+gate). Backend 338 → 355 tests, frontend 429 → 442, E2E 57 → 58,
+authorization-matrix endpoints 52 → 53. Figures in `COVERAGE.md`.
 
 ### Acceptance
 

@@ -16,6 +16,7 @@ import {
   type UseMutationResult,
 } from "@tanstack/react-query";
 
+import type { ActivityEvent } from "./activity";
 import { apiRequest } from "./api";
 import type { components } from "./api-types";
 import type {
@@ -119,6 +120,16 @@ export const keys = {
    * honest without each of them naming a key.
    */
   allVersions: ["versions"] as const,
+  /** One opportunity's merged activity log (milestone 3.0). */
+  activity: (opportunityId: number) => ["activity", opportunityId] as const,
+  /**
+   * Every opportunity's activity log. The feed merges the system entries, the
+   * audit rows and the version rows (`backend/app/activity.py`), so every
+   * write that invalidates one of those three invalidates this beside it —
+   * and like `allAuditLogs`, a delete knows its own id rather than which
+   * opportunity it hung under.
+   */
+  allActivity: ["activity"] as const,
   aiConversation: (opportunityId: number) =>
     ["ai-conversation", opportunityId] as const,
   savedViews: (entity: SavedViewEntity) => ["saved-views", entity] as const,
@@ -195,6 +206,25 @@ export function useAuditLog(opportunityId: number, enabled: boolean) {
     queryFn: () =>
       fetchAll<AuditLogEntry>(
         `/api/v2/opportunities/${opportunityId}/audit-log`,
+      ),
+  });
+}
+
+/**
+ * The merged activity log for one opportunity (milestone 3.0, D-101).
+ *
+ * Read whole, like the audit log beside it: the feed is a narrative and the
+ * dialog that shows it scrolls rather than paging. `enabled` is the dialog
+ * being open, so a timeline costs no request until someone asks what
+ * happened.
+ */
+export function useActivity(opportunityId: number, enabled: boolean) {
+  return useQuery<ActivityEvent[]>({
+    queryKey: keys.activity(opportunityId),
+    enabled,
+    queryFn: () =>
+      fetchAll<ActivityEvent>(
+        `/api/v2/opportunities/${opportunityId}/activity`,
       ),
   });
 }
@@ -463,6 +493,7 @@ export function useSaveOpportunity() {
         keys.opportunities,
         keys.allTimelines,
         keys.allVersions,
+        keys.allActivity,
       ),
   });
 }
@@ -510,6 +541,7 @@ export function useEditOpportunity() {
         keys.opportunities,
         keys.allTimelines,
         keys.allVersions,
+        keys.allActivity,
       ),
   });
 }
@@ -532,6 +564,7 @@ export function useDeleteOpportunity() {
         keys.opportunities,
         keys.allTimelines,
         keys.allAuditLogs,
+        keys.allActivity,
       ),
   });
 }
@@ -560,6 +593,7 @@ export function useRestoreOpportunity() {
     keys.opportunities,
     keys.allTimelines,
     keys.allAuditLogs,
+    keys.allActivity,
   );
 }
 
@@ -569,6 +603,7 @@ export function useRestoreTimelineEntry() {
     keys.allTimelines,
     keys.opportunities,
     keys.allAuditLogs,
+    keys.allActivity,
   );
 }
 
@@ -577,6 +612,7 @@ export function useRestoreNote() {
     (id) => `/api/v2/notes/${id}/restore`,
     keys.allTimelines,
     keys.allAuditLogs,
+    keys.allActivity,
   );
 }
 
@@ -585,6 +621,7 @@ export function useRestoreComment() {
     (id) => `/api/v2/comments/${id}/restore`,
     keys.allTimelines,
     keys.allAuditLogs,
+    keys.allActivity,
   );
 }
 
@@ -618,6 +655,7 @@ export function useBulkOpportunityAction() {
         keys.allTimelines,
         keys.allAuditLogs,
         keys.allVersions,
+        keys.allActivity,
       ),
   });
 }
@@ -657,6 +695,7 @@ export function useSaveTimelineEntry(opportunityId: number) {
         keys.allTimelines,
         keys.opportunities,
         keys.allVersions,
+        keys.allActivity,
       ),
   });
 }
@@ -688,6 +727,7 @@ export function useDeleteTimelineEntry() {
         keys.allTimelines,
         keys.opportunities,
         keys.allAuditLogs,
+        keys.allActivity,
       ),
   });
 }
@@ -729,7 +769,8 @@ export function useSaveNote() {
         ),
       ),
     onError: (_error, _variables, snapshot) => rollback(client, snapshot),
-    onSettled: () => invalidate(client, keys.allTimelines, keys.allVersions),
+    onSettled: () =>
+      invalidate(client, keys.allTimelines, keys.allVersions, keys.allActivity),
   });
 }
 
@@ -745,7 +786,13 @@ export function useDeleteNote() {
         ),
       ),
     onError: (_error, _noteId, snapshot) => rollback(client, snapshot),
-    onSettled: () => invalidate(client, keys.allTimelines, keys.allAuditLogs),
+    onSettled: () =>
+      invalidate(
+        client,
+        keys.allTimelines,
+        keys.allAuditLogs,
+        keys.allActivity,
+      ),
   });
 }
 
@@ -776,7 +823,13 @@ export function useDeleteComment() {
         ),
       ),
     onError: (_error, _commentId, snapshot) => rollback(client, snapshot),
-    onSettled: () => invalidate(client, keys.allTimelines, keys.allAuditLogs),
+    onSettled: () =>
+      invalidate(
+        client,
+        keys.allTimelines,
+        keys.allAuditLogs,
+        keys.allActivity,
+      ),
   });
 }
 
@@ -796,6 +849,7 @@ function useSharingWrite<TVariables>(
         client,
         keys.shares(opportunityId),
         keys.auditLog(opportunityId),
+        keys.activity(opportunityId),
         keys.allTimelines,
       ),
   });

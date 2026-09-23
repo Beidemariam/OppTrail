@@ -511,7 +511,17 @@ def main(argv: list[str] | None = None) -> int:
         "  185,000 at Qualification, then Negotiation, then 162,000, each with\n"
         "  who changed it and when. The Proposal sent entry has its own History\n"
         "  button with the ARR figure it used to carry, and the edited note on\n"
-        "  it has one too. Blair, an editor, is offered none of the three."
+        "  it has one too. Blair, an editor, is offered none of the three.\n"
+        "\n"
+        "  The activity log (milestone 3.0) is the one place those three\n"
+        "  mechanisms meet. Press Activity beside History on Northwind: the\n"
+        "  creation, the stage change and the sharing as the timeline records\n"
+        "  them, with 'changed Value on this opportunity' and the note and\n"
+        "  entry edits in the same list. Umbrella discovery shows the audit\n"
+        "  half - an entry deleted and restored - in among its own. Unlike\n"
+        "  History, this one is offered to Blair and Casey too; what they are\n"
+        "  given is the events their role may already read, which is the\n"
+        "  system entries."
     )
     return 0
 

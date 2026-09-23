@@ -27,6 +27,7 @@ export interface FakeApiOptions {
   notifications?: Notification[];
   shares?: Share[];
   auditLog?: AuditEntry[];
+  activity?: ActivityEvent[];
   searchResults?: SearchResult[];
   savedViews?: SavedView[];
   /** Paths that should fail, mapped to `[status, detail]`. */
@@ -116,6 +117,9 @@ interface AuditEntry {
   detail: Record<string, unknown>;
   created_at: string;
 }
+
+/** The merged activity log's row shape, straight from the generated client. */
+type ActivityEvent = components["schemas"]["ActivityEventPublic"];
 
 export const ALEX = {
   id: 1,
@@ -258,6 +262,7 @@ export class FakeApi {
   notifications: Notification[];
   shares: Share[];
   auditLog: AuditEntry[];
+  activity: ActivityEvent[];
   searchResults: SearchResult[];
   savedViews: SavedView[];
   failures: Record<string, [number, string]>;
@@ -297,6 +302,7 @@ export class FakeApi {
     this.notifications = options.notifications ?? [];
     this.shares = options.shares ?? [];
     this.auditLog = options.auditLog ?? [];
+    this.activity = options.activity ?? [];
     this.searchResults = options.searchResults ?? [];
     this.savedViews = options.savedViews ?? [];
     this.failures = options.failures ?? {};
@@ -570,6 +576,9 @@ export class FakeApi {
         this.entrySnapshot(created),
       );
       return this.json(created, 201);
+    }
+    if (segments[2] === "activity") {
+      return this.page(this.activity, path);
     }
     if (segments[2] === "shares" || segments[2] === "audit-log") {
       if (segments[2] === "audit-log") {

@@ -24,6 +24,7 @@ import {
   useTimeline,
 } from "../lib/queries";
 import { paramsWithState, stateFromParams } from "../lib/viewState";
+import { ActivityButton } from "./ActivityDialog";
 import { AiSidebar } from "./AiSidebar";
 import { HistoryButton } from "./HistoryDialog";
 import { OpportunityField, useOpportunityFieldSave } from "./InlineEdit";
@@ -234,8 +235,12 @@ function TimelineHeading({
             {format.toUpperCase()}
           </a>
         ))}
+        {/* Every role: the log answers with the events the reader's role may
+            see rather than refusing them (milestone 3.0, D-101). */}
+        <ActivityButton opportunityId={opportunity.id} />
         {/* Owner-only, like the sharing panel and the audit log below it
-            (milestone 2.10, D-096). */}
+            (milestone 2.10, D-096). This one is the field-by-field record
+            behind the "changed Name and Value" line the activity log shows. */}
         {canManage && (
           <HistoryButton
             title={`History of ${opportunity.name}`}
