@@ -138,6 +138,36 @@ describe("the command palette", () => {
     expect(api.callsTo("POST", "/api/auth/logout")).toHaveLength(1);
   });
 
+  // Milestone 2.9a / D-091: the same reset the top bar's sign-out button
+  // performs, from the palette's own copy of the action.
+  it("resets the view state in the URL when signing out from the palette", async () => {
+    await renderDashboard(
+      { opportunities: [northwind] },
+      "/?opportunities.view=table",
+    );
+    expect(screen.getByRole("button", { name: "Table" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    await userEvent.keyboard(CTRL_K);
+    await userEvent.click(screen.getByRole("option", { name: "Sign out" }));
+    await screen.findByRole("button", { name: "Create account" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    await userEvent.type(screen.getByLabelText("Email"), "casey@opptrail.test");
+    await userEvent.type(screen.getByLabelText("Password"), "password123");
+    await userEvent.click(
+      screen.getAllByRole("button", { name: "Sign in" })[1],
+    );
+
+    await screen.findByRole("heading", { name: "Opportunities" });
+    expect(screen.getByRole("button", { name: "Board" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
   it("stays shut for a signed-out visitor", async () => {
     renderApp();
     await screen.findByRole("button", { name: "Create account" });

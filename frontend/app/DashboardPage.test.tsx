@@ -304,6 +304,37 @@ describe("the dashboard", () => {
     expect(screen.queryByText("Northwind rollout")).not.toBeInTheDocument();
   });
 
+  // Milestone 2.9a / D-091: 2.2 put the applied view in the query string on
+  // purpose, so it survives a reload. It must not survive a sign-out too —
+  // otherwise whoever signs in next, in the same tab, lands on the previous
+  // reader's filtered view with no idea why.
+  it("resets the view state in the URL on sign-out, for the next reader in this tab", async () => {
+    await renderDashboard(
+      { opportunities: [anOpportunity()] },
+      "/?opportunities.view=table",
+    );
+    expect(screen.getByRole("button", { name: "Table" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    await screen.findByRole("button", { name: "Create account" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    await userEvent.type(screen.getByLabelText("Email"), "casey@opptrail.test");
+    await userEvent.type(screen.getByLabelText("Password"), "password123");
+    await userEvent.click(
+      screen.getAllByRole("button", { name: "Sign in" })[1],
+    );
+
+    await screen.findByRole("heading", { name: "Opportunities" });
+    expect(screen.getByRole("button", { name: "Board" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
   it("reports an opportunity list that will not load", async () => {
     renderApp({
       user: ALEX,

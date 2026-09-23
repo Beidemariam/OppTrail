@@ -1184,3 +1184,47 @@ for the three views that were already shipping and correct for the fourth. The
 guard test is `keeps a selection made in another view, even when the month
 hides it` in `app/DashboardPage.test.tsx`, confirmed to fail against the
 unfixed code first (brief §6.5): `0 selected` where `1 selected` was expected.
+
+## Phase 2 — milestone 2.9a (reset view state on sign-out, D-091)
+
+```
+backend:  unchanged — 305 passed, 97.47% combined line+branch. No route, no
+          schema, no permission touched: this is a frontend-only navigation
+          fix.
+frontend: 393 passed (was 391), 96.89% statements, 96.85% line, 95.60%
+          functions, 90.18% branch — against the 96/96/95/89 floor 2.8 set;
+          no threshold change needed for two call sites and two tests.
+          app/TopBar.tsx               100%   line (unchanged; new branch)
+          app/CommandPalette.tsx       97.3%  line, 90.9% branch
+e2e:      unchanged at 49 — no new route, no new journey; sign-out is not one
+          of brief §6.3's critical journeys.
+docker:   deferred to the host half — scripts/autopilot-gate.sh 2
+          (no Docker socket in this sandbox, per sandbox/README.md)
+```
+
+`make check-fast` only for this milestone (ruff, ruff format, mypy, eslint,
+tsc, prettier, backend suite, frontend suite, contract check) — a two-file
+frontend fix with no schema or route change does not need `pip-audit`,
+`npm audit`, E2E or Docker re-run; the previous milestone's full `make check`
+already covers everything else at this commit's ancestor.
+
+Two things found and fixed inside the milestone rather than worked around,
+per brief §6.5, both confirmed against the unfixed code first:
+
+1. The reviewer-reported symptom itself (D-091): after the fix, signing out
+   from a URL carrying `?opportunities.view=table` and signing back in as
+   another user now lands on the default Board view, not Table. Guard tests:
+   `resets the view state in the URL on sign-out, for the next reader in this
+   tab` (`app/DashboardPage.test.tsx`) and `resets the view state in the URL
+   when signing out from the palette` (`app/Keyboard.test.tsx`), each
+   confirmed to fail with `aria-pressed="false"` on the Board button against
+   the pre-fix code.
+2. A second, independent bug in the first draft of the fix itself (D-092):
+   `app/CommandPalette.tsx`'s "Sign out" command unmounts the palette
+   (`onClose()`) before its `logout.mutate(undefined, { onSuccess })` call
+   resolves, so TanStack Query silently drops the `onSuccess` callback — the
+   same "observer has no listeners" case `CLAUDE.md` documents for
+   `app/Toasts.tsx`'s undo. Found by instrumenting the callback (it never
+   ran) rather than by reasoning about the mutation library first. Fixed by
+   switching both `TopBar.tsx` and `CommandPalette.tsx` to `mutateAsync()`,
+   the pattern already established in this codebase for exactly this shape.

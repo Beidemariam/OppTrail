@@ -63,8 +63,16 @@ export function CommandPalette({
       id: "sign-out",
       label: "Sign out",
       run: () => {
+        // `onClose` unmounts this component immediately, before the mutation
+        // resolves — the same "control that started it has usually unmounted
+        // by the time it resolves" case `app/Toasts.tsx` documents, so this
+        // goes through `mutateAsync` rather than `mutate(vars, { onSuccess })`,
+        // which TanStack Query drops once the observer has no listeners.
+        // Reset to a clean URL, the same as `TopBar`'s sign-out button: the
+        // view state 2.2 put in the query string must not survive into
+        // whoever signs in next in this tab (D-091).
         onClose();
-        logout.mutate();
+        void logout.mutateAsync().then(() => navigate("/", { replace: true }));
       },
     },
   ];

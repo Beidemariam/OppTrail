@@ -2447,25 +2447,102 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
   calendar all read one flat sorted list); the table's cells are read-only
   (2.11); the calendar has no follow-up layer (Phase 4); and the frontend
   still calls v1 paths (2.9).
-- [ ] 2.9a Reset view state on sign-out (**D-087**, from the 2.8 review).
+- [x] 2.9a Reset view state on sign-out (**D-091**, from the 2.8 review;
+      renumbered from a clerical duplicate of D-087, which already names
+      2.8's inline-cell-editing decision — see the correction note at the
+      end of this milestone). — **DONE**
+
       `useLogout` (`lib/queries.ts:335`) clears the session from the cache and
       nothing else — it never navigates. Because 2.2 deliberately serializes
       view state into the query string so a reading is linkable
       (`?opportunities.view=table&opportunities.stage=Negotiation`), signing
-      out of one account and into another **in the same tab** leaves the first
+      out of one account and into another **in the same tab** left the first
       user's parameters in the address bar, and the second user's first screen
-      renders through them.
+      rendered through them.
       The reviewer hit this and reasonably read it as a private saved view
       leaking to another user. It is not: verified against the running app,
       Alex receives the private view `Table Negotiation` and Casey does not,
       so `is_shared` is honoured server-side and permission filtering holds.
       What carried over was the *view configuration* in the URL, not the saved
-      view. Fix it anyway — one user's working state must not survive into
+      view. Fixed anyway — one user's working state must not survive into
       another's session, it makes a private view look exposed, and whoever
       signs in next lands on a filtered screen with no idea why.
-      Note the comment already on `useLogout` explaining why the *cache* is
-      deliberately not cleared there; the URL reset is a separate concern and
-      should not disturb that reasoning.
+
+  - [x] Both places that call `useLogout` — the top bar's "Sign out" button
+        (`app/TopBar.tsx`) and the palette's "Sign out" command
+        (`app/CommandPalette.tsx`) — now navigate to `/` with `replace: true`
+        once the mutation resolves, stripping every `opportunities.*` and
+        `timeline.*` parameter (and any opened opportunity's id) from the
+        address bar in one move. `replace` rather than `push`, so the state
+        does not sit one Back away for whoever signs in next either.
+        `useLogout`'s own comment, explaining why the *cache* stays alone at
+        sign-out, is untouched — the URL reset is a separate concern layered
+        on top in the two call sites, not a change to what the hook itself
+        does.
+  - [x] A second, independent defect found while fixing the first, and fixed
+        at the cause rather than worked around, per brief §6.5: the palette's
+        version was written first as `logout.mutate(undefined, { onSuccess:
+        () => navigate(...) })`, mirroring the top bar. It silently never
+        navigated. `CommandPalette`'s "Sign out" command calls `onClose()`
+        *before* the mutation, which unmounts the palette synchronously,
+        before the mutation's promise has settled — the same "the control
+        that started it has usually unmounted by the time it resolves" case
+        `CLAUDE.md` already documents for `app/Toasts.tsx`'s undo, and for the
+        same reason: TanStack Query drops a `mutate(vars, { onSuccess })`
+        callback once its observer has no listeners. The top bar's copy of
+        the same pattern happened to work, because nothing unmounts it
+        *before* its own `onSuccess` runs — the unmount there is caused *by*
+        that success handler, not the reverse — but that is a timing
+        coincidence, not a guarantee. Both call sites now use `mutateAsync()`
+        and `.then(...)`, the documented fix for exactly this shape, so
+        neither depends on which of two async completions happens to win.
+        Confirmed against the unfixed code first: a debug harness driving the
+        real `AppRoutes` tree through a `useLocation()` spy showed the
+        address bar unchanged after the palette's sign-out despite the
+        session having cleared; instrumenting the passed `onSuccess` showed
+        it was never invoked. Recorded here rather than as a separate
+        decision, since brief §6.5 treats a defect found and fixed inside the
+        milestone that touches its code as work, not a decision needing a
+        D-number (see D-066, D-084's own history) — see **D-092** below for
+        why `mutateAsync` was chosen for both sites rather than leaving the
+        top bar's coincidentally-working version alone.
+  - [x] Tests, both confirmed to fail against the unfixed code first (brief
+        §6.5): `resets the view state in the URL on sign-out, for the next
+        reader in this tab` (`app/DashboardPage.test.tsx`) drives the top
+        bar's button; `resets the view state in the URL when signing out from
+        the palette` (`app/Keyboard.test.tsx`) drives the palette's command.
+        Both load the dashboard on `?opportunities.view=table`, sign out,
+        sign back in through `AuthPanel`, and assert the **Board** button
+        (the default) is now `aria-pressed`, not **Table** — the same
+        end-to-end symptom the reviewer saw, walked as a user rather than
+        asserted against the mutation's internals. 391 → 393 frontend tests.
+        No backend change: nothing here touches a route, a permission or a
+        schema, so no authorization-matrix entry and no new E2E journey —
+        the existing 49 Playwright specs are unaffected.
+  - [x] Coverage unchanged at the 96/96/95/89 floor 2.8 set (measured 96.89
+        statements / 90.18 branches / 95.60 functions / 96.85 lines); no
+        threshold change needed for two call sites and two tests.
+  - [x] **Correction found while recording this milestone, fixed alongside
+        it:** `docs/autopilot/DECISIONS.md` had two entries both numbered
+        **D-087** — the accepted one (2.8, inline-cell-editing deferral,
+        also cited in `CLAUDE.md` and `app/OpportunityTable.tsx`) and this
+        milestone's own sign-out decision, added later in the same session
+        without checking the last-used number. The second is renumbered
+        **D-091** (the next free number; D-088–D-090 were already taken by
+        the calendar-scope, density and table-semantics decisions from the
+        same 2.8 review session) and every reference to it — this
+        milestone's line, and the `D-087` code comments in
+        `app/TopBar.tsx`, `app/CommandPalette.tsx`,
+        `app/DashboardPage.test.tsx` and `app/Keyboard.test.tsx` — is updated
+        to match. D-087 itself (the inline-editing one) is untouched.
+
+  Gate: `make check-fast` green (ruff, ruff format, mypy, eslint, tsc,
+  prettier, 305 backend tests at 97.47% coverage — unchanged, no backend code
+  touched — 393 frontend tests at 96.89/90.18/95.60/96.85 against the
+  96/96/95/89 thresholds, contract check clean). `make check`'s remaining
+  items (E2E, audits, Docker) were not re-run for a two-file frontend fix with
+  no new route, no schema change and no new E2E journey; nothing in this
+  milestone touches what they cover.
 - [ ] 2.9 Finish the `/api/v2` migration and remove v1 (**D-033**, ruled by
       the human 2026-09-17). Milestone 1.3 moved only the collection reads and
       the error envelope to v2 — the mutations and single-resource reads had no

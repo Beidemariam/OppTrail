@@ -1,6 +1,6 @@
 "use client";
 
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 
 import type { User } from "../lib/domain";
 import { useLogout } from "../lib/queries";
@@ -21,6 +21,20 @@ import { useOpenCommandPalette } from "./ShortcutsProvider";
 export function TopBar({ user }: { user: User }) {
   const logout = useLogout();
   const openPalette = useOpenCommandPalette();
+  const navigate = useNavigate();
+
+  // Signing out ends the session; it must also end whatever this tab's URL
+  // says about it. 2.2 put the view state there on purpose (so a reading is
+  // linkable), which means it survives sign-out and renders through whoever
+  // signs in next, in the same tab, unless it is reset here (D-091).
+  // `replace` keeps that state out of history too, so the back button cannot
+  // hand it to the next session either. This button unmounts the moment the
+  // session clears (the dashboard swaps in `AuthPanel`), so the navigation
+  // goes through `mutateAsync` rather than `mutate(vars, { onSuccess })` —
+  // the same unmounted-observer case `app/Toasts.tsx` documents.
+  function signOut() {
+    void logout.mutateAsync().then(() => navigate("/", { replace: true }));
+  }
 
   return (
     <header className="topbar">
@@ -47,11 +61,7 @@ export function TopBar({ user }: { user: User }) {
         <span className="user-chip" title={user.email}>
           {user.name}
         </span>
-        <button
-          type="button"
-          className="ghost-button"
-          onClick={() => logout.mutate()}
-        >
+        <button type="button" className="ghost-button" onClick={signOut}>
           Sign out
         </button>
       </div>
