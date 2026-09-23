@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from "react-router";
 
 import {
   emptyTimelineFilters,
+  opportunityVersionFields,
   type Access,
   type Opportunity,
   type TimelineEntry,
@@ -16,9 +17,15 @@ import {
   canManageOpportunity,
   canWriteTimeline,
 } from "../lib/permissions";
-import { useOpportunities, useSession, useTimeline } from "../lib/queries";
+import {
+  useOpportunities,
+  useOpportunityVersions,
+  useSession,
+  useTimeline,
+} from "../lib/queries";
 import { paramsWithState, stateFromParams } from "../lib/viewState";
 import { AiSidebar } from "./AiSidebar";
+import { HistoryButton } from "./HistoryDialog";
 import { SavedViewsMenu } from "./SavedViewsMenu";
 import { SharingPanel } from "./SharingPanel";
 import { TimelineEntryForm } from "./TimelineEntryForm";
@@ -113,6 +120,7 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
     <section className="timeline-panel" ref={panelRef}>
       <TimelineHeading
         opportunity={opportunity}
+        canManage={access.canManage}
         onRefresh={() => void timeline.refetch()}
       />
 
@@ -156,9 +164,11 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
 
 function TimelineHeading({
   opportunity,
+  canManage,
   onRefresh,
 }: {
   opportunity: Opportunity;
+  canManage: boolean;
   onRefresh: () => void;
 }) {
   return (
@@ -178,6 +188,16 @@ function TimelineHeading({
             {format.toUpperCase()}
           </a>
         ))}
+        {/* Owner-only, like the sharing panel and the audit log below it
+            (milestone 2.10, D-096). */}
+        {canManage && (
+          <HistoryButton
+            title={`History of ${opportunity.name}`}
+            fields={opportunityVersionFields}
+            itemId={opportunity.id}
+            useVersions={useOpportunityVersions}
+          />
+        )}
         <button type="button" className="secondary-button" onClick={onRefresh}>
           Refresh
         </button>

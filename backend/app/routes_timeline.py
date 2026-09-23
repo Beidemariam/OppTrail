@@ -16,6 +16,7 @@ from .permissions import (
     require_delete_permission,
     require_edit_permission,
     require_opportunity_access,
+    require_opportunity_owner,
     require_timeline_write,
 )
 from .schemas import (
@@ -28,6 +29,7 @@ from .schemas import (
     TimelineEntryCreate,
     TimelineEntryPublic,
     TimelineEntryUpdate,
+    TimelineEntryVersionPublic,
 )
 from .search import MATCHING_ENTRY_IDS_SQL, match_expression
 from .soft_delete import (
@@ -39,6 +41,7 @@ from .soft_delete import (
     soft_delete_timeline_entry,
 )
 from .time_utils import utc_now
+from .versioning import NOTE_VERSIONS, TIMELINE_ENTRY_VERSIONS, record_version
 
 router = APIRouter(prefix="/api/v2", tags=["timeline"])
 
@@ -414,6 +417,7 @@ def create_timeline_entry(
     payload: TimelineEntryCreate,
     user: sqlite3.Row = Depends(get_current_user),
 ) -> TimelineEntryPublic:
+    created_at = utc_now()
     with db_connection() as connection:
         require_timeline_write(connection, opportunity_id, int(user["id"]))
         cursor = connection.execute(
@@ -438,11 +442,27 @@ def create_timeline_entry(
                 payload.event_timestamp,
                 payload.follow_up_date,
                 user["id"],
-                utc_now(),
+                created_at,
             ),
         )
         assert cursor.lastrowid is not None
         entry_id = int(cursor.lastrowid)
+        # Version 1 is the entry as written, so a later edit has something to
+        # be read against (milestone 2.10). Read back from the row rather than
+        # taken from the payload, which is the rule every other version write
+        # follows: the snapshot is what the database holds.
+        created = connection.execute(
+            "SELECT * FROM timeline_entries WHERE id = ?",
+            (entry_id,),
+        ).fetchone()
+        record_version(
+            connection,
+            TIMELINE_ENTRY_VERSIONS,
+            entry_id,
+            created,
+            int(user["id"]),
+            created_at,
+        )
         notify_shared_activity(
             connection,
             opportunity_id,
@@ -503,6 +523,22 @@ def update_timeline_entry(
                 """,
                 values,
             )
+            # Read back rather than assembled from `updates`: a PATCH carries
+            # only what changed and a version is the whole state. There is no
+            # `updated_at` on this table, so the version carries the write's
+            # own clock reading.
+            edited = connection.execute(
+                "SELECT * FROM timeline_entries WHERE id = ?",
+                (entry_id,),
+            ).fetchone()
+            record_version(
+                connection,
+                TIMELINE_ENTRY_VERSIONS,
+                entry_id,
+                edited,
+                int(user["id"]),
+                utc_now(),
+            )
             connection.commit()
 
         row = connection.execute(
@@ -516,6 +552,71 @@ def update_timeline_entry(
         ).fetchone()
 
     return entry_from_row(row, [])
+
+
+def timeline_entry_version_from_row(row: sqlite3.Row) -> TimelineEntryVersionPublic:
+    return TimelineEntryVersionPublic(
+        id=row["id"],
+        entry_id=row["entry_id"],
+        version_number=row["version_number"],
+        type=row["type"],
+        title=row["title"],
+        body=row["body"],
+        event_timestamp=row["event_timestamp"],
+        follow_up_date=row["follow_up_date"],
+        edited_by=row["edited_by"],
+        editor_name=row["editor_name"],
+        created_at=row["created_at"],
+    )
+
+
+@router.get("/timeline/{entry_id}/versions", response_model=Page[TimelineEntryVersionPublic])
+def list_timeline_entry_versions_page(
+    entry_id: int,
+    page: PageRequest = Depends(page_params),
+    user: sqlite3.Row = Depends(get_current_user),
+) -> Page[TimelineEntryVersionPublic]:
+    """Oldest version first, owner-only: the three histories answer the same
+    question under the same rule (D-096).
+
+    A system-generated entry cannot be edited, so its history is empty rather
+    than absent -- the route does not special-case it, because "nothing has
+    ever changed here" is the truthful answer and the same one an unedited
+    entry gives.
+    """
+    continuation, cursor_values = cursor_clause(
+        page,
+        "timeline_entry_versions.version_number",
+        "timeline_entry_versions.id",
+        descending=False,
+    )
+    params: list[object] = [entry_id, *cursor_values, page.limit + 1]
+
+    with db_connection() as connection:
+        entry = fetch_entry_context(connection, entry_id)
+        if not entry:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Timeline entry not found",
+            )
+        require_opportunity_owner(connection, entry["opportunity_id"], int(user["id"]))
+        rows = connection.execute(
+            f"""
+            SELECT timeline_entry_versions.*, users.name AS editor_name
+            FROM timeline_entry_versions
+            JOIN users ON users.id = timeline_entry_versions.edited_by
+            WHERE timeline_entry_versions.entry_id = ?
+            {f"AND {continuation}" if continuation else ""}
+            ORDER BY timeline_entry_versions.version_number ASC, timeline_entry_versions.id ASC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+
+    rows, next_cursor = split_page(rows, page.limit, lambda row: (row["version_number"], row["id"]))
+    return Page(
+        items=[timeline_entry_version_from_row(row) for row in rows], next_cursor=next_cursor
+    )
 
 
 @router.delete("/timeline/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -624,12 +725,19 @@ def create_note(
         )
         assert cursor.lastrowid is not None
         note_id = int(cursor.lastrowid)
-        connection.execute(
-            """
-            INSERT INTO note_versions (note_id, version_number, body, edited_by, created_at)
-            VALUES (?, 1, ?, ?, ?)
-            """,
-            (note_id, payload.body, user["id"], created_at),
+        # Read back, like every other version write: the snapshot is the row
+        # the database holds, not the request that asked for it.
+        written = connection.execute(
+            "SELECT * FROM notes WHERE id = ?",
+            (note_id,),
+        ).fetchone()
+        record_version(
+            connection,
+            NOTE_VERSIONS,
+            note_id,
+            written,
+            int(user["id"]),
+            created_at,
         )
         notify_mentions(
             connection,
@@ -683,16 +791,6 @@ def update_note(
             "Only the author or the opportunity owner can edit this note",
         )
 
-        latest_version = connection.execute(
-            """
-            SELECT COALESCE(MAX(version_number), 0) AS version_number
-            FROM note_versions
-            WHERE note_id = ?
-            """,
-            (note_id,),
-        ).fetchone()["version_number"]
-        next_version = int(latest_version) + 1
-
         updated_at = utc_now()
         connection.execute(
             """
@@ -702,12 +800,20 @@ def update_note(
             """,
             (payload.body, updated_at, note_id),
         )
-        connection.execute(
-            """
-            INSERT INTO note_versions (note_id, version_number, body, edited_by, created_at)
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            (note_id, next_version, payload.body, user["id"], updated_at),
+        # Milestone 2.10 moved the numbering into `versioning.py`, where the
+        # opportunity and entry histories now read it too; this is the same
+        # insert it always was, written once instead of three times.
+        edited = connection.execute(
+            "SELECT * FROM notes WHERE id = ?",
+            (note_id,),
+        ).fetchone()
+        record_version(
+            connection,
+            NOTE_VERSIONS,
+            note_id,
+            edited,
+            int(user["id"]),
+            updated_at,
         )
         notify_mentions(
             connection,
@@ -752,14 +858,14 @@ def note_version_from_row(row: sqlite3.Row) -> NoteVersionPublic:
     )
 
 
-def require_note_access(connection: sqlite3.Connection, note_id: int, user_id: int) -> None:
+def require_note_history_access(connection: sqlite3.Connection, note_id: int, user_id: int) -> None:
     note = fetch_note_context(connection, note_id)
     if not note:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Note not found",
         )
-    require_opportunity_access(connection, note["opportunity_id"], user_id)
+    require_opportunity_owner(connection, note["opportunity_id"], user_id)
 
 
 @router.get("/notes/{note_id}/versions", response_model=Page[NoteVersionPublic])
@@ -768,7 +874,13 @@ def list_note_versions_page(
     page: PageRequest = Depends(page_params),
     user: sqlite3.Row = Depends(get_current_user),
 ) -> Page[NoteVersionPublic]:
-    """Oldest version first: revision history reads forwards."""
+    """Oldest version first: revision history reads forwards.
+
+    Owner-only since milestone 2.10 (D-096). This route shipped open to every
+    role while it was the only history and no screen read it; the milestone
+    that gives all three a screen gives them one rule, the audit log's, rather
+    than three answers to "who may see what this used to say".
+    """
     continuation, cursor_values = cursor_clause(
         page,
         "note_versions.version_number",
@@ -778,7 +890,7 @@ def list_note_versions_page(
     params: list[object] = [note_id, *cursor_values, page.limit + 1]
 
     with db_connection() as connection:
-        require_note_access(connection, note_id, int(user["id"]))
+        require_note_history_access(connection, note_id, int(user["id"]))
         rows = connection.execute(
             f"""
             SELECT note_versions.*, users.name AS editor_name

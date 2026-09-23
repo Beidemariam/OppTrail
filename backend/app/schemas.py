@@ -332,11 +332,52 @@ class NoteUpdate(BaseModel):
         return value.strip()
 
 
+# --- Edit history (milestone 2.10) -----------------------------------------
+
+# One model per versioned table, each naming the fields that table snapshots
+# (`app/versioning.py`). They are not folded into one generic model with a
+# free-form payload: a history screen that has to guess at a field's type is a
+# screen the generated client cannot type either.
+
+
 class NoteVersionPublic(BaseModel):
     id: int
     note_id: int
     version_number: int
     body: str
+    edited_by: int
+    editor_name: str
+    created_at: str
+
+
+class OpportunityVersionPublic(BaseModel):
+    id: int
+    opportunity_id: int
+    version_number: int
+    name: str
+    account_name: str
+    value: Decimal
+    currency: str
+    stage: Stage
+    expected_close_date: str | None
+    edited_by: int
+    editor_name: str
+    created_at: str
+
+    @field_serializer("value")
+    def serialize_value(self, value: Decimal) -> str:
+        return str(value)
+
+
+class TimelineEntryVersionPublic(BaseModel):
+    id: int
+    entry_id: int
+    version_number: int
+    type: EntryType
+    title: str
+    body: str
+    event_timestamp: str
+    follow_up_date: str | None
     edited_by: int
     editor_name: str
     created_at: str

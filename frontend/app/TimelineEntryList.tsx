@@ -2,15 +2,21 @@
 
 import { useState } from "react";
 
-import type { Access, TimelineEntry } from "../lib/domain";
+import {
+  timelineEntryVersionFields,
+  type Access,
+  type TimelineEntry,
+} from "../lib/domain";
 import { submitOnModEnter } from "../lib/keyboard";
 import {
   useAddNote,
   useDeleteTimelineEntry,
   useRestoreTimelineEntry,
+  useTimelineEntryVersions,
 } from "../lib/queries";
 import { formatTimestamp } from "../lib/time";
 import { EntryTypeBadge } from "./EntryTypeBadge";
+import { HistoryButton } from "./HistoryDialog";
 import { NoteBlock } from "./NoteBlock";
 import { useUndoableDelete } from "./Toasts";
 
@@ -90,10 +96,21 @@ function TimelineEntryCard({
             <p className="timeline-copy">{entry.body || "No details"}</p>
           </div>
           {/* A system entry is history, not content: it cannot be edited or
-              deleted through the API (`AGENTS.md`, auditability). */}
+              deleted through the API (`AGENTS.md`, auditability), so it has no
+              edit history either. */}
           {access.canChangeItem(entry.created_by) &&
             !entry.system_generated && (
               <div className="inline-actions">
+                {/* Editing is the author's or the owner's; reading what an
+                    edit replaced is the owner's alone (milestone 2.10). */}
+                {access.canManage && (
+                  <HistoryButton
+                    title="History of this timeline entry"
+                    fields={timelineEntryVersionFields}
+                    itemId={entry.id}
+                    useVersions={useTimelineEntryVersions}
+                  />
+                )}
                 <button
                   type="button"
                   className="secondary-button"

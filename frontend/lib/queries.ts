@@ -22,13 +22,16 @@ import type {
   AiChatMessage,
   AppNotification,
   AuditLogEntry,
+  NoteVersion,
   Opportunity,
   OpportunityShare,
+  OpportunityVersion,
   SavedView,
   SavedViewEntity,
   ShareRole,
   Stage,
   TimelineEntry,
+  TimelineEntryVersion,
   TimelineFilters,
   User,
 } from "./domain";
@@ -102,6 +105,20 @@ export const keys = {
    */
   allAuditLogs: ["audit-log"] as const,
   notifications: ["notifications"] as const,
+  /**
+   * One item's edit history (milestone 2.10), keyed by what kind of thing it
+   * hangs off as well as by id: the three id spaces are separate tables.
+   */
+  versions: (kind: "opportunity" | "entry" | "note", id: number) =>
+    ["versions", kind, id] as const,
+  /**
+   * Every history, for a write to invalidate. An edit appends a version to
+   * exactly one of them, and the mutation that made it knows its own id — but
+   * a stage change from the board, a bulk move and the entry form all write
+   * through different hooks, so one prefix is what keeps an open dialog
+   * honest without each of them naming a key.
+   */
+  allVersions: ["versions"] as const,
   aiConversation: (opportunityId: number) =>
     ["ai-conversation", opportunityId] as const,
   savedViews: (entity: SavedViewEntity) => ["saved-views", entity] as const,
@@ -179,6 +196,43 @@ export function useAuditLog(opportunityId: number, enabled: boolean) {
       fetchAll<AuditLogEntry>(
         `/api/v2/opportunities/${opportunityId}/audit-log`,
       ),
+  });
+}
+
+/**
+ * The three edit histories (milestone 2.10), each read whole and each
+ * owner-only on the server — the hooks are called with `enabled` false until
+ * the dialog that shows them is opened, so a timeline of forty entries is not
+ * forty requests nobody asked for.
+ */
+export function useOpportunityVersions(
+  opportunityId: number,
+  enabled: boolean,
+) {
+  return useQuery<OpportunityVersion[]>({
+    queryKey: keys.versions("opportunity", opportunityId),
+    enabled,
+    queryFn: () =>
+      fetchAll<OpportunityVersion>(
+        `/api/v2/opportunities/${opportunityId}/versions`,
+      ),
+  });
+}
+
+export function useTimelineEntryVersions(entryId: number, enabled: boolean) {
+  return useQuery<TimelineEntryVersion[]>({
+    queryKey: keys.versions("entry", entryId),
+    enabled,
+    queryFn: () =>
+      fetchAll<TimelineEntryVersion>(`/api/v2/timeline/${entryId}/versions`),
+  });
+}
+
+export function useNoteVersions(noteId: number, enabled: boolean) {
+  return useQuery<NoteVersion[]>({
+    queryKey: keys.versions("note", noteId),
+    enabled,
+    queryFn: () => fetchAll<NoteVersion>(`/api/v2/notes/${noteId}/versions`),
   });
 }
 
@@ -401,8 +455,15 @@ export function useSaveOpportunity() {
         { method: id ? "PATCH" : "POST", body: JSON.stringify(payload) },
       ),
     // A stage change writes a system timeline entry, so the timeline is stale
-    // too (`backend/app/routes_opportunities.py`).
-    onSuccess: () => invalidate(client, keys.opportunities, keys.allTimelines),
+    // too (`backend/app/routes_opportunities.py`), and every field this sends
+    // is versioned (milestone 2.10).
+    onSuccess: () =>
+      invalidate(
+        client,
+        keys.opportunities,
+        keys.allTimelines,
+        keys.allVersions,
+      ),
   });
 }
 
@@ -438,7 +499,13 @@ export function useChangeOpportunityStage() {
         ),
       ),
     onError: (_error, _variables, snapshot) => rollback(client, snapshot),
-    onSettled: () => invalidate(client, keys.opportunities, keys.allTimelines),
+    onSettled: () =>
+      invalidate(
+        client,
+        keys.opportunities,
+        keys.allTimelines,
+        keys.allVersions,
+      ),
   });
 }
 
@@ -545,6 +612,7 @@ export function useBulkOpportunityAction() {
         keys.opportunities,
         keys.allTimelines,
         keys.allAuditLogs,
+        keys.allVersions,
       ),
   });
 }
@@ -577,8 +645,14 @@ export function useSaveTimelineEntry(opportunityId: number) {
         },
       ),
     // The list carries a stalled flag and a last-activity time, both of which
-    // an entry moves.
-    onSuccess: () => invalidate(client, keys.allTimelines, keys.opportunities),
+    // an entry moves; an edit also appends a version (milestone 2.10).
+    onSuccess: () =>
+      invalidate(
+        client,
+        keys.allTimelines,
+        keys.opportunities,
+        keys.allVersions,
+      ),
   });
 }
 
@@ -650,7 +724,7 @@ export function useSaveNote() {
         ),
       ),
     onError: (_error, _variables, snapshot) => rollback(client, snapshot),
-    onSettled: () => invalidate(client, keys.allTimelines),
+    onSettled: () => invalidate(client, keys.allTimelines, keys.allVersions),
   });
 }
 

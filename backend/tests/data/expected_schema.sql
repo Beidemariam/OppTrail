@@ -118,6 +118,21 @@ CREATE TABLE opportunity_shares (
     UNIQUE (opportunity_id, user_id)
 );
 
+CREATE TABLE opportunity_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    opportunity_id INTEGER NOT NULL REFERENCES opportunities(id),
+    version_number INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    account_name TEXT NOT NULL,
+    value NUMERIC NOT NULL DEFAULT 0,
+    currency TEXT NOT NULL DEFAULT 'USD',
+    stage TEXT NOT NULL,
+    expected_close_date TEXT,
+    edited_by INTEGER NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    UNIQUE (opportunity_id, version_number)
+);
+
 CREATE TABLE saved_views (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     created_by INTEGER NOT NULL REFERENCES users(id),
@@ -157,6 +172,20 @@ CREATE TABLE "timeline_entries" (
     system_generated INTEGER NOT NULL DEFAULT 0 CHECK (system_generated IN (0, 1)),
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     deleted_at TEXT
+);
+
+CREATE TABLE timeline_entry_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entry_id INTEGER NOT NULL REFERENCES timeline_entries(id),
+    version_number INTEGER NOT NULL,
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL DEFAULT '',
+    event_timestamp TEXT NOT NULL,
+    follow_up_date TEXT,
+    edited_by INTEGER NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    UNIQUE (entry_id, version_number)
 );
 
 CREATE TABLE users (

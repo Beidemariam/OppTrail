@@ -338,14 +338,51 @@ Two separate mechanisms, both required by `AGENTS.md`:
 Any new non-user-initiated write must be traceable to the action that caused it, and
 any new delete path needs an audit row.
 
+### Edit history
+
+A third mechanism, and the one an edit leaves behind (milestone 2.10,
+`AGENTS.md` invariant 8). Three tables, one shape: `note_versions` from the
+baseline, `opportunity_versions` and `timeline_entry_versions` from revision
+`20260923_0006_version_history`. `versioning.py` is the only writer — a fourth
+editable thing adds a `VersionedTable` there rather than a fourth `INSERT`.
+
+- **A version is a snapshot, not a diff.** Every editable field, every time, so
+  a partial `PATCH` still records the whole state and no reader has to
+  reconstruct one from a chain with a gap in it. The route writes it *after*
+  the `UPDATE`, from the row read back, and stamps it with that write's own
+  time — for an opportunity that is the `updated_at` the same statement set.
+  Version 1 is written at creation, so the history opens with what the thing
+  said on day one. `POST /opportunities/bulk`'s stage change records one too:
+  it is the same edit, asked for in bulk.
+- **The read is owner-only** (**D-096**), which is the audit log's rule and a
+  change from the one shipped route — `GET /api/v2/notes/{id}/versions` was
+  open to every role while it was the only history and nothing called it. There
+  is no admin role here, so `AGENTS.md`'s "owner or admin" resolves to the
+  opportunity owner. All three are keyset-paginated oldest-first, like the
+  audit log.
+- **System entries have no history** and are skipped by the backfill: they
+  cannot be edited (403), so the route answers an empty page rather than a copy
+  of the row beside it.
+- **The backfill's version 1 is a baseline, not a recorded edit** (**D-097**).
+  Every pre-existing row got one from its current values; for a row edited
+  before the revision the earlier values were overwritten in place and are
+  gone, so it reads as the oldest state this database can still show.
+- The frontend is one screen for all three (`app/HistoryDialog.tsx`):
+  `lib/domain.ts` declares which fields each kind snapshots and how each reads,
+  `versionChanges` compares two versions without knowing which kind it holds,
+  and the read hook arrives as a prop. Version 1 renders as the whole state,
+  every later one as only what it moved. The button sits beside the exports on
+  the opportunity, and on each entry and note, rendered only for the owner.
+
 ### Soft deletes and undo
 
 Nothing is hard-deleted. `soft_delete.py` is the only place user data is deleted:
 it stamps `deleted_at` and cascades it down the opportunity → entry → note →
 comment tree, and every read query filters `deleted_at IS NULL` at each level.
 Routes call those helpers rather than writing their own `UPDATE ... SET
-deleted_at`, so a new delete path cannot quietly forget a level of the tree. Note
-edits additionally append to `note_versions` rather than overwriting.
+deleted_at`, so a new delete path cannot quietly forget a level of the tree. An
+edit to any of the three editable things additionally appends a version rather
+than overwriting (see "Edit history" above).
 
 The same module holds the inverse, added by milestone 2.4b so the UI could stop
 confirming and start offering Undo (`docs/UX.md`): `restore_opportunity`,

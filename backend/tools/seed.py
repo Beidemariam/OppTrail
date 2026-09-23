@@ -283,6 +283,20 @@ def seed() -> None:
         "advancing Northwind to Negotiation",
     )
 
+    # Milestone 2.10's edit history, on the case that prompted it: a deal
+    # whose value moves with nothing but the history to say what it was.
+    check(
+        alex.client.patch(f"/api/v2/opportunities/{northwind}", json={"value": "162000"}),
+        "revising Northwind's value down after the discount",
+    )
+    check(
+        alex.client.patch(
+            f"/api/v2/timeline/{proposal}",
+            json={"body": "Three-year term, 162k ARR after the 8% discount, 60-day pilot clause."},
+        ),
+        "correcting the proposal entry, which keeps the figure it replaced",
+    )
+
     # 2. An ordinary, healthy opportunity with nothing special about it.
     contoso = create_opportunity(
         alex,
@@ -490,7 +504,14 @@ def main(argv: list[str] | None = None) -> int:
         "  the title is in the URL too (?opportunities.view=list), so a saved\n"
         "  view remembers which renderer it was saved in. Alex owns four of\n"
         "  the five, so Initech - where Alex is a viewer - is the card with no\n"
-        "  stage control on it."
+        "  stage control on it.\n"
+        "\n"
+        "  Edit history (milestone 2.10) is owner-only, so sign in as Alex.\n"
+        "  Open Northwind and press History beside the exports: three versions,\n"
+        "  185,000 at Qualification, then Negotiation, then 162,000, each with\n"
+        "  who changed it and when. The Proposal sent entry has its own History\n"
+        "  button with the ARR figure it used to carry, and the edited note on\n"
+        "  it has one too. Blair, an editor, is offered none of the three."
     )
     return 0
 

@@ -167,6 +167,32 @@ export interface paths {
         patch: operations["update_opportunity_api_v2_opportunities__opportunity_id__patch"];
         trace?: never;
     };
+    "/api/v2/opportunities/{opportunity_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Opportunity Versions Page
+         * @description Oldest version first: history reads forwards, like the audit log and
+         *     like `GET /api/v2/notes/{id}/versions`.
+         *
+         *     Owner-only, the audit log's rule (D-096). What an edit history answers is
+         *     "who changed this and what did it say before", which is the question the
+         *     audit log exists for -- and there is no admin role here, so `AGENTS.md`'s
+         *     "owner or admin" resolves to the opportunity owner (`permissions.py`).
+         */
+        get: operations["list_opportunity_versions_page_api_v2_opportunities__opportunity_id__versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/opportunities/bulk": {
         parameters: {
             query?: never;
@@ -328,6 +354,32 @@ export interface paths {
         patch: operations["update_timeline_entry_api_v2_timeline__entry_id__patch"];
         trace?: never;
     };
+    "/api/v2/timeline/{entry_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Timeline Entry Versions Page
+         * @description Oldest version first, owner-only: the three histories answer the same
+         *     question under the same rule (D-096).
+         *
+         *     A system-generated entry cannot be edited, so its history is empty rather
+         *     than absent -- the route does not special-case it, because "nothing has
+         *     ever changed here" is the truthful answer and the same one an unedited
+         *     entry gives.
+         */
+        get: operations["list_timeline_entry_versions_page_api_v2_timeline__entry_id__versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/timeline/{entry_id}/restore": {
         parameters: {
             query?: never;
@@ -390,6 +442,11 @@ export interface paths {
         /**
          * List Note Versions Page
          * @description Oldest version first: revision history reads forwards.
+         *
+         *     Owner-only since milestone 2.10 (D-096). This route shipped open to every
+         *     role while it was the only history and no screen read it; the milestone
+         *     that gives all three a screen gives them one rule, the audit log's, rather
+         *     than three answers to "who may see what this used to say".
          */
         get: operations["list_note_versions_page_api_v2_notes__note_id__versions_get"];
         put?: never;
@@ -1172,6 +1229,36 @@ export interface components {
             /** Expected Close Date */
             expected_close_date?: string | null;
         };
+        /** OpportunityVersionPublic */
+        OpportunityVersionPublic: {
+            /** Id */
+            id: number;
+            /** Opportunity Id */
+            opportunity_id: number;
+            /** Version Number */
+            version_number: number;
+            /** Name */
+            name: string;
+            /** Account Name */
+            account_name: string;
+            /** Value */
+            value: string;
+            /** Currency */
+            currency: string;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "Prospecting" | "Qualification" | "Needs Analysis" | "Proposal" | "Negotiation" | "Closed Won" | "Closed Lost";
+            /** Expected Close Date */
+            expected_close_date: string | null;
+            /** Edited By */
+            edited_by: number;
+            /** Editor Name */
+            editor_name: string;
+            /** Created At */
+            created_at: string;
+        };
         /** Page[AuditLogEntryPublic] */
         Page_AuditLogEntryPublic_: {
             /** Items */
@@ -1200,6 +1287,13 @@ export interface components {
             /** Next Cursor */
             next_cursor?: string | null;
         };
+        /** Page[OpportunityVersionPublic] */
+        Page_OpportunityVersionPublic_: {
+            /** Items */
+            items: components["schemas"]["OpportunityVersionPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
         /** Page[SavedViewPublic] */
         Page_SavedViewPublic_: {
             /** Items */
@@ -1225,6 +1319,13 @@ export interface components {
         Page_TimelineEntryPublic_: {
             /** Items */
             items: components["schemas"]["TimelineEntryPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[TimelineEntryVersionPublic] */
+        Page_TimelineEntryVersionPublic_: {
+            /** Items */
+            items: components["schemas"]["TimelineEntryVersionPublic"][];
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -1494,6 +1595,34 @@ export interface components {
             event_timestamp?: string | null;
             /** Follow Up Date */
             follow_up_date?: string | null;
+        };
+        /** TimelineEntryVersionPublic */
+        TimelineEntryVersionPublic: {
+            /** Id */
+            id: number;
+            /** Entry Id */
+            entry_id: number;
+            /** Version Number */
+            version_number: number;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "call" | "email" | "meeting" | "demo" | "proposal" | "contract" | "stage_change" | "other" | "site_visit" | "objection" | "competitor_intel";
+            /** Title */
+            title: string;
+            /** Body */
+            body: string;
+            /** Event Timestamp */
+            event_timestamp: string;
+            /** Follow Up Date */
+            follow_up_date: string | null;
+            /** Edited By */
+            edited_by: number;
+            /** Editor Name */
+            editor_name: string;
+            /** Created At */
+            created_at: string;
         };
         /** UserPublic */
         UserPublic: {
@@ -1898,6 +2027,42 @@ export interface operations {
             };
         };
     };
+    list_opportunity_versions_page_api_v2_opportunities__opportunity_id__versions_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_OpportunityVersionPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     bulk_opportunity_action_api_v2_opportunities_bulk_post: {
         parameters: {
             query?: never;
@@ -2277,6 +2442,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TimelineEntryPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_timeline_entry_versions_page_api_v2_timeline__entry_id__versions_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                entry_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_TimelineEntryVersionPublic_"];
                 };
             };
             /** @description Validation Error */

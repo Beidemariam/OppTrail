@@ -251,10 +251,6 @@ MATRIX: dict[Endpoint, Case] = {
         body=lambda world, actor: {"body": "Matrix note"},
         notes="Editors add freely; only changing an existing item is restricted.",
     ),
-    Endpoint("GET", "/api/v2/notes/{note_id}/versions"): Case(
-        expected=scoped(viewer=200, editor=200, owner=200),
-        url=lambda world: f"/api/v2/notes/{world.note_id}/versions",
-    ),
     Endpoint("PATCH", "/api/v2/notes/{note_id}"): Case(
         expected=scoped(viewer=403, editor=403, owner=200),
         url=lambda world: f"/api/v2/notes/{world.note_id}",
@@ -336,9 +332,22 @@ MATRIX: dict[Endpoint, Case] = {
         expected=scoped(viewer=403, editor=403, owner=200),
         url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/audit-log",
     ),
+    # --- Edit history (milestone 2.10) ------------------------------------
+    # All three read under the audit log's rule rather than the opportunity's:
+    # owner-only, 403 for a viewer or editor who can see the item itself
+    # (D-096).
+    Endpoint("GET", "/api/v2/opportunities/{opportunity_id}/versions"): Case(
+        expected=scoped(viewer=403, editor=403, owner=200),
+        url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/versions",
+    ),
+    Endpoint("GET", "/api/v2/timeline/{entry_id}/versions"): Case(
+        expected=scoped(viewer=403, editor=403, owner=200),
+        url=lambda world: f"/api/v2/timeline/{world.entry_id}/versions",
+    ),
     Endpoint("GET", "/api/v2/notes/{note_id}/versions"): Case(
-        expected=scoped(viewer=200, editor=200, owner=200),
+        expected=scoped(viewer=403, editor=403, owner=200),
         url=lambda world: f"/api/v2/notes/{world.note_id}/versions",
+        notes="Open to every role until 2.10 gave the three histories one rule.",
     ),
     Endpoint("GET", "/api/v2/notifications"): Case(
         expected=authenticated_only(200),

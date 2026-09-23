@@ -16,10 +16,12 @@ from .schemas import (
     OpportunityCreate,
     OpportunityPublic,
     OpportunityUpdate,
+    OpportunityVersionPublic,
 )
 from .soft_delete import restore_opportunity, soft_delete_opportunity
 from .time_utils import utc_days_ago, utc_now
 from .timeline_utils import create_system_timeline_entry
+from .versioning import OPPORTUNITY_VERSIONS, record_version
 
 router = APIRouter(prefix="/api/v2", tags=["opportunities"])
 
@@ -227,11 +229,22 @@ def create_opportunity(
             title="Opportunity created",
             body=f"{payload.name} was created for {payload.account_name}.",
         )
-        connection.commit()
         row = fetch_opportunity_row(connection, opportunity_id)
+        assert row is not None
+        # Version 1 is the state the record was created in, so the history
+        # opens with what the deal said on day one rather than with the first
+        # thing that changed (milestone 2.10, same shape as `note_versions`).
+        record_version(
+            connection,
+            OPPORTUNITY_VERSIONS,
+            opportunity_id,
+            row,
+            int(user["id"]),
+            created_at,
+        )
+        connection.commit()
         stalled = is_opportunity_stalled(connection, opportunity_id)
 
-    assert row is not None
     return opportunity_from_row(row, "owner", stalled)
 
 
@@ -291,12 +304,85 @@ def update_opportunity(
                 title=f"Stage changed to {updates['stage']}",
                 body=f"Stage changed from {previous_stage} to {updates['stage']}.",
             )
-        connection.commit()
         updated = fetch_opportunity_row(connection, opportunity_id)
+        assert updated is not None
+        # Read back rather than assembled from `updates`: a PATCH carries only
+        # the fields it changes, and a version is the whole state. The
+        # statement above set `updated_at`, so the row and its newest version
+        # carry the same timestamp.
+        record_version(
+            connection,
+            OPPORTUNITY_VERSIONS,
+            opportunity_id,
+            updated,
+            int(user["id"]),
+            updated["updated_at"],
+        )
+        connection.commit()
         stalled = is_opportunity_stalled(connection, opportunity_id)
 
-    assert updated is not None
     return opportunity_from_row(updated, "owner", stalled)
+
+
+def opportunity_version_from_row(row: sqlite3.Row) -> OpportunityVersionPublic:
+    return OpportunityVersionPublic(
+        id=row["id"],
+        opportunity_id=row["opportunity_id"],
+        version_number=row["version_number"],
+        name=row["name"],
+        account_name=row["account_name"],
+        value=Decimal(str(row["value"])),
+        currency=row["currency"],
+        stage=row["stage"],
+        expected_close_date=row["expected_close_date"],
+        edited_by=row["edited_by"],
+        editor_name=row["editor_name"],
+        created_at=row["created_at"],
+    )
+
+
+@router.get(
+    "/opportunities/{opportunity_id}/versions",
+    response_model=Page[OpportunityVersionPublic],
+)
+def list_opportunity_versions_page(
+    opportunity_id: int,
+    page: PageRequest = Depends(page_params),
+    user: sqlite3.Row = Depends(get_current_user),
+) -> Page[OpportunityVersionPublic]:
+    """Oldest version first: history reads forwards, like the audit log and
+    like `GET /api/v2/notes/{id}/versions`.
+
+    Owner-only, the audit log's rule (D-096). What an edit history answers is
+    "who changed this and what did it say before", which is the question the
+    audit log exists for -- and there is no admin role here, so `AGENTS.md`'s
+    "owner or admin" resolves to the opportunity owner (`permissions.py`).
+    """
+    continuation, cursor_values = cursor_clause(
+        page,
+        "opportunity_versions.version_number",
+        "opportunity_versions.id",
+        descending=False,
+    )
+    params: list[object] = [opportunity_id, *cursor_values, page.limit + 1]
+
+    with db_connection() as connection:
+        require_opportunity_owner(connection, opportunity_id, int(user["id"]))
+        rows = connection.execute(
+            f"""
+            SELECT opportunity_versions.*, users.name AS editor_name
+            FROM opportunity_versions
+            JOIN users ON users.id = opportunity_versions.edited_by
+            WHERE opportunity_versions.opportunity_id = ?
+            {f"AND {continuation}" if continuation else ""}
+            ORDER BY opportunity_versions.version_number ASC, opportunity_versions.id ASC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+
+    rows, next_cursor = split_page(rows, page.limit, lambda row: (row["version_number"], row["id"]))
+    return Page(items=[opportunity_version_from_row(row) for row in rows], next_cursor=next_cursor)
 
 
 @router.delete("/opportunities/{opportunity_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -389,6 +475,18 @@ def bulk_opportunity_action(
                         title=f"Stage changed to {payload.stage}",
                         body=f"Stage changed from {previous_stage} to {payload.stage}.",
                     )
+                # A stage set in bulk is the same edit as one set on its own,
+                # so it leaves the same version behind (milestone 2.10).
+                moved = fetch_opportunity_row(connection, opportunity_id)
+                assert moved is not None
+                record_version(
+                    connection,
+                    OPPORTUNITY_VERSIONS,
+                    opportunity_id,
+                    moved,
+                    int(user["id"]),
+                    moved["updated_at"],
+                )
 
             results.append(BulkActionResultItem(id=opportunity_id, status="ok"))
 

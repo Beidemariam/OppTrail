@@ -1288,3 +1288,43 @@ since the unread-only read was v1's. Each carries the reason in the test body.
 Brief §6.5 allows this only for an expectation that is genuinely wrong; the
 expectation here described a surface `docs/ROADMAP.md`'s breaking-changes
 table scheduled for removal at the end of this phase.
+
+## Phase 2 — milestone 2.10 (edit history for every editable thing)
+
+```
+backend:  338 passed (was 324), 97.27% combined line+branch (was 97.13%).
+          app/versioning.py           100%  line, 100% branch (new)
+          app/routes_opportunities.py 94%   line (was 93%)
+          app/routes_timeline.py      93%   line, unchanged
+          Branch floors that brief §6.2 sets at 95% are untouched: auth,
+          permissions, soft_delete, audit_utils and the AI modules are all
+          still at 100%.
+frontend: 405 passed (was 394), 96.93% statements, 96.89% line, 95.63%
+          functions, 90.29% branch — against the 96/96/95/89 floor 2.8 set.
+          app/HistoryDialog.tsx       94.11% statements, 100% branch (new)
+          lib/domain.ts               100%  statements, 95.31% branch
+e2e:      50 (was 49). e2e/03-note-history.spec.ts now drives brief §6.3's
+          journey 3 through the UI end to end instead of reading the
+          versions over the API, and a second spec in the same file walks an
+          opportunity's value history.
+docker:   deferred to the host half — scripts/autopilot-gate.sh 2
+          (no Docker socket in this sandbox, per sandbox/README.md)
+```
+
+`make check-fast` plus `make e2e` for this milestone; the full `make check`
+runs at the phase gate. No new dependency.
+
+Test-count arithmetic: backend +11 `tests/test_versions.py`, +1 migration
+backfill case, +2 authorization-matrix rows (the two new routes; the note
+route's existing row moved from 200 to 403 for viewer and editor rather than
+being added). Frontend +11 in `app/History.test.tsx` — six UI-driven cases
+(the three round trips, the loading, error and no-change states), one that
+asserts an editor is offered no history at all, and three unit cases over
+`versionChanges`.
+
+One existing test changed rather than moved:
+`tests/test_search.py::test_a_hard_delete_removes_the_index_row` simulates an
+out-of-band hard delete and now has to remove `timeline_entry_versions` rows
+first, because the new table holds a foreign key into `timeline_entries`. The
+assertion it makes — that the FTS5 index does not survive a row removed by
+other means — is unchanged.

@@ -2659,7 +2659,7 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
   `notifications.read` column (**D-095**); edit history and its screen
   (2.10); editing in place (2.11).
 
-- [ ] 2.10 Edit history for all user-editable content, with a screen
+- [x] 2.10 Edit history for all user-editable content, with a screen
       (**AGENTS.md invariant 8** and v2 scope item 15, added 2026-09-20 after a
       human user test found the gap — see D-050).
       Today only notes keep history (`note_versions`), and nothing exposes it:
@@ -2688,6 +2688,115 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
         fail first until they are added.
       Placed in Phase 2 because it needs a screen and Phase 2 owns the UI, and
       because 2.1's decomposition is what makes adding a view tractable.
+      — **DONE**
+
+  - [x] **Two new tables, one shape.** Revision
+        `20260923_0006_version_history` adds `opportunity_versions` and
+        `timeline_entry_versions`, both following `note_versions` exactly:
+        one row per state of the parent, numbered from 1 under a
+        `UNIQUE (parent, version_number)` index, never updated. A version is
+        a **snapshot of every editable field**, not a diff — the reader's
+        question is "what did it say then", and a diff is one subtraction
+        from a snapshot while a snapshot is not recoverable from a chain of
+        diffs with a gap. Neither table repeats the live `CHECK` on `stage`
+        or `type`: revision 0005 already widened one of those lists, and a
+        constraint that moves would decide later which history stays
+        writable.
+  - [x] **`app/versioning.py` is the only writer.** `VersionedTable` names
+        the table, its parent column and its field list; `record_version`
+        reads the next number out of the table and appends. The note path
+        was moved onto it too, so the numbering exists once rather than
+        three times, and a fourth editable thing adds a declaration rather
+        than a fourth `INSERT`.
+  - [x] **Every write path that edits now records.** `create_opportunity`
+        and `create_timeline_entry` write version 1, so a history opens with
+        what the thing said on day one. `update_opportunity`,
+        `update_timeline_entry` and `update_note` write the resulting state,
+        **read back from the row after the `UPDATE`** — a `PATCH` carries
+        only what changed and a version is the whole state — stamped with
+        that write's own time (for an opportunity, the `updated_at` the same
+        statement set, so the row and its newest version agree exactly).
+        `POST /opportunities/bulk`'s `set_stage` records too: it is the same
+        edit asked for in bulk, and missing it would have made the board's
+        multi-select the one way to change a stage invisibly.
+  - [x] **Three read routes, owner-only** (**D-096**, `needs human review: Y`).
+        `GET /api/v2/opportunities/{id}/versions` and
+        `GET /api/v2/timeline/{entry_id}/versions` are new;
+        `GET /api/v2/notes/{note_id}/versions` shipped in Phase F open to
+        every role and is **tightened** here, so one screen has one rule.
+        All three are keyset-paginated oldest-first, like the audit log they
+        borrow their audience from. The matrix entries were added with the
+        routes — the registry guard failed first with "no matrix entry",
+        which is the guard doing its job — and the note row moved from
+        `viewer=200, editor=200` to `403`, a tightening rather than a
+        weakened expectation.
+  - [x] **The backfill, and what it honestly claims** (**D-097**,
+        `needs human review: Y`). Every existing opportunity and every
+        non-system entry gets a version 1 from its current values,
+        attributed to its owner or author and stamped with its `created_at`.
+        For a row never edited that is exactly true; for one edited before
+        the revision, the earlier values were overwritten in place and are
+        gone, so version 1 is "the oldest state this database can still
+        show". Without it the first edit after an upgrade would be the
+        entire history with nothing to read it against — which is the gap
+        the milestone exists to close. System entries are skipped: they
+        cannot be edited (403), so their history is empty rather than a copy
+        of the row beside them.
+  - [x] **One screen for all three** (`app/HistoryDialog.tsx`, on the
+        `app/Modal.tsx` shell). `lib/domain.ts` declares which fields each
+        kind snapshots and how each one reads; `versionChanges` compares two
+        versions without knowing which kind it holds; the read hook arrives
+        as a prop, so there is one component rather than three. Version 1
+        renders as the whole state and every later one as only the fields it
+        moved, each as "before to after" — the word, not an arrow glyph, and
+        with the spaces in the markup rather than only in CSS, so a screen
+        reader hears "USD 185,000 to USD 162,000" instead of one run-on
+        token. A save that changed nothing says so. The button sits beside
+        the exports in the timeline heading, and on each entry and note,
+        rendered only for the owner; the hook is called with `enabled` bound
+        to the dialog being open, so opening a timeline of forty entries
+        costs no history requests.
+  - [x] Seed: Northwind's value moves 185,000 → 162,000 and its Proposal
+        entry is corrected, so `make seed` has a history worth opening; the
+        printed tour names the click-path and says Blair, an editor, is
+        offered none of the three.
+  - [x] Tests: 324 → 338 backend (`tests/test_versions.py`, 11 — creation
+        baseline, the value-drop case that prompted the requirement, partial
+        `PATCH` recording the whole state, bulk stage, entry edits, an empty
+        `PATCH` recording nothing, a system entry's empty history, the note
+        round trip, the cursor walk, survival through delete-and-restore,
+        and gapless numbering — plus the migration backfill case and the two
+        matrix rows). 394 → 405 frontend (`app/History.test.tsx`: three
+        UI-driven round trips, the loading, error and no-change states, an
+        editor offered nothing, and `versionChanges` directly). The fake API
+        (`app/test-api.ts`) **writes versions when it handles a write**
+        rather than taking them as canned options, so "edit it, then the
+        history says what it used to say" is a real assertion. E2E 49 → 50:
+        `e2e/03-note-history.spec.ts` now drives journey 3 entirely through
+        the UI — its old comment said the endpoint shipped and the screen did
+        not, which is exactly what this milestone changed — and a second
+        spec walks the opportunity's value history.
+  - [x] Docs: `CLAUDE.md` gains an "Edit history" section beside
+        "Auditability" and its soft-delete paragraph now says an edit to any
+        of the three appends a version.
+
+  Gate: `make check-fast` green (ruff, ruff format, mypy, eslint, tsc,
+  prettier, 338 backend tests at 97.27% combined coverage, 405 frontend tests
+  at 96.93/90.29/95.63/96.89 against the 96/96/95/89 thresholds, contract
+  check clean) and `make e2e` green at 50 with axe clean. Docker build and
+  smoke test remain the host's half of the split gate.
+
+  Backend coverage moved 97.13% → 97.27%; frontend 96.90/90.20/95.59/96.86 →
+  96.93/90.29/95.63/96.89. No module with a 95% branch floor (auth,
+  permissions, soft delete, audit, AI) moved; `versioning.py` is at 100%.
+
+  Not in this milestone, deliberately: editing in place (2.11), which is the
+  other half of the pair 2.10's own note asked to be sequenced together —
+  2.10 went first because it is what changes the write paths, and 2.11 now
+  changes only where the form is drawn. The history screen is read-only:
+  there is no "restore this version" control, because nothing in the
+  milestone or the roadmap asks for one and it would be a new write path
+  with its own permission question.
 
 - [ ] 2.11 Edit content where it is read (**AGENTS.md** v2 scope item 12,
       added 2026-09-20 from the human's Phase 1 user test — D-051). Today

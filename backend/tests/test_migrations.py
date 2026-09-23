@@ -30,7 +30,7 @@ CANONICAL = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 # The revision `alembic upgrade head` is expected to land on. Written down
 # rather than read from the script directory, for the same reason
 # `expected_schema.sql` is: a new revision should have to say so here.
-HEAD_REVISION = "0005_entry_types"
+HEAD_REVISION = "0006_version_history"
 
 
 @pytest.fixture
@@ -196,6 +196,37 @@ def test_mvp_backfill_creates_one_system_entry_per_opportunity(database_url: str
         ).fetchall()
 
     assert [row["title"] for row in rows] == ["Opportunity created"]
+
+
+def test_existing_rows_get_the_baseline_version_the_history_reads_from(
+    database_url: str,
+) -> None:
+    """Revision 0006 backfills version 1 for everything already in the database.
+
+    A row that predates the revision has no earlier state to recover — it was
+    overwritten in place — so version 1 is "the oldest state this database can
+    still show" rather than a recorded edit (D-097). Without it the first edit
+    after the upgrade would be the whole history, with nothing to read it
+    against, which is the gap the milestone exists to close.
+    """
+    build_mvp_database(database_url)
+
+    initialize_database()
+
+    with db_connection() as connection:
+        opportunity = connection.execute(
+            "SELECT * FROM opportunity_versions WHERE opportunity_id = 1"
+        ).fetchall()
+        entries = connection.execute("SELECT * FROM timeline_entry_versions").fetchall()
+
+    assert [(row["version_number"], row["name"], row["edited_by"]) for row in opportunity] == [
+        (1, "Legacy Deal", 1)
+    ]
+    # The backfilled "Opportunity created" entry is system-generated and so has
+    # no history; the legacy call the user wrote does.
+    assert [(row["entry_id"], row["version_number"], row["title"]) for row in entries] == [
+        (1, 1, "Discovery call")
+    ]
 
 
 def test_legacy_repair_runs_once_rather_than_on_every_startup(database_url: str) -> None:

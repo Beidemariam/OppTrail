@@ -2,16 +2,22 @@
 
 import { useState } from "react";
 
-import type { Access, TimelineNote } from "../lib/domain";
+import {
+  noteVersionFields,
+  type Access,
+  type TimelineNote,
+} from "../lib/domain";
 import { submitOnModEnter } from "../lib/keyboard";
 import {
   useAddComment,
   useDeleteComment,
   useDeleteNote,
+  useNoteVersions,
   useRestoreComment,
   useRestoreNote,
   useSaveNote,
 } from "../lib/queries";
+import { HistoryButton } from "./HistoryDialog";
 import { MarkdownText } from "./MarkdownText";
 import { useUndoableDelete } from "./Toasts";
 
@@ -76,6 +82,15 @@ export function NoteBlock({
         </p>
         {access.canChangeItem(note.created_by) && (
           <div className="inline-actions">
+            {/* Owner-only, like the other two histories (milestone 2.10). */}
+            {access.canManage && (
+              <HistoryButton
+                title="History of this note"
+                fields={noteVersionFields}
+                itemId={note.id}
+                useVersions={useNoteVersions}
+              />
+            )}
             <button
               type="button"
               className="secondary-button"

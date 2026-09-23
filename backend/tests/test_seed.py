@@ -47,6 +47,8 @@ def test_seed_populates_every_shipped_feature(tmp_path) -> None:
                 "notes",
                 "comments",
                 "note_versions",
+                "opportunity_versions",
+                "timeline_entry_versions",
                 "notifications",
                 "audit_log_entries",
                 "saved_views",
@@ -76,6 +78,8 @@ def test_seed_populates_every_shipped_feature(tmp_path) -> None:
         "notes",
         "comments",
         "note_versions",
+        "opportunity_versions",
+        "timeline_entry_versions",
         "audit_log_entries",
         "saved_views",
     ):
@@ -212,6 +216,19 @@ def test_seeded_permissions_match_the_printed_tour(tmp_path) -> None:
             for entry in alex.get(f"/api/v2/opportunities/{umbrella}/timeline").json()["items"]
         ]
         assert "Qualification call" in titles
+
+        # The edit-history tour line (milestone 2.10): Northwind's value moved
+        # twice and the history is what still holds the first figure. Owner-
+        # only, so Blair — an editor who can write to this opportunity — is
+        # refused the same read.
+        history = alex.get(f"/api/v2/opportunities/{northwind}/versions")
+        assert history.status_code == 200
+        assert [version["value"] for version in history.json()["items"]] == [
+            "185000",
+            "185000",
+            "162000",
+        ]
+        assert blair.get(f"/api/v2/opportunities/{northwind}/versions").status_code == 403
     finally:
         for client in (alex, blair, casey, dana):
             client.__exit__(None, None, None)

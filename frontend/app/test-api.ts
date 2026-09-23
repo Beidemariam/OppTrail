@@ -198,6 +198,16 @@ export function aComment(overrides: Partial<Comment> = {}): Comment {
 
 type SearchResult = components["schemas"]["SearchResultPublic"];
 
+/**
+ * Edit history (milestone 2.10). The fake writes these itself rather than
+ * taking them as an option: what a test wants to assert is "edit it, and the
+ * history says what it used to say", which is only a real assertion if the
+ * write is what produced the row.
+ */
+type OpportunityVersion = components["schemas"]["OpportunityVersionPublic"];
+type TimelineEntryVersion = components["schemas"]["TimelineEntryVersionPublic"];
+type NoteVersion = components["schemas"]["NoteVersionPublic"];
+
 export function aSearchResult(
   overrides: Partial<SearchResult> = {},
 ): SearchResult {
@@ -258,6 +268,15 @@ export class FakeApi {
     { wait: Promise<void>; release: () => void }
   >();
   private nextId = 1000;
+  // Version 1 is recorded when the fake sees the thing created, or — for the
+  // rows a test hands it already made — the first time it is edited, from
+  // the state it held before that edit. Either way the list opens with what
+  // the item said before the change under test.
+  private versions = {
+    opportunities: new Map<number, OpportunityVersion[]>(),
+    entries: new Map<number, TimelineEntryVersion[]>(),
+    notes: new Map<number, NoteVersion[]>(),
+  };
   // What a delete took, so a restore can put it back where it was — the
   // server keeps the row and clears `deleted_at` (`backend/app/soft_delete.py`),
   // and a fake that dropped the object would make undo untestable.
@@ -489,15 +508,38 @@ export class FakeApi {
         value: String(body.value),
       });
       this.opportunities.push(created);
+      this.recordVersion(
+        this.versions.opportunities,
+        created.id,
+        this.opportunitySnapshot(created),
+      );
       return this.json(created, 201);
+    }
+    if (segments[0] === "opportunities" && segments[2] === "versions") {
+      return this.page(
+        this.versions.opportunities.get(Number(segments[1])) ?? [],
+        path,
+      );
     }
     if (segments[0] === "opportunities" && segments.length === 2) {
       const id = Number(segments[1]);
       if (method === "PATCH") {
         const found = this.opportunities.find((item) => item.id === id)!;
+        if (!this.versions.opportunities.has(id)) {
+          this.recordVersion(
+            this.versions.opportunities,
+            id,
+            this.opportunitySnapshot(found),
+          );
+        }
         Object.assign(found, body, {
           value: String(body.value ?? found.value),
         });
+        this.recordVersion(
+          this.versions.opportunities,
+          id,
+          this.opportunitySnapshot(found),
+        );
         return this.json(found);
       }
       if (method === "DELETE") {
@@ -522,6 +564,11 @@ export class FakeApi {
         opportunity_id: Number(segments[1]),
       });
       this.entries.push(created);
+      this.recordVersion(
+        this.versions.entries,
+        created.id,
+        this.entrySnapshot(created),
+      );
       return this.json(created, 201);
     }
     if (segments[2] === "shares" || segments[2] === "audit-log") {
@@ -561,6 +608,9 @@ export class FakeApi {
     }
     if (segments[0] === "timeline") {
       const entryId = Number(segments[1]);
+      if (segments[2] === "versions") {
+        return this.page(this.versions.entries.get(entryId) ?? [], path);
+      }
       if (segments[2] === "notes") {
         const entry = this.entries.find((item) => item.id === entryId)!;
         const created = aNote({
@@ -569,11 +619,28 @@ export class FakeApi {
           body: body.body,
         });
         entry.notes.push(created);
+        this.recordVersion(
+          this.versions.notes,
+          created.id,
+          this.noteSnapshot(created),
+        );
         return this.json(created, 201);
       }
       if (method === "PATCH") {
         const entry = this.entries.find((item) => item.id === entryId)!;
+        if (!this.versions.entries.has(entryId)) {
+          this.recordVersion(
+            this.versions.entries,
+            entryId,
+            this.entrySnapshot(entry),
+          );
+        }
         Object.assign(entry, body);
+        this.recordVersion(
+          this.versions.entries,
+          entryId,
+          this.entrySnapshot(entry),
+        );
         return this.json(entry);
       }
       const index = this.entries.findIndex((item) => item.id === entryId);
@@ -583,6 +650,9 @@ export class FakeApi {
     }
     if (segments[0] === "notes") {
       const noteId = Number(segments[1]);
+      if (segments[2] === "versions") {
+        return this.page(this.versions.notes.get(noteId) ?? [], path);
+      }
       const owner = this.entries.find((entry) =>
         entry.notes.some((note) => note.id === noteId),
       )!;
@@ -597,8 +667,20 @@ export class FakeApi {
         return this.json(created, 201);
       }
       if (method === "PATCH") {
+        if (!this.versions.notes.has(noteId)) {
+          this.recordVersion(
+            this.versions.notes,
+            noteId,
+            this.noteSnapshot(note),
+          );
+        }
         note.body = body.body;
         note.edited = true;
+        this.recordVersion(
+          this.versions.notes,
+          noteId,
+          this.noteSnapshot(note),
+        );
         return this.json(note);
       }
       this.deleted.notes.set(noteId, {
@@ -656,6 +738,62 @@ export class FakeApi {
       items: items.slice(start, end),
       next_cursor: end < items.length ? String(end) : null,
     });
+  }
+
+  private opportunitySnapshot(item: Opportunity): OpportunityVersion {
+    return {
+      id: this.nextId++,
+      opportunity_id: item.id,
+      version_number: 0,
+      name: item.name,
+      account_name: item.account_name,
+      value: item.value,
+      currency: item.currency,
+      stage: item.stage as OpportunityVersion["stage"],
+      expected_close_date: item.expected_close_date,
+      edited_by: this.user?.id ?? 0,
+      editor_name: this.user?.name ?? "Owner",
+      created_at: item.updated_at,
+    };
+  }
+
+  private entrySnapshot(item: TimelineEntry): TimelineEntryVersion {
+    return {
+      id: this.nextId++,
+      entry_id: item.id,
+      version_number: 0,
+      type: item.type as TimelineEntryVersion["type"],
+      title: item.title,
+      body: item.body,
+      event_timestamp: item.event_timestamp,
+      follow_up_date: item.follow_up_date,
+      edited_by: this.user?.id ?? 0,
+      editor_name: this.user?.name ?? "Owner",
+      created_at: item.created_at,
+    };
+  }
+
+  private noteSnapshot(item: Note): NoteVersion {
+    return {
+      id: this.nextId++,
+      note_id: item.id,
+      version_number: 0,
+      body: item.body,
+      edited_by: this.user?.id ?? 0,
+      editor_name: this.user?.name ?? "Owner",
+      created_at: item.updated_at,
+    };
+  }
+
+  /** Appends a snapshot as the next version, numbering it like the API does. */
+  private recordVersion<VersionT extends { version_number: number }>(
+    history: Map<number, VersionT[]>,
+    id: number,
+    snapshot: VersionT,
+  ): void {
+    const list = history.get(id) ?? [];
+    list.push({ ...snapshot, version_number: list.length + 1 });
+    history.set(id, list);
   }
 
   private notFound(message: string): Response {

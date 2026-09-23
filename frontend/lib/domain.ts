@@ -79,6 +79,97 @@ export type TimelineNote = components["schemas"]["NotePublic"];
 export type BulkActionResultItem =
   components["schemas"]["BulkActionResultItem"];
 
+/* --- Edit history (milestone 2.10) ---------------------------------------
+ *
+ * Three histories over three different shapes, read through one screen
+ * (`app/HistoryDialog.tsx`). What differs between them is only which fields a
+ * version snapshots and how each one reads, so that is all that is declared
+ * per kind; the comparison below is written once.
+ */
+
+export type OpportunityVersion =
+  components["schemas"]["OpportunityVersionPublic"];
+export type TimelineEntryVersion =
+  components["schemas"]["TimelineEntryVersionPublic"];
+export type NoteVersion = components["schemas"]["NoteVersionPublic"];
+
+/** One versioned field: what to call it, and how to read it off a version. */
+export interface VersionField<VersionT> {
+  label: string;
+  read: (version: VersionT) => string;
+}
+
+export const opportunityVersionFields: VersionField<OpportunityVersion>[] = [
+  { label: "Name", read: (version) => version.name },
+  { label: "Account", read: (version) => version.account_name },
+  {
+    label: "Value",
+    read: (version) => formatMoney(version.currency, version.value),
+  },
+  { label: "Stage", read: (version) => version.stage },
+  {
+    label: "Close date",
+    read: (version) => version.expected_close_date ?? "Not set",
+  },
+];
+
+export const timelineEntryVersionFields: VersionField<TimelineEntryVersion>[] =
+  [
+    { label: "Type", read: (version) => entryTypeLabel(version.type) },
+    { label: "Title", read: (version) => version.title },
+    { label: "Details", read: (version) => version.body || "No details" },
+    { label: "Event time", read: (version) => version.event_timestamp },
+    {
+      label: "Follow up",
+      read: (version) => version.follow_up_date ?? "Not set",
+    },
+  ];
+
+export const noteVersionFields: VersionField<NoteVersion>[] = [
+  { label: "Body", read: (version) => version.body },
+];
+
+/**
+ * One line of a version block: a field, what it says now, and what it said
+ * before if this version is what changed it.
+ */
+export interface VersionChange {
+  label: string;
+  before: string | null;
+  after: string;
+}
+
+/**
+ * What one version is, read against the one before it.
+ *
+ * The first version has nothing to be read against, so it is the whole state —
+ * that is the point of recording it at creation. Every later version shows
+ * only the fields it moved, because a history answers "what changed" and the
+ * unchanged ones are already on the line above. A version that changed nothing
+ * (a save of an untouched form) is an empty list, which the dialog says in
+ * words rather than drawing as a gap.
+ */
+export function versionChanges<VersionT>(
+  fields: VersionField<VersionT>[],
+  version: VersionT,
+  previous: VersionT | undefined,
+): VersionChange[] {
+  if (!previous) {
+    return fields.map((field) => ({
+      label: field.label,
+      before: null,
+      after: field.read(version),
+    }));
+  }
+  return fields
+    .map((field) => ({
+      label: field.label,
+      before: field.read(previous),
+      after: field.read(version),
+    }))
+    .filter((change) => change.before !== change.after);
+}
+
 /** What the signed-in user is allowed to do inside one opportunity. */
 export interface Access {
   canWriteTimeline: boolean;

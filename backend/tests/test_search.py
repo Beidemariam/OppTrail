@@ -245,6 +245,10 @@ def test_a_hard_delete_removes_the_index_row(client: TestClient) -> None:
             (entry["id"],),
         )
         connection.execute("DELETE FROM notes WHERE entry_id = ?", (entry["id"],))
+        # Both version tables hang off the rows being removed; a hard delete
+        # has to take the history with it or the foreign key refuses
+        # (milestone 2.10 added the entry half).
+        connection.execute("DELETE FROM timeline_entry_versions WHERE entry_id = ?", (entry["id"],))
         connection.execute("DELETE FROM timeline_entries WHERE id = ?", (entry["id"],))
         connection.commit()
 

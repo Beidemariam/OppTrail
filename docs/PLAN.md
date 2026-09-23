@@ -54,6 +54,19 @@ system simple per the coding standards.
   (version 1 is captured when the note is created; each edit appends a new
   version row)
 
+**OpportunityVersion** (Phase 2 milestone 2.10)
+- id, opportunity_id, version_number, name, account_name, value, currency,
+  stage, expected_close_date, edited_by, created_at
+
+**TimelineEntryVersion** (Phase 2 milestone 2.10)
+- id, entry_id, version_number, type, title, body, event_timestamp,
+  follow_up_date, edited_by, created_at
+
+  Both follow NoteVersion exactly: version 1 at creation, one appended row per
+  edit holding the whole resulting state, never an update. `app/versioning.py`
+  is the only writer. System-generated entries are never versioned — they
+  cannot be edited.
+
 **Comment**
 - id, note_id, body, created_by, created_at, deleted_at (nullable)
   (comments are not editable after posting — see Open Questions)
@@ -91,7 +104,8 @@ across all of it (`docs/ARCHITECTURE.md`, "Pagination" / "Error shapes"):
 - `POST   /api/v2/opportunities`
 - `GET    /api/v2/opportunities/{id}`
 - `PATCH  /api/v2/opportunities/{id}` — including stage changes (auto-logs a
-  system TimelineEntry)
+  system TimelineEntry); appends an OpportunityVersion
+- `GET    /api/v2/opportunities/{id}/versions` — owner only, edit history
 - `DELETE /api/v2/opportunities/{id}` — owner only, soft delete
 - `POST   /api/v2/opportunities/{id}/restore` — owner only, undoes the above
 - `POST   /api/v2/opportunities/bulk` — one action over many ids, per-item
@@ -107,7 +121,8 @@ across all of it (`docs/ARCHITECTURE.md`, "Pagination" / "Error shapes"):
 - `GET    /api/v2/opportunities/{id}/timeline` — supports
   `?q=&type=&from=&to=&author_id=&order=`
 - `POST   /api/v2/opportunities/{id}/timeline`
-- `PATCH  /api/v2/timeline/{entry_id}`
+- `PATCH  /api/v2/timeline/{entry_id}` — appends a TimelineEntryVersion
+- `GET    /api/v2/timeline/{entry_id}/versions` — owner only, edit history
 - `DELETE /api/v2/timeline/{entry_id}` — soft delete
 - `POST   /api/v2/timeline/{entry_id}/restore`
 
@@ -115,7 +130,8 @@ across all of it (`docs/ARCHITECTURE.md`, "Pagination" / "Error shapes"):
 - `POST   /api/v2/timeline/{entry_id}/notes`
 - `PATCH  /api/v2/notes/{note_id}` — sets `edited = true` and appends a
   NoteVersion row
-- `GET    /api/v2/notes/{note_id}/versions`
+- `GET    /api/v2/notes/{note_id}/versions` — owner only since milestone 2.10
+  (D-096), which gave the three histories one audience
 - `DELETE /api/v2/notes/{note_id}` — soft delete
 - `POST   /api/v2/notes/{note_id}/restore`
 
