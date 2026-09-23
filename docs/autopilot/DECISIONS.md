@@ -452,3 +452,36 @@ scheme and will fail first.
 **D-099** | 2026-09-23 | Which *surfaces* get inline editing. An opportunity's fields are read in five places: the board card, the list row, the table cell, the calendar chip, and the opportunity's own heading above its timeline. | (a) every surface that draws a field, (b) the table grid and the opportunity heading, leaving the cards to the dialog `e` and Edit already open, (c) the table only, which is the one `docs/FEATURES.md` §1 names | (b) | A field is edited where it is read *as a field*. The table is a grid of fields — `docs/UX.md`'s view table gives it "inline edit" as its primary interaction — and the heading is where `docs/UX.md` asks for "the facts a rep needs constantly: value, stage, close date", which is precisely a set of fields displayed beside an Edit button that opened a form elsewhere. A board card and a list row read a *deal*, not a field list: an edit affordance on every value there is a control on every line of every card, which is what `AGENTS.md`'s Design bar rules out ("nothing on screen that does not earn its place"), and both already open the dialog from `e` and from Edit. (c) would leave the timeline — where the complaint in D-051 was actually made — untouched. One consequence recorded rather than discovered later: the table's **name** cell is not editable either, because it is the row's link to its timeline and a link inside a button is not a control anyone can operate; the name is edited on the heading that link leads to. | Y — every surface draws through `OpportunityField`, so adding one is a wrapper, not a mechanism. | N — it narrows rather than expands scope, and the narrowing is `AGENTS.md`'s own Design bar. |
 
 **D-100** | 2026-09-23 | How an inline editor's trigger is named for assistive technology. The first implementation gave it `aria-label="Edit Value"`, which is how every other icon-or-value control in this app is labelled. | (a) `aria-label="Edit <field>"`, (b) accessible name from the value itself, with the action as the `title` description, (c) the value plus a visually-hidden " — edit <field>" suffix | (b) | The trigger sits inside the opportunity's `<h2>`, and an `aria-label` on a descendant overrides name-from-content for the ancestor that computes its name from it: with (a) the opportunity's heading was named "Edit Opportunity" rather than the opportunity, which `e2e/helpers.ts`'s `openTimeline` failed on immediately — the accessible name of the heading was gone, not merely odd. (b) names the control what it holds, which is what a reader needs first, and announces what it does as its description; it is also the pattern the same control takes in other tools. (c) keeps the value but pollutes the heading's name with the affordance's wording. A second consequence worth keeping: tests address the trigger by `getByTitle("Edit Account")` rather than by its value, so a selector does not stop matching the moment the value it names is edited — `CLAUDE.md`'s standing Playwright rule. | Y | N — an implementation detail, settled by a test failure rather than by preference. |
+
+---
+
+## Human rulings — 2026-09-23 (Phase 2 gate, three of the seven open decisions)
+
+Ruled while the reviewer was still working through the rest of the packet.
+
+**D-093 — board filtering stayed client-side. RULED: schedule it for Phase R.**
+Not merely deferred: written into milestone **R.3**, which owns the large-dataset
+budgets, so it is measured against R.7's 800k-row seed rather than assumed. The
+reason it cannot stay as it is: filtering one page of a keyset-paginated list is
+not filtering — a row matching on page nine returns nothing while the client
+holds page one. Correct today at 400 opportunities, wrong at the confirmed scale.
+
+**D-097 — backfilled history baselines are approximate. RULED: accept as shipped,
+no `system_backfilled` flag.** The reviewer's reasoning: *"there's not real
+historical data, only trial data."* That is exactly right for the situation, and
+worth writing down because the reasoning is situational rather than permanent.
+The backfill only ever touches rows that exist when the migration runs. A fresh
+production database upgrades across the revision with nothing to backfill, so no
+approximate rows are ever created there. The approximate baselines exist only in
+the current trial database. **The one case that would revive this:** migrating
+the trial database into production, or upgrading any database that already holds
+real edits made before this revision. If either becomes the plan, revisit — the
+flag is cheap now and impossible to reconstruct later.
+
+**D-096 — edit history reads tightened to owner-only, including notes. RULED:
+accept.** Same reasoning: no real historical data, so nothing is lost by
+narrowing. Noting the direction for the record — narrowing an already-shipped
+read is the hard direction to reverse in general, but here there is no audience
+that had come to rely on it. Widening later, if collaborators turn out to want
+history as context rather than the owner wanting it as forensics, is a one-line
+change to the permission dependency.

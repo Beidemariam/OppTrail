@@ -3247,6 +3247,18 @@ this phase reaches `AWAITING_REVIEW` and is accepted, the project is finished.
 - [ ] R.3 Performance: large-dataset budgets met (800k-row seed per
       `AGENTS.md`'s "Confirmed Scale"); list/timeline virtualization; indexes
       justified by measurement, not guessed.
+      **Includes moving the board's filter and sort predicate into SQL**
+      (**D-093**, ruled by the human 2026-09-23 at the Phase 2 gate — scheduled
+      here rather than left deferred). Milestone 2.9 moved the frontend onto
+      `/api/v2/opportunities`, which is keyset-paginated, but the board still
+      filters and sorts the page it has client-side. D-061 (2.2) and D-063
+      (2.3) both predicted this would have to flip and both pointed at a later
+      milestone; 2.9 declined it as view-layer work of its own. It is correct
+      at the 400-opportunity scale the dashboard runs at today and wrong at the
+      confirmed scale, because filtering one page is not filtering — a query
+      matching a row on page nine returns nothing while the client holds page
+      one. Measure it against the 800k seed R.7 builds, rather than assuming
+      the cutover point.
 - [ ] R.4 Docker: multi-stage build, pinned versions, WeasyPrint dependencies,
       `HEALTHCHECK`, `/healthz` and `/readyz`, graceful shutdown. **Non-root
       user moved out of this item** — pulled forward into Phase 1's rework
