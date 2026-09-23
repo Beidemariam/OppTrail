@@ -24,6 +24,7 @@ export default defineConfig({
         // Test infrastructure, not shipped code.
         "app/test-api.ts",
         "app/test-app.tsx",
+        "app/test-editor.ts",
       ],
       // Brief §6.2 sets the frontend floor at 80% line. These are the numbers
       // the suite actually reaches, kept a little under the measured value so

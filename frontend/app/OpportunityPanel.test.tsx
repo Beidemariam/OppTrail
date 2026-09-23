@@ -11,6 +11,7 @@ import {
   anOpportunity,
 } from "./test-api";
 import { acceptConfirmation, openTimeline, renderDashboard } from "./test-app";
+import { clearEditor, writeInEditor } from "./test-editor";
 
 beforeEach(() => {
   document.cookie = "opptrail_csrf=test-token";
@@ -100,15 +101,22 @@ describe("the timeline", () => {
     });
     await openTimeline("Northwind rollout");
 
-    await userEvent.type(
-      await screen.findByPlaceholderText("Add note"),
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Add note" }),
+    );
+    writeInEditor(
+      screen.getByLabelText("Add a note to this entry"),
       "A fresh note",
     );
     await userEvent.click(screen.getByRole("button", { name: "Add Note" }));
 
     expect(await screen.findByText("A fresh note")).toBeInTheDocument();
 
-    await userEvent.type(screen.getByPlaceholderText("Add comment"), "A reply");
+    await userEvent.click(screen.getByRole("button", { name: "Add comment" }));
+    writeInEditor(
+      screen.getByLabelText("Add a comment to this note"),
+      "A reply",
+    );
     await userEvent.click(screen.getByRole("button", { name: "Post" }));
 
     expect(await screen.findByText("A reply")).toBeInTheDocument();
@@ -125,9 +133,10 @@ describe("the timeline", () => {
       "section",
     )!;
     await userEvent.click(within(note).getByRole("button", { name: "Edit" }));
-    const textarea = within(note).getByLabelText("Edit this note");
-    await userEvent.clear(textarea);
-    await userEvent.type(textarea, "Budget holder is the CFO.");
+    writeInEditor(
+      within(note).getByLabelText("Edit this note"),
+      "Budget holder is the CFO.",
+    );
     await userEvent.click(within(note).getByRole("button", { name: "Save" }));
 
     expect(
@@ -625,9 +634,11 @@ describe("what each role is offered", () => {
     expect(
       screen.queryByRole("button", { name: "Add Entry" }),
     ).not.toBeInTheDocument();
-    expect(screen.queryByPlaceholderText("Add note")).not.toBeInTheDocument();
     expect(
-      screen.queryByPlaceholderText("Add comment"),
+      screen.queryByRole("button", { name: "Add note" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Add comment" }),
     ).not.toBeInTheDocument();
     expect(document.querySelector(".sharing-panel")).toBeNull();
   });
@@ -661,7 +672,9 @@ describe("what each role is offered", () => {
       within(mine).getByRole("button", { name: "Edit" }),
     ).toBeInTheDocument();
     // Adding is still open to an editor.
-    expect(screen.getByPlaceholderText("Add note")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Add note" }),
+    ).toBeInTheDocument();
   });
 
   it("shows the owner the sharing panel and audit log", async () => {
@@ -905,7 +918,10 @@ describe("editing where the reader is (milestone 2.11)", () => {
     await userEvent.click(within(note).getByRole("button", { name: "Edit" }));
     expect(within(note).getByLabelText("Edit this note")).toHaveFocus();
 
-    await userEvent.type(within(note).getByLabelText("Edit this note"), "!");
+    writeInEditor(
+      within(note).getByLabelText("Edit this note"),
+      "Budget holder is the COO, confirmed.",
+    );
     await userEvent.click(within(note).getByRole("button", { name: "Save" }));
 
     expect(
@@ -1162,14 +1178,52 @@ describe("changing and removing what is already there", () => {
       "section",
     )!;
     await userEvent.click(within(note).getByRole("button", { name: "Edit" }));
-    await userEvent.type(
+    writeInEditor(
       within(note).getByLabelText("Edit this note"),
-      " and the CFO",
+      "Budget holder is the COO and the CFO.",
     );
     await userEvent.click(within(note).getByRole("button", { name: "Cancel" }));
 
     expect(screen.getByText("Budget holder is the COO.")).toBeInTheDocument();
     expect(api.callsTo("PATCH", "/api/v2/notes/200")).toHaveLength(0);
+  });
+
+  it("writes nothing when a note is reopened and saved untouched", async () => {
+    const api = await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [anEntry({ notes: [aNote({ body: "* one\n* two" })] })],
+    });
+    await openTimeline("Northwind rollout");
+
+    const note = (await screen.findByText("one")).closest("section")!;
+    await userEvent.click(within(note).getByRole("button", { name: "Edit" }));
+    await userEvent.click(within(note).getByRole("button", { name: "Save" }));
+
+    // The editor would write this body back as `- one`, which is the same
+    // list said differently — not an edit, so not a version row and not an
+    // edit marker (`lib/markdown.ts`'s `normalizeMarkdown`).
+    expect(api.callsTo("PATCH", "/api/v2/notes/200")).toHaveLength(0);
+    expect(
+      within(note).queryByLabelText("Edit this note"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("refuses to save a note emptied in the editor", async () => {
+    const api = await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [anEntry({ notes: [aNote()] })],
+    });
+    await openTimeline("Northwind rollout");
+
+    const note = (await screen.findByText("Budget holder is the COO.")).closest(
+      "section",
+    )!;
+    await userEvent.click(within(note).getByRole("button", { name: "Edit" }));
+    clearEditor(within(note).getByLabelText("Edit this note"));
+    await userEvent.click(within(note).getByRole("button", { name: "Save" }));
+
+    expect(api.callsTo("PATCH", "/api/v2/notes/200")).toHaveLength(0);
+    expect(within(note).getByLabelText("Edit this note")).toBeInTheDocument();
   });
 
   it("ignores an empty note or comment instead of posting it", async () => {
@@ -1180,8 +1234,10 @@ describe("changing and removing what is already there", () => {
     await openTimeline("Northwind rollout");
 
     await userEvent.click(
-      await screen.findByRole("button", { name: "Add Note" }),
+      await screen.findByRole("button", { name: "Add note" }),
     );
+    await userEvent.click(screen.getByRole("button", { name: "Add Note" }));
+    await userEvent.click(screen.getByRole("button", { name: "Add comment" }));
     await userEvent.click(screen.getByRole("button", { name: "Post" }));
 
     expect(api.callsTo("POST", "/notes")).toHaveLength(0);
@@ -1235,7 +1291,10 @@ describe("when the API refuses", () => {
       "section",
     )!;
     await userEvent.click(within(note).getByRole("button", { name: "Edit" }));
-    await userEvent.type(within(note).getByLabelText("Edit this note"), "!");
+    writeInEditor(
+      within(note).getByLabelText("Edit this note"),
+      "Budget holder is the CFO.",
+    );
     await userEvent.click(within(note).getByRole("button", { name: "Save" }));
 
     expect(

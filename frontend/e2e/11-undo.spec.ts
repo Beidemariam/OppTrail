@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
+  addNote,
+  addComment,
   entry,
   entryForm,
   expectNoAccessibilityViolations,
@@ -36,8 +38,7 @@ test("a deleted entry comes back, with its note, and stays back", async ({
   const review = entry(page, "Security review");
   await expect(review).toBeVisible();
 
-  await review.getByPlaceholder("Add note").fill("They asked about SOC 2.");
-  await review.getByRole("button", { name: "Add Note" }).click();
+  await addNote(review, "They asked about SOC 2.");
   await expect(review).toContainText("They asked about SOC 2.");
 
   // No dialog: the entry goes, and the toast is the way back.
@@ -111,15 +112,13 @@ test("deleting a note and a comment both leave an audit trail", async ({
   const call = entry(page, "Renewal call");
   await expect(call).toBeVisible();
 
-  await call.getByPlaceholder("Add note").fill("Discussed pricing.");
-  await call.getByRole("button", { name: "Add Note" }).click();
+  await addNote(call, "Discussed pricing.");
   const note = page
     .locator("section.note-block")
     .filter({ hasText: "Discussed pricing." });
   await expect(note).toBeVisible();
 
-  await note.getByPlaceholder("Add comment").fill("Following up next week.");
-  await note.getByRole("button", { name: "Post" }).click();
+  await addComment(note, "Following up next week.");
   const comment = note
     .locator(".comment-row")
     .filter({ hasText: "Following up next week." });

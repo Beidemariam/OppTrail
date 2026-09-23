@@ -110,7 +110,14 @@ export function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) {
     return false;
   }
-  if (target.isContentEditable) {
+  // Two readings of the same question, because each catches what the other
+  // misses. `isContentEditable` is the browser's own answer and is true inside
+  // a nested element of an editable region as well as on the host; jsdom
+  // implements no editing at all and leaves it `undefined`, so the attribute is
+  // read too — the rich composer (milestone 3.1) is a contenteditable `div`,
+  // and without the second reading every letter typed into a note in the unit
+  // suite is a command again.
+  if (target.isContentEditable || target.closest('[contenteditable="true"]')) {
     return true;
   }
   return ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);

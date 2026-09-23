@@ -33,6 +33,19 @@ describe("isTypingTarget", () => {
     expect(isTypingTarget(element)).toBe(true);
   });
 
+  it("is true inside the rich composer, a contenteditable div", () => {
+    // Deliberately unstubbed, unlike the case above: this is the shape the
+    // composer really has under jsdom, where `isContentEditable` is undefined,
+    // and reading the attribute is what covers both it and a keystroke whose
+    // target is an element inside the editable region.
+    const editable = document.createElement("div");
+    editable.setAttribute("contenteditable", "true");
+    const paragraph = document.createElement("p");
+    editable.append(paragraph);
+    expect(isTypingTarget(editable)).toBe(true);
+    expect(isTypingTarget(paragraph)).toBe(true);
+  });
+
   it("is false for an ordinary element and for nothing at all", () => {
     expect(isTypingTarget(document.createElement("article"))).toBe(false);
     expect(isTypingTarget(null)).toBe(false);

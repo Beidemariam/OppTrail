@@ -1,13 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef } from "react";
 
 import {
   timelineEntryVersionFields,
   type Access,
   type TimelineEntry,
 } from "../lib/domain";
-import { submitOnModEnter } from "../lib/keyboard";
 import {
   useAddNote,
   useDeleteTimelineEntry,
@@ -18,7 +17,9 @@ import { formatTimestamp } from "../lib/time";
 import { EntryTypeBadge } from "./EntryTypeBadge";
 import { HistoryButton } from "./HistoryDialog";
 import { useInlineEditor } from "./InlineEdit";
+import { MarkdownText } from "./MarkdownText";
 import { NoteBlock } from "./NoteBlock";
+import { Composer } from "./RichTextEditor";
 import { TimelineEntryForm } from "./TimelineEntryForm";
 import { useUndoableDelete } from "./Toasts";
 
@@ -68,7 +69,6 @@ function TimelineEntryCard({
   opportunityId: number;
   access: Access;
 }) {
-  const [note, setNote] = useState("");
   const editTriggerRef = useRef<HTMLButtonElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const editor = useInlineEditor(editTriggerRef, titleRef);
@@ -81,17 +81,6 @@ function TimelineEntryCard({
   );
 
   const failure = [addNote, deleteEntry].find((mutation) => mutation.isError);
-
-  function add() {
-    const body = note.trim();
-    if (!body) {
-      return;
-    }
-    addNote.mutate(
-      { entryId: entry.id, body },
-      { onSuccess: () => setNote("") },
-    );
-  }
 
   return (
     <article className="timeline-entry">
@@ -107,7 +96,16 @@ function TimelineEntryCard({
               <span>{formatTimestamp(entry.event_timestamp)}</span>
             </div>
             <h3>{entry.title}</h3>
-            <p className="timeline-copy">{entry.body || "No details"}</p>
+            {/* An entry body is Markdown, the same as a note's and a
+                comment's: one composer writes all three (milestone 3.1), so
+                one renderer reads them. It used to print as plain text, which
+                is why a body written with a list showed its dashes
+                (**D-108**). */}
+            {entry.body ? (
+              <MarkdownText content={entry.body} />
+            ) : (
+              <p className="timeline-copy">No details</p>
+            )}
           </div>
           {/* A system entry is history, not content: it cannot be edited or
               deleted through the API (`AGENTS.md`, auditability), so it has no
@@ -167,18 +165,15 @@ function TimelineEntryCard({
           ))}
 
           {access.canWriteTimeline && (
-            <div className="inline-compose">
-              <input
-                aria-label="Add a note to this entry"
-                placeholder="Add note"
-                value={note}
-                onChange={(event) => setNote(event.target.value)}
-                onKeyDown={submitOnModEnter(add)}
-              />
-              <button type="button" className="secondary-button" onClick={add}>
-                Add Note
-              </button>
-            </div>
+            <Composer
+              label="Add a note to this entry"
+              trigger="Add note"
+              placeholder="Write a note"
+              submitLabel="Add Note"
+              onSubmit={(body) =>
+                addNote.mutateAsync({ entryId: entry.id, body })
+              }
+            />
           )}
         </div>
       </div>

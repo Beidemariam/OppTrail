@@ -462,7 +462,6 @@ kbd,
 .timeline-form input,
 .timeline-form select,
 .timeline-form textarea,
-.inline-compose input,
 .stacked-form textarea {
   background: var(--bg-surface);
   border: 1px solid var(--border-strong);
@@ -1200,8 +1199,7 @@ a.danger-button {
 .timeline-entry-header,
 .section-heading,
 .note-header,
-.inline-actions,
-.inline-compose {
+.inline-actions {
   align-items: flex-start;
   display: flex;
   gap: 10px;
@@ -1700,17 +1698,119 @@ a.danger-button {
 }
 
 .markdown-content p,
-.markdown-content ul {
+.markdown-content ul,
+.rich-editor-input p,
+.rich-editor-input ul,
+.rich-editor-input ol {
   margin: 0;
 }
 
-.markdown-content ul {
+.markdown-content ul,
+.rich-editor-input ul,
+.rich-editor-input ol {
   padding-left: 18px;
 }
 
-.markdown-content a {
+.markdown-content a,
+.rich-editor-input a {
   color: var(--text-link);
   font-weight: 700;
+}
+
+/* --- The composer (milestone 3.1) --- */
+
+/* A caption over a control that cannot be wrapped in a `<label>`: the editor
+   is a contenteditable region named by `aria-label`, so the words on screen
+   are a sibling rather than the label element. */
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.field-caption {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+/* Collapsed, a composer reads as the field it is about to become rather than
+   as a button (`docs/UX.md`, progressive disclosure). */
+.composer-trigger {
+  background: var(--bg-surface);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  min-height: 42px;
+  padding: 9px 11px;
+  text-align: left;
+  width: 100%;
+}
+
+.composer-trigger:hover {
+  background: var(--bg-hover);
+}
+
+.rich-editor {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  display: grid;
+}
+
+.rich-toolbar {
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+}
+
+/* The pressed state is the same selected fill a checked card carries, so
+   "this is on" looks the same everywhere. */
+.rich-toolbar .ghost-button[aria-pressed="true"] {
+  background: var(--bg-selected);
+}
+
+.rich-editor-input {
+  color: var(--text-primary);
+  display: grid;
+  gap: 6px;
+  line-height: 1.5;
+  min-height: 82px;
+  overflow-wrap: anywhere;
+  padding: 9px 11px;
+}
+
+/* TipTap marks the empty document rather than rendering placeholder text, so
+   the words come from the attribute it sets. */
+.rich-editor-input p.is-editor-empty:first-child::before {
+  color: var(--text-secondary);
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+.rich-editor-input blockquote {
+  border-left: 3px solid var(--border-strong);
+  margin: 0;
+  padding-left: 10px;
+}
+
+/* A checklist is a list whose markers are its checkboxes — in the editor,
+   where TipTap marks the list with a data attribute, and in the rendered
+   Markdown, where `remark-gfm` gives it a class. */
+.rich-editor-input ul[data-type="taskList"],
+.markdown-content ul.contains-task-list {
+  list-style: none;
+  padding-left: 0;
+}
+
+.rich-editor-input ul[data-type="taskList"] li,
+.markdown-content li.task-list-item {
+  display: flex;
+  gap: 8px;
 }
 
 .meta-row {
@@ -1785,15 +1885,6 @@ a.danger-button {
   color: var(--text-primary);
   line-height: 1.4;
   overflow-wrap: anywhere;
-}
-
-.inline-compose {
-  align-items: stretch;
-}
-
-.inline-compose input {
-  flex: 1;
-  min-width: 0;
 }
 
 .compact {

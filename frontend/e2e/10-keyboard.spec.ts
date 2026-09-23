@@ -24,17 +24,20 @@ const MOD_ENTER = "ControlOrMeta+Enter";
  * mouse" is asserted rather than assumed. Bounded, so a control that is *not*
  * reachable fails with a sentence instead of hanging.
  */
-async function tabTo(page: Page, label: string, limit = 60) {
+async function tabTo(page: Page, name: string, limit = 60) {
   for (let step = 0; step < limit; step += 1) {
-    const focused = await page.evaluate(() =>
+    // Either way a control can be named: a label, or its own text. The
+    // composer's collapsed control is named by what it says (milestone 3.1).
+    const focused = await page.evaluate(() => [
       document.activeElement?.getAttribute("aria-label"),
-    );
-    if (focused === label) {
+      document.activeElement?.textContent,
+    ]);
+    if (focused.includes(name)) {
       return;
     }
     await page.keyboard.press("Tab");
   }
-  throw new Error(`"${label}" was not reachable by Tab within ${limit} stops`);
+  throw new Error(`"${name}" was not reachable by Tab within ${limit} stops`);
 }
 
 test("keyboard only: palette, opportunity, note", async ({ page }) => {
@@ -90,7 +93,12 @@ test("keyboard only: palette, opportunity, note", async ({ page }) => {
   await expect(entry(page, `Pricing call ${suffix}`)).toBeVisible();
 
   // The note composer is reachable by Tab, and takes the same submit chord.
-  await tabTo(page, "Add a note to this entry");
+  // Collapsed it is one control (milestone 3.1); opening it puts the cursor in
+  // the editor, so the note is written without touching the mouse or the
+  // pointer-driven affordances.
+  await tabTo(page, "Add note");
+  await page.keyboard.press("Enter");
+  await expect(page.getByLabel("Add a note to this entry")).toBeFocused();
   await page.keyboard.type("Filed without touching the mouse.");
   await page.keyboard.press(MOD_ENTER);
   await expect(

@@ -19,9 +19,9 @@ a red test suite, and a timestamp format/timezone split that corrupted timeline
 ordering, date filtering, and stalled detection.
 
 **Update — all Critical, High, and Medium findings (1-9) have since been fixed
-and verified.** The Low-severity items in finding 10 are still open by choice.
-See "Resolution" at the end of this document for what changed and how each fix
-was checked.
+and verified.** Most of the Low-severity items in finding 10 were left open by
+choice, and the v2 phases have closed them one at a time as the milestone that
+owned each came round; see "Still open" at the end for what remains.
 
 ## Findings by severity
 
@@ -634,9 +634,15 @@ an Arial fallback that does not exist in the image.
 
 ## Still open
 
-- **Finding 10 (Low)** — all eight items, unchanged.
+- **Finding 10 (Low)** — the single-line composers are **closed**: milestone
+  3.1 replaced every note, comment and entry-body composer with a TipTap editor
+  storing Markdown (`frontend/app/RichTextEditor.tsx`,
+  `frontend/lib/markdown.ts`), so a bullet list can be typed where it could not
+  be before. The rest of the eight are addressed where a phase touched them
+  (polling by ADR 0003's SSE work, the author filter by the timeline filter bar,
+  logging by milestone 1.6) or remain as recorded.
 - **Markdown is still not rendered in the PDF.** Note bodies export as escaped
   plain text, so `**bold**` appears with literal asterisks. This is the other
-  half of the requirement 17 gap, and it pairs with the single-line note
-  composer in finding 10; both are worth doing together, and closing it needs a
-  Markdown dependency in the backend.
+  half of the requirement 17 gap; the composer half closed in milestone 3.1,
+  and this half is milestone **3.5**, which needs a Markdown dependency in the
+  backend.

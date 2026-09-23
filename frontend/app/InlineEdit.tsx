@@ -35,7 +35,8 @@ import { useToasts } from "./Toasts";
  *
  * - `useInlineEditor` is the open/close state and the focus rule, used by
  *   whatever draws its own editor — a timeline entry swaps its card body for
- *   the entry form, a note swaps its rendered Markdown for a textarea.
+ *   the entry form, a note swaps its rendered Markdown for the composer
+ *   (`app/RichTextEditor.tsx` since 3.1, a textarea before it).
  * - `InlineEdit` is one field: it draws the value, and on activation replaces
  *   it with a control over the same space. The opportunity heading and the
  *   table cells use it.
@@ -48,7 +49,10 @@ import { useToasts } from "./Toasts";
  * Both directions run in one effect, after the render that swapped the views
  * over, because in each case the element to focus does not exist yet when the
  * handler asks for it: `editorRef` takes focus when the editor opens, and
- * `triggerRef` takes it back when the editor closes. Returning focus is part
+ * `triggerRef` takes it back when the editor closes. `editorRef` is optional
+ * for a caller whose editor focuses itself — the rich composer does, because
+ * ProseMirror creates its editable element one render later still
+ * (`app/RichTextEditor.tsx`). Returning focus is part
  * of **closing** rather than of unmounting, the same rule `app/Modal.tsx`
  * follows for dialogs (D-066) — an editor that goes away because the thing it
  * edited was deleted leaves focus alone.

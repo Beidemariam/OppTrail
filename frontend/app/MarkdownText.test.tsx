@@ -25,6 +25,21 @@ describe("MarkdownText", () => {
     expect(container.querySelector("del")).toHaveTextContent("gone");
   });
 
+  it("renders a checklist's boxes with the state the writer gave them", () => {
+    const { container } = render(
+      <MarkdownText content={"- [ ] call back\n- [x] sent the quote"} />,
+    );
+
+    const boxes = [...container.querySelectorAll("input[type=checkbox]")];
+    expect(boxes.map((box) => (box as HTMLInputElement).checked)).toEqual([
+      false,
+      true,
+    ]);
+    // Read-only where it is read: a box is ticked by editing the note
+    // (milestone 3.1), not by clicking it here.
+    expect(boxes.every((box) => box.hasAttribute("disabled"))).toBe(true);
+  });
+
   it("keeps links on the allowed protocols", () => {
     const { container } = render(
       <MarkdownText

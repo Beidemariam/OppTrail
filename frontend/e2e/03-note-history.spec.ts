@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  addNote,
   entry,
   entryForm,
   openTimeline,
@@ -39,19 +40,18 @@ test("editing a note marks it as edited and keeps the previous version", async (
   ).toBeVisible();
 
   const pricing = entry(page, "Pricing conversation");
-  await pricing
-    .getByPlaceholder("Add note")
-    .fill("First draft of the pricing summary.");
-  await pricing.getByRole("button", { name: "Add Note" }).click();
+  await addNote(pricing, "First draft of the pricing summary.");
 
   // Addressed by position, not by its text: the text is about to change, and a
-  // text filter would stop matching the moment the textarea is retyped.
+  // text filter would stop matching the moment the note is retyped.
   const note = pricing.locator("section.note-block").first();
   await expect(note).toContainText("First draft of the pricing summary.");
   await expect(note.getByText("edited")).toHaveCount(0);
 
   await note.getByRole("button", { name: "Edit" }).click();
-  await note.locator("textarea").fill("Second draft, with the 8% discount.");
+  await note
+    .getByLabel("Edit this note")
+    .fill("Second draft, with the 8% discount.");
   await note.getByRole("button", { name: "Save" }).click();
 
   await expect(note).toContainText("Second draft, with the 8% discount.");

@@ -207,7 +207,22 @@ def seed() -> None:
         body="Thirty minutes. Current tooling is three spreadsheets and a shared inbox.",
         event_timestamp=days_ago(21, hour=9),
     )
-    add_note(alex, intro, "Budget holder is the COO, not the VP. Need them on the next call.")
+    # Milestone 3.1: a note is written in a rich composer and stored as
+    # Markdown, so the demo data carries the structure that composer produces
+    # rather than one line of plain text.
+    add_note(
+        alex,
+        intro,
+        "Budget holder is the **COO**, not the VP.\n"
+        "\n"
+        "Next call needs:\n"
+        "\n"
+        "- the COO in the room\n"
+        "- the permissions model written down\n"
+        "\n"
+        "- [x] recap sent\n"
+        "- [ ] security summary",
+    )
 
     demo = add_entry(
         blair,
@@ -564,7 +579,17 @@ def main(argv: list[str] | None = None) -> int:
         "  linking back to Northwind's own timeline. GET\n"
         "  /api/v2/timeline/follow-ups is scoped the same way search is -\n"
         "  Casey sees it because they can read Northwind, and Dana sees\n"
-        "  nothing at all."
+        "  nothing at all.\n"
+        "\n"
+        "  Rich content (milestone 3.1) is on Northwind's first entry: the\n"
+        "  note under Intro call renders a bold figure, a bullet list and a\n"
+        "  two-item checklist with one box ticked, because it is stored as\n"
+        "  Markdown and always was - nothing migrated. Press Edit on it and\n"
+        "  the same note opens in the composer as a list rather than as\n"
+        "  asterisks; Add note and Add comment open the same editor, one\n"
+        "  control until you write in them. PDF export still renders these\n"
+        "  bodies as plain text - milestone 3.5 is the other half of\n"
+        "  requirement 17."
     )
     return 0
 

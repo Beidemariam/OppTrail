@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  addNote,
   entry,
   entryForm,
   openTimeline,
@@ -41,11 +42,10 @@ test("mentioning a colleague notifies them", async ({ page }) => {
     page.getByRole("heading", { name: "Security review" }),
   ).toBeVisible();
 
-  const review = entry(page, "Security review");
-  await review
-    .getByPlaceholder("Add note")
-    .fill(`@${colleagueEmail} can you take the DPA?`);
-  await review.getByRole("button", { name: "Add Note" }).click();
+  await addNote(
+    entry(page, "Security review"),
+    `@${colleagueEmail} can you take the DPA?`,
+  );
   await expect(page.getByText("can you take the DPA?")).toBeVisible();
   await signOut(page);
 
@@ -95,10 +95,7 @@ test("notification history survives being read, and mark-all-read clears the bad
   // (`routes_timeline.py` calls both `notify_mentions` and
   // `notify_shared_activity`), which is already more than one row — the
   // exact count is an implementation detail this test does not pin.
-  await kickoff
-    .getByPlaceholder("Add note")
-    .fill(`@${colleagueEmail} kickoff-note-alpha`);
-  await kickoff.getByRole("button", { name: "Add Note" }).click();
+  await addNote(kickoff, `@${colleagueEmail} kickoff-note-alpha`);
   await expect(page.getByText("kickoff-note-alpha")).toBeVisible();
   await signOut(page);
 

@@ -3114,10 +3114,14 @@ each other.
       second layer. Comparable in size to the search endpoint but simpler, with
       no full-text machinery.
 
-- [ ] 3.1 TipTap serializing to Markdown — no content migration (ADR 0005
+- [x] 3.1 TipTap serializing to Markdown — no content migration (ADR 0005
       rationale, `FEATURES.md` §4).
 - [ ] 3.2 Mention autocomplete, fixing requirement 13's discoverability
-      (today mentions require typing a full email address by hand).
+      (today mentions require typing a full email address by hand). **Also
+      carries the slash-command menu and "links to other entries"**, which
+      3.1 left to it (**D-111**): all three are one `@tiptap/suggestion`
+      popup with different triggers, and building one of them twice is the
+      duplication `AGENTS.md`'s standards rule out.
 - [ ] 3.3 Threaded comments, reactions, resolve/unresolve, watchers. Schema:
       `comments` gains `parent_id`, `resolved_at`; new `reactions`, `watchers`
       tables.
@@ -3301,6 +3305,86 @@ also run and clean. Backend 385 → 392 tests (+6 `test_follow_ups.py`, +1
 matrix row; the `test_seed.py` addition is assertions inside an existing
 test, not a new one), frontend 448 → 450 (+2 `lib/domain.test.ts`), E2E 59 →
 60, authorization-matrix endpoints 55 → 56. Figures in `COVERAGE.md`.
+
+### 3.1 TipTap serializing to Markdown — **DONE**
+
+`app/RichTextEditor.tsx` is the composer, everywhere this app takes content
+from a person, and `lib/markdown.ts` is the Markdown it reads and writes. No
+migration and no backend change: note, comment and entry bodies have been
+Markdown text since the MVP, so this milestone is a new way to type what was
+already stored — which is the payoff ADR 0005 and `FEATURES.md` §4 named when
+they chose Markdown over ProseMirror JSON.
+
+- [x] **The editor** — TipTap 3.31.3 (`@tiptap/react`, `@tiptap/starter-kit`,
+      `@tiptap/extension-list`, `@tiptap/extensions`) with the round trip
+      through TipTap's own `@tiptap/markdown` (**D-108**). `npm audit` is
+      clean across the 53 packages the four additions bring.
+      `lib/markdown.ts`'s `contentExtensions` is the single declaration of
+      which nodes the app's content may contain, and it is deliberately the
+      *renderer's* set: `underline` is off because Markdown has no syntax for
+      it and `MarkdownText`'s sanitizer has no `u` tag. The sanitizer's
+      allowlist is unchanged, which is what `FEATURES.md` §4 asks — the one
+      construct that needed checking rather than assuming is a checklist's
+      ticked box, and it survives the existing schema.
+      `linkProtocols` now lives in `lib/markdown.ts` and is read by both the
+      editor's link validation and the sanitizer, so the editor cannot write a
+      `javascript:` link the renderer would silently strip.
+- [x] **Four surfaces, one composer** (**D-109**) — an entry's body, a note
+      being written, a note being edited, and a comment. The entry body is the
+      one that widened the milestone: it was a `<textarea>` whose content was
+      printed as *plain text*, so a list typed into it showed its dashes. It
+      renders through `MarkdownText` now, like the other two.
+- [x] **Collapsed until written in** (**D-110**) — `Composer` is the second
+      shape in `app/RichTextEditor.tsx`, the way `InlineEdit.tsx` holds two:
+      one control saying what it would add, and the editor once it is clicked.
+      `docs/UX.md` already specified that for the entry composer; the reason
+      it generalises is that a timeline is made of composers and each is a
+      ProseMirror view. The draft lives in the `Composer`, so `Esc` and Cancel
+      put it away with what was written still in it.
+- [x] **Focus, and the keyboard** — the editor takes focus itself on open
+      (`autoFocus` in `onCreate`), because ProseMirror creates the editable
+      element in a layout effect and `useInlineEditor`'s effect runs before
+      that; returning focus to the trigger on close is still the hook's.
+      `Ctrl Enter` submits from inside the editor exactly as it did from the
+      textarea — the keystroke bubbles and `submitOnModEnter` is unchanged.
+      `isTypingTarget` needed a fix to keep single letters from becoming
+      commands inside a contenteditable (**D-112**), caught by the existing
+      guard test.
+- [x] **An edit that changed nothing writes nothing** (**D-114**) — the
+      editor normalizes syntax (`* one` → `- one`), so a note reopened and
+      saved untouched would otherwise write a version row and an edit marker.
+- [x] **Slash commands, mentions and entry links move to 3.2** (**D-111**) —
+      one suggestion popup with three triggers, built once. Every block a
+      slash menu would insert is already on the toolbar or has a Markdown
+      input rule.
+- [x] **One accessibility fix the seed data surfaced** — a checklist renders
+      as `<input type="checkbox">` with no accessible name, which axe fails
+      critically for the whole screen; `MarkdownText` names it from its state.
+      Latent before this milestone (any note could contain a task list) and
+      caught by `e2e/07-accessibility.spec.ts` once the demo note had one.
+- [x] **Tests** — `lib/markdown.test.ts` (13: the round trip, the
+      normalization `NoteBlock` compares against, the link allowlist),
+      `app/RichTextEditor.test.tsx` (20: all eight toolbar controls, the
+      refused `javascript:` link, and the `Composer`'s open/post/cancel/refuse
+      paths), two new `OpportunityPanel` journeys (the untouched-save no-op
+      and the emptied note), the checklist-rendering case in
+      `MarkdownText.test.tsx`, and the contenteditable case in
+      `lib/keyboard.test.ts`. `app/test-editor.ts` is how a ProseMirror editor
+      is driven under jsdom at all (**D-113**), and `e2e/18-rich-text.spec.ts`
+      is what jsdom cannot do: typing, and with it the Markdown input rules
+      that turn `- ` into a list — Phase 3's acceptance criterion, in a real
+      browser. `make seed` writes one Markdown note and the printed tour says
+      what to look at; `test_seed.py` holds it true.
+      `e2e/17-security-regressions.spec.ts`'s hostile-note journey changed
+      rather than moved: the composer now refuses to make a `javascript:` link
+      at all, so it asserts that **and** the same payload posted straight to
+      the API, where the sanitizer is the only thing in the way — which is the
+      property the test was always about, and the one Phase 5's email
+      ingestion will lean on.
+
+Gate: `make check` green (Docker half deferred to the host per the split
+gate). Backend 392 tests, unchanged — this milestone is entirely frontend.
+Frontend 450 → 487, E2E 60 → 61. Figures in `COVERAGE.md`.
 
 ### Acceptance
 

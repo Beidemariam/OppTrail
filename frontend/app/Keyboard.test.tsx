@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ALEX, anEntry, anOpportunity } from "./test-api";
 import { findCard, renderApp, renderDashboard } from "./test-app";
+import { writeInEditor } from "./test-editor";
 
 const northwind = anOpportunity();
 const acme = anOpportunity({
@@ -462,7 +463,7 @@ describe("with a timeline open", () => {
 
     await userEvent.keyboard("c");
     await userEvent.keyboard("Pricing call");
-    await userEvent.type(screen.getByLabelText("Body"), "They pushed back.");
+    writeInEditor(screen.getByLabelText("Body"), "They pushed back.");
     await userEvent.keyboard(CTRL_ENTER);
 
     await waitFor(() =>
@@ -482,7 +483,8 @@ describe("with a timeline open", () => {
       name: "Northwind rollout",
     });
 
-    await userEvent.type(
+    await userEvent.click(screen.getByRole("button", { name: "Add note" }));
+    writeInEditor(
       screen.getByLabelText("Add a note to this entry"),
       "Budget confirmed.",
     );
@@ -510,11 +512,19 @@ describe("shortcuts and text", () => {
       name: "Northwind rollout",
     });
 
+    await userEvent.click(screen.getByRole("button", { name: "Add note" }));
     const composer = screen.getByLabelText("Add a note to this entry");
     await userEvent.type(composer, "check jack's expiry date?");
 
-    expect(composer).toHaveValue("check jack's expiry date?");
+    // What the reader typed cannot be read back here — jsdom does not update a
+    // ProseMirror document from keystrokes (`app/test-editor.ts`), and
+    // `e2e/18-rich-text.spec.ts` types a note in a real browser. What this
+    // asserts is the other half, and the half the guard is about: none of
+    // those letters reached the keyboard map. "c" and "j"/"k" would have moved
+    // focus out of the composer, "x" would have bulk-selected a card, "e"
+    // would have opened the opportunity's form and "?" the shortcut reference.
     expect(composer).toHaveFocus();
+    expect(screen.queryByText("1 selected")).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { name: "Edit Opportunity" }),

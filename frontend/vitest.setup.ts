@@ -46,3 +46,27 @@ Object.defineProperty(window, "matchMedia", {
     dispatchEvent: () => false,
   }),
 });
+
+// The same absence, for ProseMirror (the rich composer, milestone 3.1): it
+// asks where the caret is on screen — to keep it in view after a change, and
+// to turn a mouse position into a document position — and jsdom answers
+// neither question. `Text` and `Range` in particular implement no geometry at
+// all, and ProseMirror measures both — a caret between two characters is a
+// collapsed range. These stubs make those reads answer zero rather than throw;
+// where the caret actually goes is asserted in `e2e/18-rich-text.spec.ts`,
+// which has a real layout.
+const emptyRect = {
+  bottom: 0,
+  height: 0,
+  left: 0,
+  right: 0,
+  top: 0,
+  width: 0,
+};
+document.elementFromPoint = () => null;
+for (const geometryless of [window.Text.prototype, window.Range.prototype]) {
+  Object.assign(geometryless, {
+    getBoundingClientRect: () => emptyRect,
+    getClientRects: () => [],
+  });
+}

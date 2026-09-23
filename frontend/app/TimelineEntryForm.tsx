@@ -10,6 +10,7 @@ import {
   nowDateTimeInput,
   toDateTimeInput,
 } from "../lib/time";
+import { RichTextEditor } from "./RichTextEditor";
 
 interface EntryFormState {
   type: EntryType;
@@ -79,8 +80,8 @@ export function TimelineEntryForm({
     <form
       className="timeline-form"
       onSubmit={submit}
-      // Ctrl Enter submits from anywhere in the form, including the textarea,
-      // where a bare Enter is a newline.
+      // Ctrl Enter submits from anywhere in the form, including the body
+      // composer, where a bare Enter is a new paragraph.
       onKeyDown={submitFormOnModEnter()}
     >
       <div className="timeline-form-grid">
@@ -130,14 +131,19 @@ export function TimelineEntryForm({
           required
         />
       </label>
-      <label>
-        Body
-        <textarea
+      {/* The body is the rich composer (milestone 3.1), so its name is an
+          `aria-label` on the editable region rather than a `<label>` — a
+          contenteditable element cannot be a label's target. The caption is
+          still on screen, the way the filter bars carry both. */}
+      <div className="field">
+        <span className="field-caption">Body</span>
+        <RichTextEditor
+          label="Body"
+          placeholder="What happened?"
           value={form.body}
-          onChange={(event) => setForm({ ...form, body: event.target.value })}
-          rows={3}
+          onChange={(body) => setForm({ ...form, body })}
         />
-      </label>
+      </div>
       <div className="inline-actions">
         <button className="primary-button" type="submit">
           {editing ? "Save Entry" : "Add Entry"}

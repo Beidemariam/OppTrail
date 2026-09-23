@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
+  addNote,
+  addComment,
   card,
   entry,
   entryForm,
@@ -39,9 +41,7 @@ test("viewer is read-only, editor can write, comments stay immutable", async ({
   await entryForm(page).getByRole("button", { name: "Add Entry" }).click();
   await expect(page.getByRole("heading", { name: "Kickoff" })).toBeVisible();
 
-  const kickoff = entry(page, "Kickoff");
-  await kickoff.getByPlaceholder("Add note").fill("Owner's note");
-  await kickoff.getByRole("button", { name: "Add Note" }).click();
+  await addNote(entry(page, "Kickoff"), "Owner's note");
   await expect(page.getByText("Owner's note")).toBeVisible();
 
   await page.getByPlaceholder("Colleague email").fill(guestEmail);
@@ -63,8 +63,10 @@ test("viewer is read-only, editor can write, comments stay immutable", async ({
   await openTimeline(page, opportunity);
   await expect(page.getByText("Owner's note")).toBeVisible();
   await expect(page.getByRole("button", { name: "Add Entry" })).toHaveCount(0);
-  await expect(page.getByPlaceholder("Add note")).toHaveCount(0);
-  await expect(page.getByPlaceholder("Add comment")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add note" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add comment" })).toHaveCount(
+    0,
+  );
   // Sharing and the audit log are the owner's alone.
   await expect(page.locator(".sharing-panel")).toHaveCount(0);
   await signOut(page);
@@ -89,9 +91,7 @@ test("viewer is read-only, editor can write, comments stay immutable", async ({
   await signIn(page, guestEmail);
   await openTimeline(page, opportunity);
 
-  const editorEntry = entry(page, "Kickoff");
-  await editorEntry.getByPlaceholder("Add note").fill("Editor's own note");
-  await editorEntry.getByRole("button", { name: "Add Note" }).click();
+  await addNote(entry(page, "Kickoff"), "Editor's own note");
   const editorNote = page
     .locator("section.note-block")
     .filter({ hasText: "Editor's own note" });
@@ -107,8 +107,7 @@ test("viewer is read-only, editor can write, comments stay immutable", async ({
     0,
   );
 
-  await editorNote.getByPlaceholder("Add comment").fill("Editor's comment");
-  await editorNote.getByRole("button", { name: "Post" }).click();
+  await addComment(editorNote, "Editor's comment");
   const comment = editorNote
     .locator(".comment-row")
     .filter({ hasText: "Editor's comment" });

@@ -1,4 +1,9 @@
-import { expect, type APIRequestContext, type Page } from "@playwright/test";
+import {
+  expect,
+  type APIRequestContext,
+  type Locator,
+  type Page,
+} from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
 /** Seeded by `backend/tools/seed.py`; see `make seed` for the full tour. */
@@ -95,6 +100,50 @@ export async function createOpportunity(
 /** The "Add Entry" form inside an open timeline. */
 export function entryForm(page: Page) {
   return page.locator("form.timeline-form");
+}
+
+/**
+ * A composer, which is collapsed until it is written in (milestone 3.1,
+ * `app/RichTextEditor.tsx`).
+ *
+ * Two steps, because there are two: the control saying what it would add is
+ * what a reader sees, and the editable region only exists once that is
+ * clicked. The region is addressed by its accessible name — a contenteditable
+ * element carries no placeholder attribute, and `aria-label` is what names it.
+ */
+export async function openComposer(
+  scope: Page | Locator,
+  trigger: string,
+  label: string,
+) {
+  await scope.getByRole("button", { name: trigger, exact: true }).click();
+  const editor = scope.getByLabel(label);
+  await expect(editor).toBeVisible();
+  return editor;
+}
+
+/** Writes one note on an entry and posts it. */
+export async function addNote(scope: Page | Locator, markdown: string) {
+  const editor = await openComposer(
+    scope,
+    "Add note",
+    "Add a note to this entry",
+  );
+  await editor.fill(markdown);
+  await scope.getByRole("button", { name: "Add Note" }).click();
+  await expect(editor).toBeHidden();
+}
+
+/** Writes one comment on a note and posts it. */
+export async function addComment(scope: Page | Locator, markdown: string) {
+  const editor = await openComposer(
+    scope,
+    "Add comment",
+    "Add a comment to this note",
+  );
+  await editor.fill(markdown);
+  await scope.getByRole("button", { name: "Post" }).click();
+  await expect(editor).toBeHidden();
 }
 
 /** The card for one opportunity on the stage board. */

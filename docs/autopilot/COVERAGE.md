@@ -1580,3 +1580,77 @@ Authorization-matrix endpoints: 55 (milestone 3.0a) → 56
 export routes — 200 for anyone signed in, permission filter inside the query.
 `tests/test_follow_ups.py::test_scoped_to_what_the_caller_can_read` holds the
 leakage case, since the matrix asserts status codes only.
+
+## Phase 3 — milestone 3.1 (TipTap serializing to Markdown)
+
+No migration, no route, no schema: the backend figures are unchanged because
+this milestone is entirely frontend — note, comment and entry bodies were
+already Markdown text, which is what `docs/FEATURES.md` §4 meant by "the payoff
+for storing Markdown from day one". The one backend file that changed is
+`tools/seed.py`, which now writes one Markdown note for the demo tour, with the
+assertion holding it true added inside `test_seed.py`'s existing test.
+
+Four dependencies added, all `@tiptap/*` at 3.31.3 (`react`, `starter-kit`,
+`extension-list`, `markdown`) plus `@tiptap/extensions` for `Placeholder`;
+53 packages in total, `npm audit` clean.
+
+```
+backend:  ruff check, ruff format --check, mypy app tools    all clean
+          392 passed (unchanged from milestone 3.0b — the seed's new note is
+          asserted inside an existing test)
+          97% combined line+branch (--cov-fail-under=90 enforced)
+          the six >=95%-branch modules (permissions, audit_utils, auth,
+          soft_delete, routes_ai, versioning) all still at 100%
+          pip-audit                                          no known vulnerabilities
+frontend: tsc --noEmit, eslint, prettier --check              all clean
+          (the same 2 pre-existing warnings, 0 errors)
+          487 passed (450 at milestone 3.0b; +13 lib/markdown.test.ts,
+          +20 app/RichTextEditor.test.tsx, +2 app/OpportunityPanel.test.tsx,
+          +1 app/MarkdownText.test.tsx, +1 lib/keyboard.test.ts)
+          97.17% statements / 91.55% branch / 95.65% functions / 97.14% line
+          (thresholds 96/96/95/90 all met; branches up from 91.30, functions
+          fractionally down from 95.51 — both measured, both above the floor.
+          `app/test-editor.ts` joins the other two test-infrastructure files in
+          the coverage exclusions)
+          app/RichTextEditor.tsx            new, 100% statements
+          lib/markdown.ts                   new, 100% statements
+          npm audit                                           0 vulnerabilities
+contract: scripts/generate-api-client.sh --check               up to date
+          (no API change to regenerate against)
+e2e:      61 passed (18 specs; +1 journey in the new 18-rich-text.spec.ts),
+          axe clean, the deferred-rule ratchet still empty
+docker:   deferred to the host half — scripts/autopilot-gate.sh 3
+          (no Docker socket in this sandbox, per sandbox/README.md)
+```
+
+Coverage floors (brief §6.2) all met: backend >= 90% line / >= 80% branch (97%
+combined); frontend >= 80% line (97.15%); the >=95%-branch modules at 100%.
+
+Authorization-matrix endpoints: 56, unchanged — this milestone adds no route.
+
+Two failures worth recording, because both were real rather than test churn:
+
+- **The typing guard.** `app/Keyboard.test.tsx`'s `does not treat what the
+  reader types as commands` failed the moment the note composer became a
+  contenteditable `div`: `isTypingTarget` asked only for `isContentEditable`,
+  which jsdom leaves `undefined`, so every letter of the note was a command
+  again. Fixed in `lib/keyboard.ts` (**D-112**) and confirmed to fail with the
+  fix reverted, per brief §6.5.
+- **An unnamed form control.** `e2e/07-accessibility.spec.ts` failed with 11
+  `label` violations (impact: critical) once the seeded demo note contained a
+  checklist: `remark-gfm` renders `- [x]` as a bare `<input type="checkbox">`
+  with no accessible name. `app/MarkdownText.tsx` names it from its state, and
+  `MarkdownText.test.tsx` asserts the two names. This was latent before the
+  milestone — any note could already contain a task list — and the seed data is
+  what surfaced it.
+
+One further E2E change worth naming, because it is a behaviour change rather
+than a selector change: `e2e/17-security-regressions.spec.ts`'s hostile-note
+journey used to assert that a typed `javascript:` link reached the renderer and
+came back as an `<a>` with its `href` stripped. The composer now refuses to
+make that link at all, so the text stays text and there is no anchor. The
+journey asserts both halves: the composer's refusal, **and** the same payload
+posted straight to the API — which the composer never sees, and where the
+sanitizer is the only thing between it and the reader. That second half is the
+property the test was always about, and it is the one Phase 5's email ingestion
+will depend on.

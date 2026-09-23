@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  addNote,
   createOpportunity,
   entryForm,
   expectNoAccessibilityViolations,
@@ -90,8 +91,7 @@ test("edit an entry, a note and an opportunity field without leaving the page", 
 
   // A note edits in its own note, and Esc-free: Save closes it and hands
   // focus back to the control that opened it.
-  await last.getByPlaceholder("Add note").fill("Budget holder is the COO.");
-  await last.getByRole("button", { name: "Add Note" }).click();
+  await addNote(last, "Budget holder is the COO.");
   const note = last.locator("section.note-block").first();
   await expect(note).toBeVisible();
   await note.getByRole("button", { name: "Edit" }).click();

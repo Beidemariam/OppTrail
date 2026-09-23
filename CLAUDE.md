@@ -457,6 +457,63 @@ is not one of `OPPORTUNITY_VERSIONS`' fields. `app/share_utils.py` is the one
 place a share row is granted, shared with `create_share`, because both have to
 cope with a soft-deleted row under a unique index.
 
+### The composer
+
+Milestone 3.1 replaced every place a person writes content — an entry's body, a
+note, an edit to a note, a comment — with one TipTap editor whose storage is
+Markdown. `docs/FEATURES.md` §4 is the spec and **no content migrated**, which
+is the whole reason Markdown was chosen over ProseMirror JSON: these bodies
+have been Markdown text since the MVP, so this is a new way to type what was
+already stored. It is entirely frontend; no route, schema or table changed.
+
+- **`lib/markdown.ts` declares the node set, and it is the renderer's**
+  (**D-108**). `contentExtensions` is what the editor may produce *and* what
+  `app/MarkdownText.tsx` can render, so a document cannot be written and then
+  not read back: `underline` is off because Markdown has no syntax for it and
+  the sanitizer has no `u` tag. The conversion is TipTap's own
+  `@tiptap/markdown` through a standalone `MarkdownManager`, so
+  `markdownFromDoc` — the function the component calls on every keystroke — is
+  the one the unit suite tests without a DOM. `linkProtocols` lives here and is
+  read by both the editor's link validation and the sanitizer's `href`
+  allowlist: **sanitization on render is still the boundary**, and sharing the
+  list is what stops the editor producing a `javascript:` link that the
+  renderer would silently strip. The sanitizer's allowlist is otherwise
+  unchanged, which is what `FEATURES.md` §4 requires.
+- **`app/RichTextEditor.tsx` holds two shapes**, the way `InlineEdit.tsx` does.
+  `RichTextEditor` is the editor itself: uncontrolled like the `<textarea>` it
+  replaced (`value` seeds the document once; every keystroke reports Markdown
+  through `onChange`), named by `aria-label` with `role="textbox"` because a
+  contenteditable `div` cannot be a `<label>`'s target, and focusing itself on
+  open — ProseMirror creates the editable element in a layout effect, one
+  render after `useInlineEditor` would look for it. `Composer` is the same
+  editor collapsed to the control that opens it (**D-110**, `docs/UX.md`'s
+  progressive disclosure): a timeline is made of composers and each open one is
+  a ProseMirror view, the draft lives in the `Composer` so `Esc` and Cancel
+  keep it, and posting unmounts the editor rather than clearing it.
+- **The toolbar carries only what needs no second question.** Bold, italic,
+  strike, code, the three lists and quote; a link and a heading are typed
+  (`[text](url)`, `### `) because a button for either has to open a dialog out
+  of a composer. It is named "Formatting", not after the field — a group called
+  "Formatting: Body" is also a match for a query for "Body".
+- **An edit that changed nothing writes nothing** (**D-114**): the editor
+  normalizes syntax, so `NoteBlock.save` compares the draft against
+  `normalizeMarkdown(note.body)` rather than the raw text — otherwise reopening
+  a note and pressing Save writes a version row and an edit marker for an edit
+  nobody made.
+- **Entry bodies are Markdown too** (**D-109**). They used to print as plain
+  text, so a list typed into the one field a call gets logged into showed its
+  dashes.
+- **Slash commands, mention autocomplete and links to other entries are 3.2**
+  (**D-111**) — one `@tiptap/suggestion` popup with three triggers, built once.
+- **Two things about testing it.** `userEvent.type` cannot drive ProseMirror
+  under jsdom (it applies a typed character by reading back the DOM mutation a
+  browser would have made), so `app/test-editor.ts`'s `writeInEditor` pastes
+  instead — a real action, no seam in the component — and `clearEditor` deletes
+  a selection, which is a ProseMirror command (**D-113**). Typing itself, and
+  with it the Markdown input rules, is `e2e/18-rich-text.spec.ts`.
+  `vitest.setup.ts` stubs the geometry ProseMirror asks for, for the same
+  reason the virtualizer needed `offsetHeight`.
+
 ### Editing where content is read
 
 `AGENTS.md` v2 scope item 12 — "content is edited where it is read, not in a
@@ -744,8 +801,12 @@ The units worth testing directly, each in its own module:
 - `lib/contrast.ts` — WCAG relative luminance and contrast ratio, used by
   `lib/contrast.test.ts` to re-run `docs/DESIGN-SYSTEM.md`'s audit against the
   tokens themselves.
+- `lib/markdown.ts` — the node set the composer and the renderer share, and
+  Markdown to and from an editor document (3.1). See "The composer".
 - `app/InlineEdit.tsx` — `useInlineEditor` and `InlineEdit`, the two shapes
   of "edit this where it is read" (2.11). See "Editing where content is read".
+- `app/RichTextEditor.tsx` — `RichTextEditor` and `Composer`, the two shapes
+  of "write content here" (3.1). See "The composer".
 - `app/Toasts.tsx` — the toast surface and `useUndoableDelete`, the one
   definition of "delete it, and say so with a way back" (milestone 2.4b). The
   region is a `role="status"` live region, never focused, so a reader keeps
@@ -754,9 +815,12 @@ The units worth testing directly, each in its own module:
   that started the delete has usually unmounted by the time it resolves —
   deleting a note unmounts the note — and TanStack Query drops
   `mutate(vars, { onSuccess })` once the observer has no listeners.
-- `app/MarkdownText.tsx` — note and comment bodies, rendered through
-  `rehype-sanitize` with an explicit `http`/`https`/`mailto` protocol allowlist.
-  Keep that allowlist if you touch the Markdown pipeline.
+- `app/MarkdownText.tsx` — entry, note and comment bodies (all three since
+  3.1), rendered through `rehype-sanitize` with an explicit
+  `http`/`https`/`mailto` protocol allowlist, which is `lib/markdown.ts`'s
+  `linkProtocols`. Keep that allowlist if you touch the Markdown pipeline. Its
+  one control is a checklist's box, which `remark-gfm` emits unnamed — named
+  here, because an unlabelled form control fails axe for the whole screen.
 - `app/VirtualList.tsx` — a generic `<T>` wrapper over
   `@tanstack/react-virtual` (milestone 2.3, roadmap: "400 opportunities will
   not render unvirtualized"). `StageBoard` renders each stage column through
@@ -816,7 +880,9 @@ The units worth testing directly, each in its own module:
   acts on.
 - **Single keys stop at a text field.** `chordFor` returns nothing for a
   letter typed into an input, textarea, select or contenteditable —
-  `isTypingTarget` — while `Ctrl K` and `Esc` still work there, which is what
+  `isTypingTarget`, which reads both `isContentEditable` and the attribute,
+  because jsdom implements the first as `undefined` and the composer is a
+  contenteditable `div` (**D-112**) — while `Ctrl K` and `Esc` still work there, which is what
   `docs/UX.md` means by "from anywhere including inside inputs". The guard test
   is `does not treat what the reader types as commands` in
   `app/Keyboard.test.tsx`; without that check, typing a note fires half the

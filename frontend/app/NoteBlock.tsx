@@ -8,6 +8,7 @@ import {
   type TimelineNote,
 } from "../lib/domain";
 import { submitOnModEnter } from "../lib/keyboard";
+import { normalizeMarkdown } from "../lib/markdown";
 import {
   useAddComment,
   useDeleteComment,
@@ -20,6 +21,7 @@ import {
 import { HistoryButton } from "./HistoryDialog";
 import { useInlineEditor } from "./InlineEdit";
 import { MarkdownText } from "./MarkdownText";
+import { Composer, RichTextEditor } from "./RichTextEditor";
 import { useUndoableDelete } from "./Toasts";
 
 /**
@@ -37,14 +39,15 @@ export function NoteBlock({
 }) {
   // Editing a note has always happened in the note (`docs/UX.md`), so
   // milestone 2.11 changed nothing about where; what it added is the focus
-  // rule every inline editor now shares — the textarea takes focus when it
+  // rule every inline editor now shares — the editor takes focus when it
   // opens, and the Edit button takes it back when it closes, so a keyboard
-  // reader is never returned to the top of the timeline.
+  // reader is never returned to the top of the timeline. Since 3.1 the editor
+  // is the rich composer, which takes focus itself on open (`autoFocus`) —
+  // ProseMirror has not created the editable element yet when the hook's
+  // effect runs.
   const editTriggerRef = useRef<HTMLButtonElement>(null);
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
-  const editor = useInlineEditor(editTriggerRef, bodyRef);
+  const editor = useInlineEditor(editTriggerRef);
   const [draft, setDraft] = useState("");
-  const [comment, setComment] = useState("");
   const saveNote = useSaveNote();
   const deleteNote = useDeleteNote();
   const addComment = useAddComment();
@@ -65,18 +68,16 @@ export function NoteBlock({
     if (!body) {
       return;
     }
-    saveNote.mutate({ noteId: note.id, body }, { onSuccess: editor.close });
-  }
-
-  function post() {
-    const body = comment.trim();
-    if (!body) {
+    // The editor writes the structure back out in its own syntax, so a body
+    // reopened and saved untouched can differ from the stored text character
+    // for character while saying the same thing. Comparing against the
+    // normalized original is what keeps that from writing a version row and
+    // an edit marker for an edit nobody made (`lib/markdown.ts`).
+    if (body === normalizeMarkdown(note.body)) {
+      editor.close();
       return;
     }
-    addComment.mutate(
-      { noteId: note.id, body },
-      { onSuccess: () => setComment("") },
-    );
+    saveNote.mutate({ noteId: note.id, body }, { onSuccess: editor.close });
   }
 
   return (
@@ -121,13 +122,13 @@ export function NoteBlock({
 
       {editor.editing ? (
         <div className="stacked-form">
-          <textarea
-            ref={bodyRef}
-            aria-label="Edit this note"
+          <RichTextEditor
+            label="Edit this note"
+            placeholder="Write a note"
             value={draft}
-            onChange={(event) => setDraft(event.target.value)}
+            onChange={setDraft}
             onKeyDown={submitOnModEnter(save)}
-            rows={3}
+            autoFocus
           />
           <div className="inline-actions">
             <button type="button" className="primary-button" onClick={save}>
@@ -169,18 +170,13 @@ export function NoteBlock({
       </div>
 
       {access.canWriteTimeline && (
-        <div className="inline-compose">
-          <input
-            aria-label="Add a comment to this note"
-            placeholder="Add comment"
-            value={comment}
-            onChange={(event) => setComment(event.target.value)}
-            onKeyDown={submitOnModEnter(post)}
-          />
-          <button type="button" className="secondary-button" onClick={post}>
-            Post
-          </button>
-        </div>
+        <Composer
+          label="Add a comment to this note"
+          trigger="Add comment"
+          placeholder="Write a comment"
+          submitLabel="Post"
+          onSubmit={(body) => addComment.mutateAsync({ noteId: note.id, body })}
+        />
       )}
     </section>
   );

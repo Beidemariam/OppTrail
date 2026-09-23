@@ -278,6 +278,21 @@ def test_seeded_permissions_match_the_printed_tour(tmp_path) -> None:
         casey_follow_ups = casey.get("/api/v2/timeline/follow-ups").json()["items"]
         assert any(item["title"] == demo_follow_up["title"] for item in casey_follow_ups)
         assert dana.get("/api/v2/timeline/follow-ups").json()["items"] == []
+
+        # The rich-content tour line (milestone 3.1): the note under the intro
+        # call is Markdown with the three constructs the tour names, stored as
+        # the text the composer writes rather than as one flat line.
+        entries = alex.get(f"/api/v2/opportunities/{northwind}/timeline").json()["items"]
+        intro_notes = next(
+            entry["notes"]
+            for entry in entries
+            if entry["title"] == "Intro call with the VP of Operations"
+        )
+        rich_note = intro_notes[0]["body"]
+        assert "**COO**" in rich_note
+        assert "- the COO in the room" in rich_note
+        assert "- [x] recap sent" in rich_note
+        assert "- [ ] security summary" in rich_note
     finally:
         for client in (alex, blair, casey, dana):
             client.__exit__(None, None, None)

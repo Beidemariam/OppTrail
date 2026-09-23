@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { aComment, aNote, anEntry, anOpportunity } from "./test-api";
 import { acceptConfirmation, openTimeline, renderDashboard } from "./test-app";
+import { writeInEditor } from "./test-editor";
 import { TOAST_DURATION_MS, ToastProvider, useToasts } from "./Toasts";
 
 /**
@@ -164,8 +165,7 @@ describe("optimistic updates", () => {
     )!;
 
     await userEvent.click(within(note).getByRole("button", { name: "Edit" }));
-    await userEvent.clear(within(note).getByLabelText("Edit this note"));
-    await userEvent.type(
+    writeInEditor(
       within(note).getByLabelText("Edit this note"),
       "Budget holder is the CFO.",
     );
@@ -191,9 +191,9 @@ describe("optimistic updates", () => {
     )!;
 
     await userEvent.click(within(note).getByRole("button", { name: "Edit" }));
-    await userEvent.type(
+    writeInEditor(
       within(note).getByLabelText("Edit this note"),
-      " Maybe.",
+      "Budget holder is the COO. Maybe.",
     );
     await userEvent.click(within(note).getByRole("button", { name: "Save" }));
 

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { aNote, anEntry, anOpportunity, BLAIR } from "./test-api";
 import { findCard, openTimeline, renderDashboard } from "./test-app";
+import { writeInEditor } from "./test-editor";
 import { versionChanges, opportunityVersionFields } from "../lib/domain";
 
 /**
@@ -136,9 +137,10 @@ describe("edit history", () => {
 
     const note = noteBlock();
     await userEvent.click(within(note).getByRole("button", { name: "Edit" }));
-    const textarea = screen.getByLabelText("Edit this note");
-    await userEvent.clear(textarea);
-    await userEvent.type(textarea, "Budget holder is the CFO.");
+    writeInEditor(
+      screen.getByLabelText("Edit this note"),
+      "Budget holder is the CFO.",
+    );
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await screen.findByText("Budget holder is the CFO.");
 
@@ -215,7 +217,9 @@ describe("edit history", () => {
     });
     await openTimeline("Northwind rollout");
 
-    expect(await screen.findByPlaceholderText("Add note")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "Add note" }),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "History" })).toBeNull();
   });
 
