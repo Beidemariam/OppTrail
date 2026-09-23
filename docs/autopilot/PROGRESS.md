@@ -3068,6 +3068,48 @@ each other.
 
 ### Milestones
 
+- [ ] 3.0 One activity log per opportunity (**D-098**, raised by the human at
+      the Phase 2 gate). Today "who did what when" is scattered across three
+      mechanisms that never meet: **system timeline entries** (created, stage
+      changed, sharing changed), **audit log rows** (deletions and share
+      changes, owner-only), and **version rows** (every edit, in
+      `note_versions` / `opportunity_versions` / `timeline_entry_versions`).
+      Each item's history opens separately, and the reviewer asked for the
+      obvious thing: *"one place where the whole history of every event to the
+      opportunity resides so people can see who did what when. It should reside
+      at Opportunity level."*
+      The reviewer also noticed edits do not appear in the audit log and asked
+      whether auditable events are defined to exclude some. **They are, and it
+      is worth stating plainly:** verified against the running app, opportunity
+      2 has *zero* audit rows while carrying 1 opportunity-version and 14
+      entry-version rows. The audit log records only the seven actions in
+      `audit_utils` — four deletions, `share_removed`, `share_role_changed`,
+      `is_shared` — because `AGENTS.md` invariant 7 scopes it to deletions and
+      sharing. Edits were never in it; invariant 8 put them in version tables
+      instead. Nothing is missing, but no screen joins the three.
+      Scope: one chronological, permission-filtered view at opportunity level
+      merging all three sources, each row naming actor, action and time. Note
+      the audit half is owner-only today (D-096) while system entries are
+      visible to everyone with access — so either the merged view filters per
+      row by role, or the decision about who sees what gets revisited. That is
+      the real design question in this milestone.
+- [ ] 3.0a The three bulk actions 2.4c did not build (**D-070**, ruled by the
+      human 2026-09-23). Assign owner, add to view, and export need capabilities
+      that do not exist as single-item operations: ownership transfer, view
+      membership, and multi-record export. Placed here rather than in Phase 2
+      because each is a feature in its own right, and ownership transfer in
+      particular needs a permission decision (may an editor reassign? does the
+      old owner keep access?) that belongs with this phase's collaboration work.
+- [ ] 3.0b Follow-up dates on the calendar (**D-088**, ruled by the human
+      2026-09-23). `FEATURES.md` scopes the calendar as close dates *and*
+      follow-up dates; 2.8 shipped close dates only, because those arrive with
+      the opportunity list while follow-up dates live on `timeline_entries` and
+      no endpoint returns them across opportunities. Needs one new read:
+      follow-up entries in a date range, permission-filtered, paginated like
+      the rest of v2 — plus its authorization-matrix entry and the calendar's
+      second layer. Comparable in size to the search endpoint but simpler, with
+      no full-text machinery.
+
 - [ ] 3.1 TipTap serializing to Markdown — no content migration (ADR 0005
       rationale, `FEATURES.md` §4).
 - [ ] 3.2 Mention autocomplete, fixing requirement 13's discoverability

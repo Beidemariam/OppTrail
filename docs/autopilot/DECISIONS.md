@@ -485,3 +485,51 @@ read is the hard direction to reverse in general, but here there is no audience
 that had come to rely on it. Widening later, if collaborators turn out to want
 history as context rather than the owner wanting it as forensics, is a one-line
 change to the permission dependency.
+
+---
+
+## Human rulings — 2026-09-23 (Phase 2 gate, remaining four decisions)
+
+All seven decisions from the Phase 2 packet are now ruled. D-093, D-096 and
+D-097 are recorded above. The remaining four, all **agreed as recommended**:
+
+**D-070 — three of five bulk actions unbuilt. ACCEPTED**, with the reviewer
+asking where the rest go. Scheduled as milestone **3.0a**. Phase 3 rather than
+Phase 2 because each needs a capability that does not exist as a single-item
+operation — ownership transfer, view membership, multi-record export — and
+ownership transfer in particular carries a permission question (may an editor
+reassign? does the previous owner keep access?) that belongs with Phase 3's
+collaboration work rather than being decided inside a bulk-action wrapper.
+
+**D-078 — icons on all eleven entry types. ACCEPTED**, no further work.
+
+**D-088 — calendar shows close dates only. ACCEPTED**, with the reviewer asking
+the effort for the endpoint that would add follow-ups. Scheduled as **3.0b**.
+Sized: one new read — follow-up entries in a date range, permission-filtered,
+paginated like the rest of v2 — plus its authorization-matrix entry, its tests
+and the calendar's second layer. Comparable to the search endpoint in shape but
+smaller, since there is no full-text machinery: the data is a column on
+`timeline_entries` that nothing currently returns across opportunities. Not a
+milestone on its own in a later phase, which is why it is bundled at the front
+of Phase 3 rather than deferred to Phase R.
+
+**D-090 — the table is not a true ARIA grid. ACCEPTED**, with the reviewer
+asking me to record the consequence. **The note, for the record:** a
+screen-reader user navigating the table view hears a list of rows, not a grid.
+They cannot use table navigation commands, cannot move cell-by-cell along a
+row, and do not hear "column 3 of 5" style position announcements. Each cell
+does carry its column name in visually-hidden text, so no information is lost —
+it is slower to traverse, not unusable, and `axe` passes because the markup
+never claims to be a grid it is not. The cost lands entirely on assistive-
+technology users, which is why it is written down rather than left implicit.
+The trigger for revisiting: if OppTrail ever needs a genuine data grid — editable
+cells, column resizing, keyboard cell navigation — this is the decision that has
+to be reopened first, and doing it then means either plumbing `role="presentation"`
+and `aria-rowindex` through `VirtualList` or dropping virtualization for the
+table. Phase R's accessibility pass (R.2) should confirm the hidden column
+labels actually read well in a real screen reader rather than only satisfying
+`axe`.
+
+---
+
+**D-098** | 2026-09-23 | Raised by the human at the Phase 2 gate, from check g-01: *"the history for each item, note, comment etc is separated. I want one history log, ideally combined with audit log... one place where the whole history of every event to the opportunity resides so people can see who did what when. It should reside at Opportunity level."* The same note asked whether auditable events are defined to exclude some, having seen no audit trail for edits just made. | Investigated before answering. **Yes, deliberately, and nothing is missing.** Three mechanisms record history and none of them meet: system timeline entries (opportunity created, stage changed, sharing changed), audit log rows (the seven actions in `audit_utils` — four deletions, `share_removed`, `share_role_changed`, `is_shared`), and version rows (every edit, in the three `*_versions` tables). `AGENTS.md` invariant 7 scopes the audit log to deletions and sharing; invariant 8 put edits in version tables. Verified against the running app: opportunity 2 has **zero** audit rows while carrying 1 opportunity-version and 14 entry-version rows — exactly as designed, and exactly as confusing as the reviewer found it. | (a) widen the audit log to record edits too, (b) build one merged view over all three sources, (c) leave it | (b), scheduled as milestone **3.0** | (a) would duplicate in the audit log what version tables already hold better, and invariant 7's scope is deliberate — the audit log is owner-only forensics about destruction and access, not a change feed. (c) leaves a product with three partial histories and no answer to "who did what when", which is the question a sales team actually asks. (b) is a read-side join over data that already exists, and needs no schema change. **The real design question it carries:** the audit half is owner-only (D-096, ruled this same session) while system entries are visible to anyone with access, so a merged view either filters per row by role or reopens who-sees-what. That belongs in the milestone, not in this entry. | Y — a new read-only view. | N — the human asked for it directly; the investigation answered the question inside it. |
