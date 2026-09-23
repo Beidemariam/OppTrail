@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useParams, useSearchParams } from "react-router";
 
 import {
   emptyTimelineFilters,
+  formatMoney,
   opportunityVersionFields,
   type Access,
   type Opportunity,
-  type TimelineEntry,
   type TimelineFilters,
 } from "../lib/domain";
 import { useKeyboardShortcuts } from "../lib/keyboard";
@@ -26,6 +26,7 @@ import {
 import { paramsWithState, stateFromParams } from "../lib/viewState";
 import { AiSidebar } from "./AiSidebar";
 import { HistoryButton } from "./HistoryDialog";
+import { OpportunityField, useOpportunityFieldSave } from "./InlineEdit";
 import { SavedViewsMenu } from "./SavedViewsMenu";
 import { SharingPanel } from "./SharingPanel";
 import { TimelineEntryForm } from "./TimelineEntryForm";
@@ -68,7 +69,6 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
       paramsWithState(searchParams, next, emptyTimelineFilters, "timeline"),
     );
   }
-  const [editingEntry, setEditingEntry] = useState<TimelineEntry | null>(null);
   // The views above are a full screen of board or list, so an opportunity
   // opened from the bottom of a column would otherwise land below the fold and
   // leave the reader looking at the thing they just clicked away from
@@ -135,13 +135,14 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
 
       <TimelineFilterBar filters={filters} onApply={setFilters} />
 
+      {/* The composer only, since milestone 2.11: editing an existing entry
+          happens in that entry's own card, where the reader already is. */}
       {access.canWriteTimeline && (
         <TimelineEntryForm
-          key={editingEntry?.id ?? "new"}
           opportunityId={opportunityId}
-          editing={editingEntry}
+          editing={null}
           titleRef={entryTitleRef}
-          onDone={() => setEditingEntry(null)}
+          onDone={() => {}}
         />
       )}
 
@@ -152,8 +153,8 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
       ) : (
         <TimelineEntryList
           entries={timeline.data}
+          opportunityId={opportunityId}
           access={access}
-          onEdit={setEditingEntry}
         />
       )}
 
@@ -162,6 +163,18 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
   );
 }
 
+/**
+ * The opportunity's own record, above its timeline: what it is called, who it
+ * is with, what it is worth, where it stands and when it closes.
+ *
+ * Every one of those is edited here rather than in the dialog on the board
+ * behind this panel (milestone 2.11). `docs/UX.md` asks the header to hold
+ * "the facts a rep needs constantly: value, stage, close date", and a fact
+ * displayed beside an Edit button that opens a form somewhere else is exactly
+ * what `AGENTS.md` v2 scope item 12 rules out. Owner-only, like every other
+ * change to an opportunity's own fields — a viewer or an editor reads the
+ * same line with no affordance on it.
+ */
 function TimelineHeading({
   opportunity,
   canManage,
@@ -171,12 +184,45 @@ function TimelineHeading({
   canManage: boolean;
   onRefresh: () => void;
 }) {
+  const save = useOpportunityFieldSave();
+  const facts = ["value", "stage", "expected_close_date"] as const;
   return (
     <div className="timeline-heading">
       <div>
-        <p className="eyebrow">{opportunity.account_name}</p>
-        <h2>{opportunity.name}</h2>
-        <p className="meta-row">Your role: {opportunity.current_user_role}</p>
+        <p className="eyebrow">
+          <OpportunityField
+            opportunity={opportunity}
+            field="account_name"
+            editable={canManage}
+            save={save}
+          >
+            {opportunity.account_name}
+          </OpportunityField>
+        </p>
+        <h2>
+          <OpportunityField
+            opportunity={opportunity}
+            field="name"
+            editable={canManage}
+            save={save}
+          >
+            {opportunity.name}
+          </OpportunityField>
+        </h2>
+        <p className="meta-row opportunity-facts">
+          {facts.map((field) => (
+            <OpportunityField
+              key={field}
+              opportunity={opportunity}
+              field={field}
+              editable={canManage}
+              save={save}
+            >
+              {headingFact(opportunity, field)}
+            </OpportunityField>
+          ))}
+          <span>Your role: {opportunity.current_user_role}</span>
+        </p>
       </div>
       <div className="export-actions">
         {(["pdf", "csv", "json"] as const).map((format) => (
@@ -204,4 +250,23 @@ function TimelineHeading({
       </div>
     </div>
   );
+}
+
+/** How a heading fact reads before it is edited. The editors underneath take
+ * the raw value (`editableOpportunityFields[...].read`); this is the same
+ * three fields written for a person scanning the line. */
+function headingFact(
+  opportunity: Opportunity,
+  field: "value" | "stage" | "expected_close_date",
+): string {
+  switch (field) {
+    case "value":
+      return formatMoney(opportunity.currency, opportunity.value);
+    case "stage":
+      return opportunity.stage;
+    default:
+      return opportunity.expected_close_date
+        ? `Closes ${opportunity.expected_close_date}`
+        : "No close date";
+  }
 }

@@ -822,6 +822,168 @@ describe("the AI panel", () => {
   });
 });
 
+describe("editing where the reader is (milestone 2.11)", () => {
+  /**
+   * The opportunity's own record above the timeline, which is where its
+   * fields are edited from. Scoped, because the board stays mounted behind
+   * the panel (D-054) and draws the same account and the same value on its
+   * card.
+   */
+  async function heading() {
+    await screen.findByRole("heading", { name: "Discovery call" });
+    return document.querySelector(".timeline-heading") as HTMLElement;
+  }
+
+  /**
+   * The guard test for this milestone (brief §6.5), confirmed to fail against
+   * the unfixed code first: before 2.11, Edit loaded the entry into the
+   * composer at the top of the panel, so this found the form outside the card
+   * and a reader fifty entries down was moved to the top of the page (D-051).
+   */
+  it("opens an entry's editor inside that entry, with its neighbours still on screen", async () => {
+    await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [
+        anEntry({ id: 100, title: "Discovery call" }),
+        anEntry({ id: 101, title: "Pricing pushback" }),
+      ],
+    });
+    await openTimeline("Northwind rollout");
+
+    const entry = (
+      await screen.findByRole("heading", { name: "Pricing pushback" })
+    ).closest("article")!;
+    await userEvent.click(within(entry).getByRole("button", { name: "Edit" }));
+
+    const title = within(entry).getByLabelText("Title");
+    expect(title).toHaveValue("Pricing pushback");
+    // The editor is in the card, not somewhere else on the page.
+    expect(entry).toContainElement(title);
+    // And the reader is put in it.
+    expect(title).toHaveFocus();
+    // The entry above it is still where it was.
+    expect(
+      screen.getByRole("heading", { name: "Discovery call" }),
+    ).toBeInTheDocument();
+    // The composer at the top of the panel is still empty and still a
+    // composer.
+    expect(
+      screen.getByRole("button", { name: "Add Entry" }),
+    ).toBeInTheDocument();
+  });
+
+  it("closes the entry editor and hands focus back to Edit", async () => {
+    const api = await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [anEntry()],
+    });
+    await openTimeline("Northwind rollout");
+
+    const entry = (
+      await screen.findByRole("heading", { name: "Discovery call" })
+    ).closest("article")!;
+    await userEvent.click(within(entry).getByRole("button", { name: "Edit" }));
+    await userEvent.click(
+      within(entry).getByRole("button", { name: "Cancel" }),
+    );
+
+    expect(within(entry).queryByLabelText("Title")).toBeNull();
+    expect(within(entry).getByRole("button", { name: "Edit" })).toHaveFocus();
+    expect(api.callsTo("PATCH", "/api/v2/timeline/100")).toHaveLength(0);
+  });
+
+  it("hands focus back to Edit after a note is saved in place", async () => {
+    await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [anEntry({ notes: [aNote()] })],
+    });
+    await openTimeline("Northwind rollout");
+
+    const note = (await screen.findByText("Budget holder is the COO.")).closest(
+      "section",
+    )!;
+    await userEvent.click(within(note).getByRole("button", { name: "Edit" }));
+    expect(within(note).getByLabelText("Edit this note")).toHaveFocus();
+
+    await userEvent.type(within(note).getByLabelText("Edit this note"), "!");
+    await userEvent.click(within(note).getByRole("button", { name: "Save" }));
+
+    expect(
+      await within(note).findByRole("button", { name: "Edit" }),
+    ).toHaveFocus();
+  });
+
+  it("edits the opportunity's own fields from its heading", async () => {
+    const api = await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [anEntry()],
+    });
+    await openTimeline("Northwind rollout");
+
+    // The facts `docs/UX.md` asks the header to hold, each one a control.
+    const facts = await heading();
+    expect(within(facts).getByText("USD 185,000")).toBeInTheDocument();
+    expect(within(facts).getByText("Closes 2026-12-01")).toBeInTheDocument();
+
+    await userEvent.click(within(facts).getByTitle("Edit Value"));
+    await userEvent.clear(within(facts).getByLabelText("Value"));
+    await userEvent.type(within(facts).getByLabelText("Value"), "210000");
+    await userEvent.keyboard("{Enter}");
+
+    await waitFor(() =>
+      expect(api.callsTo("PATCH", "/api/v2/opportunities/10")).toHaveLength(1),
+    );
+    expect(api.callsTo("PATCH", "/api/v2/opportunities/10")[0].body).toEqual({
+      value: "210000",
+    });
+    expect(
+      within(await heading()).getByText("USD 210,000"),
+    ).toBeInTheDocument();
+  });
+
+  it("changes the stage from the heading through the same partial write", async () => {
+    const api = await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [anEntry()],
+    });
+    await openTimeline("Northwind rollout");
+
+    const facts = await heading();
+    await userEvent.click(within(facts).getByTitle("Edit Stage"));
+    await userEvent.selectOptions(
+      within(facts).getByLabelText("Stage"),
+      "Closed Won",
+    );
+    await userEvent.click(
+      within(facts).getByRole("button", { name: "Save Stage" }),
+    );
+
+    await waitFor(() =>
+      expect(api.callsTo("PATCH", "/api/v2/opportunities/10")).toHaveLength(1),
+    );
+    expect(api.callsTo("PATCH", "/api/v2/opportunities/10")[0].body).toEqual({
+      stage: "Closed Won",
+    });
+  });
+
+  it("offers a shared reader the facts and no way to change them", async () => {
+    await renderDashboard({
+      opportunities: [
+        anOpportunity({ current_user_role: "editor", owner_id: BLAIR.id }),
+      ],
+      entries: [anEntry()],
+    });
+    await openTimeline("Northwind rollout");
+
+    const facts = await heading();
+    expect(within(facts).getByText("USD 185,000")).toBeInTheDocument();
+    expect(within(facts).getByText("Northwind")).toBeInTheDocument();
+    expect(within(facts).queryByTitle("Edit Value")).toBeNull();
+    expect(within(facts).queryByTitle("Edit Opportunity")).toBeNull();
+    expect(within(facts).queryByTitle("Edit Stage")).toBeNull();
+  });
+});
+
 describe("changing and removing what is already there", () => {
   it("loads an entry into the form and saves the edit", async () => {
     const api = await renderDashboard({

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import {
   noteVersionFields,
@@ -18,6 +18,7 @@ import {
   useSaveNote,
 } from "../lib/queries";
 import { HistoryButton } from "./HistoryDialog";
+import { useInlineEditor } from "./InlineEdit";
 import { MarkdownText } from "./MarkdownText";
 import { useUndoableDelete } from "./Toasts";
 
@@ -34,7 +35,15 @@ export function NoteBlock({
   note: TimelineNote;
   access: Access;
 }) {
-  const [draft, setDraft] = useState<string | null>(null);
+  // Editing a note has always happened in the note (`docs/UX.md`), so
+  // milestone 2.11 changed nothing about where; what it added is the focus
+  // rule every inline editor now shares — the textarea takes focus when it
+  // opens, and the Edit button takes it back when it closes, so a keyboard
+  // reader is never returned to the top of the timeline.
+  const editTriggerRef = useRef<HTMLButtonElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const editor = useInlineEditor(editTriggerRef, bodyRef);
+  const [draft, setDraft] = useState("");
   const [comment, setComment] = useState("");
   const saveNote = useSaveNote();
   const deleteNote = useDeleteNote();
@@ -52,14 +61,11 @@ export function NoteBlock({
   );
 
   function save() {
-    const body = (draft ?? "").trim();
+    const body = draft.trim();
     if (!body) {
       return;
     }
-    saveNote.mutate(
-      { noteId: note.id, body },
-      { onSuccess: () => setDraft(null) },
-    );
+    saveNote.mutate({ noteId: note.id, body }, { onSuccess: editor.close });
   }
 
   function post() {
@@ -92,9 +98,13 @@ export function NoteBlock({
               />
             )}
             <button
+              ref={editTriggerRef}
               type="button"
               className="secondary-button"
-              onClick={() => setDraft(note.body)}
+              onClick={() => {
+                setDraft(note.body);
+                editor.open();
+              }}
             >
               Edit
             </button>
@@ -109,9 +119,10 @@ export function NoteBlock({
         )}
       </div>
 
-      {draft !== null ? (
+      {editor.editing ? (
         <div className="stacked-form">
           <textarea
+            ref={bodyRef}
             aria-label="Edit this note"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
@@ -125,7 +136,7 @@ export function NoteBlock({
             <button
               type="button"
               className="secondary-button"
-              onClick={() => setDraft(null)}
+              onClick={editor.close}
             >
               Cancel
             </button>

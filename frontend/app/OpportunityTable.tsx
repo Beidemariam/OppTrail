@@ -4,15 +4,22 @@ import { Link } from "react-router";
 
 import {
   columnsFromState,
+  editableField,
   opportunityCell,
   opportunityColumns,
   sortFields,
   type Opportunity,
   type OpportunityColumn,
+  type OpportunityEditableKey,
   type OpportunitySortField,
   type OpportunityViewState,
   type Stage,
 } from "../lib/domain";
+import {
+  OpportunityField,
+  useOpportunityFieldSave,
+  type OpportunityFieldSave,
+} from "./InlineEdit";
 import { MoveToStage } from "./MoveToStage";
 import type { OpportunityViewProps } from "./StageBoard";
 import { useOpportunityItem } from "./useOpportunityItem";
@@ -47,9 +54,13 @@ const ESTIMATED_ROW_HEIGHT = 36;
  * name in visually-hidden text, so a screen reader gets the column context a
  * real table would have given it.
  *
- * Inline cell editing is **not** here: milestone 2.11 owns editing content
- * where it is read, for entries, notes and opportunity fields together, and
- * writing it twice is how the two drift (D-087).
+ * **Cells are edited in place** since milestone 2.11, which is what D-087
+ * deferred to it: an owner clicks the account, the value or the close date
+ * and types over it, with the row and the rows around it still on screen.
+ * Stage was already an inline control (`MoveToStage`) and stays one, and the
+ * name is not edited here — it is the row's link to its timeline, where its
+ * own heading edits it (**D-099**). Every one of them is the same partial
+ * `PATCH` the drag and the `[`/`]` chords send (`useEditOpportunity`).
  */
 export function OpportunityTable({
   opportunities,
@@ -70,6 +81,9 @@ export function OpportunityTable({
   onSort: (field: OpportunitySortField) => void;
 }) {
   const columns = columnsFromState(view.columns);
+  // One per table rather than one per cell: fifty visible cells would
+  // otherwise be fifty mutation observers over the same endpoint.
+  const saveField = useOpportunityFieldSave();
   // The grid is declared once and shared by the header and every row, so a
   // column cannot be wide in one and narrow in the other.
   const template = `16px minmax(140px, 2fr) ${columns
@@ -116,6 +130,7 @@ export function OpportunityTable({
           <TableRow
             opportunity={opportunity}
             columns={columns}
+            saveField={saveField}
             template={template}
             selected={selectedId === opportunity.id}
             focused={focusedId === opportunity.id}
@@ -181,6 +196,7 @@ function SortHeader({
 function TableRow({
   opportunity,
   columns,
+  saveField,
   template,
   selected,
   focused,
@@ -194,6 +210,7 @@ function TableRow({
 }: {
   opportunity: Opportunity;
   columns: OpportunityColumn[];
+  saveField: OpportunityFieldSave;
   template: string;
   selected: boolean;
   focused: boolean;
@@ -224,23 +241,35 @@ function TableRow({
         <Link to={`/opportunities/${opportunity.id}`}>{opportunity.name}</Link>
         {opportunity.stalled && <span className="stalled-badge">Stalled</span>}
       </p>
-      {columns.map((column) =>
-        column === "stage" ? (
-          <p className="table-cell" key={column}>
-            <span className="visually-hidden">Stage: </span>
-            {owns ? (
-              <MoveToStage opportunity={opportunity} onMove={onMoveToStage} />
-            ) : (
-              opportunity.stage
-            )}
-          </p>
-        ) : (
+      {columns.map((column) => {
+        const editable = editableField(column);
+        return (
           <p className="table-cell" key={column}>
             <span className="visually-hidden">{columnLabel(column)}: </span>
-            {opportunityCell(opportunity, column)}
+            {column === "stage" ? (
+              // Already an editor, and a better one than a text box: the
+              // stage list is fixed (`AGENTS.md` invariant 6) and this is the
+              // same select the board's cards carry.
+              owns ? (
+                <MoveToStage opportunity={opportunity} onMove={onMoveToStage} />
+              ) : (
+                opportunity.stage
+              )
+            ) : editable ? (
+              <OpportunityField
+                opportunity={opportunity}
+                field={column as OpportunityEditableKey}
+                editable={owns}
+                save={saveField}
+              >
+                {opportunityCell(opportunity, column)}
+              </OpportunityField>
+            ) : (
+              opportunityCell(opportunity, column)
+            )}
           </p>
-        ),
-      )}
+        );
+      })}
       <div className="table-actions">
         {owns && (
           <>

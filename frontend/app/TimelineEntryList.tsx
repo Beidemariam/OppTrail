@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import {
   timelineEntryVersionFields,
@@ -17,18 +17,20 @@ import {
 import { formatTimestamp } from "../lib/time";
 import { EntryTypeBadge } from "./EntryTypeBadge";
 import { HistoryButton } from "./HistoryDialog";
+import { useInlineEditor } from "./InlineEdit";
 import { NoteBlock } from "./NoteBlock";
+import { TimelineEntryForm } from "./TimelineEntryForm";
 import { useUndoableDelete } from "./Toasts";
 
 /** The opportunity's history, oldest first, as the API ordered it. */
 export function TimelineEntryList({
   entries,
+  opportunityId,
   access,
-  onEdit,
 }: {
   entries: TimelineEntry[];
+  opportunityId: number;
   access: Access;
-  onEdit: (entry: TimelineEntry) => void;
 }) {
   if (entries.length === 0) {
     return <p className="empty-state">No timeline entries match this view.</p>;
@@ -40,24 +42,36 @@ export function TimelineEntryList({
         <TimelineEntryCard
           key={entry.id}
           entry={entry}
+          opportunityId={opportunityId}
           access={access}
-          onEdit={onEdit}
         />
       ))}
     </div>
   );
 }
 
+/**
+ * One entry, and — since milestone 2.11 — its editor.
+ *
+ * Edit swaps this card's own body for the entry form, in the space the entry
+ * occupied, with the entries above and below it still on screen. It used to
+ * load the entry into the composer at the top of the panel, which moved a
+ * reader fifty entries down back to the top of the page and lost their place
+ * (D-051); nothing about the write changed, only where the reader does it.
+ */
 function TimelineEntryCard({
   entry,
+  opportunityId,
   access,
-  onEdit,
 }: {
   entry: TimelineEntry;
+  opportunityId: number;
   access: Access;
-  onEdit: (entry: TimelineEntry) => void;
 }) {
   const [note, setNote] = useState("");
+  const editTriggerRef = useRef<HTMLButtonElement>(null);
+  const titleRef = useRef<HTMLInputElement>(null);
+  const editor = useInlineEditor(editTriggerRef, titleRef);
   const addNote = useAddNote();
   const deleteEntry = useDeleteTimelineEntry();
   const remove = useUndoableDelete(
@@ -112,9 +126,10 @@ function TimelineEntryCard({
                   />
                 )}
                 <button
+                  ref={editTriggerRef}
                   type="button"
                   className="secondary-button"
-                  onClick={() => onEdit(entry)}
+                  onClick={editor.open}
                 >
                   Edit
                 </button>
@@ -134,6 +149,15 @@ function TimelineEntryCard({
           By {entry.author_name ?? "System"}
           {entry.follow_up_date ? ` | Follow up ${entry.follow_up_date}` : ""}
         </p>
+
+        {editor.editing && (
+          <TimelineEntryForm
+            opportunityId={opportunityId}
+            editing={entry}
+            titleRef={titleRef}
+            onDone={editor.close}
+          />
+        )}
 
         {failure && <p className="error">{failure.error?.message}</p>}
 

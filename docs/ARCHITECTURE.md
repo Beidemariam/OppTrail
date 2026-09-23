@@ -58,6 +58,15 @@ path (`main.py:56-64`).
   view is a named copy of those parameters (`lib/viewState.ts`,
   `backend/app/routes_saved_views.py`).
 - **TanStack Query** — the only server-state cache; SSE events invalidate keys.
+- **Editing in place** — a field is edited where it is read rather than in a
+  form elsewhere on the page (`AGENTS.md` v2 scope item 12, milestone 2.11).
+  `app/InlineEdit.tsx` holds the two shapes of it and the focus rule that
+  returns the reader to where they were; `lib/domain.ts`'s
+  `editableOpportunityFields` declares each field once for every surface that
+  edits it, and every one of those writes is a partial `PATCH` through
+  `useEditOpportunity`. No route changed for it: the update routes already
+  applied exactly the fields they were given, and versioned the result
+  (milestone 2.10).
 - **Keyboard map** — one declaration (`lib/keyboard.ts`) serves both the `?`
   reference screen and the `Chord` union the views bind against, so a
   documented key that nothing answers is a type error (milestone 2.4a). Each

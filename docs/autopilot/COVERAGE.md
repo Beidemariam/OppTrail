@@ -1328,3 +1328,53 @@ out-of-band hard delete and now has to remove `timeline_entry_versions` rows
 first, because the new table holds a foreign key into `timeline_entries`. The
 assertion it makes — that the FTS5 index does not survive a row removed by
 other means — is unchanged.
+
+## Phase 2 — milestone 2.11 (edit content where it is read)
+
+```
+backend:  338 passed, 97.27% combined line+branch — unchanged, and that is
+          the finding rather than an omission: 2.10 had already made every
+          write this milestone touches keep a version, and both update routes
+          already applied exactly the fields they were given. No route,
+          schema, migration or authorization-matrix entry changed.
+frontend: 429 passed (was 405), 97.10% statements, 97.07% line, 95.80%
+          functions, 90.95% branch. Branch floor raised 89 -> 90; the other
+          three stay at 96/96/95, since a floor set a tenth under the
+          measurement fails on churn rather than on a regression.
+          app/InlineEdit.tsx          100% statements, 100% branch, 100%
+                                      functions (new)
+          app/OpportunityTable.tsx    100% statements, 95% branch
+          app/TimelineEntryList.tsx   100% statements, 86.95% branch
+          lib/domain.ts               100% statements, 95.71% branch
+e2e:      52 (was 50). e2e/16-edit-in-place.spec.ts, both specs with axe:
+          one walks an eight-entry timeline, edits the entry at the bottom of
+          it and asserts the reader did not move (window.scrollY within 40px,
+          the editor in the viewport, the entry above still drawn), the other
+          edits a table cell and reloads to prove the write was real rather
+          than an optimistic cache entry.
+docker:   deferred to the host half — scripts/autopilot-gate.sh 2
+          (no Docker socket in this sandbox, per sandbox/README.md)
+```
+
+Full `make check` for this milestone, not only `make check-fast`: the first
+E2E run is what caught D-100 — labelling the inline trigger "Edit Value"
+renamed the opportunity's own `<h2>` to that, because an `aria-label` on a
+descendant overrides the ancestor's name-from-content. Twenty specs failed at
+`openTimeline`, and none of the 405 component tests had noticed, because
+`dom-accessibility-api` and Playwright's accname implementation disagree here.
+The fix is in the component, not in the helper.
+
+Test-count arithmetic: frontend +10 `app/InlineEdit.test.tsx` (the primitive
+on its own, including each value it refuses), +3 `lib/domain.test.ts` over the
+field declaration, +5 `app/DashboardPage.test.tsx` over the table cells,
++6 `app/OpportunityPanel.test.tsx` over the entry card, the note and the
+heading. E2E +2.
+
+One existing test's selector changed, not its expectation:
+`app/History.test.tsx`'s entry-history case asked for the "Title" field
+globally and now finds two, since the composer and the edited card's editor
+are both on screen; it is scoped to the card it was always about.
+
+The guard test (brief §6.5), confirmed to fail against the unfixed code
+before being trusted: `opens an entry's editor inside that entry, with its
+neighbours still on screen` in `app/OpportunityPanel.test.tsx`.

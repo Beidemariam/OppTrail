@@ -2525,3 +2525,76 @@ kbd {
 .calendar-undated-chips .opportunity-chip {
   flex: 0 1 220px;
 }
+
+/* --- Editing where content is read (milestone 2.11) -----------------------
+ *
+ * The affordance is the value itself: an editable field is a button drawn
+ * like the text it replaces, so nothing is added to the screen until the
+ * reader points at it (`AGENTS.md`'s Design bar — "nothing on screen that
+ * does not earn its place"). It inherits its type from whatever it sits in,
+ * which is why one rule serves a heading, a meta row and a table cell. */
+.inline-edit {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  cursor: text;
+  font: inherit;
+  letter-spacing: inherit;
+  margin: 0 -4px;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0 4px;
+  text-align: inherit;
+  text-overflow: ellipsis;
+  white-space: inherit;
+}
+
+/* What a reader who may not edit sees: the value, in the space the control
+   would have taken, with no affordance on it. */
+.inline-edit-static {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inline-edit:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+/* The editor occupies the space the value did, so the rows around it do not
+   move while it is open. */
+.inline-editor {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  max-width: 100%;
+}
+
+.inline-editor input,
+.inline-editor select {
+  font-size: var(--text-sm);
+  max-width: 220px;
+  min-height: 30px;
+  padding: 2px var(--space-2);
+}
+
+.inline-editor .error {
+  flex-basis: 100%;
+  font-size: var(--text-xs);
+  margin: 0;
+}
+
+/* The facts `docs/UX.md` asks an opportunity's header to hold: value, stage,
+   close date. Separated by rules rather than punctuation, because each one is
+   its own control. */
+.opportunity-facts {
+  gap: var(--space-3);
+}
+
+.opportunity-facts > * + * {
+  border-left: 1px solid var(--border-subtle);
+  padding-left: var(--space-3);
+}

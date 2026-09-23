@@ -98,10 +98,14 @@ describe("edit history", () => {
 
     const entry = await entryCard("Discovery call");
     await userEvent.click(within(entry).getByRole("button", { name: "Edit" }));
-    const title = screen.getByLabelText("Title");
+    // Scoped to the entry: since milestone 2.11 the editor is inside the card
+    // and the composer at the top of the panel has a Title field of its own.
+    const title = within(entry).getByLabelText("Title");
     await userEvent.clear(title);
     await userEvent.type(title, "Discovery call, corrected");
-    await userEvent.click(screen.getByRole("button", { name: "Save Entry" }));
+    await userEvent.click(
+      within(entry).getByRole("button", { name: "Save Entry" }),
+    );
     await screen.findByRole("heading", { name: "Discovery call, corrected" });
 
     const dialog = await openHistory(

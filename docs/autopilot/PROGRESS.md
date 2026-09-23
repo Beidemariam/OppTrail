@@ -2798,7 +2798,7 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
   milestone or the roadmap asks for one and it would be a new write path
   with its own permission question.
 
-- [ ] 2.11 Edit content where it is read (**AGENTS.md** v2 scope item 12,
+- [x] 2.11 Edit content where it is read (**AGENTS.md** v2 scope item 12,
       added 2026-09-20 from the human's Phase 1 user test — D-051). Today
       editing an entry or note scrolls the reader to a form elsewhere on the
       page, losing their place in the timeline; the further down the timeline
@@ -2807,7 +2807,95 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
       Pairs with 2.4's optimistic mutations (the save should not feel like a
       page event) and with 2.10's edit history (the same fields gain
       versioning, so both milestones touch the same write paths — sequence them
-      together rather than editing those routes twice).
+      together rather than editing those routes twice). — **DONE**
+
+  - [x] Frontend only, and that is the payoff of the sequencing the milestone
+        asked for: 2.10 had already made every one of these writes keep a
+        version, and `PATCH /api/v2/opportunities/{id}` and
+        `PATCH /api/v2/timeline/{id}` already applied exactly the fields they
+        were given (`model_dump(exclude_unset=True)`). No route, schema,
+        migration or authorization-matrix entry changed.
+  - [x] `app/InlineEdit.tsx` holds both shapes of "edit this where it is
+        read", so a fourth editable surface adds a caller rather than a third
+        mechanism. `useInlineEditor(triggerRef, editorRef)` is the open/close
+        state and the focus rule, for anything that draws its own editor;
+        `InlineEdit` is one field drawn as its own value and replaced in place
+        by a control, bound to the opportunity by `OpportunityField`.
+  - [x] **Timeline entries** edit in their own card
+        (`app/TimelineEntryList.tsx`): Edit swaps the card body for
+        `TimelineEntryForm` in the space the entry occupied. The form at the
+        top of the panel is now the composer and nothing else —
+        `OpportunityPanel` no longer lifts an `editingEntry` out of the list.
+        This is the exact complaint D-051 recorded.
+  - [x] **Notes** already edited in the note; what 2.11 added there is the
+        focus rule the other two now share — the textarea takes focus when it
+        opens, the Edit button takes it back when it closes, both in one
+        effect after the render that swapped the views (the element to focus
+        does not exist yet when the handler asks for it, in either direction).
+  - [x] **Opportunity fields** are edited on the table's cells — which is what
+        **D-087** deferred here from 2.8 — and on the opportunity's own
+        heading, which now carries the facts `docs/UX.md` asks a header to
+        hold: value, stage and close date, each one a control rather than a
+        line of text beside an Edit button. Owner-only, like every other
+        change to an opportunity's fields. Which fields (**D-098**: five, not
+        currency) and which surfaces (**D-099**: the grid and the heading, not
+        every card) are both recorded.
+  - [x] One declaration behind all of it: `lib/domain.ts`'s
+        `editableOpportunityFields` says a field's label, its editor, how it
+        reads and what it patches, so a field cannot be editable as a cell and
+        not as a heading fact, or send a different patch from each.
+  - [x] One write: `useChangeOpportunityStage` became `useEditOpportunity`, an
+        optimistic partial `PATCH` over arbitrary fields. The drag, the
+        move-to-stage select, `[`/`]`, a table cell and a heading field are now
+        literally the same mutation. `useOpportunityFieldSave` pairs it with
+        the rollback toast once per view rather than once per cell.
+  - [x] What the API would refuse is refused before the optimistic write —
+        an empty name or account, a negative or non-numeric value — because an
+        editor that closes and then silently reverts is worse than one that
+        stays open and says why. A close date clears to `null` rather than
+        being omitted.
+  - [x] **D-100**: the trigger is named by the value it holds, with the action
+        as its `title`. The first implementation labelled it "Edit Value",
+        which renamed the opportunity's `<h2>` to that — an `aria-label` on a
+        descendant overrides the ancestor's name-from-content. Caught by
+        `e2e/helpers.ts`'s `openTimeline` on the first full E2E run, fixed
+        rather than worked around in the helper.
+  - [x] Tests: 10 new unit cases over the primitive
+        (`app/InlineEdit.test.tsx`, 100% covered including every value it
+        refuses), 3 in `lib/domain.test.ts` over the field declaration, 5 in
+        `DashboardPage.test.tsx` over the table cells (including the rollback
+        toast), 6 in `OpportunityPanel.test.tsx` over the entry card, the note
+        and the heading, and 2 E2E in `e2e/16-edit-in-place.spec.ts` with axe
+        on both. 405 → 429 frontend tests; 50 → 52 E2E. Backend unchanged at
+        338. Branch threshold raised 89 → 90 (measured 90.95).
+  - [x] One existing assertion's *selector* changed, not its expectation:
+        `History.test.tsx` asked for "Title" globally and now finds two, since
+        the composer and the card's editor are both on screen; it is scoped to
+        the card.
+
+  Gate: `make check` green in full (ruff, ruff format, mypy, eslint, tsc,
+  prettier, 338 backend tests at 97.27% coverage — unchanged, no backend code
+  touched — 429 frontend tests at 97.10 statements / 90.95 branches / 95.80
+  functions / 97.07 lines over the 96/96/95/90 thresholds, contract check, 52
+  E2E with axe, pip-audit, npm audit). Docker deferred to the host half
+  (`sandbox/README.md`).
+
+  The guard test (brief §6.5, confirmed to fail against the unfixed code
+  first): `opens an entry's editor inside that entry, with its neighbours
+  still on screen` in `app/OpportunityPanel.test.tsx`, which fails with
+  "Unable to find a label with the text of: Title" inside the entry's
+  `article` when run against the pre-2.11 `TimelineEntryList` and
+  `OpportunityPanel` — the editor was at the top of the panel, not in the
+  card.
+
+  Not in this milestone, deliberately: the board card, the list row and the
+  calendar chip still open the dialog (**D-099**); currency is still
+  dialog-only (**D-098**); comments remain immutable (`AGENTS.md` invariant 2)
+  and a system entry still has no editor, because the API has no route behind
+  either. One pre-existing behaviour left alone and worth naming since the E2E
+  journey walks past it: the composer keeps the last entry's text after a
+  successful add — it did before this milestone too, and clearing it is not
+  2.11's to decide.
 
 - [ ] 2.12 Fold the repeatable half of the manual user test into the E2E
       suite, and keep the rest manual (**D-053**, from the Phase 1 user test).

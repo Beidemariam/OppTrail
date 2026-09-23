@@ -40,11 +40,18 @@ export default defineConfig({
       // lines — the table, the calendar and the density preference each
       // arrived with their own tests, and the two view components are covered
       // outright.
+      // Milestone 2.11 raised branches from 89, against a measured 97.10
+      // statements / 90.95 branches / 95.80 functions / 97.07 lines:
+      // `app/InlineEdit.tsx` arrived fully covered, including the values it
+      // refuses. The other three stay where 2.8 put them — the measured line
+      // and statement figures are 97.1 against a 96 floor, and a floor set
+      // one tenth under the measurement fails on ordinary churn rather than
+      // on a regression.
       thresholds: {
         lines: 96,
         statements: 96,
         functions: 95,
-        branches: 89,
+        branches: 90,
       },
     },
   },

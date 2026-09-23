@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ALEX, anEntry, anOpportunity } from "./test-api";
+import { ALEX, BLAIR, anEntry, anOpportunity } from "./test-api";
 import {
   acceptConfirmation,
   cancelConfirmation,
@@ -1103,6 +1103,159 @@ describe("the table view (milestone 2.8)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Board" }));
     expect(screen.queryByLabelText("Row density")).toBeNull();
     expect(screen.queryByRole("button", { name: /^Columns/ })).toBeNull();
+  });
+});
+
+describe("editing a table cell where it is read (milestone 2.11)", () => {
+  // Built per test, not once for the describe: these tests write, and the
+  // fake API edits the row objects it was handed in place — exactly as the
+  // real one edits the database.
+  function deals() {
+    return [
+      anOpportunity({
+        id: 10,
+        name: "Northwind rollout",
+        account_name: "Northwind",
+        value: "185000",
+        expected_close_date: "2026-12-01",
+      }),
+      anOpportunity({
+        id: 11,
+        name: "Globex renewal",
+        account_name: "Globex",
+        value: "42000",
+      }),
+    ];
+  }
+
+  it("edits an account in its own cell, sending only that field", async () => {
+    const api = await renderDashboard(
+      { opportunities: deals() },
+      "/?opportunities.view=table",
+    );
+
+    const row = await findCard("Northwind rollout");
+    await userEvent.click(within(row).getByTitle("Edit Account"));
+    await userEvent.clear(within(row).getByLabelText("Account"));
+    await userEvent.type(
+      within(row).getByLabelText("Account"),
+      "Northwind Traders",
+    );
+    await userEvent.click(
+      within(row).getByRole("button", { name: "Save Account" }),
+    );
+
+    await waitFor(() =>
+      expect(api.callsTo("PATCH", "/api/v2/opportunities/10")).toHaveLength(1),
+    );
+    // A partial PATCH: nothing the reader did not touch is rewritten.
+    expect(api.callsTo("PATCH", "/api/v2/opportunities/10")[0].body).toEqual({
+      account_name: "Northwind Traders",
+    });
+    // Optimistic, so the cell reads the new value without waiting for the
+    // list to be fetched again.
+    expect(
+      within(await findCard("Northwind rollout")).getByText(
+        "Northwind Traders",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("edits a value and a close date in their own cells", async () => {
+    const api = await renderDashboard(
+      { opportunities: deals() },
+      "/?opportunities.view=table",
+    );
+
+    const row = await findCard("Northwind rollout");
+    await userEvent.click(within(row).getByTitle("Edit Value"));
+    await userEvent.clear(within(row).getByLabelText("Value"));
+    await userEvent.type(within(row).getByLabelText("Value"), "200000");
+    await userEvent.keyboard("{Enter}");
+
+    await waitFor(() =>
+      expect(api.callsTo("PATCH", "/api/v2/opportunities/10")).toHaveLength(1),
+    );
+    expect(api.callsTo("PATCH", "/api/v2/opportunities/10")[0].body).toEqual({
+      value: "200000",
+    });
+
+    const again = await findCard("Northwind rollout");
+    await userEvent.click(within(again).getByTitle("Edit Close date"));
+    await userEvent.clear(within(again).getByLabelText("Close date"));
+    await userEvent.click(
+      within(again).getByRole("button", { name: "Save Close date" }),
+    );
+
+    await waitFor(() =>
+      expect(api.callsTo("PATCH", "/api/v2/opportunities/10")).toHaveLength(2),
+    );
+    // Cleared, not omitted: the route updates exactly the keys it is given.
+    expect(api.callsTo("PATCH", "/api/v2/opportunities/10")[1].body).toEqual({
+      expected_close_date: null,
+    });
+  });
+
+  it("leaves the name alone, because the name is the link to the timeline", async () => {
+    await renderDashboard(
+      { opportunities: deals() },
+      "/?opportunities.view=table",
+    );
+
+    const row = await findCard("Northwind rollout");
+    expect(
+      within(row).getByRole("link", { name: "Northwind rollout" }),
+    ).toBeInTheDocument();
+    expect(within(row).queryByTitle("Edit Opportunity")).toBeNull();
+  });
+
+  it("offers no cell editor on a row the reader does not own", async () => {
+    await renderDashboard(
+      {
+        opportunities: [
+          anOpportunity({
+            id: 12,
+            name: "Initech expansion",
+            current_user_role: "editor",
+            owner_id: BLAIR.id,
+            owner_name: BLAIR.name,
+          }),
+        ],
+      },
+      "/?opportunities.view=table",
+    );
+
+    const row = await findCard("Initech expansion");
+    expect(within(row).queryByTitle("Edit Account")).toBeNull();
+    expect(within(row).queryByTitle("Edit Value")).toBeNull();
+    expect(within(row).getByText("Northwind")).toBeInTheDocument();
+  });
+
+  it("puts the old value back and says so when the server refuses", async () => {
+    await renderDashboard(
+      {
+        opportunities: deals(),
+        failures: { "PATCH /api/v2/opportunities/10": [403, "Not the owner"] },
+      },
+      "/?opportunities.view=table",
+    );
+
+    const row = await findCard("Northwind rollout");
+    await userEvent.click(within(row).getByTitle("Edit Account"));
+    await userEvent.clear(within(row).getByLabelText("Account"));
+    await userEvent.type(within(row).getByLabelText("Account"), "Wrongwind");
+    await userEvent.click(
+      within(row).getByRole("button", { name: "Save Account" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "Could not change the account of Northwind rollout: Not the owner",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(await findCard("Northwind rollout")).getByText("Northwind"),
+    ).toBeInTheDocument();
   });
 });
 

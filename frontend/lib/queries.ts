@@ -24,12 +24,12 @@ import type {
   AuditLogEntry,
   NoteVersion,
   Opportunity,
+  OpportunityFieldPatch,
   OpportunityShare,
   OpportunityVersion,
   SavedView,
   SavedViewEntity,
   ShareRole,
-  Stage,
   TimelineEntry,
   TimelineEntryVersion,
   TimelineFilters,
@@ -468,34 +468,39 @@ export function useSaveOpportunity() {
 }
 
 /**
- * Dragging a card to another stage column, and the two keyboard paths that do
- * the same thing (milestone 2.7): the card's move-to-stage select and the
- * `[`/`]` chords.
+ * One field of one opportunity, changed where it is read.
  *
- * A partial `PATCH` rather than the whole form `useSaveOpportunity` sends —
- * the stage is the only field a move changes, and the route already updates
- * exactly the fields it is given (`backend/app/routes_opportunities.py`).
- * Optimistic, because the cache holds the card and where it lands is not the
- * server's to decide; the server's own consequence, the `stage_change` system
- * timeline entry, is not guessed and arrives with the invalidation.
+ * Every partial write to an opportunity goes through here: dragging a card to
+ * another stage column and the two keyboard paths that do the same thing
+ * (milestone 2.7 — the card's move-to-stage select and the `[`/`]` chords),
+ * and since milestone 2.11 the inline editors on the table cells and the
+ * opportunity's own heading. A partial `PATCH` rather than the whole form
+ * `useSaveOpportunity` sends: the route updates exactly the fields it is
+ * given (`backend/app/routes_opportunities.py`), so one edited field is one
+ * key and nothing the reader did not touch is rewritten.
+ *
+ * Optimistic, because the cache holds the row and none of these fields is the
+ * server's to decide; the server's own consequences — the `stage_change`
+ * system timeline entry, the new version, `updated_at`, the stalled flag —
+ * are not guessed and arrive with the invalidation.
  */
-export function useChangeOpportunityStage() {
+export function useEditOpportunity() {
   const client = useQueryClient();
   return useMutation<
     Opportunity,
     Error,
-    { id: number; stage: Stage },
+    { id: number; fields: OpportunityFieldPatch },
     Snapshot
   >({
-    mutationFn: ({ id, stage }) =>
+    mutationFn: ({ id, fields }) =>
       apiRequest<Opportunity>(`/api/v2/opportunities/${id}`, {
         method: "PATCH",
-        body: JSON.stringify({ stage }),
+        body: JSON.stringify(fields),
       }),
-    onMutate: ({ id, stage }) =>
+    onMutate: ({ id, fields }) =>
       optimisticOpportunities(client, (opportunities) =>
         opportunities.map((opportunity) =>
-          opportunity.id === id ? { ...opportunity, stage } : opportunity,
+          opportunity.id === id ? { ...opportunity, ...fields } : opportunity,
         ),
       ),
     onError: (_error, _variables, snapshot) => rollback(client, snapshot),

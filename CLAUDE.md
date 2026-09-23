@@ -374,6 +374,61 @@ editable thing adds a `VersionedTable` there rather than a fourth `INSERT`.
   every later one as only what it moved. The button sits beside the exports on
   the opportunity, and on each entry and note, rendered only for the owner.
 
+### Editing where content is read
+
+`AGENTS.md` v2 scope item 12 — "content is edited where it is read, not in a
+form elsewhere on the page" — is milestone 2.11, and it is entirely frontend:
+the routes it writes through already took a partial `PATCH` (2.10 is what
+made every one of those writes keep a version). Before it, editing an entry
+loaded it into the composer at the top of the panel, so a reader fifty entries
+down was moved to the top of the page (**D-051**).
+
+`app/InlineEdit.tsx` holds both shapes, and a fourth editable surface should
+use one of them rather than a third:
+
+- `useInlineEditor(triggerRef, editorRef)` is the open/close state and the
+  focus rule, for anything that draws its own editor: a timeline entry swaps
+  its card body for `TimelineEntryForm` (`app/TimelineEntryList.tsx`), a note
+  swaps its rendered Markdown for a textarea (`app/NoteBlock.tsx`). Focus
+  moves into the editor when it opens and back to the control that opened it
+  when it closes — both in one effect, after the render that swapped the
+  views, because in each direction the element to focus does not exist yet
+  when the handler asks for it. The refs are the caller's and passed in: a ref
+  handed back from a hook and then read in JSX is a ref accessed during render
+  as far as the React Compiler's lint rule can tell.
+- `InlineEdit` is one field, drawn as its own value and replaced in place by a
+  control. `OpportunityField` binds it to `lib/domain.ts`'s
+  `editableOpportunityFields`, which is where a field's label, its editor, how
+  it reads and what it patches are declared once — so a field cannot be
+  editable as a table cell and not on the heading, or send a different patch
+  from each.
+
+Four things about it are load bearing:
+
+- **The trigger is named by its value, not by "Edit"** — the action rides on
+  `title`. An `aria-label` would override name-from-content, and this control
+  sits inside the opportunity's `h2`: labelling it "Edit Opportunity" renames
+  the heading to that, which `e2e/helpers.ts`'s `openTimeline` caught. Tests
+  address it by `getByTitle`, which also survives the value being edited.
+- **Every write is one partial `PATCH`.** `useEditOpportunity` replaced
+  `useChangeOpportunityStage` and is now the single optimistic partial write:
+  a card dragged to another column, the move-to-stage select, `[`/`]`, a table
+  cell and a heading field all send only the key that changed.
+  `useOpportunityFieldSave` is the one place that write is paired with a
+  toast, called once per view rather than once per cell.
+- **What the API would refuse is refused before the optimistic write.** The
+  same three rules `OpportunityUpdate` carries — a non-empty name, a
+  non-negative number, a close date that may be cleared to `null`. An editor
+  that closes and then silently reverts is worse than one that stays open and
+  says why.
+- **Two surfaces, deliberately, not five** (**D-099**). The table grid and the
+  opportunity's own heading are where a field is read *as a field*; a board or
+  list card reads a deal, and an edit affordance on every value there is the
+  clutter `AGENTS.md`'s Design bar rules out. The row's name stays a link to
+  its timeline, where the heading edits it. Comments remain immutable
+  (invariant 2) and a system entry has no editor (it cannot be edited through
+  the API either).
+
 ### Soft deletes and undo
 
 Nothing is hard-deleted. `soft_delete.py` is the only place user data is deleted:
@@ -491,7 +546,8 @@ the shape of that is worth knowing before adding a fifth:
   bar's dropdowns do — one setting asked two ways. It is not a `<table>`:
   windowed rows cannot carry honest table semantics, so each cell names its
   column in visually-hidden text and the sort state rides on the row region's
-  label (**D-090**). Inline cell editing is 2.11's, not here (**D-087**).
+  label (**D-090**). Its cells are edited in place from 2.11 (**D-087**
+  deferred that here).
 - **The calendar places `expected_close_date` only.** A follow-up date lives
   on a timeline entry and there is no cross-opportunity read for those; Phase
   4 builds one (**D-088**). Deals with no close date are listed under the grid
@@ -503,9 +559,10 @@ the shape of that is worth knowing before adding a fifth:
 - **Every stage change is the same write.** A card dropped in another column,
   the move-to-stage select on a card or row (`app/MoveToStage.tsx`), and the
   `[`/`]` chords all call `DashboardPage`'s `moveToStage`, which is
-  `useChangeOpportunityStage`: a partial `PATCH {stage}`, optimistic, rolled
+  `useEditOpportunity`: a partial `PATCH {stage}`, optimistic, rolled
   back with a toast, invalidating the timeline because the server writes the
-  `stage_change` system entry. The drag itself is the browser's own HTML5
+  `stage_change` system entry. Since 2.11 that hook is every partial write to
+  an opportunity, not only the stage one. The drag itself is the browser's own HTML5
   drag-and-drop with no library (D-080); the dragged card is held in React
   state rather than read back from `dataTransfer`, because a `dragover` handler
   may not look inside the payload. Only an owner's card is draggable and only
@@ -522,6 +579,10 @@ the shape of that is worth knowing before adding a fifth:
   app has an opinion about row height. The control (`app/Density.tsx`) sits
   beside the view switcher and only while the table is on screen; the theme
   control stays in the top bar because it applies everywhere.
+- **A field is edited where it is read** (2.11): the account, value and close
+  date cells, and the same fields on the opportunity's own heading, are
+  `app/InlineEdit.tsx` over one declaration in `lib/domain.ts`
+  (`editableOpportunityFields`). See "Editing where content is read" below.
 - **The create/edit form is a dialog**, not a column (D-079): opened from the
   page header, by `c`, and by Edit on any card or row, on the same
   `app/Modal.tsx` shell as the palette. `TopBar` therefore carries no page
@@ -581,7 +642,8 @@ The units worth testing directly, each in its own module:
   ends of the fixed list), `formatMoney`, the `sortFields` and
   `opportunityColumns` lists with `columnsFromState`/`opportunityCell`, and the
   calendar's date arithmetic (`resolveMonth`, `shiftMonth`, `calendarWeeks`,
-  `monthOrder`).
+  `monthOrder`). Also `editableOpportunityFields` and `editableField`, which
+  say which fields are edited in place and how (2.11).
 - `lib/density.ts` — Comfortable and Compact as a preference resolved to one
   root attribute. Carries no sizes, the same way `lib/theme.ts` carries no
   colours.
@@ -596,6 +658,8 @@ The units worth testing directly, each in its own module:
 - `lib/contrast.ts` — WCAG relative luminance and contrast ratio, used by
   `lib/contrast.test.ts` to re-run `docs/DESIGN-SYSTEM.md`'s audit against the
   tokens themselves.
+- `app/InlineEdit.tsx` — `useInlineEditor` and `InlineEdit`, the two shapes
+  of "edit this where it is read" (2.11). See "Editing where content is read".
 - `app/Toasts.tsx` — the toast surface and `useUndoableDelete`, the one
   definition of "delete it, and say so with a way back" (milestone 2.4b). The
   region is a `role="status"` live region, never focused, so a reader keeps

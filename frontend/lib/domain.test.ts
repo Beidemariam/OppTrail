@@ -7,6 +7,8 @@ import {
   closingOn,
   columnsFromState,
   defaultOpportunityColumns,
+  editableField,
+  editableOpportunityFields,
   emptyOpportunityViewState,
   emptyTimelineFilters,
   formatMoney,
@@ -336,6 +338,73 @@ describe("the table's columns (milestone 2.8)", () => {
     // Date alone: nobody scans a column of timestamps for the minute.
     expect(opportunityCell(opportunity, "updated_at")).toBe("2026-09-02");
     expect(opportunityCell(opportunity, "account_name")).toBe("Northwind");
+  });
+});
+
+describe("which opportunity fields are edited in place (milestone 2.11)", () => {
+  const opportunity = anOpportunity({
+    name: "Northwind rollout",
+    account_name: "Northwind",
+    value: "185000",
+    stage: "Negotiation",
+    expected_close_date: "2026-12-01",
+  });
+
+  it("reads each field as its editor's own value, not as the cell reads it", () => {
+    // The cell shows "USD 185,000"; the number input has to open on 185000.
+    expect(editableOpportunityFields.value.read(opportunity)).toBe("185000");
+    expect(opportunityCell(opportunity, "value")).toBe("USD 185,000");
+    expect(editableOpportunityFields.name.read(opportunity)).toBe(
+      "Northwind rollout",
+    );
+    expect(editableOpportunityFields.account_name.read(opportunity)).toBe(
+      "Northwind",
+    );
+    expect(editableOpportunityFields.stage.read(opportunity)).toBe(
+      "Negotiation",
+    );
+    expect(
+      editableOpportunityFields.expected_close_date.read(opportunity),
+    ).toBe("2026-12-01");
+    // An empty date, not the "Not set" the cell says.
+    expect(
+      editableOpportunityFields.expected_close_date.read(
+        anOpportunity({ expected_close_date: null }),
+      ),
+    ).toBe("");
+  });
+
+  it("sends one key per edited field, and null to clear a close date", () => {
+    expect(editableOpportunityFields.name.patch("Renamed")).toEqual({
+      name: "Renamed",
+    });
+    expect(editableOpportunityFields.account_name.patch("Globex")).toEqual({
+      account_name: "Globex",
+    });
+    expect(editableOpportunityFields.value.patch("210000")).toEqual({
+      value: "210000",
+    });
+    expect(editableOpportunityFields.stage.patch("Closed Won")).toEqual({
+      stage: "Closed Won",
+    });
+    expect(
+      editableOpportunityFields.expected_close_date.patch("2027-01-15"),
+    ).toEqual({ expected_close_date: "2027-01-15" });
+    expect(editableOpportunityFields.expected_close_date.patch("")).toEqual({
+      expected_close_date: null,
+    });
+  });
+
+  it("knows which table columns are fields and which are only read", () => {
+    expect(editableField("account_name")).toBe(
+      editableOpportunityFields.account_name,
+    );
+    expect(editableField("value")).toBe(editableOpportunityFields.value);
+    // Derived or owned elsewhere: none of these is something a reader types
+    // over in a cell.
+    expect(editableField("owner_name")).toBeNull();
+    expect(editableField("updated_at")).toBeNull();
+    expect(editableField("created_at")).toBeNull();
   });
 });
 

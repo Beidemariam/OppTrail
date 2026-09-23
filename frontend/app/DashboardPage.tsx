@@ -20,7 +20,7 @@ import {
 import { useKeyboardShortcuts } from "../lib/keyboard";
 import {
   useBulkOpportunityAction,
-  useChangeOpportunityStage,
+  useEditOpportunity,
   useDeleteOpportunity,
   useOpportunities,
   useRestoreOpportunity,
@@ -97,7 +97,7 @@ export function DashboardPage() {
     deleteOpportunity,
     restoreOpportunity,
   );
-  const changeStage = useChangeOpportunityStage();
+  const changeStage = useEditOpportunity();
   const bulkAction = useBulkOpportunityAction();
   const bulkRestoreOpportunity = useRestoreOpportunity();
   const showToast = useToasts();
@@ -188,7 +188,7 @@ export function DashboardPage() {
    * The one stage-change path: a card dropped in another column, the
    * move-to-stage select, and the `[`/`]` chords all call this.
    *
-   * Optimistic in the cache (`useChangeOpportunityStage`), so the card is in
+   * Optimistic in the cache (`useEditOpportunity`), so the card is in
    * its new column before the request lands and goes back if it fails. The
    * move is also announced, because the reader who used the keyboard to make
    * it may not be watching the card that moved.
@@ -199,7 +199,7 @@ export function DashboardPage() {
     }
     setAnnouncement(`${opportunity.name} moved to ${stage}.`);
     changeStage
-      .mutateAsync({ id: opportunity.id, stage })
+      .mutateAsync({ id: opportunity.id, fields: { stage } })
       .catch((error: Error) => {
         setAnnouncement("");
         showToast({

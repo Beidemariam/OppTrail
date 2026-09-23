@@ -335,6 +335,94 @@ export function opportunityCell(
   }
 }
 
+/* --- Editing where content is read (milestone 2.11) -----------------------
+ *
+ * `AGENTS.md` v2 scope item 12: "content is edited where it is read, not in a
+ * form elsewhere on the page". An opportunity's fields are read as fields in
+ * two places — the table grid and the opportunity's own heading — and this is
+ * the one declaration both of them edit through, so a field cannot be
+ * editable as a table cell and not as a heading, or send a different patch
+ * from each.
+ *
+ * Currency is deliberately absent: it is read as part of the value
+ * (`formatMoney`) rather than as a field of its own, and it is the one
+ * opportunity field nobody changes after the first keystroke (**D-098**). It
+ * stays in the create/edit dialog with everything else.
+ */
+
+/** A partial `PATCH /api/v2/opportunities/{id}` body: the route updates
+ * exactly the fields it is given (`backend/app/routes_opportunities.py`), so
+ * one edited field is one key. */
+export type OpportunityFieldPatch = Partial<
+  Pick<
+    Opportunity,
+    "name" | "account_name" | "value" | "stage" | "expected_close_date"
+  >
+>;
+
+export interface EditableOpportunityField {
+  label: string;
+  /** Which editor to draw. `stage` is the fixed list, so it is a select over
+   * `stages` rather than free text (`AGENTS.md` invariant 6). */
+  input: "text" | "number" | "date" | "stage";
+  /** What the editor opens with, as the input element's own string value —
+   * not what the cell reads, which is formatted for scanning. */
+  read: (opportunity: Opportunity) => string;
+  /** What one edit sends. An empty close date clears the column, which is why
+   * this returns `null` rather than omitting the key. */
+  patch: (value: string) => OpportunityFieldPatch;
+}
+
+export const editableOpportunityFields: Record<
+  "name" | "account_name" | "value" | "stage" | "expected_close_date",
+  EditableOpportunityField
+> = {
+  name: {
+    label: "Opportunity",
+    input: "text",
+    read: (opportunity) => opportunity.name,
+    patch: (value) => ({ name: value }),
+  },
+  account_name: {
+    label: "Account",
+    input: "text",
+    read: (opportunity) => opportunity.account_name,
+    patch: (value) => ({ account_name: value }),
+  },
+  value: {
+    label: "Value",
+    input: "number",
+    read: (opportunity) => opportunity.value,
+    patch: (value) => ({ value }),
+  },
+  stage: {
+    label: "Stage",
+    input: "stage",
+    read: (opportunity) => opportunity.stage,
+    patch: (value) => ({ stage: value as Stage }),
+  },
+  expected_close_date: {
+    label: "Close date",
+    input: "date",
+    read: (opportunity) => opportunity.expected_close_date ?? "",
+    patch: (value) => ({ expected_close_date: value || null }),
+  },
+};
+
+export type OpportunityEditableKey = keyof typeof editableOpportunityFields;
+
+/** Whether a table column is one of the editable fields. The column list and
+ * the editable list overlap rather than coincide — owner, last activity and
+ * created are columns nobody edits — so the table asks this rather than
+ * assuming. */
+export function editableField(
+  column: OpportunityColumn,
+): EditableOpportunityField | null {
+  return column in editableOpportunityFields
+    ? editableOpportunityFields[column as OpportunityEditableKey]
+    : null;
+}
+
 /**
  * Filters and sorts the already-fetched opportunity list against a view
  * state. Client-side rather than a new query parameter on

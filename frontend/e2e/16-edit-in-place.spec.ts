@@ -1,0 +1,147 @@
+import { expect, test } from "@playwright/test";
+
+import {
+  createOpportunity,
+  entryForm,
+  expectNoAccessibilityViolations,
+  openTimeline,
+  signUp,
+} from "./helpers";
+
+/**
+ * Milestone 2.11: content is edited where it is read (`AGENTS.md` v2 scope
+ * item 12).
+ *
+ * The thing worth asserting in a real browser, and the reason this milestone
+ * exists (D-051), is the one a component test cannot see: the reader does not
+ * move. jsdom lays nothing out and scrolls nothing, so only here can "editing
+ * the entry at the bottom of a long timeline leaves you at the bottom of the
+ * timeline" be checked.
+ */
+test("edit an entry, a note and an opportunity field without leaving the page", async ({
+  page,
+}) => {
+  const suffix = Math.random().toString(36).slice(2, 8);
+  const opportunity = `In place ${suffix}`;
+
+  await signUp(page, `in-place-${suffix}@opptrail.test`, "In Place Tester");
+  await createOpportunity(page, opportunity, {
+    account: "Wonka Industries",
+    value: "75000",
+    currency: "USD",
+    stage: "Prospecting",
+  });
+  await openTimeline(page, opportunity);
+
+  // A timeline long enough that its last entry is well below the fold.
+  const titles = Array.from({ length: 8 }, (_, index) => `Call ${index + 1}`);
+  for (const title of titles) {
+    await entryForm(page).getByLabel("Title").fill(title);
+    await entryForm(page)
+      .getByLabel("Body")
+      .fill(`What was said on ${title.toLowerCase()}.`);
+    await entryForm(page).getByRole("button", { name: "Add Entry" }).click();
+    await expect(
+      page.locator(".timeline-list").getByRole("heading", { name: title }),
+    ).toBeVisible();
+  }
+
+  // Addressed by position, not by the title this test is about to change: a
+  // locator filtered on that text stops matching mid-test. The position is
+  // looked up once, from the titles as they are now — the system
+  // "Opportunity created" entry is in this list too, and where it sorts
+  // depends on the clock.
+  const entries = page.locator("article.timeline-entry");
+  const headings = await entries.locator("h3").allTextContents();
+  const last = entries.nth(headings.indexOf("Call 8"));
+  await last.scrollIntoViewIfNeeded();
+  const before = await page.evaluate(() => window.scrollY);
+
+  await last.getByRole("button", { name: "Edit" }).click();
+
+  // The editor is inside the entry, and the reader has not been moved to a
+  // form at the top of the page.
+  const editor = last.locator("form.timeline-form");
+  await expect(editor.getByLabel("Title")).toBeFocused();
+  await expect(editor.getByLabel("Title")).toBeInViewport();
+  expect(
+    Math.abs((await page.evaluate(() => window.scrollY)) - before),
+  ).toBeLessThan(40);
+  // The entry above it is still drawn, which is what "with the surrounding
+  // context still visible" means.
+  await expect(entries).toHaveCount(titles.length + 1);
+  await expect(
+    page.locator(".timeline-list").getByRole("heading", { name: "Call 7" }),
+  ).toBeVisible();
+
+  await editor.getByLabel("Title").fill("Call 8, corrected");
+  await editor.getByRole("button", { name: "Save Entry" }).click();
+  await expect(
+    page.locator(".timeline-list").getByRole("heading", {
+      name: "Call 8, corrected",
+    }),
+  ).toBeVisible();
+  // The composer at the top stayed a composer throughout: before milestone
+  // 2.11 this is where the edit happened, and it offered "Save Entry".
+  await expect(
+    entryForm(page).first().getByRole("button", { name: "Add Entry" }),
+  ).toBeVisible();
+  await expect(page.locator("form.timeline-form")).toHaveCount(1);
+
+  // A note edits in its own note, and Esc-free: Save closes it and hands
+  // focus back to the control that opened it.
+  await last.getByPlaceholder("Add note").fill("Budget holder is the COO.");
+  await last.getByRole("button", { name: "Add Note" }).click();
+  const note = last.locator("section.note-block").first();
+  await expect(note).toBeVisible();
+  await note.getByRole("button", { name: "Edit" }).click();
+  await expect(note.getByLabel("Edit this note")).toBeFocused();
+  await note.getByLabel("Edit this note").fill("Budget holder is the CFO.");
+  await note.getByRole("button", { name: "Save" }).click();
+  await expect(note.getByText("Budget holder is the CFO.")).toBeVisible();
+  await expect(note.getByRole("button", { name: "Edit" })).toBeFocused();
+
+  // The opportunity's own fields are edited from its heading rather than from
+  // a dialog on the board behind it.
+  const heading = page.locator(".timeline-heading");
+  await expect(heading.getByText("USD 75,000")).toBeVisible();
+  await heading.getByTitle("Edit Value").click();
+  // Exact, because "Save Value" and "Cancel editing Value" are labelled
+  // beside it.
+  await heading.getByLabel("Value", { exact: true }).fill("90000");
+  await heading.getByRole("button", { name: "Save Value" }).click();
+  await expect(heading.getByText("USD 90,000")).toBeVisible();
+
+  await expectNoAccessibilityViolations(page, "timeline with inline editors");
+});
+
+test("edit an opportunity in a table cell", async ({ page }) => {
+  const suffix = Math.random().toString(36).slice(2, 8);
+  const opportunity = `Cell ${suffix}`;
+
+  await signUp(page, `cell-${suffix}@opptrail.test`, "Cell Tester");
+  await createOpportunity(page, opportunity, {
+    account: "Initech",
+    value: "50000",
+    currency: "USD",
+  });
+
+  await page.getByRole("button", { name: "Table" }).click();
+  const row = page.locator("article.opportunity-table-row").first();
+  await expect(row.getByText("Initech")).toBeVisible();
+
+  await row.getByTitle("Edit Account").click();
+  await row.getByLabel("Account", { exact: true }).fill("Initech Holdings");
+  await row.getByRole("button", { name: "Save Account" }).click();
+  await expect(row.getByText("Initech Holdings")).toBeVisible();
+
+  // And the edit is real: it survives a reload, which is what separates an
+  // optimistic cache write from a saved one.
+  await page.reload();
+  await page.getByRole("button", { name: "Table" }).click();
+  await expect(
+    page.locator("article.opportunity-table-row").first(),
+  ).toContainText("Initech Holdings");
+
+  await expectNoAccessibilityViolations(page, "table with inline editors");
+});
