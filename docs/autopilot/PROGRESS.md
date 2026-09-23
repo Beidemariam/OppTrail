@@ -2897,37 +2897,115 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
   successful add — it did before this milestone too, and clearing it is not
   2.11's to decide.
 
-- [ ] 2.12 Fold the repeatable half of the manual user test into the E2E
-      suite, and keep the rest manual (**D-053**, from the Phase 1 user test).
-      Phase 2 rewrites the UI, so `frontend/e2e/`'s selectors have to be
-      revisited anyway — extending the suite while already in those files costs
-      far less than a separate pass later.
-      **Automate** (fixed right answer, so they become regression guards):
-      - Session cookie flags — `opptrail_session` is `HttpOnly`,
-        `opptrail_csrf` is not.
-      - Timeline ordering and system-generated entries carrying no edit or
-        delete control.
-      - The permission matrix as a *user* sees it: an editor offered no edit or
-        delete control on a colleague's note, a viewer offered no write control
-        anywhere, a non-member shown no trace of the opportunity. The API-level
-        matrix already exists (`test_authorization_matrix.py`); this asserts the
-        UI never offers what the API would refuse.
-      - Search access scoping — the viewer's query for a term that exists only
-        in an opportunity they cannot see returns nothing.
-      - Notification history surviving a read, and mark-all-read.
-      - Audit log completeness after a delete.
-      - **The security half of the sanitization check**: no dialog fires, the
-        `javascript:` link does not navigate. Correcting the coarser call made
-        when this was first discussed — a stored-XSS regression belongs in CI
-        whatever else stays manual, even with `sanitize.py`'s unit tests
-        already passing, because this asserts it end to end in a real browser.
-      **Keep manual** (no fixed right answer; automation would pass and tell
-      you nothing): whether timestamps read correctly in the tester's own
-      timezone, whether rendered markdown is *readable*, whether the PDF export
-      is something a person would actually send, whether an AI answer is
-      grounded and useful.
-      Then trim the hand-run page to the judgment checks, so a phase gate costs
-      a human twenty minutes rather than an hour.
+### 2.12 Fold the repeatable half of the manual user test into the E2E suite (D-053) — **DONE**
+
+Automated the six fixed-right-answer checks D-053 scheduled here, each landed
+in the file its journey already lives in rather than one new catch-all spec —
+consistent with the milestone's own reasoning ("extending the suite while
+already in those files costs far less than a separate pass later"). Two items
+had no existing home (cookie flags, the sanitization security half) and got
+one new file, `frontend/e2e/17-security-regressions.spec.ts`.
+
+- [x] **Session cookie flags.** New test in the new file:
+      `opptrail_session` is `HttpOnly`, `opptrail_csrf` is not (the
+      double-submit design needs the SPA to read it).
+- [x] **Timeline ordering and system-generated entries carrying no edit or
+      delete control.** The system-entry half was already pinned in
+      `01-opportunity-lifecycle.spec.ts` (the "Stage changed to Proposal"
+      entry asserting zero Edit/Delete buttons) — confirmed, not
+      re-implemented. The ordering half was genuinely missing and, writing it,
+      surfaced a real subtlety rather than a bug: `TimelineEntryForm`'s "Event
+      time" field is a `datetime-local` input, minute resolution
+      (`lib/time.ts`'s `toLocalInput`), while the system entry's own timestamp
+      carries the actual second its create call ran on. Left at their shared
+      default of "now", two typed entries added moments after the opportunity
+      round down to `:00` seconds of the current minute and sort *before* the
+      system entry's `:NN` — not a product defect (a `datetime-local` input
+      has no seconds field; this is what it always does), but it makes "add
+      entries right after creating the opportunity, assert reading order"
+      flaky at second-level timing. Fixed by giving the test explicit,
+      well-separated "Event time" values (now+1h, now+2h) rather than by
+      changing any application code.
+- [x] **The UI permission matrix as a user sees it.** Editor-cannot-touch-a-
+      colleague's-note and viewer-is-read-only were already asserted in
+      `02-sharing-permissions.spec.ts` — confirmed, not re-implemented. Added
+      the missing third case there: an unrelated user sees the opportunity on
+      neither the dashboard nor at its own URL (`OpportunityPanel`'s "This
+      opportunity is not available." branch), which is the UI expression of
+      "absence of access is 404, not 403" (`CLAUDE.md`, Permissions).
+- [x] **Search access scoping.** Already asserted by name in
+      `08-search.spec.ts` ("a viewer sees only the match inside the
+      opportunity shared with them") — confirmed, not re-implemented.
+- [x] **Notification history surviving a read, and mark-all-read.** New test
+      in `04-mentions.spec.ts`: mark one row read, assert the row count is
+      unchanged (the v1 `WHERE read = 0` dead end milestone 1.7 fixed) and the
+      row keeps its read styling after a full page reload, not just in the
+      query cache; mark-all-read then clears every remaining row and disables
+      itself. Deliberately does not hardcode the notification count — one
+      mentioning note fires both `notify_mentions` and
+      `notify_shared_activity` (`routes_timeline.py`), so the exact row count
+      is an implementation detail the test reads back (`await rows.count()`)
+      rather than asserts.
+- [x] **Audit log completeness after a delete.** `timeline_entry_deleted` /
+      `_restored` were already asserted in `11-undo.spec.ts` — confirmed, not
+      re-implemented. Added the missing case there: deleting a note and a
+      comment both write `note_deleted` and `comment_deleted` rows a reader
+      can see in the owner's audit panel.
+- [x] **The security half of the sanitization check.** New test in the new
+      file: a note body carrying `<img onerror=...>` and a
+      `[text](javascript:...)` link, posted through the real form and read
+      back through the real render. Asserts two things a browser can prove
+      and a unit test cannot: no `dialog` event fires, and the rendered
+      anchor's `href` never contains `javascript:` — addressed by CSS
+      selector rather than `getByRole("link")`, because an anchor with its
+      `href` attribute stripped (rather than merely rewritten) has no
+      implicit link role to query by, which is itself evidence the sanitizer
+      removed the attribute rather than just neutralizing its value.
+      `MarkdownText.test.tsx` already proves the sanitizer's logic in
+      isolation; what this adds is the same guarantee through the real
+      round trip — typed into the form, posted to the API, stored as-is
+      (`sanitize.py` is not yet on this write path; Phase 3's rich-text
+      editor is what changes that) and sanitized only at render.
+- [x] **Kept manual, unchanged:** whether timestamps read correctly in the
+      tester's own timezone, whether rendered markdown is readable, whether a
+      PDF export is something a person would send, whether an AI answer is
+      grounded. None of these have a fixed right answer for automation to
+      check.
+- [x] **Trim the hand-run page to the judgment checks.** Phase 2 has not yet
+      had its own review packet written (that is the phase-ending gate, a
+      separate step from this milestone per brief §3.3 — "one milestone... or
+      the end-of-phase review packet"). Recorded here so that step does not
+      regress: the Phase 2 review packet's "How to try it" section should list
+      only the six items above as *manual*, not the ones this milestone just
+      automated — the point of D-053 was making the human's twenty minutes go
+      where only a human can look.
+
+Work log: single session, no backend or frontend application code changed —
+this milestone is entirely test additions. New:
+`frontend/e2e/17-security-regressions.spec.ts` (2 tests: cookie flags, hostile
+markdown end to end). Changed: `frontend/e2e/01-opportunity-lifecycle.spec.ts`
+(explicit event-time ordering assertion), `frontend/e2e/02-sharing-permissions.spec.ts`
+(+1 test: unrelated user sees no trace), `frontend/e2e/04-mentions.spec.ts`
+(+1 test: notification history and mark-all-read), `frontend/e2e/11-undo.spec.ts`
+(+1 test: note/comment audit trail). 52 → 57 E2E tests, all confirmed green
+against the real running application (Playwright, Chromium) before commit —
+not just typechecked. Two of the new assertions were confirmed to fail first
+against the pre-fix understanding, per brief §6.5: the ordering test, run with
+entries left at their default "now" timestamp, failed exactly as described
+above (system entry sorting last), which is what led to the explicit-offset
+fix rather than a guess; the notification test, run with a hardcoded count of
+2, failed with "Received: 6" (a single mentioning note fires two
+notifications, plus whatever the seeded/shared fixtures around it produced),
+which is what led to reading the count back dynamically instead of asserting
+a specific one.
+Gate: full `make check` green in the sandbox — ruff, `ruff format --check`,
+`mypy --strict` over `app` and `tools`, frontend typecheck and lint, prettier,
+338 backend tests at 97.27% combined coverage (unchanged — no backend code
+touched), 429 frontend unit tests at 97.10/90.95/95.80/97.07 statements/
+branches/functions/lines (unchanged — no frontend source outside `e2e/`
+touched), API-contract check current, `pip-audit` and `npm audit` both clean,
+57 Playwright E2E tests (was 52) all green. Docker build + smoke test remains
+deferred to the host per the unchanged split gate (`sandbox/README.md`).
 
 ### Acceptance
 

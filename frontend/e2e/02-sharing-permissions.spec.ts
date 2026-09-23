@@ -118,3 +118,41 @@ test("viewer is read-only, editor can write, comments stay immutable", async ({
   await expect(comment.getByRole("button", { name: "Edit" })).toHaveCount(0);
   await expect(comment.getByRole("button", { name: "Delete" })).toBeVisible();
 });
+
+/**
+ * The UI half of "absence of access returns 404, not 403" (`CLAUDE.md`,
+ * Permissions): an opportunity nobody shared should not exist as far as an
+ * unrelated user's screen is concerned, not on the dashboard and not at the
+ * URL a colleague could open.
+ */
+test("an unrelated user sees no trace of the opportunity, on the dashboard or at its URL", async ({
+  page,
+}) => {
+  const suffix = Math.random().toString(36).slice(2, 8);
+  const ownerEmail = `trace-owner-${suffix}@opptrail.test`;
+  const strangerEmail = `trace-stranger-${suffix}@opptrail.test`;
+  const opportunity = `Private ${suffix}`;
+
+  await signUp(page, strangerEmail, "Unrelated Stranger");
+  await signOut(page);
+
+  await signUp(page, ownerEmail, "Private Owner");
+  await createOpportunity(page, opportunity, { account: "Wayne Enterprises" });
+  await openTimeline(page, opportunity);
+  const opportunityUrl = page.url();
+  await signOut(page);
+
+  await signIn(page, strangerEmail);
+  await expect(
+    page.getByRole("heading", { name: "Opportunities" }),
+  ).toBeVisible();
+  await expect(card(page, opportunity)).toHaveCount(0);
+
+  // Not shared with this reader, so the same URL the owner used answers "not
+  // available" rather than leaking the name or any timeline content.
+  await page.goto(opportunityUrl);
+  await expect(
+    page.getByRole("heading", { name: "This opportunity is not available." }),
+  ).toBeVisible();
+  await expect(page.getByText(opportunity)).toHaveCount(0);
+});

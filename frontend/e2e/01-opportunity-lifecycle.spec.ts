@@ -44,20 +44,47 @@ test("sign up, create an opportunity, add entries, change stage", async ({
   await page.reload();
   await expect(timeline.getByText("Opportunity created")).toBeVisible();
 
-  for (const [type, title] of [
-    ["Call", "Discovery call"],
-    ["Meeting", "Solution review"],
+  // Explicit, well-separated event times: the "Event time" input is minute
+  // resolution (`lib/time.ts`'s `toLocalInput`), while the system entry
+  // carries the full second its create call ran on — leaving them at their
+  // shared default of "now" would let the system entry's own seconds sort
+  // *after* an entry rounded down to the top of the same minute, which is
+  // the input's known granularity, not a claim about typical event spacing.
+  const hourFromNow = (hours: number) => {
+    const target = new Date(Date.now() + hours * 60 * 60 * 1000);
+    const local = new Date(
+      target.getTime() - target.getTimezoneOffset() * 60 * 1000,
+    );
+    return local.toISOString().slice(0, 16);
+  };
+
+  for (const [type, title, offsetHours] of [
+    ["Call", "Discovery call", 1],
+    ["Meeting", "Solution review", 2],
   ] as const) {
     await entryForm(page).getByLabel("Type").selectOption({ label: type });
     await entryForm(page).getByLabel("Title").fill(title);
     await entryForm(page)
       .getByLabel("Body")
       .fill(`Notes from the ${title.toLowerCase()}.`);
+    await entryForm(page)
+      .getByLabel("Event time")
+      .fill(hourFromNow(offsetHours));
     await entryForm(page).getByRole("button", { name: "Add Entry" }).click();
     await expect(timeline.getByRole("heading", { name: title })).toBeVisible();
   }
 
   await expect(timeline.locator("article.timeline-entry")).toHaveCount(3);
+
+  // Default reading order is oldest first (`event_timestamp` ascending,
+  // `lib/domain.ts`'s `emptyTimelineFilters`), so the system entry and the
+  // two typed entries — each an hour further out than the last — read back
+  // in the order their event times actually put them in.
+  await expect(timeline.locator("article.timeline-entry h3")).toHaveText([
+    "Opportunity created",
+    "Discovery call",
+    "Solution review",
+  ]);
 
   // Changing the stage must append a system entry nobody can edit.
   await page

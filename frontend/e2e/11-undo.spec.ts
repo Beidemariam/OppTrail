@@ -95,3 +95,44 @@ test("an undone deletion is both events in the owner's audit log", async ({
   await expect(log).toContainText("timeline_entry_deleted");
   await expect(log).toContainText("timeline_entry_restored");
 });
+
+test("deleting a note and a comment both leave an audit trail", async ({
+  page,
+}) => {
+  const suffix = Math.random().toString(36).slice(2, 8);
+  const opportunity = `Note audit ${suffix}`;
+
+  await signUp(page, `note-audit-${suffix}@opptrail.test`, "Note Audit Tester");
+  await createOpportunity(page, opportunity, { account: "Initech" });
+  await openTimeline(page, opportunity);
+
+  await entryForm(page).getByLabel("Title").fill("Renewal call");
+  await entryForm(page).getByRole("button", { name: "Add Entry" }).click();
+  const call = entry(page, "Renewal call");
+  await expect(call).toBeVisible();
+
+  await call.getByPlaceholder("Add note").fill("Discussed pricing.");
+  await call.getByRole("button", { name: "Add Note" }).click();
+  const note = page
+    .locator("section.note-block")
+    .filter({ hasText: "Discussed pricing." });
+  await expect(note).toBeVisible();
+
+  await note.getByPlaceholder("Add comment").fill("Following up next week.");
+  await note.getByRole("button", { name: "Post" }).click();
+  const comment = note
+    .locator(".comment-row")
+    .filter({ hasText: "Following up next week." });
+  await expect(comment).toBeVisible();
+
+  await comment.getByRole("button", { name: "Delete" }).click();
+  await expect(comment).toHaveCount(0);
+
+  await note.getByRole("button", { name: "Delete" }).click();
+  await expect(note).toHaveCount(0);
+
+  await page.locator(".audit-panel summary").click();
+  const log = page.locator(".audit-list");
+  await expect(log).toContainText("comment_deleted");
+  await expect(log).toContainText("note_deleted");
+});

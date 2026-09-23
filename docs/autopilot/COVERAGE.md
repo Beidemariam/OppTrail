@@ -1378,3 +1378,31 @@ are both on screen; it is scoped to the card it was always about.
 The guard test (brief §6.5), confirmed to fail against the unfixed code
 before being trusted: `opens an entry's editor inside that entry, with its
 neighbours still on screen` in `app/OpportunityPanel.test.tsx`.
+
+## Phase 2 — milestone 2.12 (fold the manual user test's deterministic half into E2E)
+
+```
+backend:  338 passed, 97.27% combined line+branch — unchanged, no backend
+          code touched.
+frontend: 429 passed, 97.10% statements, 97.07% line, 95.80% functions,
+          90.95% branch — unchanged, no frontend source outside e2e/ touched.
+e2e:      57 (was 52). New: e2e/17-security-regressions.spec.ts (2: cookie
+          flags, hostile-markdown round trip). +1 each in
+          01-opportunity-lifecycle.spec.ts (ordering — an existing test
+          extended, not a new one), 02-sharing-permissions.spec.ts (unrelated
+          user sees no trace), 04-mentions.spec.ts (notification history +
+          mark-all-read), 11-undo.spec.ts (note/comment audit trail).
+docker:   deferred to the host half — scripts/autopilot-gate.sh 2
+          (no Docker socket in this sandbox, per sandbox/README.md)
+```
+
+No coverage floor moved: this milestone adds E2E tests only, which
+`vitest.config.ts`'s thresholds and pytest's `--cov-fail-under` do not
+measure. All 57 E2E tests were run against the real application (Playwright,
+Chromium) before commit, not just typechecked — two of the new assertions
+were confirmed to fail first against a wrong assumption (PROGRESS.md's 2.12
+entry has both: the timeline-ordering test against entries left at their
+default "now" timestamp, and the notification test against a hardcoded
+row count of 2), which is what caught a real timing subtlety in the first
+case and a wrong assumption about notification fan-out in the second, before
+either became a flaky or over-specific regression guard.
