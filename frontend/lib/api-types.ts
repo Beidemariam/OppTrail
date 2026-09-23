@@ -236,13 +236,20 @@ export interface paths {
          *     one in the same batch fails, so a caller's mixed selection of owned and
          *     merely-shared records only loses the ones it cannot touch.
          *
-         *     Both actions reuse an existing single-item rule rather than adding a new
-         *     one: `delete` is `delete_opportunity`'s cascade plus its audit row,
-         *     `set_stage` is `update_opportunity`'s stage branch, and both are
-         *     owner-only through the same `require_opportunity_owner` those routes call.
-         *     `docs/UX.md`'s action bar also names "assign owner", "add to view" and
-         *     export; D-070 is why this milestone ships only the two that already exist
-         *     one id at a time.
+         *     Four of `docs/UX.md`'s five action-bar actions are here, and each reuses a
+         *     rule that already exists rather than adding one: `delete` and `set_stage`
+         *     are owner-only through `require_opportunity_owner`, like the single-item
+         *     routes they repeat; `assign_owner` is owner-only for the same reason --
+         *     only the holder of a record may hand it on (D-105); and `add_to_view`
+         *     asks only for *read* access per id, because it writes to the caller's own
+         *     saved view rather than to the opportunity (D-106). The fifth, export, is
+         *     not an action here at all: it answers with a file rather than a list of
+         *     per-item outcomes (D-107, `routes_export.py`).
+         *
+         *     Two failures are about the request rather than about one id -- an unknown
+         *     email and a view that is not the caller's -- and both are raised before
+         *     the loop, so a selection is never half-applied against a target that does
+         *     not exist.
          */
         post: operations["bulk_opportunity_action_api_v2_opportunities_bulk_post"];
         delete?: never;
@@ -568,6 +575,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/opportunities/export/json": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Selection Json */
+        get: operations["export_selection_json_api_v2_opportunities_export_json_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/opportunities/export/csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Selection Csv */
+        get: operations["export_selection_csv_api_v2_opportunities_export_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/opportunities/{opportunity_id}/export/json": {
         parameters: {
             query?: never;
@@ -777,9 +818,9 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "opportunity_deleted" | "opportunity_restored" | "share_added" | "share_role_changed" | "share_removed" | "timeline_entry_deleted" | "timeline_entry_restored" | "note_deleted" | "note_restored" | "comment_deleted" | "comment_restored";
+            action: "opportunity_deleted" | "opportunity_restored" | "share_added" | "share_role_changed" | "share_removed" | "owner_changed" | "timeline_entry_deleted" | "timeline_entry_restored" | "note_deleted" | "note_restored" | "comment_deleted" | "comment_restored";
             /** Detail */
-            detail: components["schemas"]["AuditDetailOpportunityDeleted"] | components["schemas"]["AuditDetailOpportunityRestored"] | components["schemas"]["AuditDetailShareAdded"] | components["schemas"]["AuditDetailShareRoleChanged"] | components["schemas"]["AuditDetailShareRemoved"] | components["schemas"]["AuditDetailTimelineEntryDeleted"] | components["schemas"]["AuditDetailTimelineEntryRestored"] | components["schemas"]["AuditDetailNoteDeleted"] | components["schemas"]["AuditDetailNoteRestored"] | components["schemas"]["AuditDetailCommentDeleted"] | components["schemas"]["AuditDetailCommentRestored"];
+            detail: components["schemas"]["AuditDetailOpportunityDeleted"] | components["schemas"]["AuditDetailOpportunityRestored"] | components["schemas"]["AuditDetailShareAdded"] | components["schemas"]["AuditDetailShareRoleChanged"] | components["schemas"]["AuditDetailShareRemoved"] | components["schemas"]["AuditDetailOwnerChanged"] | components["schemas"]["AuditDetailTimelineEntryDeleted"] | components["schemas"]["AuditDetailTimelineEntryRestored"] | components["schemas"]["AuditDetailNoteDeleted"] | components["schemas"]["AuditDetailNoteRestored"] | components["schemas"]["AuditDetailCommentDeleted"] | components["schemas"]["AuditDetailCommentRestored"];
         };
         /**
          * ActivityEditEvent
@@ -909,6 +950,15 @@ export interface components {
             /** Stage */
             stage: string;
         };
+        /** AuditDetailOwnerChanged */
+        AuditDetailOwnerChanged: {
+            /** From User Id */
+            from_user_id: number;
+            /** To User Id */
+            to_user_id: number;
+            /** To Email */
+            to_email: string;
+        };
         /** AuditDetailShareAdded */
         AuditDetailShareAdded: {
             /** User Id */
@@ -992,9 +1042,9 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "opportunity_deleted" | "opportunity_restored" | "share_added" | "share_role_changed" | "share_removed" | "timeline_entry_deleted" | "timeline_entry_restored" | "note_deleted" | "note_restored" | "comment_deleted" | "comment_restored";
+            action: "opportunity_deleted" | "opportunity_restored" | "share_added" | "share_role_changed" | "share_removed" | "owner_changed" | "timeline_entry_deleted" | "timeline_entry_restored" | "note_deleted" | "note_restored" | "comment_deleted" | "comment_restored";
             /** Detail */
-            detail: components["schemas"]["AuditDetailOpportunityDeleted"] | components["schemas"]["AuditDetailOpportunityRestored"] | components["schemas"]["AuditDetailShareAdded"] | components["schemas"]["AuditDetailShareRoleChanged"] | components["schemas"]["AuditDetailShareRemoved"] | components["schemas"]["AuditDetailTimelineEntryDeleted"] | components["schemas"]["AuditDetailTimelineEntryRestored"] | components["schemas"]["AuditDetailNoteDeleted"] | components["schemas"]["AuditDetailNoteRestored"] | components["schemas"]["AuditDetailCommentDeleted"] | components["schemas"]["AuditDetailCommentRestored"];
+            detail: components["schemas"]["AuditDetailOpportunityDeleted"] | components["schemas"]["AuditDetailOpportunityRestored"] | components["schemas"]["AuditDetailShareAdded"] | components["schemas"]["AuditDetailShareRoleChanged"] | components["schemas"]["AuditDetailShareRemoved"] | components["schemas"]["AuditDetailOwnerChanged"] | components["schemas"]["AuditDetailTimelineEntryDeleted"] | components["schemas"]["AuditDetailTimelineEntryRestored"] | components["schemas"]["AuditDetailNoteDeleted"] | components["schemas"]["AuditDetailNoteRestored"] | components["schemas"]["AuditDetailCommentDeleted"] | components["schemas"]["AuditDetailCommentRestored"];
             /** Created At */
             created_at: string;
         };
@@ -1028,10 +1078,14 @@ export interface components {
          * BulkOpportunityAction
          * @description One request over many opportunities (`docs/UX.md`'s action bar).
          *
-         *     Only the two actions that already exist one id at a time —
-         *     `update_opportunity`'s stage change and `delete_opportunity` — are
-         *     exposed here; D-070 explains why "assign owner", "add to view" and
-         *     export are not.
+         *     All four of the action bar's non-export actions live here. Each reuses a
+         *     rule that exists elsewhere rather than inventing one: `delete` and
+         *     `set_stage` are `delete_opportunity`/`update_opportunity` done per id
+         *     (owner-only), `assign_owner` is owner-only for the same reason every
+         *     other opportunity write is, and `add_to_view` writes to the caller's own
+         *     saved view, so its rule is that view's creator-only write plus read
+         *     access to each opportunity (D-105, D-106). Export is the fifth and is not
+         *     here: it answers with a file rather than a per-item result (D-107).
          */
         BulkOpportunityAction: {
             /** Ids */
@@ -1040,9 +1094,13 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "delete" | "set_stage";
+            action: "delete" | "set_stage" | "assign_owner" | "add_to_view";
             /** Stage */
             stage?: ("Prospecting" | "Qualification" | "Needs Analysis" | "Proposal" | "Negotiation" | "Closed Won" | "Closed Lost") | null;
+            /** New Owner Email */
+            new_owner_email?: string | null;
+            /** View Id */
+            view_id?: number | null;
         };
         /** CommentCreate */
         CommentCreate: {
@@ -1173,6 +1231,18 @@ export interface components {
             /** Email */
             email: string;
         };
+        /**
+         * NotificationPayloadOwnerChanged
+         * @description Being handed a deal is the one access change nobody asked for, so it
+         *     is told the same way a share is (milestone 3.0a). The previous owner is
+         *     the actor, so they are not notified of their own action.
+         */
+        NotificationPayloadOwnerChanged: {
+            /** Opportunity Id */
+            opportunity_id: number;
+            /** Actor Id */
+            actor_id: number;
+        };
         /** NotificationPayloadShareAdded */
         NotificationPayloadShareAdded: {
             /** Opportunity Id */
@@ -1246,9 +1316,9 @@ export interface components {
              * Type
              * @enum {string}
              */
-            type: "share_added" | "share_role_changed" | "share_removed" | "mention" | "shared_activity" | "comment";
+            type: "share_added" | "share_role_changed" | "share_removed" | "owner_changed" | "mention" | "shared_activity" | "comment";
             /** Payload */
-            payload: components["schemas"]["NotificationPayloadShareAdded"] | components["schemas"]["NotificationPayloadShareRoleChanged"] | components["schemas"]["NotificationPayloadShareRemoved"] | components["schemas"]["NotificationPayloadMention"] | components["schemas"]["NotificationPayloadSharedActivity"] | components["schemas"]["NotificationPayloadComment"];
+            payload: components["schemas"]["NotificationPayloadShareAdded"] | components["schemas"]["NotificationPayloadShareRoleChanged"] | components["schemas"]["NotificationPayloadShareRemoved"] | components["schemas"]["NotificationPayloadOwnerChanged"] | components["schemas"]["NotificationPayloadMention"] | components["schemas"]["NotificationPayloadSharedActivity"] | components["schemas"]["NotificationPayloadComment"];
             /** Read At */
             read_at: string | null;
             /** Grouped Key */
@@ -2966,6 +3036,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AiAskResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_selection_json_api_v2_opportunities_export_json_get: {
+        parameters: {
+            query: {
+                /** @description Comma-separated opportunity ids */
+                ids: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_selection_csv_api_v2_opportunities_export_csv_get: {
+        parameters: {
+            query: {
+                /** @description Comma-separated opportunity ids */
+                ids: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

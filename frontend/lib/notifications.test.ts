@@ -24,6 +24,7 @@ describe("notificationText", () => {
     ["share_added", "An opportunity was shared with you."],
     ["share_role_changed", "Your access role changed."],
     ["share_removed", "Your opportunity access was removed."],
+    ["owner_changed", "An opportunity was handed over to you."],
   ])("describes a %s", (type, expected) => {
     expect(notificationText(notification(type))).toBe(expected);
   });

@@ -124,14 +124,16 @@ describe("activitySentence", () => {
     }
   });
 
-  it("still has a sentence for the sharing actions the feed leaves out", () => {
+  it("still has a sentence for the access actions the feed leaves out", () => {
     // `backend/app/activity.py` drops these because the system entry beside
     // them says the same thing — but they are in the type the audit log
-    // answers with, so the switch has to be total rather than assume.
+    // answers with, so the switch has to be total rather than assume. The
+    // ownership transfer (milestone 3.0a) is the fourth of them.
     const actions = [
       "share_added",
       "share_role_changed",
       "share_removed",
+      "owner_changed",
     ] as const;
 
     for (const action of actions) {

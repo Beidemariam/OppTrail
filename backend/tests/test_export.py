@@ -235,3 +235,112 @@ def test_pdf_export_produces_a_real_pdf(client: TestClient) -> None:
     assert response.status_code == 200
     assert response.content.startswith(b"%PDF")
     assert len(response.content) > 1000
+
+
+# --- Exporting a selection (milestone 3.0a, D-107) --------------------------
+
+
+def create_named_opportunity(client: TestClient, name: str, account: str = "Acme") -> dict:
+    response = client.post(
+        "/api/v2/opportunities",
+        json={
+            "name": name,
+            "account_name": account,
+            "value": "1000",
+            "currency": "USD",
+            "stage": "Prospecting",
+        },
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
+def test_selection_export_writes_one_row_per_opportunity(client: TestClient) -> None:
+    signup(client, "owner@example.com", "Owner")
+    first = create_named_opportunity(client, "First")
+    second = create_named_opportunity(client, "Second")
+    create_named_opportunity(client, "Unselected")
+
+    response = client.get(f"/api/v2/opportunities/export/csv?ids={first['id']},{second['id']}")
+    assert response.status_code == 200
+    assert response.headers["content-disposition"] == 'attachment; filename="opportunities.csv"'
+
+    rows = list(csv.DictReader(StringIO(response.text)))
+    # The record, not its timeline: a selection export is a spreadsheet of
+    # deals, which is a different question from one deal's document (D-107).
+    assert sorted(row["name"] for row in rows) == ["First", "Second"]
+    assert rows[0]["owner_name"] == "Owner"
+    assert set(rows[0]) == {
+        "id",
+        "name",
+        "account_name",
+        "value",
+        "currency",
+        "stage",
+        "owner_name",
+        "expected_close_date",
+        "created_at",
+        "updated_at",
+    }
+
+
+def test_selection_export_json_carries_the_same_records(client: TestClient) -> None:
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_named_opportunity(client, "First")
+
+    response = client.get(f"/api/v2/opportunities/export/json?ids={opportunity['id']}")
+    assert response.status_code == 200
+    assert response.headers["content-disposition"] == 'attachment; filename="opportunities.json"'
+
+    body = response.json()
+    assert body["exported_at"].endswith("Z")
+    assert [item["name"] for item in body["opportunities"]] == ["First"]
+    assert body["opportunities"][0]["value"] == "1000"
+
+
+def test_selection_export_omits_what_the_caller_cannot_read(client: TestClient) -> None:
+    owner = signup(client, "owner@example.com", "Owner")
+    shared = create_named_opportunity(client, "Shared")
+    hidden = create_named_opportunity(client, "Hidden")
+    client.post("/api/v2/auth/logout")
+
+    viewer = signup(client, "viewer@example.com", "Viewer")
+    share_opportunity(shared["id"], viewer["id"], owner["id"], "viewer")
+
+    response = client.get(f"/api/v2/opportunities/export/csv?ids={shared['id']},{hidden['id']}")
+    # Absent rather than refused: a 404 naming one id out of a selection would
+    # say whether it exists, which is what the 404-not-403 rule avoids.
+    assert response.status_code == 200
+    rows = list(csv.DictReader(StringIO(response.text)))
+    assert [row["name"] for row in rows] == ["Shared"]
+
+
+def test_selection_export_neutralizes_spreadsheet_formulas(client: TestClient) -> None:
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_named_opportunity(client, '=HYPERLINK("https://attacker.example")')
+
+    response = client.get(f"/api/v2/opportunities/export/csv?ids={opportunity['id']}")
+    assert response.status_code == 200
+    rows = list(csv.DictReader(StringIO(response.text)))
+    assert rows[0]["name"].startswith("'=")
+
+
+def test_selection_export_rejects_ids_it_cannot_read(client: TestClient) -> None:
+    signup(client, "owner@example.com", "Owner")
+
+    assert client.get("/api/v2/opportunities/export/csv?ids=one,two").status_code == 400
+    assert client.get("/api/v2/opportunities/export/csv?ids=").status_code == 400
+    assert client.get("/api/v2/opportunities/export/csv").status_code == 422
+
+    too_many = ",".join(str(number) for number in range(1, 402))
+    assert client.get(f"/api/v2/opportunities/export/json?ids={too_many}").status_code == 400
+
+
+def test_selection_export_needs_a_session(client: TestClient) -> None:
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_named_opportunity(client, "First")
+    client.post("/api/v2/auth/logout")
+
+    assert (
+        client.get(f"/api/v2/opportunities/export/csv?ids={opportunity['id']}").status_code == 401
+    )

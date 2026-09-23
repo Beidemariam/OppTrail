@@ -5,6 +5,8 @@ from html import escape
 from io import StringIO
 from typing import Any
 
+from .permissions import ACCESSIBLE_OPPORTUNITY_IDS_SQL
+
 # Excel, LibreOffice and Google Sheets evaluate a cell that opens with one of
 # these characters as a formula, so a note body is a live injection vector once
 # the export is opened.
@@ -377,3 +379,75 @@ def render_export_html(data: dict[str, Any]) -> str:
       </body>
     </html>
     """
+
+
+# --- Exporting a selection (milestone 3.0a) ---------------------------------
+
+# One row per opportunity, in the order a reader scans them. Deliberately the
+# record and not its timeline: `fetch_export_data` above answers "give me
+# everything about this deal" and is a document per opportunity, while the
+# action bar's export answers "give me the deals I just selected", which is a
+# spreadsheet (**D-107**). The two are different questions, so they are
+# different shapes rather than one shape asked twice.
+OPPORTUNITY_EXPORT_FIELDS = (
+    "id",
+    "name",
+    "account_name",
+    "value",
+    "currency",
+    "stage",
+    "owner_name",
+    "expected_close_date",
+    "created_at",
+    "updated_at",
+)
+
+
+def fetch_opportunity_list_export(
+    connection: sqlite3.Connection,
+    opportunity_ids: list[int],
+    user_id: int,
+) -> list[dict[str, Any]]:
+    """The selected opportunities the caller may read, newest activity first.
+
+    The permission filter is inside the query rather than a pass over its
+    results (`permissions.ACCESSIBLE_OPPORTUNITY_IDS_SQL`), the same way
+    `search.py` does it: this is the second read in the app that spans
+    opportunities, so there is no single role to resolve first. An id the
+    caller cannot read is absent rather than refused -- a 404 naming one id
+    out of a selection would say whether it exists.
+    """
+    if not opportunity_ids:
+        return []
+
+    placeholders = ",".join("?" for _ in opportunity_ids)
+    rows = connection.execute(
+        f"""
+        SELECT opportunities.*, users.name AS owner_name
+        FROM opportunities
+        JOIN users ON users.id = opportunities.owner_id
+        WHERE opportunities.id IN ({placeholders})
+            AND opportunities.id IN ({ACCESSIBLE_OPPORTUNITY_IDS_SQL})
+        ORDER BY opportunities.updated_at DESC, opportunities.id DESC
+        """,
+        (*opportunity_ids, user_id, user_id),
+    ).fetchall()
+
+    return [
+        {
+            field: (str(row["value"]) if field == "value" else row[field])
+            for field in OPPORTUNITY_EXPORT_FIELDS
+        }
+        for row in rows
+    ]
+
+
+def opportunity_list_to_csv(opportunities: list[dict[str, Any]]) -> str:
+    """The same formula-injection guard the timeline export uses: a deal name
+    beginning `=` is a live spreadsheet formula once the file is opened."""
+    output = StringIO()
+    writer = csv.DictWriter(output, fieldnames=list(OPPORTUNITY_EXPORT_FIELDS))
+    writer.writeheader()
+    for opportunity in opportunities:
+        writer.writerow({key: escape_csv_value(value) for key, value in opportunity.items()})
+    return output.getvalue()

@@ -340,7 +340,7 @@ export function DashboardPage() {
    * per-item, so nothing here is safe to guess before the response arrives.
    */
   function reportBulkOutcome(
-    verb: "deleted" | "updated",
+    verb: "deleted" | "updated" | "handed over" | "added to the view",
     results: BulkActionResultItem[],
   ): number[] {
     const okIds = results
@@ -388,6 +388,51 @@ export function DashboardPage() {
       .catch((error: Error) =>
         showToast({
           message: `Could not change stage: ${error.message}`,
+          tone: "error",
+        }),
+      );
+  }
+
+  /**
+   * Hand the selection to someone else (milestone 3.0a, D-105). Not
+   * confirmed and not undoable from here: the previous owner stays on as an
+   * editor, so the reader keeps access to what they handed over and the new
+   * owner can hand it back. What it does change is who may manage the row,
+   * which is why the toast says so rather than only counting.
+   */
+  function bulkAssignOwner(email: string) {
+    const ids = checkedOpportunities.map((opportunity) => opportunity.id);
+    bulkAction
+      .mutateAsync({ ids, action: "assign_owner", new_owner_email: email })
+      .then((response) => {
+        reportBulkOutcome("handed over", response.results);
+        clearSelection();
+      })
+      .catch((error: Error) =>
+        showToast({
+          message: `Could not assign owner: ${error.message}`,
+          tone: "error",
+        }),
+      );
+  }
+
+  /**
+   * Pin the selection into one of the reader's own saved views (milestone
+   * 3.0a, D-106). The view's filters change, so the saved-view list is
+   * refetched by the mutation; the board itself does not move until the
+   * reader applies that view.
+   */
+  function bulkAddToView(viewId: number) {
+    const ids = checkedOpportunities.map((opportunity) => opportunity.id);
+    bulkAction
+      .mutateAsync({ ids, action: "add_to_view", view_id: viewId })
+      .then((response) => {
+        reportBulkOutcome("added to the view", response.results);
+        clearSelection();
+      })
+      .catch((error: Error) =>
+        showToast({
+          message: `Could not add to the view: ${error.message}`,
           tone: "error",
         }),
       );
@@ -541,6 +586,8 @@ export function DashboardPage() {
               selected={checkedOpportunities}
               onClear={clearSelection}
               onChangeStage={bulkChangeStage}
+              onAssignOwner={bulkAssignOwner}
+              onAddToView={bulkAddToView}
               onDelete={bulkDelete}
               pending={bulkAction.isPending}
             />

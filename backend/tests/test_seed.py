@@ -188,13 +188,28 @@ def test_seeded_permissions_match_the_printed_tour(tmp_path) -> None:
             assert page.status_code == 200, page.text
             return sorted(item["name"] for item in page.json()["items"])
 
-        assert view_names(alex, "opportunities") == ["Late-stage pipeline"]
+        assert view_names(alex, "opportunities") == [
+            "Alex's shortlist",
+            "Late-stage pipeline",
+        ]
         assert view_names(blair, "opportunities") == [
             "Blair's proposals",
             "Late-stage pipeline",
         ]
         assert view_names(alex, "timeline") == ["Newest first"]
         assert view_names(dana, "opportunities") == ["Late-stage pipeline"]
+
+        # The curated-view tour line (milestone 3.0a): "add to view" writes
+        # the selection into the view's filters, so the pinned ids are what
+        # the seeded shortlist carries and nothing else changed about it.
+        shortlist = next(
+            view
+            for view in alex.get("/api/v2/saved-views?entity=opportunities").json()["items"]
+            if view["name"] == "Alex's shortlist"
+        )
+        globex = by_name["Globex renewal"]["id"]
+        assert shortlist["filters"] == {"ids": f"{northwind},{globex}"}
+        assert shortlist["is_shared"] is False
 
         # The owner-only audit log is not empty on a fresh seed.
         audit = alex.get(f"/api/v2/opportunities/{northwind}/audit-log")

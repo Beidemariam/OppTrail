@@ -120,6 +120,10 @@ export const keys = {
    * honest without each of them naming a key.
    */
   allVersions: ["versions"] as const,
+  /** Every entity's saved views, for a write that does not know which
+   * entity it touched — `add_to_view` sends a view id and nothing else
+   * (milestone 3.0a). */
+  allSavedViews: ["saved-views"] as const,
   /** One opportunity's merged activity log (milestone 3.0). */
   activity: (opportunityId: number) => ["activity", opportunityId] as const,
   /**
@@ -629,7 +633,7 @@ type BulkOpportunityAction = components["schemas"]["BulkOpportunityAction"];
 type BulkActionResponse = components["schemas"]["BulkActionResponse"];
 
 /**
- * The bulk action bar's one request (milestone 2.4c, `docs/UX.md`).
+ * The bulk action bar's one request (milestone 2.4c, completed in 3.0a).
  *
  * Not optimistic, unlike the single-item deletes (D-068 extended to the
  * bulk case, D-071): the response is per-item — some ids may succeed and
@@ -648,6 +652,9 @@ export function useBulkOpportunityAction() {
     // A stage change writes a system timeline entry and a delete writes an
     // audit row that cannot be resolved to one opportunity id (same reason
     // `useDeleteOpportunity` invalidates the prefix rather than one key).
+    // `add_to_view` writes to a saved view instead of to any opportunity,
+    // and `assign_owner` changes the role every list reports, so the whole
+    // set is invalidated rather than a branch per action.
     onSuccess: () =>
       invalidate(
         client,
@@ -656,6 +663,8 @@ export function useBulkOpportunityAction() {
         keys.allAuditLogs,
         keys.allVersions,
         keys.allActivity,
+        keys.allSavedViews,
+        keys.notifications,
       ),
   });
 }

@@ -1465,6 +1465,15 @@ a.danger-button {
   flex-basis: 100%;
 }
 
+/* The pinned-selection note (milestone 3.0a) sits on a row of its own under
+   the controls, like the action bar's role note. */
+.filter-bar .filter-note {
+  align-items: center;
+  display: flex;
+  flex-basis: 100%;
+  gap: var(--space-2);
+}
+
 .stacked-field {
   display: flex;
   flex-direction: column;

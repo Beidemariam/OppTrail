@@ -436,6 +436,29 @@ def seed() -> None:
         group_by="stage",
     )
 
+    # 8. A curated view (milestone 3.0a): "add to view" on the bulk action
+    #    bar writes the selection into the view's filters, because a saved
+    #    view is a filter set rather than a folder (D-106). Seeded through
+    #    the real endpoint, so what the demo shows is what the button does.
+    shortlist = save_view(
+        alex,
+        name="Alex's shortlist",
+        entity="opportunities",
+        filters={},
+        group_by="stage",
+    )
+    check(
+        alex.client.post(
+            "/api/v2/opportunities/bulk",
+            json={
+                "ids": [northwind, globex],
+                "action": "add_to_view",
+                "view_id": shortlist,
+            },
+        ),
+        "pinning two opportunities into a saved view",
+    )
+
     for session in (alex, blair, casey):
         session.client.__exit__(None, None, None)
 
@@ -521,7 +544,19 @@ def main(argv: list[str] | None = None) -> int:
         "  half - an entry deleted and restored - in among its own. Unlike\n"
         "  History, this one is offered to Blair and Casey too; what they are\n"
         "  given is the events their role may already read, which is the\n"
-        "  system entries."
+        "  system entries.\n"
+        "\n"
+        "  The bulk action bar (milestones 2.4c and 3.0a) appears in place of\n"
+        "  the filter bar as soon as something is checked - the checkbox on a\n"
+        "  card, x, or shift-click for a range. All five actions are there:\n"
+        "  change stage, assign owner, add to view, export and delete. Alex's\n"
+        "  shortlist is what 'add to view' leaves behind - Northwind and\n"
+        "  Globex pinned into a saved view, which shows only those two until\n"
+        "  Show all clears it. Export CSV and Export JSON download the checked\n"
+        "  deals as a spreadsheet of records rather than one deal's document.\n"
+        "  Assign owner hands them over: type blair@opptrail.test, and Alex\n"
+        "  stays on the deal as an editor rather than losing it, with the\n"
+        "  handover on the timeline and in the owner-only audit log."
     )
     return 0
 

@@ -1483,3 +1483,51 @@ Authorization-matrix endpoints: 52 (Phase 2 gate) → 53
 It is the first read in the matrix whose expectation is 200 for every role and
 whose *rows* differ by role instead — `tests/test_activity.py` is where that
 distinction is held, since the matrix asserts status codes.
+
+## Phase 3 — milestone 3.0a (the three bulk actions D-070 deferred)
+
+One new backend module (`app/share_utils.py`, four statements, 100%), two new
+routes (`GET /api/v2/opportunities/export/{csv,json}`) and two new actions on
+the endpoint that already existed. No migration: the ownership transfer moves a
+column that was always there, and "add to view" writes into the saved view's
+existing opaque `filters` JSON (D-106).
+
+```
+backend:  ruff check, ruff format --check, mypy app tools    all clean
+          385 passed (355 at milestone 3.0; +25 across
+          tests/test_bulk_actions.py and tests/test_export.py, +1 each in
+          test_activity.py and test_sharing.py, +2 matrix endpoints)
+          97% combined line+branch (--cov-fail-under=90 enforced)
+          app/share_utils.py                 100% line, 100% branch
+          app/routes_saved_views.py          100% line, 100% branch
+          app/routes_export.py               98% line (one partial branch)
+          app/routes_opportunities.py        96% line (both gaps pre-date
+          this milestone: the no-op PATCH branch and the never-empty
+          stalled lookup)
+          the six >=95%-branch modules (permissions, audit_utils, auth,
+          soft_delete, routes_ai, versioning) all still at 100%
+          pip-audit                                          no known vulnerabilities
+frontend: tsc --noEmit, eslint, prettier --check              all clean
+          (the same 2 pre-existing warnings, 0 errors)
+          448 passed (442 at milestone 3.0; +4 DashboardPage.test.tsx,
+          +1 lib/domain.test.ts, +1 lib/notifications.test.ts)
+          97.13% statements / 91.28% branch / 95.73% functions / 97.10% line
+          (thresholds 96/96/95/90 all met)
+          npm audit                                           0 vulnerabilities
+contract: scripts/generate-api-client.sh --check               up to date
+e2e:      59 passed (17 specs; +1 journey in 12-bulk-actions.spec.ts),
+          axe clean, the deferred-rule ratchet still empty
+docker:   deferred to the host half — scripts/autopilot-gate.sh 3
+          (no Docker socket in this sandbox, per sandbox/README.md)
+```
+
+Coverage floors (brief §6.2) all met: backend >= 90% line / >= 80% branch (97%
+combined); frontend >= 80% line (97.10%); the >=95%-branch modules at 100%.
+
+Authorization-matrix endpoints: 53 (milestone 3.0) → 55, both of them the
+selection export. Like `GET /api/v2/search`, they answer 200 for anyone signed
+in and carry the permission filter inside the query — `tests/test_export.py`
+holds the leakage case, since the matrix asserts status codes. The two new
+bulk actions needed no new row: `POST /api/v2/opportunities/bulk` was already
+registered, which is also why `tests/test_bulk_actions.py` carries their
+per-actor cases itself.

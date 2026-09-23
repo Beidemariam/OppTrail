@@ -180,25 +180,55 @@ class OpportunityPublic(BaseModel):
 BULK_ACTION_MAX_IDS = 400
 
 
+# Which extra field each action carries, and therefore which one it refuses
+# without. Declared as data rather than as a chain of `if`s because the
+# validator below has to answer both halves -- required, and not-for-anyone-
+# else -- and a fifth action should extend one line rather than four
+# (milestone 3.0a).
+BulkAction = Literal["delete", "set_stage", "assign_owner", "add_to_view"]
+
+BULK_ACTION_FIELDS: dict[str, str | None] = {
+    "delete": None,
+    "set_stage": "stage",
+    "assign_owner": "new_owner_email",
+    "add_to_view": "view_id",
+}
+
+
 class BulkOpportunityAction(BaseModel):
     """One request over many opportunities (`docs/UX.md`'s action bar).
 
-    Only the two actions that already exist one id at a time —
-    `update_opportunity`'s stage change and `delete_opportunity` — are
-    exposed here; D-070 explains why "assign owner", "add to view" and
-    export are not.
+    All four of the action bar's non-export actions live here. Each reuses a
+    rule that exists elsewhere rather than inventing one: `delete` and
+    `set_stage` are `delete_opportunity`/`update_opportunity` done per id
+    (owner-only), `assign_owner` is owner-only for the same reason every
+    other opportunity write is, and `add_to_view` writes to the caller's own
+    saved view, so its rule is that view's creator-only write plus read
+    access to each opportunity (D-105, D-106). Export is the fifth and is not
+    here: it answers with a file rather than a per-item result (D-107).
     """
 
     ids: list[int] = Field(min_length=1, max_length=BULK_ACTION_MAX_IDS)
-    action: Literal["delete", "set_stage"]
+    action: BulkAction
     stage: Stage | None = None
+    new_owner_email: str | None = None
+    view_id: int | None = None
+
+    @field_validator("new_owner_email")
+    @classmethod
+    def normalize_new_owner_email(cls, value: str | None) -> str | None:
+        return value.strip().lower() if value is not None else value
 
     @model_validator(mode="after")
-    def validate_stage_matches_action(self) -> "BulkOpportunityAction":
-        if self.action == "set_stage" and self.stage is None:
-            raise ValueError("stage is required for the set_stage action")
-        if self.action == "delete" and self.stage is not None:
-            raise ValueError("stage is only valid for the set_stage action")
+    def validate_field_matches_action(self) -> "BulkOpportunityAction":
+        required = BULK_ACTION_FIELDS[self.action]
+        for field, expected in BULK_ACTION_FIELDS.items():
+            if expected is None or expected == required:
+                continue
+            if getattr(self, expected) is not None:
+                raise ValueError(f"{expected} is only valid for the {field} action")
+        if required is not None and getattr(self, required) is None:
+            raise ValueError(f"{required} is required for the {self.action} action")
         return self
 
 
@@ -422,6 +452,7 @@ AuditAction = Literal[
     "share_added",
     "share_role_changed",
     "share_removed",
+    "owner_changed",
     "timeline_entry_deleted",
     "timeline_entry_restored",
     "note_deleted",
@@ -454,6 +485,16 @@ class AuditDetailShareRemoved(BaseModel):
     user_id: int
     email: str
     role: ShareRole
+
+
+# An ownership transfer is a change of who may do everything to the record,
+# which is the access question `AGENTS.md` invariant 7 puts in the audit log
+# (milestone 3.0a). The previous owner is named as well as the new one: the
+# forensic question is who handed it on, not only who holds it now.
+class AuditDetailOwnerChanged(BaseModel):
+    from_user_id: int
+    to_user_id: int
+    to_email: str
 
 
 class AuditDetailTimelineEntryDeleted(BaseModel):
@@ -510,6 +551,7 @@ AuditDetail = (
     | AuditDetailShareAdded
     | AuditDetailShareRoleChanged
     | AuditDetailShareRemoved
+    | AuditDetailOwnerChanged
     | AuditDetailTimelineEntryDeleted
     | AuditDetailTimelineEntryRestored
     | AuditDetailNoteDeleted
@@ -524,6 +566,7 @@ AUDIT_DETAIL_MODELS: dict[str, type[BaseModel]] = {
     "share_added": AuditDetailShareAdded,
     "share_role_changed": AuditDetailShareRoleChanged,
     "share_removed": AuditDetailShareRemoved,
+    "owner_changed": AuditDetailOwnerChanged,
     "timeline_entry_deleted": AuditDetailTimelineEntryDeleted,
     "timeline_entry_restored": AuditDetailTimelineEntryRestored,
     "note_deleted": AuditDetailNoteDeleted,
@@ -632,6 +675,7 @@ NotificationType = Literal[
     "share_added",
     "share_role_changed",
     "share_removed",
+    "owner_changed",
     "mention",
     "shared_activity",
     "comment",
@@ -657,6 +701,15 @@ class NotificationPayloadShareRemoved(BaseModel):
     opportunity_id: int
     actor_id: int
     role: ShareRole
+
+
+class NotificationPayloadOwnerChanged(BaseModel):
+    """Being handed a deal is the one access change nobody asked for, so it
+    is told the same way a share is (milestone 3.0a). The previous owner is
+    the actor, so they are not notified of their own action."""
+
+    opportunity_id: int
+    actor_id: int
 
 
 class NotificationPayloadMention(BaseModel):
@@ -686,6 +739,7 @@ NotificationPayload = (
     NotificationPayloadShareAdded
     | NotificationPayloadShareRoleChanged
     | NotificationPayloadShareRemoved
+    | NotificationPayloadOwnerChanged
     | NotificationPayloadMention
     | NotificationPayloadSharedActivity
     | NotificationPayloadComment
@@ -695,6 +749,7 @@ NOTIFICATION_PAYLOAD_MODELS: dict[str, type[BaseModel]] = {
     "share_added": NotificationPayloadShareAdded,
     "share_role_changed": NotificationPayloadShareRoleChanged,
     "share_removed": NotificationPayloadShareRemoved,
+    "owner_changed": NotificationPayloadOwnerChanged,
     "mention": NotificationPayloadMention,
     "shared_activity": NotificationPayloadSharedActivity,
     "comment": NotificationPayloadComment,

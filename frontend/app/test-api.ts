@@ -868,16 +868,41 @@ export class FakeApi {
    */
   private bulkOpportunityAction(body: {
     ids: number[];
-    action: "delete" | "set_stage";
+    action: "delete" | "set_stage" | "assign_owner" | "add_to_view";
     stage?: string;
+    new_owner_email?: string;
+    view_id?: number;
   }): Response {
+    // The two failures that are about the request rather than about one id,
+    // raised before anything is applied (milestone 3.0a).
+    const newOwner = [ALEX, BLAIR].find(
+      (person) => person.email === body.new_owner_email,
+    );
+    if (body.action === "assign_owner" && !newOwner) {
+      return this.notFound("User with that email was not found");
+    }
+    const view = this.savedViews.find((item) => item.id === body.view_id);
+    if (
+      body.action === "add_to_view" &&
+      (!view || view.created_by !== this.user?.id)
+    ) {
+      return this.notFound("Saved view not found");
+    }
+
+    const pinned: number[] = [];
     const results = body.ids.map((id) => {
       const index = this.opportunities.findIndex((item) => item.id === id);
       const found = index === -1 ? undefined : this.opportunities[index];
       if (!found) {
         return { id, status: "error" as const, error: "Opportunity not found" };
       }
-      if (found.current_user_role !== "owner") {
+      // Pinning writes to the caller's own view rather than to the
+      // opportunity, so read access is its whole rule (D-106); everything
+      // else here is owner-only.
+      if (
+        body.action !== "add_to_view" &&
+        found.current_user_role !== "owner"
+      ) {
         return {
           id,
           status: "error" as const,
@@ -889,11 +914,38 @@ export class FakeApi {
         this.opportunities = this.opportunities.filter(
           (item) => item.id !== id,
         );
-      } else {
+      } else if (body.action === "set_stage") {
         found.stage = body.stage ?? found.stage;
+      } else if (body.action === "assign_owner") {
+        if (found.owner_id === newOwner!.id) {
+          return {
+            id,
+            status: "error" as const,
+            error: "Opportunity is already owned by that user",
+          };
+        }
+        found.owner_id = newOwner!.id;
+        found.owner_name = newOwner!.name;
+        found.current_user_role = "editor";
+      } else {
+        pinned.push(id);
       }
       return { id, status: "ok" as const, error: null };
     });
+
+    if (view && pinned.length > 0) {
+      const existing = String(view.filters.ids ?? "")
+        .split(",")
+        .filter(Boolean)
+        .map(Number);
+      view.filters = {
+        ...view.filters,
+        ids: [
+          ...existing,
+          ...pinned.filter((id) => !existing.includes(id)),
+        ].join(","),
+      };
+    }
     return this.json({ results });
   }
 

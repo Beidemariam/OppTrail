@@ -56,14 +56,17 @@ function auditSentence(
       return "deleted a comment";
     case "comment_restored":
       return "restored a comment";
-    // Sharing is reported to every reader by its system entry, so the feed
-    // drops the audit row that repeats it (`backend/app/activity.py`). The
-    // action is still in the type the audit log endpoint answers with, which
-    // is why these three are answered rather than left to fall through.
+    // An access change is reported to every reader by its system entry, so
+    // the feed drops the audit row that repeats it
+    // (`backend/app/activity.py`). The actions are still in the type the
+    // audit log endpoint answers with, which is why these four are answered
+    // rather than left to fall through.
     case "share_added":
       return "shared this opportunity";
     case "share_role_changed":
       return "changed a colleague's role";
+    case "owner_changed":
+      return "handed this opportunity to someone else";
     default:
       return "removed a colleague's access";
   }

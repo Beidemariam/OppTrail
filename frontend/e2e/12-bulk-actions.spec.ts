@@ -3,6 +3,8 @@ import {
   card,
   expectNoAccessibilityViolations,
   createOpportunity,
+  openTimeline,
+  signOut,
   signUp,
 } from "./helpers";
 
@@ -115,4 +117,107 @@ test("checks two cards, bulk-changes their stage, then bulk-deletes with Undo", 
   await page.reload();
   await expect(card(page, first)).toBeVisible();
   await expect(card(page, second)).toBeVisible();
+});
+
+/**
+ * Milestone 3.0a: the three actions 2.4c left unbuilt (D-070's ruling) —
+ * assign owner, add to view and export. Each writes to something different,
+ * so the journey checks each against what it actually changed: the view's
+ * filters, the record's ownership, and the file the link downloads.
+ *
+ * Signs up two users, because an ownership transfer needs somewhere to send
+ * the deal.
+ */
+test("pins a selection into a view, exports it, and hands it to a colleague", async ({
+  page,
+}) => {
+  const suffix = Math.random().toString(36).slice(2, 8);
+  const first = `Handover first ${suffix}`;
+  const second = `Handover second ${suffix}`;
+  const heirEmail = `heir-${suffix}@opptrail.test`;
+
+  await signUp(page, heirEmail, "Heir Apparent");
+  await signOut(page);
+  await signUp(page, `handover-${suffix}@opptrail.test`, "Handover Tester");
+
+  for (const name of [first, second]) {
+    await createOpportunity(page, name, { account: "Initech" });
+  }
+
+  // A view of the reader's own, which is the only kind "add to view" writes
+  // to (D-106).
+  await page
+    .getByRole("button", { name: "Save current opportunity view" })
+    .click();
+  await page.getByLabel("View name").fill(`Shortlist ${suffix}`);
+  await page.getByRole("button", { name: "Save view" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  const firstCheckbox = card(page, first).getByLabel(
+    `Select ${first} for bulk actions`,
+  );
+  const secondCheckbox = card(page, second).getByLabel(
+    `Select ${second} for bulk actions`,
+  );
+  await check(firstCheckbox);
+  await check(secondCheckbox);
+
+  const bar = page.getByRole("toolbar", { name: "Bulk actions" });
+  await expect(bar).toContainText("2 selected");
+
+  // Export is a link, so the assertion is what the link answers with rather
+  // than what it looks like: `page.request` carries the session cookie.
+  const exportUrl = await bar
+    .getByRole("link", { name: "Export CSV" })
+    .getAttribute("href");
+  const download = await page.request.get(exportUrl!);
+  expect(download.status()).toBe(200);
+  expect(download.headers()["content-disposition"]).toContain(
+    "opportunities.csv",
+  );
+  const csv = await download.text();
+  expect(csv.split("\n")[0]).toContain("account_name");
+  expect(csv).toContain(first);
+  expect(csv).toContain(second);
+
+  const viewOption = await bar
+    .getByLabel("Add to saved view")
+    .locator("option")
+    .nth(1)
+    .getAttribute("value");
+  await bar.getByLabel("Add to saved view").selectOption(viewOption!);
+  await bar.getByRole("button", { name: "Add to view" }).click();
+  await expect(page.locator(".toast").last()).toContainText(
+    "2 opportunities added to the view.",
+  );
+
+  // Applying that view now draws the pinned pair and says so.
+  await createOpportunity(page, `Unpinned ${suffix}`, { account: "Initech" });
+  // By value: an option reads "<name> - <visibility>" since 2.13, so the
+  // name alone is not the label.
+  await page.getByLabel("Saved opportunity views").selectOption(viewOption!);
+  await expect(page.locator(".filter-note")).toContainText(
+    "Showing 2 pinned opportunities",
+  );
+  await expect(card(page, `Unpinned ${suffix}`)).toHaveCount(0);
+  await page.getByRole("button", { name: "Show all" }).click();
+  await expect(card(page, `Unpinned ${suffix}`)).toBeVisible();
+
+  // And the handover itself: owner-only, and the previous owner stays on as
+  // an editor rather than losing the deal (D-105).
+  await check(firstCheckbox);
+  await bar.getByLabel("Assign owner by email").fill(heirEmail);
+  await bar.getByRole("button", { name: "Assign owner" }).click();
+  await expect(page.locator(".toast").last()).toContainText(
+    "1 opportunity handed over.",
+  );
+
+  await page.reload();
+  await openTimeline(page, first);
+  await expect(page.locator(".opportunity-facts")).toContainText(
+    "Your role: editor",
+  );
+  await expect(
+    page.getByRole("article").filter({ hasText: "Owner changed to Heir" }),
+  ).toBeVisible();
 });

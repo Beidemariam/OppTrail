@@ -107,6 +107,36 @@ describe("applyOpportunityView", () => {
     ).toEqual([2]);
   });
 
+  it("filters to a pinned selection, and ignores what is not one", () => {
+    const opportunities = [
+      anOpportunity({ id: 1 }),
+      anOpportunity({ id: 2 }),
+      anOpportunity({ id: 3 }),
+    ];
+    // A filter, not an ordering: the pinned rows are still drawn in the
+    // view's own sort order rather than in the order they were pinned.
+    expect(
+      applyOpportunityView(opportunities, {
+        ...emptyOpportunityViewState,
+        ids: "3,1",
+      }).map((item) => item.id),
+    ).toEqual([1, 3]);
+
+    // A stale or hand-edited link reads as the ids it does carry, the way a
+    // stale column list still draws a table.
+    expect(
+      applyOpportunityView(opportunities, {
+        ...emptyOpportunityViewState,
+        ids: "2,nonsense",
+      }).map((item) => item.id),
+    ).toEqual([2]);
+
+    // Empty pins nothing, which is not the same as pinning an empty set.
+    expect(
+      applyOpportunityView(opportunities, emptyOpportunityViewState),
+    ).toHaveLength(3);
+  });
+
   it("filters by a keyword across name, account and owner", () => {
     const opportunities = [
       anOpportunity({ id: 1, name: "Northwind rollout" }),

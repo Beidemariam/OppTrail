@@ -3097,7 +3097,7 @@ each other.
       visible to everyone with access — so either the merged view filters per
       row by role, or the decision about who sees what gets revisited. That is
       the real design question in this milestone.
-- [ ] 3.0a The three bulk actions 2.4c did not build (**D-070**, ruled by the
+- [x] 3.0a The three bulk actions 2.4c did not build (**D-070**, ruled by the
       human 2026-09-23). Assign owner, add to view, and export need capabilities
       that do not exist as single-item operations: ownership transfer, view
       membership, and multi-record export. Placed here rather than in Phase 2
@@ -3185,6 +3185,69 @@ the audit log.
 Gate: `make check` green (Docker half deferred to the host per the split
 gate). Backend 338 → 355 tests, frontend 429 → 442, E2E 57 → 58,
 authorization-matrix endpoints 52 → 53. Figures in `COVERAGE.md`.
+
+### 3.0a The three bulk actions D-070 deferred — **DONE**
+
+`docs/UX.md`'s action bar now offers all five of the actions it names. Each of
+the three new ones needed a capability the app did not have, and each turned
+out to need a different permission rule — which is the reason they are
+described together here rather than as "three more `action` values".
+
+- [x] **Assign owner** (**D-105**) — `POST /api/v2/opportunities/bulk` with
+      `action: "assign_owner"` and `new_owner_email`. Owner-only per id, the
+      rule every other write to an opportunity row already follows; an
+      unknown email fails the whole request rather than each id in it. The
+      previous owner is left behind as an **editor** (`share_utils.py`'s
+      `upsert_share_row`, now the one place a share row is granted), because
+      the person who performs a transfer has no undo for it and a mis-typed
+      address should not take the deal off their board. Recorded as an access
+      change, the way sharing is: a system entry every reader sees, an
+      owner-only `owner_changed` audit row, and a notification to the new
+      owner. No version row — `owner_id` is not one of
+      `OPPORTUNITY_VERSIONS`' snapshot fields.
+- [x] **Add to view** (**D-106**) — `action: "add_to_view"` with `view_id`.
+      The one action here whose per-id rule is `require_opportunity_access`
+      rather than ownership: it writes to the caller's own saved view, not to
+      the opportunity. A saved view is a filter set rather than a folder, so
+      the selection is written into an `ids` filter
+      (`routes_saved_views.add_opportunity_ids_to_view`,
+      `lib/domain.ts`'s `pinnedIds`) — no membership table, no migration, and
+      the pinned view is linkable and reloadable like every other view
+      because it is `?opportunities.ids=3,7` in the URL. Additive, and 400
+      rather than truncation when the merged filter would exceed what a saved
+      view may carry.
+- [x] **Export** (**D-107**) — `GET
+      /api/v2/opportunities/export/{csv,json}?ids=`, not a bulk action: that
+      endpoint answers with a per-id result list and a file has no room for
+      one. A plain link, like the three on an opportunity's own screen;
+      permission-filtered inside the query
+      (`ACCESSIBLE_OPPORTUNITY_IDS_SQL`), so an id the caller cannot read is
+      absent rather than refused; rows are the opportunity's own fields,
+      because "the deals I selected" is a spreadsheet and not 400 timelines.
+      PDF deliberately not offered.
+- [x] **Frontend** — `BulkActionBar` carries all five with three different
+      enablement rules, `DashboardPage` gained `bulkAssignOwner` and
+      `bulkAddToView` beside the two it had, `OpportunityFilterBar` says when
+      a pinned selection is in force and offers Show all, and
+      `useBulkOpportunityAction` now also invalidates the saved views and the
+      notifications.
+- [x] **Tests** — backend: 19 new cases in `tests/test_bulk_actions.py`, 6 in
+      `tests/test_export.py`, the ownership transfer's single-appearance rule
+      in `tests/test_activity.py`, the re-grant round trip in
+      `tests/test_sharing.py` that covers the extracted `share_utils`, and two
+      authorization-matrix rows for the export routes. Frontend: 4 new
+      `DashboardPage.test.tsx` journeys, the pinned-ids cases in
+      `lib/domain.test.ts`, and the two new sentences in
+      `lib/notifications.test.ts` / `lib/activity.test.ts`. E2E: a second
+      journey in `12-bulk-actions.spec.ts` driving all three through the real
+      stack, including the export link's own response. `make seed` pins two
+      opportunities into a curated view through the real endpoint and the
+      printed tour says so, held true by `test_seed.py`.
+
+Gate: `make check-fast` green, and `make e2e` run beside it because this
+milestone adds a journey (59 passed, axe clean). Backend 355 → 385, frontend
+442 → 448, E2E 58 → 59, authorization-matrix endpoints 53 → 55. Figures in
+`COVERAGE.md`.
 
 ### Acceptance
 

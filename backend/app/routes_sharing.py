@@ -14,8 +14,8 @@ from .schemas import (
     SharePublic,
     ShareUpdate,
 )
+from .share_utils import upsert_share_row
 from .soft_delete import soft_delete_share
-from .time_utils import utc_now
 from .timeline_utils import create_system_timeline_entry
 
 router = APIRouter(prefix="/api/v2/opportunities", tags=["sharing"])
@@ -138,28 +138,16 @@ def create_share(
                 detail="Opportunity is already shared with that user",
             )
 
-        if existing_share:
-            connection.execute(
-                """
-                UPDATE opportunity_shares
-                SET role = ?,
-                    invited_by = ?,
-                    created_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
-                    deleted_at = NULL
-                WHERE opportunity_id = ? AND user_id = ?
-                """,
-                (payload.role, user["id"], opportunity_id, invited_user["id"]),
-            )
-        else:
-            connection.execute(
-                """
-                INSERT INTO opportunity_shares (
-                    opportunity_id, user_id, role, invited_by, created_at
-                )
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (opportunity_id, invited_user["id"], payload.role, user["id"], utc_now()),
-            )
+        # The row may exist and be soft-deleted, which is why this is an
+        # upsert and why it is shared with the ownership transfer that leaves
+        # the previous owner behind as an editor (`share_utils.py`).
+        upsert_share_row(
+            connection,
+            opportunity_id,
+            int(invited_user["id"]),
+            payload.role,
+            int(user["id"]),
+        )
         create_system_timeline_entry(
             connection=connection,
             opportunity_id=opportunity_id,

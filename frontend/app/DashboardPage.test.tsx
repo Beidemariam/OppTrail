@@ -448,7 +448,7 @@ describe("bulk actions (milestone 2.4c)", () => {
     expect(checkboxFor("Third")).toBeChecked();
   });
 
-  it("disables change-stage and delete when the selection includes an opportunity the reader does not own", async () => {
+  it("disables the actions that write to an opportunity when the selection includes one the reader does not own", async () => {
     await renderDashboard({
       opportunities: [
         anOpportunity({ id: 10, name: "Mine", current_user_role: "owner" }),
@@ -471,8 +471,11 @@ describe("bulk actions (milestone 2.4c)", () => {
       within(bulkBar()).getByRole("button", { name: "Change stage" }),
     ).toBeDisabled();
     expect(
+      within(bulkBar()).getByRole("button", { name: "Assign owner" }),
+    ).toBeDisabled();
+    expect(
       screen.getByText(
-        "Change stage and delete are limited to opportunities you own.",
+        "Change stage, assign owner and delete are limited to opportunities you own.",
       ),
     ).toBeInTheDocument();
   });
@@ -548,6 +551,156 @@ describe("bulk actions (milestone 2.4c)", () => {
 
     expect(await screen.findByText("First")).toBeInTheDocument();
     expect(await screen.findByText("Second")).toBeInTheDocument();
+  });
+
+  it("hands the checked opportunities to another user", async () => {
+    const api = await renderDashboard({
+      opportunities: [
+        anOpportunity({ id: 10, name: "First" }),
+        anOpportunity({ id: 11, name: "Second" }),
+      ],
+    });
+    await findCard("First");
+
+    await userEvent.click(checkboxFor("First"));
+    await userEvent.click(checkboxFor("Second"));
+    await userEvent.type(
+      screen.getByLabelText("Assign owner by email"),
+      BLAIR.email,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Assign owner" }));
+
+    await waitFor(() =>
+      expect(api.callsTo("POST", "/api/v2/opportunities/bulk")).toHaveLength(1),
+    );
+    expect(
+      api.callsTo("POST", "/api/v2/opportunities/bulk")[0].body,
+    ).toMatchObject({
+      ids: [10, 11],
+      action: "assign_owner",
+      new_owner_email: BLAIR.email,
+    });
+    expect(
+      await screen.findByText("2 opportunities handed over."),
+    ).toBeInTheDocument();
+  });
+
+  it("reports an ownership transfer to an address nobody uses", async () => {
+    await renderDashboard({
+      opportunities: [anOpportunity({ id: 10, name: "First" })],
+    });
+    await findCard("First");
+
+    await userEvent.click(checkboxFor("First"));
+    await userEvent.type(
+      screen.getByLabelText("Assign owner by email"),
+      "nobody@example.com",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Assign owner" }));
+
+    // A whole-request failure, so it arrives as a thrown error rather than as
+    // a per-item result: nothing was applied.
+    expect(
+      await screen.findByText(
+        "Could not assign owner: User with that email was not found",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("1 selected")).toBeInTheDocument();
+  });
+
+  it("pins the checked opportunities into one of the reader's own views", async () => {
+    const api = await renderDashboard({
+      opportunities: [
+        anOpportunity({ id: 10, name: "First" }),
+        anOpportunity({ id: 11, name: "Second" }),
+      ],
+      savedViews: [
+        {
+          id: 1,
+          created_by: ALEX.id,
+          creator_name: ALEX.name,
+          name: "My shortlist",
+          entity: "opportunities",
+          filters: {},
+          sort: {},
+          group_by: "stage",
+          is_shared: false,
+          is_default: false,
+          created_at: "2026-09-01T00:00:00Z",
+          updated_at: "2026-09-01T00:00:00Z",
+        },
+        {
+          id: 2,
+          created_by: BLAIR.id,
+          creator_name: BLAIR.name,
+          name: "Blair's shortlist",
+          entity: "opportunities",
+          filters: {},
+          sort: {},
+          group_by: "stage",
+          is_shared: true,
+          is_default: false,
+          created_at: "2026-09-01T00:00:00Z",
+          updated_at: "2026-09-01T00:00:00Z",
+        },
+      ],
+    });
+    await findCard("First");
+
+    await userEvent.click(checkboxFor("First"));
+    const viewPicker = within(bulkBar()).getByLabelText("Add to saved view");
+    // A colleague's shared view is readable and still not a target: adding to
+    // it would change what every signed-in reader sees through it (D-106).
+    expect(
+      within(viewPicker).queryByText(/Blair's shortlist/),
+    ).not.toBeInTheDocument();
+
+    await userEvent.selectOptions(viewPicker, "1");
+    await userEvent.click(screen.getByRole("button", { name: "Add to view" }));
+
+    await waitFor(() =>
+      expect(api.callsTo("POST", "/api/v2/opportunities/bulk")).toHaveLength(1),
+    );
+    expect(
+      api.callsTo("POST", "/api/v2/opportunities/bulk")[0].body,
+    ).toMatchObject({ ids: [10], action: "add_to_view", view_id: 1 });
+    expect(
+      await screen.findByText("1 opportunity added to the view."),
+    ).toBeInTheDocument();
+
+    // Applying the view now draws the pinned selection and says so.
+    await userEvent.selectOptions(
+      await screen.findByLabelText("Saved opportunity views"),
+      "1",
+    );
+    expect(screen.queryByText("Second")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Showing 1 pinned opportunity from a saved view/),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Show all" }));
+    expect(await screen.findByText("Second")).toBeInTheDocument();
+  });
+
+  it("offers the selection as one export link per format", async () => {
+    await renderDashboard({
+      opportunities: [
+        anOpportunity({ id: 10, name: "First" }),
+        anOpportunity({ id: 11, name: "Second" }),
+      ],
+    });
+    await findCard("First");
+
+    await userEvent.click(checkboxFor("First"));
+    await userEvent.click(checkboxFor("Second"));
+
+    // A read, so it is a link rather than a mutation (D-107).
+    expect(
+      within(bulkBar()).getByRole("link", { name: "Export CSV" }),
+    ).toHaveAttribute("href", "/api/v2/opportunities/export/csv?ids=10,11");
+    expect(
+      within(bulkBar()).getByRole("link", { name: "Export JSON" }),
+    ).toHaveAttribute("href", "/api/v2/opportunities/export/json?ids=10,11");
   });
 
   it("reports a partial bulk failure without losing the successful items", async () => {

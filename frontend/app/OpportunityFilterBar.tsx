@@ -4,6 +4,7 @@ import { FormEvent, useState, type RefObject } from "react";
 
 import {
   emptyOpportunityViewState,
+  pinnedIds,
   sortFields,
   stages,
   type OpportunityViewState,
@@ -51,6 +52,8 @@ export function OpportunityFilterBar({
     setDraft(emptyOpportunityViewState);
     onApply(emptyOpportunityViewState);
   }
+
+  const pinned = pinnedIds(state.ids);
 
   return (
     <form className="filter-bar" onSubmit={apply}>
@@ -140,6 +143,28 @@ export function OpportunityFilterBar({
       <button className="secondary-button" type="button" onClick={clear}>
         Clear
       </button>
+      {/* A view can also filter to a pinned selection (milestone 3.0a,
+          D-106). It has no control of its own — it is written by the action
+          bar's "add to view" and arrives with the view — so the bar says it
+          is in force and offers the way out, which is the same job the
+          applied-view line does for the rest of a saved view. */}
+      {pinned && (
+        <p className="field-hint filter-note">
+          Showing {pinned.size}{" "}
+          {pinned.size === 1 ? "pinned opportunity" : "pinned opportunities"}{" "}
+          from a saved view.
+          <button
+            className="secondary-button compact-button"
+            type="button"
+            onClick={() => {
+              setDraft({ ...draft, ids: "" });
+              onApply({ ...state, ids: "" });
+            }}
+          >
+            Show all
+          </button>
+        </p>
+      )}
     </form>
   );
 }

@@ -7,8 +7,10 @@ from .activity import fetch_activity_page
 from .audit_utils import create_audit_log_entry
 from .auth import get_current_user
 from .database import db_connection
+from .notification_service import create_notification
 from .pagination import Page, PageRequest, cursor_clause, page_params, split_page
 from .permissions import Role, require_opportunity_access, require_opportunity_owner
+from .routes_saved_views import add_opportunity_ids_to_view, require_own_opportunity_view
 from .schemas import (
     STAGES,
     ActivityEventPublic,
@@ -20,7 +22,8 @@ from .schemas import (
     OpportunityUpdate,
     OpportunityVersionPublic,
 )
-from .soft_delete import restore_opportunity, soft_delete_opportunity
+from .share_utils import upsert_share_row
+from .soft_delete import restore_opportunity, soft_delete_opportunity, soft_delete_share
 from .time_utils import utc_days_ago, utc_now
 from .timeline_utils import create_system_timeline_entry
 from .versioning import OPPORTUNITY_VERSIONS, record_version
@@ -436,6 +439,161 @@ def delete_opportunity(
         connection.commit()
 
 
+def bulk_delete(
+    connection: sqlite3.Connection,
+    opportunity_id: int,
+    row: sqlite3.Row,
+    actor_id: int,
+) -> None:
+    """`delete_opportunity`, once per id: the same cascade and the same audit
+    row, so a bulk delete is undone by the same restore route."""
+    soft_delete_opportunity(connection, opportunity_id)
+    create_audit_log_entry(
+        connection=connection,
+        opportunity_id=opportunity_id,
+        actor_id=actor_id,
+        action="opportunity_deleted",
+        detail={
+            "name": row["name"],
+            "account_name": row["account_name"],
+            "stage": row["stage"],
+        },
+    )
+
+
+def bulk_set_stage(
+    connection: sqlite3.Connection,
+    opportunity_id: int,
+    row: sqlite3.Row,
+    actor_id: int,
+    stage: str,
+) -> None:
+    """`update_opportunity`'s stage branch, once per id."""
+    previous_stage = row["stage"]
+    connection.execute(
+        """
+        UPDATE opportunities
+        SET stage = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+        WHERE id = ? AND owner_id = ? AND deleted_at IS NULL
+        """,
+        (stage, opportunity_id, actor_id),
+    )
+    if stage != previous_stage:
+        create_system_timeline_entry(
+            connection=connection,
+            opportunity_id=opportunity_id,
+            created_by=actor_id,
+            entry_type="stage_change",
+            title=f"Stage changed to {stage}",
+            body=f"Stage changed from {previous_stage} to {stage}.",
+        )
+    # A stage set in bulk is the same edit as one set on its own, so it leaves
+    # the same version behind (milestone 2.10).
+    moved = fetch_opportunity_row(connection, opportunity_id)
+    assert moved is not None
+    record_version(
+        connection,
+        OPPORTUNITY_VERSIONS,
+        opportunity_id,
+        moved,
+        actor_id,
+        moved["updated_at"],
+    )
+
+
+def bulk_assign_owner(
+    connection: sqlite3.Connection,
+    opportunity_id: int,
+    row: sqlite3.Row,
+    actor_id: int,
+    new_owner: sqlite3.Row,
+) -> None:
+    """Hand one opportunity to another user (milestone 3.0a, **D-105**).
+
+    Three writes, in the order they matter:
+
+    - **The record changes hands.** `owner_id` is the one opportunity column
+      with no version history (`versioning.OPPORTUNITY_VERSIONS` snapshots
+      what a reader edits, and ownership is not edited in the dialog), so
+      this writes no version row. It is recorded as history the way sharing
+      is -- a system entry everyone with access reads, and an audit row for
+      the forensics.
+    - **The previous owner stays on as an editor**, rather than losing the
+      deal entirely. A transfer is then not a lockout: the person who handed
+      it on can still read their own work and add to it, and the new owner
+      can remove them from the sharing panel if that is what they meant.
+      D-105 records the alternative (a clean break) and why this is the
+      safer default for an action the previous owner cannot undo themselves.
+    - **The new owner is told.** Being given a deal is the one access change
+      nobody asked for, so it notifies like a share does.
+
+    An existing share row for the new owner is removed in the same step: they
+    hold the record now, and a share row beside the ownership would draw them
+    into the sharing panel as their own guest.
+    """
+    previous_owner_id = int(row["owner_id"])
+    connection.execute(
+        """
+        UPDATE opportunities
+        SET owner_id = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+        WHERE id = ? AND deleted_at IS NULL
+        """,
+        (new_owner["id"], opportunity_id),
+    )
+    soft_delete_share(connection, opportunity_id, int(new_owner["id"]))
+    upsert_share_row(connection, opportunity_id, previous_owner_id, "editor", actor_id)
+    create_system_timeline_entry(
+        connection=connection,
+        opportunity_id=opportunity_id,
+        created_by=actor_id,
+        entry_type="other",
+        title=f"Owner changed to {new_owner['name']}",
+        body=(
+            f"{row['owner_name']} handed this opportunity to {new_owner['name']} "
+            f"and stays on as editor."
+        ),
+    )
+    create_audit_log_entry(
+        connection=connection,
+        opportunity_id=opportunity_id,
+        actor_id=actor_id,
+        action="owner_changed",
+        detail={
+            "from_user_id": previous_owner_id,
+            "to_user_id": int(new_owner["id"]),
+            "to_email": new_owner["email"],
+        },
+    )
+    create_notification(
+        connection,
+        int(new_owner["id"]),
+        "owner_changed",
+        {"opportunity_id": opportunity_id, "actor_id": actor_id},
+    )
+
+
+def resolve_new_owner(
+    connection: sqlite3.Connection,
+    email: str,
+) -> sqlite3.Row:
+    """The user an `assign_owner` names, or 404.
+
+    A whole-request failure rather than a per-item one: an unknown email is
+    wrong about the request, not about any id in it, so answering per item
+    would repeat one mistake as many times as the selection is long.
+    """
+    new_owner: sqlite3.Row | None = connection.execute(
+        "SELECT id, email, name FROM users WHERE email = ?",
+        (email,),
+    ).fetchone()
+    if not new_owner:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User with that email was not found",
+        )
+    return new_owner
+
+
 @router.post("/opportunities/bulk", response_model=BulkActionResponse)
 def bulk_opportunity_action(
     payload: BulkOpportunityAction,
@@ -447,19 +605,47 @@ def bulk_opportunity_action(
     one in the same batch fails, so a caller's mixed selection of owned and
     merely-shared records only loses the ones it cannot touch.
 
-    Both actions reuse an existing single-item rule rather than adding a new
-    one: `delete` is `delete_opportunity`'s cascade plus its audit row,
-    `set_stage` is `update_opportunity`'s stage branch, and both are
-    owner-only through the same `require_opportunity_owner` those routes call.
-    `docs/UX.md`'s action bar also names "assign owner", "add to view" and
-    export; D-070 is why this milestone ships only the two that already exist
-    one id at a time.
+    Four of `docs/UX.md`'s five action-bar actions are here, and each reuses a
+    rule that already exists rather than adding one: `delete` and `set_stage`
+    are owner-only through `require_opportunity_owner`, like the single-item
+    routes they repeat; `assign_owner` is owner-only for the same reason --
+    only the holder of a record may hand it on (D-105); and `add_to_view`
+    asks only for *read* access per id, because it writes to the caller's own
+    saved view rather than to the opportunity (D-106). The fifth, export, is
+    not an action here at all: it answers with a file rather than a list of
+    per-item outcomes (D-107, `routes_export.py`).
+
+    Two failures are about the request rather than about one id -- an unknown
+    email and a view that is not the caller's -- and both are raised before
+    the loop, so a selection is never half-applied against a target that does
+    not exist.
     """
+    actor_id = int(user["id"])
     results: list[BulkActionResultItem] = []
+
     with db_connection() as connection:
+        # `is not None` rather than truthiness: the validator has already
+        # tied each field to its action, so what is left here is the value
+        # itself, and an empty email or a view id of zero should reach the
+        # lookup that answers 404 rather than quietly skipping it.
+        new_owner = (
+            resolve_new_owner(connection, payload.new_owner_email)
+            if payload.new_owner_email is not None
+            else None
+        )
+        view = (
+            require_own_opportunity_view(connection, payload.view_id, actor_id)
+            if payload.view_id is not None
+            else None
+        )
+        pinned: list[int] = []
+
         for opportunity_id in payload.ids:
             try:
-                require_opportunity_owner(connection, opportunity_id, int(user["id"]))
+                if payload.action == "add_to_view":
+                    require_opportunity_access(connection, opportunity_id, actor_id)
+                else:
+                    require_opportunity_owner(connection, opportunity_id, actor_id)
                 row = fetch_opportunity_row(connection, opportunity_id)
             except HTTPException as exc:
                 results.append(
@@ -469,52 +655,29 @@ def bulk_opportunity_action(
 
             assert row is not None
             if payload.action == "delete":
-                soft_delete_opportunity(connection, opportunity_id)
-                create_audit_log_entry(
-                    connection=connection,
-                    opportunity_id=opportunity_id,
-                    actor_id=int(user["id"]),
-                    action="opportunity_deleted",
-                    detail={
-                        "name": row["name"],
-                        "account_name": row["account_name"],
-                        "stage": row["stage"],
-                    },
-                )
-            else:
+                bulk_delete(connection, opportunity_id, row, actor_id)
+            elif payload.action == "set_stage":
                 assert payload.stage is not None
-                previous_stage = row["stage"]
-                connection.execute(
-                    """
-                    UPDATE opportunities
-                    SET stage = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-                    WHERE id = ? AND owner_id = ? AND deleted_at IS NULL
-                    """,
-                    (payload.stage, opportunity_id, user["id"]),
-                )
-                if payload.stage != previous_stage:
-                    create_system_timeline_entry(
-                        connection=connection,
-                        opportunity_id=opportunity_id,
-                        created_by=int(user["id"]),
-                        entry_type="stage_change",
-                        title=f"Stage changed to {payload.stage}",
-                        body=f"Stage changed from {previous_stage} to {payload.stage}.",
+                bulk_set_stage(connection, opportunity_id, row, actor_id, payload.stage)
+            elif payload.action == "assign_owner":
+                assert new_owner is not None
+                if row["owner_id"] == new_owner["id"]:
+                    results.append(
+                        BulkActionResultItem(
+                            id=opportunity_id,
+                            status="error",
+                            error="Opportunity is already owned by that user",
+                        )
                     )
-                # A stage set in bulk is the same edit as one set on its own,
-                # so it leaves the same version behind (milestone 2.10).
-                moved = fetch_opportunity_row(connection, opportunity_id)
-                assert moved is not None
-                record_version(
-                    connection,
-                    OPPORTUNITY_VERSIONS,
-                    opportunity_id,
-                    moved,
-                    int(user["id"]),
-                    moved["updated_at"],
-                )
+                    continue
+                bulk_assign_owner(connection, opportunity_id, row, actor_id, new_owner)
+            else:
+                pinned.append(opportunity_id)
 
             results.append(BulkActionResultItem(id=opportunity_id, status="ok"))
+
+        if view is not None and pinned:
+            add_opportunity_ids_to_view(connection, view, pinned)
 
         connection.commit()
 

@@ -163,6 +163,44 @@ def test_shared_user_dashboard_and_permissions_follow_role(
     assert audit_attempt.status_code == 403
 
 
+def test_a_removed_share_can_be_granted_again(client: TestClient) -> None:
+    """`soft_delete_share` stamps the row rather than removing it, and
+    `UNIQUE (opportunity_id, user_id)` means a second grant is an update of
+    that row. `share_utils.upsert_share_row` is the one place both paths --
+    this one and milestone 3.0a's ownership transfer -- write it."""
+    owner = signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    client.post("/api/v2/auth/logout")
+
+    colleague = signup(client, "colleague@example.com", "Colleague")
+    client.post("/api/v2/auth/logout")
+    login(client, "owner@example.com")
+
+    client.post(
+        f"/api/v2/opportunities/{opportunity['id']}/shares",
+        json={"email": "colleague@example.com", "role": "viewer"},
+    )
+    assert (
+        client.delete(
+            f"/api/v2/opportunities/{opportunity['id']}/shares/{colleague['id']}"
+        ).status_code
+        == 204
+    )
+
+    regranted = client.post(
+        f"/api/v2/opportunities/{opportunity['id']}/shares",
+        json={"email": "colleague@example.com", "role": "editor"},
+    )
+    assert regranted.status_code == 201
+    # The revived row records this grant, not the one that was removed.
+    assert regranted.json()["role"] == "editor"
+    assert regranted.json()["invited_by"] == owner["id"]
+    client.post("/api/v2/auth/logout")
+
+    login(client, "colleague@example.com")
+    assert client.get(f"/api/v2/opportunities/{opportunity['id']}").status_code == 200
+
+
 def test_non_owner_cannot_manage_shares_or_audit_log(client: TestClient) -> None:
     signup(client, "owner@example.com", "Owner")
     opportunity = create_opportunity(client)

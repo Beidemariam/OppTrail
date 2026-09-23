@@ -250,6 +250,36 @@ def test_sharing_is_reported_once_by_its_system_entry(client: TestClient) -> Non
     assert [item["action"] for item in audit.json()["items"]] == ["share_added"]
 
 
+def test_an_ownership_transfer_is_reported_once_by_its_system_entry(
+    client: TestClient,
+) -> None:
+    """Milestone 3.0a's transfer records the same pair a share does -- a
+    system entry and an audit row -- so the feed drops the same half
+    (`activity.ACCESS_ACTIONS`)."""
+    signup(client, "owner@example.com", "Owner")
+    signup(client, "successor@example.com", "Successor")
+    login(client, "owner@example.com")
+    opportunity = create_opportunity(client)
+
+    response = client.post(
+        "/api/v2/opportunities/bulk",
+        json={
+            "ids": [opportunity["id"]],
+            "action": "assign_owner",
+            "new_owner_email": "successor@example.com",
+        },
+    )
+    assert response.status_code == 200, response.text
+    login(client, "successor@example.com")
+
+    events = activity(client, opportunity["id"])
+    assert sources(events) == ["system_entry", "system_entry"]
+    assert events[1]["detail"]["title"] == "Owner changed to Successor"
+
+    audit = client.get(f"/api/v2/opportunities/{opportunity['id']}/audit-log")
+    assert [item["action"] for item in audit.json()["items"]] == ["owner_changed"]
+
+
 def test_an_editor_reads_the_events_they_may_already_see(client: TestClient) -> None:
     """Each row keeps its source's rule: system entries for anyone with
     access, the audit and version halves for the owner only (invariant 7,

@@ -228,6 +228,9 @@ mirror its v1 twin. It went with the rest of v1 in milestone 2.9;
 - `grouped_key` rides along unpopulated. It exists now so Phase 5's digest
   batching (§9's "3 new comments on Acme Expansion, not three emails") is a
   query change, not another migration.
+- Being handed an opportunity notifies the new owner (`owner_changed`, 3.0a),
+  because it is the one access change nobody asked for; the previous owner is
+  the actor, so they are not told about their own action.
 - Two write routes over the same rows:
   `PATCH /api/v2/notifications/{id}/read` for one and
   `POST /api/v2/notifications/mark-all-read` for everything. The frontend
@@ -333,8 +336,9 @@ Two separate mechanisms, both required by `AGENTS.md`:
   user-visible history — opportunity created, stage changed, sharing changed. They
   carry `system_generated = 1` and cannot be edited or deleted through the API.
 - **Audit log rows** (`audit_utils.create_audit_log_entry`) are owner-only forensics
-  — every share change and every deletion (`opportunity_deleted`,
-  `timeline_entry_deleted`, `note_deleted`, `comment_deleted`).
+  — every access change and every deletion (`opportunity_deleted`,
+  `timeline_entry_deleted`, `note_deleted`, `comment_deleted`, the three
+  `share_*` actions and, since 3.0a, `owner_changed`).
 
 Any new non-user-initiated write must be traceable to the action that caused it, and
 any new delete path needs an audit row. Both, plus the edit history below, are
@@ -394,9 +398,9 @@ adds no table — every row it returns already existed.
   rather than a 403. Widening that (showing a non-owner that an edit
   happened, which an edit marker already says) is **D-102**, left for the
   human.
-- **An event appears once.** Sharing writes both a system entry and an audit
-  row, so `SHARE_ACTIONS` is dropped from the feed and the audit log endpoint
-  keeps them. An opportunity edit reaches the feed only if it moved a field
+- **An event appears once.** An access change — sharing, or an ownership
+  transfer — writes both a system entry and an audit row, so `ACCESS_ACTIONS`
+  is dropped from the feed and the audit log endpoint keeps them. An opportunity edit reaches the feed only if it moved a field
   other than `stage`, because a stage change already writes its own system
   entry. Version 1 is excluded everywhere by the join to the preceding
   version — it is the creation baseline, not an edit (D-097).
@@ -415,6 +419,43 @@ adds no table — every row it returns already existed.
 
 A comment being posted is the one event no mechanism records (comments are
 immutable, so they have no version table); its deletion is in the audit half.
+
+### The bulk action bar
+
+`docs/UX.md` names five actions over a selection — change stage, assign owner,
+add to view, export, delete. Milestone 2.4c shipped the two that already
+existed one id at a time and **D-070** deferred the rest; milestone 3.0a built
+them. What is worth knowing is that they are gated by three different rules,
+because they write to three different things:
+
+- **Change stage, assign owner and delete write to the opportunity**, so they
+  are owner-only per id through `require_opportunity_owner`, and
+  `BulkActionBar` disables them unless `canManageOpportunity` holds for the
+  whole selection.
+- **Add to view writes to the caller's own saved view**, so its per-id rule is
+  only `require_opportunity_access` (**D-106**): anything the reader can see
+  can be pinned into a list of their own.
+- **Export reads**, so it is not an action on `POST /api/v2/opportunities/bulk`
+  at all — that endpoint answers `{"results": [...]}` per id and a file has no
+  room for per-item outcomes. It is `GET
+  /api/v2/opportunities/export/{csv,json}?ids=`, a plain link like the three on
+  an opportunity's own screen, permission-filtered inside the query the way
+  search is, and its rows are the opportunity's own fields rather than each
+  deal's whole timeline (**D-107**). PDF is deliberately not among them.
+
+Two whole-request failures are raised before the loop, because they are wrong
+about the request rather than about one id: an `assign_owner` naming an email
+nobody uses, and an `add_to_view` naming a view that is not the caller's.
+
+**An ownership transfer leaves the previous owner behind as an editor**
+(**D-105**). It is the one action with no undo available to the person who
+performs it, so a mis-typed handover does not remove the deal from their board;
+the new owner can drop that share from the sharing panel. It is recorded the
+way sharing is — a system entry, an owner-only `owner_changed` audit row, and a
+notification to the new owner — and writes no version row, because `owner_id`
+is not one of `OPPORTUNITY_VERSIONS`' fields. `app/share_utils.py` is the one
+place a share row is granted, shared with `create_share`, because both have to
+cope with a soft-deleted row under a unique index.
 
 ### Editing where content is read
 
@@ -815,7 +856,13 @@ shared, with at most one default per user per entity. Three things about it:
   means visible to every signed-in user — this app has no teams (D-060).
 - `filters` and `sort` are **opaque JSON**: whatever the URL held, stored as
   key/value strings with a size cap and no schema. A new filter field is a
-  frontend change, not a migration.
+  frontend change, not a migration — which is what makes a *curated* view
+  possible without a membership table: "add to view" (3.0a) writes the
+  selection into an `ids` filter (**D-106**), read by `lib/domain.ts`'s
+  `pinnedIds` like every other filter, so it serialises to
+  `?opportunities.ids=3,7` and is shareable and reloadable for free. It is a
+  filter and not an ordering, and the size cap is what bounds how many deals
+  one view can pin — the route answers 400 rather than truncating.
 - The **partial unique index** `idx_saved_views_default_per_user` enforces the
   one-default rule in the schema, not in application code; the routes clear
   the previous default in the same transaction before setting a new one.

@@ -456,6 +456,18 @@ MATRIX: dict[Endpoint, Case] = {
             "stage": "Qualification",
         },
     ),
+    # Cross-opportunity like search: the ids come from the caller, so the
+    # permission filter is inside the query and an id the caller cannot read
+    # is absent from the file rather than refused (tests/test_export.py holds
+    # the leakage case). Everyone signed in therefore gets 200.
+    Endpoint("GET", "/api/v2/opportunities/export/csv"): Case(
+        expected=authenticated_only(200),
+        url=lambda world: f"/api/v2/opportunities/export/csv?ids={world.opportunity_id}",
+    ),
+    Endpoint("GET", "/api/v2/opportunities/export/json"): Case(
+        expected=authenticated_only(200),
+        url=lambda world: f"/api/v2/opportunities/export/json?ids={world.opportunity_id}",
+    ),
     Endpoint("GET", "/api/v2/search"): Case(
         expected=authenticated_only(200),
         url=lambda world: "/api/v2/search?q=discovery",

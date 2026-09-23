@@ -19,7 +19,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from .auth import get_current_user
 from .database import db_connection
 from .pagination import Page, PageRequest, cursor_clause, page_params, split_page
-from .schemas import SavedViewCreate, SavedViewPublic, SavedViewUpdate
+from .schemas import (
+    MAX_VIEW_PARAMS_JSON_LENGTH,
+    SavedViewCreate,
+    SavedViewPublic,
+    SavedViewUpdate,
+)
 from .soft_delete import soft_delete_saved_view
 from .time_utils import utc_now
 
@@ -209,6 +214,77 @@ def update_saved_view(
 
     assert row is not None
     return saved_view_from_row(row)
+
+
+# --- Curated views (milestone 3.0a) ----------------------------------------
+
+# A saved view is a filter set, not a folder: `filters` is whatever the URL
+# held (`lib/viewState.ts`), stored as opaque key/value strings. "Add to view"
+# therefore writes a filter like any other -- the ids the reader picked -- and
+# needs no membership table and no migration (**D-106**). The key is the one
+# `OpportunityViewState` already uses, so a view carrying it reads back as
+# `?opportunities.ids=` and filters in the client with everything else.
+VIEW_IDS_FILTER = "ids"
+
+
+def add_opportunity_ids_to_view(
+    connection: sqlite3.Connection,
+    view: sqlite3.Row,
+    opportunity_ids: list[int],
+) -> None:
+    """Merge `opportunity_ids` into the view's id filter.
+
+    Additive and order-preserving: adding a deal that is already pinned is
+    not an error, it is a no-op, which is what "add to view" means when the
+    reader cannot see from the action bar what the view already holds.
+
+    Raises 400 when the merged filter would exceed the size a saved view may
+    carry, rather than silently dropping the tail -- the cap
+    (`MAX_VIEW_PARAMS_JSON_LENGTH`) is what bounds one client's storage, and
+    a reader who pinned 400 deals needs to be told the view cannot hold them.
+    """
+    filters = json.loads(view["filters"])
+    existing = [
+        int(value)
+        for value in str(filters.get(VIEW_IDS_FILTER, "")).split(",")
+        if value.strip().isdigit()
+    ]
+    merged = existing + [item for item in opportunity_ids if item not in existing]
+    filters[VIEW_IDS_FILTER] = ",".join(str(item) for item in merged)
+
+    if len(json.dumps(filters)) > MAX_VIEW_PARAMS_JSON_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Saved view parameters are too large",
+        )
+
+    connection.execute(
+        "UPDATE saved_views SET filters = ?, updated_at = ? WHERE id = ?",
+        (json.dumps(filters), utc_now(), view["id"]),
+    )
+
+
+def require_own_opportunity_view(
+    connection: sqlite3.Connection,
+    view_id: int,
+    user_id: int,
+) -> sqlite3.Row:
+    """The target of an "add to view": one of the caller's own views over
+    opportunities.
+
+    Creator-only, the same rule `PATCH /api/v2/saved-views/{id}` enforces and
+    for the same reason -- a shared view is readable by everyone signed in,
+    and writing to someone else's would let any reader change what their
+    colleague sees. A view that is not the caller's answers 404 rather than
+    403, so its existence does not leak.
+    """
+    view = _require_creator(fetch_saved_view_row(connection, view_id), user_id)
+    if view["entity"] != "opportunities":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Saved view is not a view over opportunities",
+        )
+    return view
 
 
 @router.delete("/{view_id}", status_code=status.HTTP_204_NO_CONTENT)

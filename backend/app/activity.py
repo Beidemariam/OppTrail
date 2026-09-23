@@ -18,9 +18,10 @@ Four things about it are load bearing:
   fourth visibility tier; widening it is a product decision, logged as D-102
   for the human rather than taken here.
 - **An event appears once.** Three sources over the same actions would
-  otherwise double-report: the sharing audit rows are dropped because the
-  system entry beside them says the same thing to every reader (the audit log
-  endpoint still holds them in full), and an opportunity edit reaches the feed
+  otherwise double-report: the audit row for an access change -- sharing, and
+  since 3.0a an ownership transfer -- is dropped because the system entry
+  beside it says the same thing to every reader (the audit log endpoint still
+  holds them in full), and an opportunity edit reaches the feed
   only when it moved a field other than `stage`, because a stage change
   already writes its own system entry. Version 1 is excluded everywhere by
   the join to the preceding version -- it is the creation baseline, not an
@@ -85,10 +86,12 @@ SOURCE_RANKS: dict[ActivitySource, int] = {
     "audit_log": 4,
 }
 
-# Sharing writes a system entry *and* an audit row. The system entry is the
-# one every reader with access already sees, so it is the one the feed keeps;
-# `GET /api/v2/opportunities/{id}/audit-log` still answers with both.
-SHARE_ACTIONS = ("share_added", "share_role_changed", "share_removed")
+# An access change writes a system entry *and* an audit row: the three
+# `share_*` actions, and since milestone 3.0a the ownership transfer as well.
+# The system entry is the one every reader with access already sees, so it is
+# the one the feed keeps; `GET /api/v2/opportunities/{id}/audit-log` still
+# answers with both (D-103, extended by D-105).
+ACCESS_ACTIONS = ("share_added", "share_role_changed", "share_removed", "owner_changed")
 
 # A stage change writes its own `stage_change` system entry, so the version
 # row that records the same `PATCH` is only an event when it moved something
@@ -195,7 +198,7 @@ def _audit_events(
         _id_expression("audit_log_entries.id", "audit_log"),
         descending=False,
     )
-    placeholders = ", ".join("?" for _ in SHARE_ACTIONS)
+    placeholders = ", ".join("?" for _ in ACCESS_ACTIONS)
     rows = connection.execute(
         f"""
         SELECT audit_log_entries.*, users.name AS actor_name
@@ -209,7 +212,7 @@ def _audit_events(
             {_id_expression("audit_log_entries.id", "audit_log")} ASC
         LIMIT ?
         """,
-        [opportunity_id, *SHARE_ACTIONS, *cursor_values, page.limit + 1],
+        [opportunity_id, *ACCESS_ACTIONS, *cursor_values, page.limit + 1],
     ).fetchall()
     return [
         ActivityEventPublic(

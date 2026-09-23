@@ -256,6 +256,14 @@ export type OpportunityViewState = {
    * the reader is in, resolved at render (`resolveMonth`) rather than stored,
    * so a link with no month in it always opens on today. */
   month: string;
+  /**
+   * A curated selection, comma-separated (milestone 3.0a, **D-106**). This is
+   * what the action bar's "add to view" writes: a saved view is a filter set
+   * rather than a folder, so pinning deals into one is a filter like any
+   * other and needs no membership table. Empty means no selection is pinned,
+   * which is every view that does not use the feature.
+   */
+  ids: string;
 };
 
 /** The four renderers over one filtered list: board and list from milestone
@@ -327,6 +335,7 @@ export const emptyOpportunityViewState: OpportunityViewState = {
   view: "board",
   columns: defaultOpportunityColumns.join(","),
   month: "",
+  ids: "",
 };
 
 /**
@@ -467,7 +476,11 @@ export function applyOpportunityView(
   state: OpportunityViewState,
 ): Opportunity[] {
   const keyword = state.q.trim().toLowerCase();
+  const pinned = pinnedIds(state.ids);
   const filtered = opportunities.filter((opportunity) => {
+    if (pinned && !pinned.has(opportunity.id)) {
+      return false;
+    }
     if (state.stage && opportunity.stage !== state.stage) {
       return false;
     }
@@ -490,6 +503,27 @@ export function applyOpportunityView(
   const direction = state.sortDirection === "asc" ? 1 : -1;
   return [...filtered].sort(
     (a, b) => compareOpportunities(a, b, state.sortField) * direction,
+  );
+}
+
+/**
+ * The pinned selection as a set, or `null` when nothing is pinned — which is
+ * not the same as an empty set: a view that pins nothing shows everything,
+ * and one whose every pinned deal has since been deleted shows none of them.
+ * A hand-edited or stale link that carries something other than numbers is
+ * read as the numbers it does carry, the way `columnsFromState` reads a
+ * stale column list.
+ */
+export function pinnedIds(value: string): Set<number> | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return new Set(
+    trimmed
+      .split(",")
+      .map((id) => Number(id.trim()))
+      .filter((id) => Number.isInteger(id) && id > 0),
   );
 }
 

@@ -32,5 +32,8 @@ export function notificationText(notification: AppNotification): string {
   if (notification.type === "share_removed") {
     return "Your opportunity access was removed.";
   }
+  if (notification.type === "owner_changed") {
+    return "An opportunity was handed over to you.";
+  }
   return "New notification.";
 }
