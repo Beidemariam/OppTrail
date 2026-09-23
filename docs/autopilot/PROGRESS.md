@@ -1,4 +1,4 @@
-STATUS: IN_PROGRESS phase=2
+STATUS: AWAITING_REVIEW phase=2
 
 # Autopilot Progress
 
@@ -3016,6 +3016,46 @@ deferred to the host per the unchanged split gate (`sandbox/README.md`).
 - Timeline load stays within 400 ms at seeded scale.
 - Light and dark themes both ship, and both pass axe contrast checks on every
   component delivered in this phase (D-003, accepted 2026-09-16).
+
+### Phase 2 gate and review packet — **DONE**
+
+All fourteen milestones (2.1-2.13, including 2.9a) complete on a clean tree
+at commit `77f4aba`. This session made no application-code change — it
+re-ran the sandbox half of the split gate (brief §3.4) fresh against that
+commit (not copied forward from milestone 2.12's own gate) and wrote the
+phase review packet.
+
+- [x] `make check`'s sandbox-runnable portion green: `ruff check`, `ruff
+      format --check`, `mypy app tools`, frontend `tsc --noEmit`/`eslint`/
+      `prettier --check`, backend pytest (338 passed, 97.27% combined
+      line+branch coverage, `--cov-fail-under=90`, all ≥95%-branch modules
+      at 100%), frontend vitest (429 passed, 97.10% statements / 90.95%
+      branch / 95.80% functions / 97.07% line, thresholds 96/96/95/90 all
+      met), the generated-client contract check, `pip-audit` (no known
+      vulnerabilities), `npm audit` (0 vulnerabilities), Playwright E2E +
+      axe (57 passed, 17 specs, axe clean in both light and dark on every
+      screen exercised; the deferred `color-contrast` ratchet is now empty).
+      Docker build/smoke test named as deferred to the host, not silently
+      skipped.
+- [x] Seven `needs human review: Y` decisions from this phase are still
+      open at this gate — D-070, D-078, D-088, D-090, D-093, D-096, D-097 —
+      each with a recommendation and an alternative in the review packet
+      §3. Three others raised mid-phase (D-060, D-075, D-082) were already
+      resolved by a later human ruling in the same phase and are not
+      repeated there.
+- [x] `docs/autopilot/COVERAGE.md`: gate entry to add under "Phase 2 —
+      gate", cross-referencing the review packet rather than duplicating
+      its detail.
+- [x] `docs/autopilot/reviews/phase-2-summary.md` written per brief §3.5's
+      seven sections.
+
+Work log: single session, gate-and-packet only. Changed:
+`docs/autopilot/PROGRESS.md` (this entry, status line), `docs/autopilot/
+COVERAGE.md` (Phase 2 gate entry). New: `docs/autopilot/reviews/
+phase-2-summary.md`. No application code touched. Per brief §3.1/§3.3: no
+tag, merge, or push from this session. `scripts/autopilot-gate.sh 2` against
+commit `77f4aba` is required before `scripts/autopilot-accept.sh` can tag
+`phase-2-accepted`.
 
 ---
 

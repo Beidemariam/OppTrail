@@ -1406,3 +1406,39 @@ default "now" timestamp, and the notification test against a hardcoded
 row count of 2), which is what caught a real timing subtlety in the first
 case and a wrong assumption about notification fan-out in the second, before
 either became a flaky or over-specific regression guard.
+
+## Phase 2 — gate (end of phase, all milestones 2.1–2.13 done, incl. 2.9a)
+
+No application code changed in this session — it re-ran the full sandbox
+half of the split gate (brief §3.4) at the commit milestone 2.12 left, to
+confirm the phase is ready for `AWAITING_REVIEW`. Figures are unchanged from
+the 2.12 gate above, run fresh rather than copied forward:
+
+```
+backend:  ruff check, ruff format --check, mypy app tools    all clean
+          338 passed, 97.27% combined line+branch coverage
+          (--cov-fail-under=90 enforced); the six ≥95%-branch modules
+          (permissions.py, audit_utils.py, auth.py, soft_delete.py,
+          routes_ai.py, versioning.py) all at 100%
+          pip-audit                                          no known vulnerabilities
+frontend: tsc --noEmit, eslint, prettier --check              all clean
+          (2 pre-existing warnings, 0 errors — see phase-2-summary.md)
+          429 passed, 97.10% statements / 90.95% branch / 95.80% functions /
+          97.07% line (thresholds 96/96/95/90 all met)
+          npm audit                                           0 vulnerabilities
+contract: scripts/generate-api-client.sh --check               up to date
+e2e:      57 passed (17 specs), axe clean on every screen in both light and
+          dark; the deferred color-contrast ratchet is now empty
+docker:   deferred to the host half — scripts/autopilot-gate.sh 2
+          (no Docker socket in this sandbox, per sandbox/README.md)
+```
+
+Coverage floors (brief §6.2) all met: backend ≥ 90% line / ≥ 80% branch
+(97.27% combined); frontend ≥ 80% line (97.07%, well above floor — the
+project's own thresholds are 96/96/95/90); the ≥95%-branch modules all at
+100%.
+
+Authorization-matrix endpoints: 47 (Phase 1 gate) → 52 (saved views, the
+four restore routes, the bulk-action endpoint, three edit-history reads).
+
+Full detail and the try-it steps: `docs/autopilot/reviews/phase-2-summary.md`.
