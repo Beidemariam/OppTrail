@@ -369,6 +369,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/timeline/follow-ups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Follow Ups Page
+         * @description Entries with a follow-up date, across every opportunity the caller may
+         *     read (milestone 3.0b, **D-088**) -- the calendar's second layer.
+         *
+         *     Cross-opportunity like `GET /api/v2/search`, so the permission filter is
+         *     inside the query (`ACCESSIBLE_OPPORTUNITY_IDS_SQL`) rather than a role
+         *     resolved first: there is no single opportunity here to resolve one from.
+         *     `from`/`to` bound the read to the month on screen, the same names the
+         *     timeline's own filter uses for `event_timestamp`, but filtering here is
+         *     on `follow_up_date`.
+         */
+        get: operations["list_follow_ups_page_api_v2_timeline_follow_ups_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/timeline/{entry_id}": {
         parameters: {
             query?: never;
@@ -1122,6 +1150,35 @@ export interface components {
             /** Created At */
             created_at: string;
         };
+        /**
+         * FollowUpPublic
+         * @description One entry with a follow-up date, read across every opportunity the
+         *     caller may see (milestone 3.0b, **D-088**) -- the calendar's second layer,
+         *     over the same permission-filtered cross-opportunity read `search.py` and
+         *     `export_service.py` already use. `follow_up_date` is never null on a row
+         *     this model describes; the query that produces it filters that.
+         */
+        FollowUpPublic: {
+            /** Id */
+            id: number;
+            /** Opportunity Id */
+            opportunity_id: number;
+            /** Opportunity Name */
+            opportunity_name: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "call" | "email" | "meeting" | "demo" | "proposal" | "contract" | "stage_change" | "other" | "site_visit" | "objection" | "competitor_intel";
+            /** Title */
+            title: string;
+            /** Follow Up Date */
+            follow_up_date: string;
+            /** Created By */
+            created_by: number | null;
+            /** Author Name */
+            author_name: string | null;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1446,6 +1503,13 @@ export interface components {
         Page_AuditLogEntryPublic_: {
             /** Items */
             items: components["schemas"]["AuditLogEntryPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[FollowUpPublic] */
+        Page_FollowUpPublic_: {
+            /** Items */
+            items: components["schemas"]["FollowUpPublic"][];
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -2593,6 +2657,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TimelineEntryPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_follow_ups_page_api_v2_timeline_follow_ups_get: {
+        parameters: {
+            query?: {
+                from?: string | null;
+                to?: string | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_FollowUpPublic_"];
                 };
             };
             /** @description Validation Error */

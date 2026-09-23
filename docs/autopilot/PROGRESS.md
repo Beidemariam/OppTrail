@@ -3104,7 +3104,7 @@ each other.
       because each is a feature in its own right, and ownership transfer in
       particular needs a permission decision (may an editor reassign? does the
       old owner keep access?) that belongs with this phase's collaboration work.
-- [ ] 3.0b Follow-up dates on the calendar (**D-088**, ruled by the human
+- [x] 3.0b Follow-up dates on the calendar (**D-088**, ruled by the human
       2026-09-23). `FEATURES.md` scopes the calendar as close dates *and*
       follow-up dates; 2.8 shipped close dates only, because those arrive with
       the opportunity list while follow-up dates live on `timeline_entries` and
@@ -3248,6 +3248,59 @@ Gate: `make check-fast` green, and `make e2e` run beside it because this
 milestone adds a journey (59 passed, axe clean). Backend 355 → 385, frontend
 442 → 448, E2E 58 → 59, authorization-matrix endpoints 53 → 55. Figures in
 `COVERAGE.md`.
+
+### 3.0b Follow-up dates on the calendar (D-088) — **DONE**
+
+`GET /api/v2/timeline/follow-ups` is the calendar's second layer — the read
+D-088 deferred when 2.8 shipped close dates alone, sized and scheduled here at
+the Phase 2 gate. This session found the backend, schema, frontend wiring and
+seed data already written but uncommitted from an earlier one; what it added
+was the missing test coverage the gate requires (a domain-test suite that
+imported the new helpers without exercising them, no E2E journey, no seed-tour
+assertion) and verified the whole thing green before committing.
+
+- [x] **Backend** — `backend/app/routes_timeline.py`'s
+      `list_follow_ups_page`: cross-opportunity like search and the bulk
+      export routes, so the permission filter lives inside the query
+      (`ACCESSIBLE_OPPORTUNITY_IDS_SQL`) rather than a role resolved first.
+      Registered ahead of `PATCH/DELETE /timeline/{entry_id}` so `follow-ups`
+      cannot be swallowed as a path parameter. `from`/`to` bound the read to
+      the grid on screen; ordered by `follow_up_date` then `id`, keyset-
+      paginated like every other v2 collection. `schemas.FollowUpPublic` is
+      the new response model, discriminated by carrying the opportunity's own
+      name since the read spans opportunities.
+- [x] **Frontend** — `lib/domain.ts` gained `calendarRange` (the exact
+      `from`/`to` the grid draws, including the neighbouring-month days) and
+      `followUpsOn` (one day's due entries); `lib/queries.ts`'s `useFollowUps`
+      is enabled only while the calendar is the view on screen, keyed by the
+      range so switching months costs a request and switching back is cached.
+      `OpportunityCalendar` draws each day's follow-ups as a
+      `FollowUpChip` — no checkbox, no keyboard cursor, no selection, because
+      a follow-up is a timeline entry rather than an opportunity, and it
+      links to the opportunity's own timeline like every other cross-
+      opportunity read in the app. Regenerated `frontend/lib/api-types.ts`.
+- [x] **Tests** — `backend/tests/test_follow_ups.py` (6): the date filter,
+      the leakage case (scoped to what the caller can read, including a
+      share being removed), pagination ordering, and both soft-delete paths
+      (the entry directly, and cascaded from the opportunity). One
+      authorization-matrix row. Frontend: this session added the two
+      `lib/domain.test.ts` cases (`calendarRange`'s grid bounds,
+      `followUpsOn`'s day filter) that the uncommitted work had imported but
+      never called — caught by `npm run lint` reporting three unused-var
+      warnings against the documented baseline of two. Also added: a new
+      E2E journey in `e2e/15-table-calendar.spec.ts` driving a follow-up
+      entry through the real stack (create with a follow-up date, see its
+      chip on the calendar, follow the link back to the timeline, axe
+      clean), and a `test_seed.py` assertion + `make seed` tour paragraph for
+      the demo entry's follow-up (Northwind's "Product demo" entry, already
+      seeded with one — Alex and Casey can read it, Dana gets nothing).
+
+Gate: `make check-fast` green, and `make e2e` run beside it because this
+milestone adds a journey (60 passed, axe clean); `pip-audit` and `npm audit`
+also run and clean. Backend 385 → 392 tests (+6 `test_follow_ups.py`, +1
+matrix row; the `test_seed.py` addition is assertions inside an existing
+test, not a new one), frontend 448 → 450 (+2 `lib/domain.test.ts`), E2E 59 →
+60, authorization-matrix endpoints 55 → 56. Figures in `COVERAGE.md`.
 
 ### Acceptance
 

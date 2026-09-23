@@ -2552,6 +2552,36 @@ kbd {
   flex: 0 1 220px;
 }
 
+/* The calendar's second layer (milestone 3.0b, D-088): a follow-up due on a
+   timeline entry, drawn in the warning palette so it reads as a reminder
+   rather than as another deal — `.opportunity-chip` beside it is the deal
+   itself. */
+.followup-chip {
+  align-items: center;
+  background: var(--bg-warning);
+  border: 1px solid var(--border-warning);
+  border-radius: var(--radius-sm);
+  display: flex;
+  font-size: var(--text-xs);
+  gap: var(--space-1);
+  line-height: var(--line-xs);
+  padding: var(--space-0-5) var(--space-1);
+}
+
+.followup-chip a {
+  color: var(--text-warning);
+  flex: 1;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.followup-chip .chip-opportunity {
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
 /* --- Editing where content is read (milestone 2.11) -----------------------
  *
  * The affordance is the value itself: an editable field is a button drawn

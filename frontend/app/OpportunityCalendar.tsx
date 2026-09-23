@@ -5,11 +5,14 @@ import { Link } from "react-router";
 import {
   calendarWeeks,
   closingOn,
+  entryTypeLabel,
+  followUpsOn,
   formatMoney,
   monthLabel,
   shiftMonth,
   weekdayLabels,
   withoutCloseDate,
+  type FollowUp,
   type Opportunity,
 } from "../lib/domain";
 import type { OpportunityViewProps } from "./StageBoard";
@@ -20,13 +23,12 @@ import { useOpportunityItem } from "./useOpportunityItem";
  * on the month their deal is expected to close.
  *
  * `docs/FEATURES.md` §1 describes it as "expected close dates and follow-up
- * dates". Only the first half is here, because the second has no
- * cross-opportunity read to draw from — a follow-up date lives on a timeline
- * entry, and nothing returns entries across opportunities. Phase 4 builds
- * exactly that (milestone 4.1's "My Tasks across opportunities", 4.2's
- * migration of `timeline_entries.follow_up_date` into tasks), so the second
- * layer arrives with the query that can feed it rather than with a bespoke
- * endpoint built here and replaced there (**D-088**).
+ * dates" — milestone 3.0b (**D-088**) added the second layer, drawn from
+ * `GET /api/v2/timeline/follow-ups`, the cross-opportunity read that did not
+ * exist when 2.8 shipped close dates alone. Phase 4's "My Tasks across
+ * opportunities" (4.1) supersedes this endpoint when `follow_up_date` moves
+ * off the entry and onto a task (4.2); this layer moves with it then, not
+ * before.
  *
  * Not virtualized, and deliberately: a month is at most six week rows, and
  * what varies is how many deals sit in one day's cell. `VirtualList` windows
@@ -43,6 +45,7 @@ export function OpportunityCalendar({
   checkedIds,
   month,
   today,
+  followUps,
   onFocus,
   onToggleChecked,
   onRangeSelect,
@@ -63,6 +66,9 @@ export function OpportunityCalendar({
    * rather than read here, because a component that reads the clock cannot be
    * tested without one. */
   today: string;
+  /** The follow-ups due within the drawn grid (milestone 3.0b), already
+   * fetched for exactly this range by the dashboard. */
+  followUps: FollowUp[];
   onMonthChange: (month: string) => void;
 }) {
   const weeks = calendarWeeks(month);
@@ -108,6 +114,7 @@ export function OpportunityCalendar({
           <div className="calendar-week" key={week[0]}>
             {week.map((day) => {
               const closing = closingOn(opportunities, day);
+              const due = followUpsOn(followUps, day);
               return (
                 <div
                   className={[
@@ -134,6 +141,9 @@ export function OpportunityCalendar({
                       onToggleChecked={onToggleChecked}
                       onRangeSelect={onRangeSelect}
                     />
+                  ))}
+                  {due.map((followUp) => (
+                    <FollowUpChip key={followUp.id} followUp={followUp} />
                   ))}
                 </div>
               );
@@ -210,6 +220,26 @@ function CalendarChip({
       <span className="chip-value">
         {formatMoney(opportunity.currency, opportunity.value)}
       </span>
+    </article>
+  );
+}
+
+/**
+ * One follow-up due on a day (milestone 3.0b, D-088). Unlike `CalendarChip`
+ * this is not an opportunity item: it carries no checkbox, no keyboard
+ * cursor and no selection, because a follow-up is a timeline entry, and this
+ * app's cross-opportunity reads stop at "here is the opportunity it happened
+ * on" (the same granularity `app/SearchPage.tsx` and the activity log use).
+ * The link goes to that opportunity's own timeline, not to the entry itself
+ * — nothing else in the app deep-links to one entry either.
+ */
+function FollowUpChip({ followUp }: { followUp: FollowUp }) {
+  return (
+    <article className="followup-chip">
+      <Link to={`/opportunities/${followUp.opportunity_id}`}>
+        {entryTypeLabel(followUp.type)}: {followUp.title}
+      </Link>
+      <span className="chip-opportunity">{followUp.opportunity_name}</span>
     </article>
   );
 }

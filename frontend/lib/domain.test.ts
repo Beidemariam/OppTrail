@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   adjacentStage,
   applyOpportunityView,
+  calendarRange,
   calendarWeeks,
   closingOn,
   columnsFromState,
@@ -11,6 +12,7 @@ import {
   editableOpportunityFields,
   emptyOpportunityViewState,
   emptyTimelineFilters,
+  followUpsOn,
   formatMoney,
   matchesSavedView,
   monthLabel,
@@ -22,6 +24,7 @@ import {
   shiftMonth,
   viewOrder,
   withoutCloseDate,
+  type FollowUp,
   type Opportunity,
   type SavedView,
 } from "./domain";
@@ -59,6 +62,20 @@ function anOpportunity(overrides: Partial<Opportunity> = {}): Opportunity {
     updated_at: "2026-09-01T00:00:00Z",
     stalled: false,
     current_user_role: "owner",
+    ...overrides,
+  };
+}
+
+function aFollowUp(overrides: Partial<FollowUp> = {}): FollowUp {
+  return {
+    id: 100,
+    opportunity_id: 1,
+    opportunity_name: "Northwind rollout",
+    type: "demo",
+    title: "Send updated pricing",
+    follow_up_date: "2026-12-02",
+    created_by: 1,
+    author_name: "Alex",
     ...overrides,
   };
 }
@@ -488,5 +505,29 @@ describe("the calendar's month (milestone 2.8)", () => {
     expect(
       viewOrder(deals, "calendar", "2026-12").map((item) => item.id),
     ).toEqual([3, 1, 2]);
+  });
+});
+
+describe("the calendar's follow-up layer (milestone 3.0b, D-088)", () => {
+  it("bounds the read to exactly the grid calendarWeeks draws", () => {
+    // Same December 2026 grid as above: the first week opens on 30 November,
+    // the last closes on 3 January, so the range must reach both neighbours.
+    expect(calendarRange("2026-12")).toEqual({
+      from: "2026-11-30",
+      to: "2027-01-03",
+    });
+  });
+
+  it("finds the follow-ups due on one day and ignores the rest", () => {
+    const followUps = [
+      aFollowUp({ id: 1, follow_up_date: "2026-12-02" }),
+      aFollowUp({ id: 2, follow_up_date: "2026-12-03" }),
+      aFollowUp({ id: 3, follow_up_date: "2026-12-02" }),
+    ];
+
+    expect(followUpsOn(followUps, "2026-12-02").map((item) => item.id)).toEqual(
+      [1, 3],
+    );
+    expect(followUpsOn(followUps, "2026-12-25")).toEqual([]);
   });
 });

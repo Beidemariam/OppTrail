@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from app.database import db_connection, initialize_database
 from app.settings import settings
-from tools.seed import ALEX, BLAIR, CASEY, DANA, DEMO_PASSWORD, seed
+from tools.seed import ALEX, BLAIR, CASEY, DANA, DEMO_PASSWORD, days_ago, seed
 
 
 def sign_in(client: TestClient, email: str) -> None:
@@ -261,6 +261,23 @@ def test_seeded_permissions_match_the_printed_tour(tmp_path) -> None:
 
         umbrella_feed = alex.get(f"/api/v2/opportunities/{umbrella}/activity").json()["items"]
         assert "audit_log" in {event["detail"]["source"] for event in umbrella_feed}
+
+        # The calendar's follow-up tour line (milestone 3.0b): the demo entry's
+        # follow-up date is readable by everyone shared on Northwind and by
+        # nobody else - the same access split as the rest of the tour.
+        expected_follow_up = days_ago(-3)[:10]
+        alex_follow_ups = alex.get("/api/v2/timeline/follow-ups").json()["items"]
+        demo_follow_up = next(
+            item
+            for item in alex_follow_ups
+            if item["title"] == "Product demo for the operations team"
+        )
+        assert demo_follow_up["follow_up_date"] == expected_follow_up
+        assert demo_follow_up["opportunity_name"] == "Northwind platform rollout"
+
+        casey_follow_ups = casey.get("/api/v2/timeline/follow-ups").json()["items"]
+        assert any(item["title"] == demo_follow_up["title"] for item in casey_follow_ups)
+        assert dana.get("/api/v2/timeline/follow-ups").json()["items"] == []
     finally:
         for client in (alex, blair, casey, dana):
             client.__exit__(None, None, None)

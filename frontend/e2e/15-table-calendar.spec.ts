@@ -1,7 +1,9 @@
 import { expect, test } from "@playwright/test";
 import {
   createOpportunity,
+  entryForm,
   expectNoAccessibilityViolations,
+  openTimeline,
   signUp,
 } from "./helpers";
 
@@ -126,5 +128,44 @@ test("the calendar places a deal on its close month and accounts for the rest", 
   await page.getByRole("link", { name: dated }).click();
   await expect(
     page.locator(".timeline-panel").getByRole("heading", { name: dated }),
+  ).toBeVisible();
+});
+
+test("the calendar's follow-up layer draws an entry's date and links back to its timeline (milestone 3.0b)", async ({
+  page,
+}) => {
+  const suffix = Math.random().toString(36).slice(2, 8);
+  const opportunity = `Follow-up deal ${suffix}`;
+
+  await signUp(page, `followup-${suffix}@opptrail.test`, "Follow-up Tester");
+  await createOpportunity(page, opportunity);
+  await openTimeline(page, opportunity);
+
+  await entryForm(page).getByLabel("Type").selectOption({ label: "Call" });
+  await entryForm(page).getByLabel("Title").fill("Send updated pricing");
+  await entryForm(page).getByLabel("Follow up").fill("2027-08-19");
+  await entryForm(page).getByRole("button", { name: "Add Entry" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Send updated pricing" }),
+  ).toBeVisible();
+
+  await page.goto("/?opportunities.view=calendar&opportunities.month=2027-08");
+  await expect(
+    page.getByRole("heading", { name: "August 2027" }),
+  ).toBeVisible();
+
+  const chip = page.getByRole("link", { name: /Send updated pricing/ });
+  await expect(chip).toBeVisible();
+  await expect(chip).toContainText("Call:");
+  await expect(page.locator(".followup-chip")).toContainText(opportunity);
+
+  await expectNoAccessibilityViolations(page, "calendar view with a follow-up");
+
+  // A follow-up chip links to the opportunity's own timeline, the same
+  // granularity every other cross-opportunity read in the app stops at —
+  // there is no deep link to one entry.
+  await chip.click();
+  await expect(
+    page.locator(".timeline-panel").getByRole("heading", { name: opportunity }),
   ).toBeVisible();
 });

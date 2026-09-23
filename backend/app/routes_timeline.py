@@ -13,6 +13,7 @@ from .notification_service import (
 )
 from .pagination import Page, PageRequest, cursor_clause, page_params, split_page
 from .permissions import (
+    ACCESSIBLE_OPPORTUNITY_IDS_SQL,
     require_delete_permission,
     require_edit_permission,
     require_opportunity_access,
@@ -22,6 +23,7 @@ from .permissions import (
 from .schemas import (
     CommentCreate,
     CommentPublic,
+    FollowUpPublic,
     NoteCreate,
     NotePublic,
     NoteUpdate,
@@ -405,6 +407,84 @@ def list_timeline_page(
             rows, page.limit, lambda row: (row["event_timestamp"], row["id"])
         )
         return Page(items=entries_with_notes(connection, entries), next_cursor=next_cursor)
+
+
+@router.get("/timeline/follow-ups", response_model=Page[FollowUpPublic])
+def list_follow_ups_page(
+    page: PageRequest = Depends(page_params),
+    from_date: str | None = Query(default=None, alias="from"),
+    to_date: str | None = Query(default=None, alias="to"),
+    user: sqlite3.Row = Depends(get_current_user),
+) -> Page[FollowUpPublic]:
+    """Entries with a follow-up date, across every opportunity the caller may
+    read (milestone 3.0b, **D-088**) -- the calendar's second layer.
+
+    Cross-opportunity like `GET /api/v2/search`, so the permission filter is
+    inside the query (`ACCESSIBLE_OPPORTUNITY_IDS_SQL`) rather than a role
+    resolved first: there is no single opportunity here to resolve one from.
+    `from`/`to` bound the read to the month on screen, the same names the
+    timeline's own filter uses for `event_timestamp`, but filtering here is
+    on `follow_up_date`.
+    """
+    where = [
+        "timeline_entries.deleted_at IS NULL",
+        "timeline_entries.follow_up_date IS NOT NULL",
+        f"timeline_entries.opportunity_id IN ({ACCESSIBLE_OPPORTUNITY_IDS_SQL})",
+    ]
+    params: list[object] = [int(user["id"]), int(user["id"])]
+
+    if from_date:
+        where.append("timeline_entries.follow_up_date >= ?")
+        params.append(from_date)
+    if to_date:
+        where.append("timeline_entries.follow_up_date <= ?")
+        params.append(to_date)
+
+    continuation, cursor_values = cursor_clause(
+        page,
+        "timeline_entries.follow_up_date",
+        "timeline_entries.id",
+        descending=False,
+    )
+    if continuation:
+        where.append(continuation)
+        params.extend(cursor_values)
+    params.append(page.limit + 1)
+
+    with db_connection() as connection:
+        rows = connection.execute(
+            f"""
+            SELECT timeline_entries.*, users.name AS author_name,
+                opportunities.name AS opportunity_name
+            FROM timeline_entries
+            JOIN opportunities ON opportunities.id = timeline_entries.opportunity_id
+            LEFT JOIN users ON users.id = timeline_entries.created_by
+            WHERE {" AND ".join(where)}
+            ORDER BY timeline_entries.follow_up_date ASC, timeline_entries.id ASC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+
+    items, next_cursor = split_page(
+        rows, page.limit, lambda row: (row["follow_up_date"], row["id"])
+    )
+    return Page(
+        items=[
+            FollowUpPublic(
+                id=row["id"],
+                opportunity_id=row["opportunity_id"],
+                opportunity_name=row["opportunity_name"],
+                type=row["type"],
+                title=row["title"],
+                follow_up_date=row["follow_up_date"],
+                created_by=row["created_by"],
+                author_name=row["author_name"],
+            )
+            for row in items
+        ],
+        next_cursor=next_cursor,
+    )
 
 
 @router.post(

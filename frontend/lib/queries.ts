@@ -23,6 +23,7 @@ import type {
   AiChatMessage,
   AppNotification,
   AuditLogEntry,
+  FollowUp,
   NoteVersion,
   Opportunity,
   OpportunityFieldPatch,
@@ -134,6 +135,10 @@ export const keys = {
    * opportunity it hung under.
    */
   allActivity: ["activity"] as const,
+  /** One month's follow-up layer for the calendar (milestone 3.0b, D-088),
+   * keyed by the `from`/`to` range the grid draws so switching months costs a
+   * request and switching back is cached. */
+  followUps: (from: string, to: string) => ["follow-ups", from, to] as const,
   aiConversation: (opportunityId: number) =>
     ["ai-conversation", opportunityId] as const,
   savedViews: (entity: SavedViewEntity) => ["saved-views", entity] as const,
@@ -230,6 +235,20 @@ export function useActivity(opportunityId: number, enabled: boolean) {
       fetchAll<ActivityEvent>(
         `/api/v2/opportunities/${opportunityId}/activity`,
       ),
+  });
+}
+
+/**
+ * The calendar's follow-up layer (milestone 3.0b, D-088), for the month on
+ * screen — `enabled` is the calendar view being on screen, so switching to
+ * the board or the table costs no request for a layer nothing is drawing.
+ */
+export function useFollowUps(from: string, to: string, enabled: boolean) {
+  return useQuery<FollowUp[]>({
+    queryKey: keys.followUps(from, to),
+    enabled,
+    queryFn: () =>
+      fetchAll<FollowUp>(`/api/v2/timeline/follow-ups?from=${from}&to=${to}`),
   });
 }
 

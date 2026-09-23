@@ -6,6 +6,7 @@ import { Outlet, useMatch, useNavigate, useSearchParams } from "react-router";
 import {
   adjacentStage,
   applyOpportunityView,
+  calendarRange,
   emptyOpportunityViewState,
   resolveMonth,
   stages,
@@ -22,6 +23,7 @@ import {
   useBulkOpportunityAction,
   useEditOpportunity,
   useDeleteOpportunity,
+  useFollowUps,
   useOpportunities,
   useRestoreOpportunity,
   useSession,
@@ -134,6 +136,15 @@ export function DashboardPage() {
   // the calendar and `viewOrder` cannot disagree about which month is on
   // screen.
   const month = resolveMonth(viewState.month);
+  // The calendar's second layer (milestone 3.0b, D-088), read only while the
+  // calendar is the view on screen — the range matches exactly what the grid
+  // draws, including the neighbouring-month days in its first and last weeks.
+  const followUpRange = calendarRange(month);
+  const followUps = useFollowUps(
+    followUpRange.from,
+    followUpRange.to,
+    viewState.view === "calendar",
+  );
   // The order this view is read in — column by column on the board, top to
   // bottom in the list and the table, day by day in the calendar — which is
   // what the cursor and a range walk.
@@ -662,6 +673,7 @@ export function DashboardPage() {
             {...viewProps}
             month={month}
             today={resolveToday()}
+            followUps={followUps.data ?? []}
             onMonthChange={(next: string) =>
               setViewState({ ...viewState, month: next })
             }

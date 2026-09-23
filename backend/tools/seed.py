@@ -556,7 +556,15 @@ def main(argv: list[str] | None = None) -> int:
         "  deals as a spreadsheet of records rather than one deal's document.\n"
         "  Assign owner hands them over: type blair@opptrail.test, and Alex\n"
         "  stays on the deal as an editor rather than losing it, with the\n"
-        "  handover on the timeline and in the owner-only audit log."
+        "  handover on the timeline and in the owner-only audit log.\n"
+        "\n"
+        "  The calendar's follow-up layer (milestone 3.0b) draws beside the\n"
+        "  close-date chips: switch the dashboard to Calendar and Northwind's\n"
+        "  demo entry shows up three days out, a reminder rather than a deal,\n"
+        "  linking back to Northwind's own timeline. GET\n"
+        "  /api/v2/timeline/follow-ups is scoped the same way search is -\n"
+        "  Casey sees it because they can read Northwind, and Dana sees\n"
+        "  nothing at all."
     )
     return 0
 

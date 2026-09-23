@@ -76,6 +76,9 @@ export type AppNotification = components["schemas"]["NotificationPublic"];
 export type NotificationType = AppNotification["type"];
 export type TimelineEntry = components["schemas"]["TimelineEntryPublic"];
 export type TimelineNote = components["schemas"]["NotePublic"];
+/** One entry with a follow-up date, read across every opportunity (milestone
+ * 3.0b, D-088) — the calendar's second layer. */
+export type FollowUp = components["schemas"]["FollowUpPublic"];
 export type BulkActionResultItem =
   components["schemas"]["BulkActionResultItem"];
 
@@ -751,6 +754,17 @@ export function calendarWeeks(month: string): string[][] {
   return weeks;
 }
 
+/**
+ * The `from`/`to` bounds of the grid `calendarWeeks` draws, including the
+ * neighbouring-month days that fill out the first and last weeks — the range
+ * `useFollowUps` asks the server for, so the second layer covers exactly what
+ * the first one draws.
+ */
+export function calendarRange(month: string): { from: string; to: string } {
+  const days = calendarWeeks(month).flat();
+  return { from: days[0], to: days[days.length - 1] };
+}
+
 /** The opportunities closing on one day. */
 export function closingOn(
   opportunities: Opportunity[],
@@ -768,6 +782,18 @@ export function withoutCloseDate(opportunities: Opportunity[]): Opportunity[] {
   return opportunities.filter(
     (opportunity) => !opportunity.expected_close_date,
   );
+}
+
+/**
+ * The follow-ups due on one day (milestone 3.0b, D-088) — the calendar's
+ * second layer, drawn beside `closingOn`'s chips rather than instead of them.
+ * Not part of `viewOrder`: a follow-up is a timeline entry, not an
+ * opportunity, so it carries no keyboard cursor, checkbox or selection of its
+ * own — it draws in the cell and links to its opportunity's timeline, the
+ * same granularity every other cross-opportunity read in the app stops at.
+ */
+export function followUpsOn(followUps: FollowUp[], day: string): FollowUp[] {
+  return followUps.filter((followUp) => followUp.follow_up_date === day);
 }
 
 /**

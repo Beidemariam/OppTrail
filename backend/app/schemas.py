@@ -344,6 +344,24 @@ class TimelineEntryPublic(BaseModel):
     notes: list[NotePublic]
 
 
+class FollowUpPublic(BaseModel):
+    """One entry with a follow-up date, read across every opportunity the
+    caller may see (milestone 3.0b, **D-088**) -- the calendar's second layer,
+    over the same permission-filtered cross-opportunity read `search.py` and
+    `export_service.py` already use. `follow_up_date` is never null on a row
+    this model describes; the query that produces it filters that.
+    """
+
+    id: int
+    opportunity_id: int
+    opportunity_name: str
+    type: EntryType
+    title: str
+    follow_up_date: str
+    created_by: int | None
+    author_name: str | None
+
+
 class NoteCreate(BaseModel):
     body: str = Field(min_length=1)
 

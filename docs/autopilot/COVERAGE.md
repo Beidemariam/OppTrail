@@ -1531,3 +1531,52 @@ holds the leakage case, since the matrix asserts status codes. The two new
 bulk actions needed no new row: `POST /api/v2/opportunities/bulk` was already
 registered, which is also why `tests/test_bulk_actions.py` carries their
 per-actor cases itself.
+
+## Phase 3 — milestone 3.0b (follow-up dates on the calendar, D-088)
+
+One new route (`GET /api/v2/timeline/follow-ups`), one new schema
+(`FollowUpPublic`), no migration — the read is a column that already existed
+on `timeline_entries`, unreachable across opportunities until this endpoint.
+The backend, schema, frontend wiring and seed data were already written,
+uncommitted, at the start of this session; what was missing and added here:
+two `lib/domain.test.ts` cases for the two functions the uncommitted work had
+imported but never called, a new E2E journey, and a `test_seed.py` assertion
+for the seed tour's new paragraph.
+
+```
+backend:  ruff check, ruff format --check, mypy app tools    all clean
+          392 passed (385 at milestone 3.0a; +6 tests/test_follow_ups.py,
+          +1 authorization-matrix row; test_seed.py's addition is assertions
+          inside an existing test, not a new one)
+          97.49% combined line+branch (--cov-fail-under=90 enforced)
+          app/routes_timeline.py             94% line (pre-existing gaps —
+          see milestone 3.0a's note; none of the new follow-ups code is among
+          the missed lines)
+          the six >=95%-branch modules (permissions, audit_utils, auth,
+          soft_delete, routes_ai, versioning) all still at 100%
+          pip-audit                                          no known vulnerabilities
+frontend: tsc --noEmit, eslint, prettier --check              all clean
+          (the same 2 pre-existing warnings, 0 errors — this session's fix
+          removed three warnings the uncommitted work had introduced:
+          calendarRange, followUpsOn and aFollowUp all unused before the two
+          new test cases were added)
+          450 passed (448 at milestone 3.0a; +2 lib/domain.test.ts)
+          97.02% statements / 91.30% branch / 95.51% functions / 96.98% line
+          (thresholds 96/96/95/90 all met)
+          npm audit                                           0 vulnerabilities
+contract: scripts/generate-api-client.sh --check               up to date
+e2e:      60 passed (17 specs; +1 journey in 15-table-calendar.spec.ts),
+          axe clean, the deferred-rule ratchet still empty
+docker:   deferred to the host half — scripts/autopilot-gate.sh 3
+          (no Docker socket in this sandbox, per sandbox/README.md)
+```
+
+Coverage floors (brief §6.2) all met: backend >= 90% line / >= 80% branch
+(97.49% combined); frontend >= 80% line (96.98%); the >=95%-branch modules at
+100%.
+
+Authorization-matrix endpoints: 55 (milestone 3.0a) → 56
+(`GET /api/v2/timeline/follow-ups`), cross-opportunity like search and the
+export routes — 200 for anyone signed in, permission filter inside the query.
+`tests/test_follow_ups.py::test_scoped_to_what_the_caller_can_read` holds the
+leakage case, since the matrix asserts status codes only.
