@@ -125,14 +125,78 @@ export type OpportunityViewState = {
   q: string;
   stage: string;
   stalled: "" | "true" | "false";
-  sortField: "updated_at" | "value" | "expected_close_date" | "name";
+  sortField: OpportunitySortField;
   sortDirection: "asc" | "desc";
   view: OpportunityView;
+  /** The table's visible columns, comma-separated in the order they are
+   * drawn (milestone 2.8). A string because this shape is also the URL and a
+   * saved view's `filters`, both of which are flat string maps. */
+  columns: string;
+  /** Which month the calendar is showing, `YYYY-MM`. Empty means the month
+   * the reader is in, resolved at render (`resolveMonth`) rather than stored,
+   * so a link with no month in it always opens on today. */
+  month: string;
 };
 
-/** The two renderers milestone 2.7 ships over one filtered list. Table and
- * calendar (2.8) join them here rather than forking the state. */
-export type OpportunityView = "board" | "list";
+/** The four renderers over one filtered list: board and list from milestone
+ * 2.7, table and calendar from 2.8. They are renderers and not queries — the
+ * dashboard filters and sorts once and hands the result to whichever one the
+ * URL asked for. */
+export type OpportunityView = "board" | "list" | "table" | "calendar";
+
+export const opportunityViews = [
+  { value: "board", label: "Board" },
+  { value: "list", label: "List" },
+  { value: "table", label: "Table" },
+  { value: "calendar", label: "Calendar" },
+] as const;
+
+/**
+ * What the opportunity views can be sorted by: every column the table can
+ * show, plus the name. Declared here rather than in the filter bar because
+ * the table's own column headers sort through the same state (milestone
+ * 2.8) — a header click and the sort dropdown are one setting, not two.
+ */
+export const sortFields = [
+  { value: "updated_at", label: "Last activity" },
+  { value: "name", label: "Name" },
+  { value: "account_name", label: "Account" },
+  { value: "stage", label: "Stage" },
+  { value: "value", label: "Value" },
+  { value: "expected_close_date", label: "Close date" },
+  { value: "owner_name", label: "Owner" },
+  { value: "created_at", label: "Created" },
+] as const;
+
+export type OpportunitySortField = (typeof sortFields)[number]["value"];
+
+/**
+ * The columns the table can show, in the order the picker offers them
+ * (milestone 2.8). The opportunity's own name is not here: it is the row's
+ * identity and the link to its timeline, so it is always drawn and cannot be
+ * turned off.
+ */
+export const opportunityColumns = [
+  { key: "account_name", label: "Account" },
+  { key: "stage", label: "Stage" },
+  { key: "value", label: "Value" },
+  { key: "expected_close_date", label: "Close date" },
+  { key: "owner_name", label: "Owner" },
+  { key: "updated_at", label: "Last activity" },
+  { key: "created_at", label: "Created" },
+] as const;
+
+export type OpportunityColumn = (typeof opportunityColumns)[number]["key"];
+
+/** What the table shows before anyone picks: the fields the list view already shows,
+ * so switching between the two views does not change what is on screen. */
+export const defaultOpportunityColumns: readonly OpportunityColumn[] = [
+  "account_name",
+  "stage",
+  "value",
+  "expected_close_date",
+  "owner_name",
+] as const;
 
 export const emptyOpportunityViewState: OpportunityViewState = {
   q: "",
@@ -141,7 +205,44 @@ export const emptyOpportunityViewState: OpportunityViewState = {
   sortField: "updated_at",
   sortDirection: "desc",
   view: "board",
+  columns: defaultOpportunityColumns.join(","),
+  month: "",
 };
+
+/**
+ * The chosen columns as a list, ignoring anything the URL carries that is not
+ * a column — a hand-edited or stale link should draw a table, not nothing.
+ * An empty selection falls back to the default set for the same reason.
+ */
+export function columnsFromState(value: string): OpportunityColumn[] {
+  const known = new Set<string>(opportunityColumns.map((column) => column.key));
+  const chosen = value
+    .split(",")
+    .map((key) => key.trim())
+    .filter((key): key is OpportunityColumn => known.has(key));
+  return chosen.length > 0 ? chosen : [...defaultOpportunityColumns];
+}
+
+/** One cell's text. Stage is not here — the table draws it as the same
+ * move-to-stage control the list does, for the owner who may change it. */
+export function opportunityCell(
+  opportunity: Opportunity,
+  column: OpportunityColumn,
+): string {
+  switch (column) {
+    case "value":
+      return formatMoney(opportunity.currency, opportunity.value);
+    case "expected_close_date":
+      return opportunity.expected_close_date ?? "Not set";
+    case "updated_at":
+    case "created_at":
+      // Date alone: a table row is one line, and the time of day is not what
+      // anyone scans a column of dates for.
+      return opportunity[column].slice(0, 10);
+    default:
+      return opportunity[column];
+  }
+}
 
 /**
  * Filters and sorts the already-fetched opportunity list against a view
@@ -178,22 +279,39 @@ export function applyOpportunityView(
   });
 
   const direction = state.sortDirection === "asc" ? 1 : -1;
-  return [...filtered].sort((a, b) => {
-    switch (state.sortField) {
-      case "value":
-        return (Number(a.value) - Number(b.value)) * direction;
-      case "name":
-        return a.name.localeCompare(b.name) * direction;
-      case "expected_close_date":
-        return (
-          (a.expected_close_date ?? "").localeCompare(
-            b.expected_close_date ?? "",
-          ) * direction
-        );
-      default:
-        return a.updated_at.localeCompare(b.updated_at) * direction;
-    }
-  });
+  return [...filtered].sort(
+    (a, b) => compareOpportunities(a, b, state.sortField) * direction,
+  );
+}
+
+/**
+ * One field's ordering, ascending. Every sort in the app goes through this —
+ * the filter bar's dropdown and the table's column headers are the same
+ * setting asked two ways (milestone 2.8).
+ *
+ * Stage sorts by its position in the fixed pipeline rather than
+ * alphabetically: "Closed Won" before "Needs Analysis" is the wrong answer to
+ * the only question anyone sorts a stage column to ask.
+ */
+function compareOpportunities(
+  a: Opportunity,
+  b: Opportunity,
+  field: OpportunitySortField,
+): number {
+  switch (field) {
+    case "value":
+      return Number(a.value) - Number(b.value);
+    case "stage":
+      return stages.indexOf(a.stage) - stages.indexOf(b.stage);
+    case "expected_close_date":
+      // Undated deals sort together at the far end rather than scattering
+      // through the dated ones.
+      return (a.expected_close_date ?? "").localeCompare(
+        b.expected_close_date ?? "",
+      );
+    default:
+      return a[field].localeCompare(b[field]);
+  }
 }
 
 export type SavedView = components["schemas"]["SavedViewPublic"];
@@ -283,15 +401,146 @@ export function boardOrder(opportunities: Opportunity[]): Opportunity[] {
  * The reading order of whichever view is on screen, which is the order the
  * keyboard cursor and a shift-click range both walk.
  *
- * The list already arrives sorted by `applyOpportunityView`, so it reads top
- * to bottom; the board regroups that same list into stage columns, so it
- * reads column by column (`boardOrder`).
+ * The list and the table already arrive sorted by `applyOpportunityView`, so
+ * they read top to bottom; the board regroups that same list into stage
+ * columns, so it reads column by column (`boardOrder`); the calendar reads by
+ * date, and only the month on screen is in it (`monthOrder`) — `j` cannot
+ * move to a card that is not drawn.
  */
 export function viewOrder(
   opportunities: Opportunity[],
   view: OpportunityView,
+  month: string,
 ): Opportunity[] {
-  return view === "list" ? opportunities : boardOrder(opportunities);
+  switch (view) {
+    case "list":
+    case "table":
+      return opportunities;
+    case "calendar":
+      return monthOrder(opportunities, month);
+    default:
+      return boardOrder(opportunities);
+  }
+}
+
+/* --- Calendar (milestone 2.8) ----------------------------------------------
+ *
+ * Every date here is handled as the `YYYY-MM-DD` text the API stores and in
+ * UTC, never as a local `Date` parsed from that text: `new Date("2026-12-01")`
+ * is midnight UTC, which is the previous day west of Greenwich, and a calendar
+ * that draws a deal in the wrong cell for half the world is worse than no
+ * calendar. `lib/time.ts` makes the same distinction for timestamps; close
+ * dates carry no time of day at all, so they are never converted.
+ */
+
+/** Days of the week as the grid draws them, Monday first. */
+export const weekdayLabels = [
+  "Mon",
+  "Tue",
+  "Wed",
+  "Thu",
+  "Fri",
+  "Sat",
+  "Sun",
+] as const;
+
+/** `YYYY-MM` for a date. */
+function monthOf(date: Date): string {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+/** `YYYY-MM-DD` for a date. */
+function dayOf(date: Date): string {
+  return `${monthOf(date)}-${String(date.getUTCDate()).padStart(2, "0")}`;
+}
+
+/**
+ * The month a calendar should draw: what the URL asked for, or the month the
+ * reader is in when it asked for nothing. Empty rather than today's month is
+ * the stored default so a saved view or a shared link with no month in it
+ * always opens on the reader's own month rather than on whichever one it was
+ * written in.
+ */
+export function resolveMonth(month: string, today: Date = new Date()): string {
+  return /^\d{4}-\d{2}$/.test(month) ? month : monthOf(today);
+}
+
+/** The month `step` months either side of this one. */
+export function shiftMonth(month: string, step: number): string {
+  const [year, index] = month.split("-").map(Number);
+  return monthOf(new Date(Date.UTC(year, index - 1 + step, 1)));
+}
+
+/** "December 2026" — the heading above the grid. */
+export function monthLabel(month: string): string {
+  const [year, index] = month.split("-").map(Number);
+  return new Date(Date.UTC(year, index - 1, 1)).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+/**
+ * The grid: whole weeks, Monday first, covering the month and no more. Each
+ * cell is a `YYYY-MM-DD` day, including the few days of the neighbouring
+ * months that share the first and last weeks — they are drawn dimmed rather
+ * than left blank, so the week rows stay whole.
+ */
+export function calendarWeeks(month: string): string[][] {
+  const [year, index] = month.split("-").map(Number);
+  const first = new Date(Date.UTC(year, index - 1, 1));
+  const last = new Date(Date.UTC(year, index, 0));
+  // Monday = 0, which `getUTCDay` (Sunday = 0) does not give directly.
+  const start = new Date(first);
+  start.setUTCDate(first.getUTCDate() - ((first.getUTCDay() + 6) % 7));
+
+  const weeks: string[][] = [];
+  const cursor = new Date(start);
+  while (cursor <= last || weeks.length === 0) {
+    const week: string[] = [];
+    for (let day = 0; day < 7; day += 1) {
+      week.push(dayOf(cursor));
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+    weeks.push(week);
+  }
+  return weeks;
+}
+
+/** The opportunities closing on one day. */
+export function closingOn(
+  opportunities: Opportunity[],
+  day: string,
+): Opportunity[] {
+  return opportunities.filter(
+    (opportunity) => opportunity.expected_close_date === day,
+  );
+}
+
+/** The ones with no close date, which a calendar cannot place and must
+ * therefore still account for — a deal missing from the month is a deal the
+ * reader thinks they do not have. */
+export function withoutCloseDate(opportunities: Opportunity[]): Opportunity[] {
+  return opportunities.filter(
+    (opportunity) => !opportunity.expected_close_date,
+  );
+}
+
+/**
+ * The calendar as one list, in the order it is read: the drawn month day by
+ * day, then the undated deals listed beneath it. Anything closing in another
+ * month is not on screen and is not here.
+ */
+export function monthOrder(
+  opportunities: Opportunity[],
+  month: string,
+): Opportunity[] {
+  const days = calendarWeeks(month).flat();
+  return [
+    ...days.flatMap((day) => closingOn(opportunities, day)),
+    ...withoutCloseDate(opportunities),
+  ];
 }
 
 /** The stage one step either side of an opportunity's own, or `null` at the

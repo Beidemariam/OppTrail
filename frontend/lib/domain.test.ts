@@ -3,13 +3,23 @@ import { describe, expect, it } from "vitest";
 import {
   adjacentStage,
   applyOpportunityView,
+  calendarWeeks,
+  closingOn,
+  columnsFromState,
+  defaultOpportunityColumns,
   emptyOpportunityViewState,
   emptyTimelineFilters,
   formatMoney,
   matchesSavedView,
+  monthLabel,
+  monthOrder,
+  opportunityCell,
+  resolveMonth,
   savedViewLabel,
   savedViewVisibility,
+  shiftMonth,
   viewOrder,
+  withoutCloseDate,
   type Opportunity,
   type SavedView,
 } from "./domain";
@@ -172,13 +182,18 @@ describe("the shared formatting and ordering helpers (milestone 2.7)", () => {
       anOpportunity({ id: 2, stage: "Prospecting" }),
     ];
 
-    expect(viewOrder(opportunities, "list").map((item) => item.id)).toEqual([
-      1, 2,
-    ]);
+    expect(
+      viewOrder(opportunities, "list", "2026-12").map((item) => item.id),
+    ).toEqual([1, 2]);
+    // The table is the list's data in the list's order; only the layout
+    // differs.
+    expect(
+      viewOrder(opportunities, "table", "2026-12").map((item) => item.id),
+    ).toEqual([1, 2]);
     // Prospecting is the first column, so the board reads it first.
-    expect(viewOrder(opportunities, "board").map((item) => item.id)).toEqual([
-      2, 1,
-    ]);
+    expect(
+      viewOrder(opportunities, "board", "2026-12").map((item) => item.id),
+    ).toEqual([2, 1]);
   });
 
   it("stops at both ends of the fixed stage list", () => {
@@ -233,5 +248,146 @@ describe("what a saved view is, said in words (milestone 2.13)", () => {
     expect(
       matchesSavedView(view, emptyTimelineFilters, emptyTimelineFilters),
     ).toBe(false);
+  });
+});
+
+describe("sorting by any column the table can show (milestone 2.8)", () => {
+  const deals = [
+    anOpportunity({ id: 1, name: "Beta", account_name: "Zenith" }),
+    anOpportunity({ id: 2, name: "Alpha", account_name: "Acme" }),
+  ];
+
+  function sortedIds(
+    field: (typeof emptyOpportunityViewState)["sortField"],
+    direction: "asc" | "desc" = "asc",
+  ) {
+    return applyOpportunityView(deals, {
+      ...emptyOpportunityViewState,
+      sortField: field,
+      sortDirection: direction,
+    }).map((item) => item.id);
+  }
+
+  it("orders by every text column the table offers", () => {
+    expect(sortedIds("name")).toEqual([2, 1]);
+    expect(sortedIds("account_name")).toEqual([2, 1]);
+    expect(sortedIds("name", "desc")).toEqual([1, 2]);
+  });
+
+  it("orders stages down the pipeline, not down the alphabet", () => {
+    // The whole point of sorting a stage column: "Closed Won" after
+    // "Prospecting", which alphabetical order gets backwards.
+    const stagesOut = applyOpportunityView(
+      [
+        anOpportunity({ id: 1, stage: "Prospecting" }),
+        anOpportunity({ id: 2, stage: "Closed Won" }),
+        anOpportunity({ id: 3, stage: "Needs Analysis" }),
+      ],
+      {
+        ...emptyOpportunityViewState,
+        sortField: "stage",
+        sortDirection: "asc",
+      },
+    );
+    expect(stagesOut.map((item) => item.stage)).toEqual([
+      "Prospecting",
+      "Needs Analysis",
+      "Closed Won",
+    ]);
+  });
+
+  it("sorts undated deals together rather than scattering them", () => {
+    const out = applyOpportunityView(
+      [
+        anOpportunity({ id: 1, expected_close_date: "2026-12-01" }),
+        anOpportunity({ id: 2, expected_close_date: null }),
+        anOpportunity({ id: 3, expected_close_date: "2026-11-01" }),
+      ],
+      {
+        ...emptyOpportunityViewState,
+        sortField: "expected_close_date",
+        sortDirection: "asc",
+      },
+    );
+    expect(out.map((item) => item.id)).toEqual([2, 3, 1]);
+  });
+});
+
+describe("the table's columns (milestone 2.8)", () => {
+  it("falls back to the default set for a link that names no real column", () => {
+    expect(columnsFromState("")).toEqual([...defaultOpportunityColumns]);
+    expect(columnsFromState("nonsense,also_nonsense")).toEqual([
+      ...defaultOpportunityColumns,
+    ]);
+    // A stale link that names one real column and one that no longer exists
+    // still draws the real one.
+    expect(columnsFromState("value,retired_column")).toEqual(["value"]);
+  });
+
+  it("formats a cell the way that column is read", () => {
+    const opportunity = anOpportunity({
+      value: "185000",
+      currency: "USD",
+      expected_close_date: null,
+      updated_at: "2026-09-02T14:31:00Z",
+    });
+    expect(opportunityCell(opportunity, "value")).toBe("USD 185,000");
+    expect(opportunityCell(opportunity, "expected_close_date")).toBe("Not set");
+    // Date alone: nobody scans a column of timestamps for the minute.
+    expect(opportunityCell(opportunity, "updated_at")).toBe("2026-09-02");
+    expect(opportunityCell(opportunity, "account_name")).toBe("Northwind");
+  });
+});
+
+describe("the calendar's month (milestone 2.8)", () => {
+  it("draws whole weeks from Monday, including the neighbours' days", () => {
+    // December 2026 starts on a Tuesday and ends on a Thursday, so the first
+    // week opens on 30 November and the last closes on 3 January.
+    const weeks = calendarWeeks("2026-12");
+    expect(weeks[0][0]).toBe("2026-11-30");
+    expect(weeks[0][1]).toBe("2026-12-01");
+    expect(weeks.at(-1)!.at(-1)).toBe("2027-01-03");
+    expect(weeks.every((week) => week.length === 7)).toBe(true);
+  });
+
+  it("draws a month that starts on a Monday without a leading week", () => {
+    // June 2026 starts on a Monday: the first cell is the first of the month.
+    expect(calendarWeeks("2026-06")[0][0]).toBe("2026-06-01");
+  });
+
+  it("steps across a year boundary in both directions", () => {
+    expect(shiftMonth("2026-12", 1)).toBe("2027-01");
+    expect(shiftMonth("2026-01", -1)).toBe("2025-12");
+    expect(monthLabel("2026-12")).toBe("December 2026");
+  });
+
+  it("falls back to the reader's own month when the URL names none", () => {
+    expect(resolveMonth("2026-03")).toBe("2026-03");
+    // An empty or malformed month resolves to today's, not to nothing - a
+    // link with no month in it opens where the reader is.
+    expect(resolveMonth("", new Date("2026-03-15T00:00:00Z"))).toBe("2026-03");
+    expect(resolveMonth("not-a-month", new Date("2026-03-15T00:00:00Z"))).toBe(
+      "2026-03",
+    );
+    expect(resolveMonth("")).toBe(new Date().toISOString().slice(0, 7));
+  });
+
+  it("reads the drawn month by date, then the deals it cannot place", () => {
+    const deals = [
+      anOpportunity({ id: 1, expected_close_date: "2026-12-20" }),
+      anOpportunity({ id: 2, expected_close_date: null }),
+      anOpportunity({ id: 3, expected_close_date: "2026-12-02" }),
+      // Another month entirely: not drawn, so the cursor must not visit it.
+      anOpportunity({ id: 4, expected_close_date: "2026-08-04" }),
+    ];
+
+    expect(closingOn(deals, "2026-12-02").map((item) => item.id)).toEqual([3]);
+    expect(withoutCloseDate(deals).map((item) => item.id)).toEqual([2]);
+    expect(monthOrder(deals, "2026-12").map((item) => item.id)).toEqual([
+      3, 1, 2,
+    ]);
+    expect(
+      viewOrder(deals, "calendar", "2026-12").map((item) => item.id),
+    ).toEqual([3, 1, 2]);
   });
 });

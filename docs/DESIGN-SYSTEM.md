@@ -100,8 +100,14 @@ Motion: `fast 120ms` (hover, focus), `base 180ms` (dropdowns, expand), `slow 260
 
 ### Density modes
 
-*Not built yet — D-075 defers both modes to the milestone that builds the table
-view they exist for (2.8). The token set that carries them is in place.*
+*As built (2.8, **D-089**): `lib/density.ts` stores the choice and writes
+`data-density` on `<html>`; `app/globals.css` declares `--row-height`,
+`--row-text`, `--row-line`, `--cell-padding-y` and `--cell-padding-x` under
+`:root` and `[data-density="compact"]`, and every rule that varies reads those
+rather than a number. Density and theme are independent attributes on the same
+element, so all four combinations already work and none of them is a fourth
+palette to audit. The control (`app/Density.tsx`) is offered beside the view
+switcher while the table is on screen — the view the modes exist for.*
 
 Two, user-switchable, as a root token change rather than per-component variants:
 
@@ -129,6 +135,12 @@ Badge, Avatar, Tooltip, Spinner, Skeleton.
 **Composites** — Dialog (focus-trapped, replacing every `window.confirm`),
 Drawer, Popover, DropdownMenu, ContextMenu, Toast (with undo action), Tabs,
 Accordion, Breadcrumb, Pagination, EmptyState, ErrorState, ConfirmDialog.
+
+*Built so far: `ViewSwitcher`, `ColumnPicker`, `FilterBar`, `SavedViewMenu`,
+`EntryTypeBadge`, `StalledBadge`, `CommandPalette`, `NotificationItem`,
+`AuditRow`, `NoteBlock`, `AiMessage`, `OpportunityCard`, `VirtualList`,
+`AppShell`, `TopBar`, `PageHeader`, `Dialog`, `ConfirmDialog`, `Toast`,
+`Skeleton`, `EmptyState`.*
 
 **Domain** — OpportunityCard, StageBadge, EntryTypeBadge, TimelineEntry,
 NoteBlock, CommentThread, MentionText, RichTextEditor, RichTextViewer,

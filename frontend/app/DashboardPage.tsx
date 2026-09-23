@@ -7,10 +7,12 @@ import {
   adjacentStage,
   applyOpportunityView,
   emptyOpportunityViewState,
+  resolveMonth,
   stages,
   viewOrder,
   type BulkActionResultItem,
   type Opportunity,
+  type OpportunitySortField,
   type OpportunityView,
   type Stage,
   type OpportunityViewState,
@@ -27,11 +29,15 @@ import {
 import { paramsWithState, stateFromParams } from "../lib/viewState";
 import { AuthPanel } from "./AuthPanel";
 import { BulkActionBar } from "./BulkActionBar";
+import { ColumnPicker } from "./ColumnPicker";
 import { useConfirm } from "./ConfirmDialog";
+import { DensityToggle } from "./Density";
 import { Modal } from "./Modal";
+import { OpportunityCalendar } from "./OpportunityCalendar";
 import { OpportunityFilterBar } from "./OpportunityFilterBar";
 import { OpportunityForm } from "./OpportunityForm";
 import { OpportunityList } from "./OpportunityList";
+import { OpportunityTable } from "./OpportunityTable";
 import { SavedViewsMenu } from "./SavedViewsMenu";
 import { StageBoard } from "./StageBoard";
 import { useToasts, useUndoableDelete } from "./Toasts";
@@ -47,11 +53,11 @@ import { ViewSwitcher } from "./ViewSwitcher";
  * panel. That is what gives an opportunity its own URL without reloading the
  * list behind it.
  *
- * Both views are renderers over the same already-filtered array and share
+ * All four views are renderers over the same already-filtered array and share
  * every piece of state around them — the cursor, the selection, the filters —
- * so switching between them is a URL change and nothing else (milestone 2.7).
- * The one write they share is `moveToStage`: a drag, the move-to-stage select
- * and the `[`/`]` chords all land on it.
+ * so switching between them is a URL change and nothing else (milestones 2.7
+ * and 2.8). The one write they share is `moveToStage`: a drag, the
+ * move-to-stage select and the `[`/`]` chords all land on it.
  */
 export function DashboardPage() {
   const session = useSession();
@@ -123,10 +129,19 @@ export function DashboardPage() {
     opportunities.data ?? [],
     viewState,
   );
+  // Which month the calendar draws: what the URL asked for, or the reader's
+  // own month when it asked for nothing (`resolveMonth`). Resolved here so
+  // the calendar and `viewOrder` cannot disagree about which month is on
+  // screen.
+  const month = resolveMonth(viewState.month);
   // The order this view is read in — column by column on the board, top to
-  // bottom in the list — which is what the cursor and a range walk.
-  const ordered = viewOrder(visibleOpportunities, viewState.view);
-  const checkedOpportunities = ordered.filter((opportunity) =>
+  // bottom in the list and the table, day by day in the calendar — which is
+  // what the cursor and a range walk.
+  const ordered = viewOrder(visibleOpportunities, viewState.view, month);
+  // Filtered from everything on this screen rather than from `ordered`: the
+  // calendar draws one month, and a selection made before switching to it is
+  // still a selection.
+  const checkedOpportunities = visibleOpportunities.filter((opportunity) =>
     checkedIds.has(opportunity.id),
   );
 
@@ -228,7 +243,9 @@ export function DashboardPage() {
   function clearFocus() {
     setFocusedId(null);
     const active = document.activeElement;
-    if (active instanceof HTMLElement && active.matches(".opportunity-card")) {
+    // Whatever the cursor is on, in whichever view drew it
+    // (`useOpportunityItem` gives all four the same class).
+    if (active instanceof HTMLElement && active.matches(".opportunity-item")) {
       active.blur();
     }
   }
@@ -439,6 +456,23 @@ export function DashboardPage() {
     setEditing(null);
   }
 
+  /**
+   * A table column heading, clicked. The same two fields the filter bar's two
+   * dropdowns write, so the header and the dropdown are one setting: clicking
+   * the column already sorted reverses it, and clicking another starts it
+   * ascending, which is what a spreadsheet does.
+   */
+  function sortBy(field: OpportunitySortField) {
+    setViewState({
+      ...viewState,
+      sortField: field,
+      sortDirection:
+        viewState.sortField === field && viewState.sortDirection === "asc"
+          ? "desc"
+          : "asc",
+    });
+  }
+
   return (
     <main className="app-shell">
       <TopBar user={session.data} />
@@ -460,6 +494,22 @@ export function DashboardPage() {
                 setViewState({ ...viewState, view })
               }
             />
+            {/* Both belong to the table and are offered only there: columns
+                are its own setting, and `docs/DESIGN-SYSTEM.md` introduces
+                density as being "for the table view and power users"
+                (D-075). A control for how tall a row is, on a screen of
+                cards, is a control that explains nothing. */}
+            {viewState.view === "table" && (
+              <>
+                <ColumnPicker
+                  columns={viewState.columns}
+                  onChange={(columns: string) =>
+                    setViewState({ ...viewState, columns })
+                  }
+                />
+                <DensityToggle />
+              </>
+            )}
             <button
               type="button"
               className="primary-button"
@@ -558,6 +608,17 @@ export function DashboardPage() {
           </section>
         ) : viewState.view === "list" ? (
           <OpportunityList {...viewProps} />
+        ) : viewState.view === "table" ? (
+          <OpportunityTable {...viewProps} view={viewState} onSort={sortBy} />
+        ) : viewState.view === "calendar" ? (
+          <OpportunityCalendar
+            {...viewProps}
+            month={month}
+            today={resolveToday()}
+            onMonthChange={(next: string) =>
+              setViewState({ ...viewState, month: next })
+            }
+          />
         ) : (
           <StageBoard {...viewProps} />
         )}
@@ -588,6 +649,13 @@ export function DashboardPage() {
       )}
     </main>
   );
+}
+
+/** Today as the `YYYY-MM-DD` a close date is stored as, in UTC — the same
+ * calendar the dates themselves are on, so "today" is not a day out west of
+ * Greenwich. */
+function resolveToday(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 /** First paint, before the list has arrived: the shape of what is coming,

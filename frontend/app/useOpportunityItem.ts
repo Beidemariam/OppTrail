@@ -25,8 +25,10 @@ export function useOpportunityItem({
   onToggleChecked,
   onRangeSelect,
 }: {
-  /** The view's own class for one item: `opportunity-card`, `opportunity-row`.
-   * The state classes below are appended to it. */
+  /** The view's own class for one item: `opportunity-card`,
+   * `opportunity-row`, `opportunity-table-row`, `opportunity-chip`. The
+   * shared `opportunity-item` class and the state classes below are appended
+   * to it. */
   className: string;
   opportunity: Opportunity;
   selected: boolean;
@@ -80,6 +82,11 @@ export function useOpportunityItem({
       onKeyDown,
       onFocus: () => onFocus(opportunity),
       className: [
+        // Every view's item carries this as well as its own class: it is how
+        // anything outside the item recognises one without knowing which view
+        // drew it (`DashboardPage`'s Esc, which blurs whatever the cursor is
+        // on).
+        "opportunity-item",
         className,
         selected ? "selected" : "",
         focused ? "focused" : "",

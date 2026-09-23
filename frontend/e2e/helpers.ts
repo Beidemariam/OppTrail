@@ -69,6 +69,7 @@ export async function createOpportunity(
     value?: string;
     currency?: string;
     stage?: string;
+    closeDate?: string;
   } = {},
 ) {
   const form = await openOpportunityForm(page);
@@ -82,6 +83,9 @@ export async function createOpportunity(
   }
   if (fields.stage) {
     await form.getByLabel("Stage").selectOption(fields.stage);
+  }
+  if (fields.closeDate) {
+    await form.getByLabel("Expected close").fill(fields.closeDate);
   }
   await form.getByRole("button", { name: "Create opportunity" }).click();
   await expect(form).toBeHidden();

@@ -1142,3 +1142,45 @@ the vitest worker aborted with SIGABRT after 165,066 `Maximum call stack size
 exceeded` errors in `HTMLButtonElement.focus`. The delete confirmation moved
 into the row instead (**D-083**); `useConfirm` is for a question raised from
 the page, not from inside another dialog.
+
+## Phase 2 — milestone 2.8 (table and calendar views, density modes)
+
+```
+backend:  unchanged — 305 passed, 97.47% combined line+branch
+          (--cov-fail-under=90 enforced). No schema, no route, no new
+          authorization-matrix entry: both views are renderers over the list
+          GET /api/opportunities already returns whole (D-061), so nothing
+          on the server moved.
+frontend: 391 passed (was 354), 96.88% statements, 96.85% line, 95.59%
+          functions, 90.18% branch. Thresholds raised 96/96/94/88 ->
+          96/96/95/89.
+          app/OpportunityTable.tsx    100%   line, 94.4% branch (new)
+          app/OpportunityCalendar.tsx 100%   line, 100%  branch (new)
+          app/ColumnPicker.tsx        92.3%  line, 87.5% branch (new)
+          app/Density.tsx             100%   line (new)
+          lib/density.ts              100%   line, 100%  branch (new)
+          lib/domain.ts               100%   line, 98.2% branch
+e2e:      49 passed (was 46). New in e2e/15-table-calendar.spec.ts: the
+          table's column picker and header sorting surviving a reload,
+          compact density surviving one, and the calendar placing a deal on
+          its close month, listing what it cannot place, and walking months
+          through the URL. axe clean on both new views;
+          DEFERRED_AXE_RULES stays empty.
+docker:   deferred to the host half — scripts/autopilot-gate.sh 2
+          (no Docker socket in this sandbox, per sandbox/README.md)
+```
+
+`pip-audit` and `npm audit` were run for this milestone (full `make check`,
+not just `check-fast`) and are clean. No new dependency: the calendar is a CSS
+grid and the table reuses `app/VirtualList.tsx`.
+
+One defect found and fixed inside the milestone rather than worked around: the
+bulk selection was derived from the *reading order of the current view*
+(`ordered`), which is every filtered opportunity on the board, the list and the
+table — but only the drawn month in the calendar. Switching to the calendar
+therefore shrank a live selection to whatever that month happened to show. It
+now derives from the filtered set (`visibleOpportunities`), which is identical
+for the three views that were already shipping and correct for the fourth. The
+guard test is `keeps a selection made in another view, even when the month
+hides it` in `app/DashboardPage.test.tsx`, confirmed to fail against the
+unfixed code first (brief §6.5): `0 selected` where `1 selected` was expected.

@@ -35,11 +35,16 @@ export default defineConfig({
       // 97.03 lines / 97.10 statements / 95.67 functions / 89.59 branches.
       // Milestone 2.5 raised them from 94/94/93/87: the theme, the contrast
       // tokens and the confirmation dialog all arrived with their own tests.
+      // Milestone 2.8 raised branches and functions from 88/94, against a
+      // measured 96.88 statements / 90.18 branches / 95.59 functions / 96.85
+      // lines — the table, the calendar and the density preference each
+      // arrived with their own tests, and the two view components are covered
+      // outright.
       thresholds: {
         lines: 96,
         statements: 96,
-        functions: 94,
-        branches: 88,
+        functions: 95,
+        branches: 89,
       },
     },
   },

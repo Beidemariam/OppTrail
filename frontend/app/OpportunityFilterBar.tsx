@@ -4,16 +4,10 @@ import { FormEvent, useState, type RefObject } from "react";
 
 import {
   emptyOpportunityViewState,
+  sortFields,
   stages,
   type OpportunityViewState,
 } from "../lib/domain";
-
-const sortFields = [
-  { value: "updated_at", label: "Last activity" },
-  { value: "value", label: "Value" },
-  { value: "expected_close_date", label: "Close date" },
-  { value: "name", label: "Name" },
-] as const;
 
 /**
  * The opportunity board's filter/sort bar (milestone 2.2).

@@ -2340,9 +2340,113 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
   46 Playwright tests passing with axe clean. Docker build and smoke test
   remain the host's half of the split gate.
 
-- [ ] 2.8 Table and calendar view — may slip to Phase 3 per the roadmap's own
+- [x] 2.8 Table and calendar view — may slip to Phase 3 per the roadmap's own
       stated risk mitigation; do not treat slipping these as a blocked
-      milestone.
+      milestone. **Not slipped: both shipped in Phase 2.** — **DONE**
+
+  - [x] Two more renderers over the one filtered list, not two more queries.
+        `DashboardPage` still calls `applyOpportunityView` once and hands the
+        result to whichever of the four the URL asked for
+        (`?opportunities.view=table|calendar`), so switching costs no request
+        and keeps the cursor, the bulk selection and the filters where they
+        were. `viewOrder` gained the two new reading orders; `ViewSwitcher`
+        reads its list from `lib/domain.ts` so adding a renderer is one edit.
+  - [x] **Table** (`app/OpportunityTable.tsx`): one line per deal, virtualized
+        through the existing `app/VirtualList.tsx`, with two settings of its
+        own. Columns are chosen in `app/ColumnPicker.tsx` and live in the URL
+        (`?opportunities.columns=`), so a table with a particular set of
+        columns is linkable and is what a saved view stores — `filters` is
+        opaque JSON (D-062), so no migration. The column headers sort, writing
+        the same `sortField`/`sortDirection` the filter bar's two dropdowns
+        write: one setting asked two ways, and a test asserts the dropdown
+        shows what the header just did. `sortField` grew from four fields to
+        eight (every column the table can show), and stage now sorts down the
+        pipeline rather than down the alphabet.
+  - [x] **Calendar** (`app/OpportunityCalendar.tsx`): a month grid of expected
+        close dates, Monday-first whole weeks, the neighbouring months' days
+        drawn dimmed rather than left blank. The month is
+        `?opportunities.month=YYYY-MM` and empty resolves to the reader's own
+        month at render, so a shared link opens where the reader is rather
+        than where it was written. Deals with no close date are listed under
+        the grid with a count, not dropped — the same failure D-076 found in
+        the empty states. Not virtualized, deliberately: a month is six week
+        rows. Every date is `YYYY-MM-DD` text in UTC and never a parsed local
+        `Date`, because `new Date("2026-12-01")` is the previous day west of
+        Greenwich.
+  - [x] Follow-up dates are **not** on the calendar (**D-088**, needs human
+        review). They live on `timeline_entries` and no cross-opportunity read
+        returns those; Phase 4 builds one (4.1's My Tasks, 4.2's migration of
+        `follow_up_date` into tasks), so an endpoint built here would be an
+        endpoint with a scheduled deletion. Recorded in the component's
+        docstring as well as here.
+  - [x] Inline cell editing is **not** in the table (**D-087**): 2.11 owns
+        editing content where it is read, for entries, notes and opportunity
+        fields together, and 2.10 changes the same opportunity write path.
+  - [x] **Density modes** (**D-089**, which answers D-075's flag: 2.8 was the
+        right home). `lib/density.ts` + `app/Density.tsx` store Comfortable or
+        Compact and write `data-density` on `<html>`; `app/globals.css`
+        declares `--row-height`, `--row-text`, `--row-line` and the two cell
+        paddings under `:root` and `[data-density="compact"]`. A root token
+        change, exactly as `docs/DESIGN-SYSTEM.md` specifies, and the theme's
+        smaller sibling by construction (D-074) with two answers rather than
+        three — nothing outside the app has an opinion about row height. The
+        control sits beside the view switcher and only while the table is on
+        screen.
+  - [x] Table semantics, decided and recorded (**D-090**, needs human review):
+        the table is a styled grid of `article` rows, not a `<table>` or an
+        ARIA `grid`. Windowed rows cannot carry honest table semantics through
+        `VirtualList`'s positioned wrappers, so each cell names its column in
+        visually-hidden text — a screen reader hears "Value: USD 185,000"
+        rather than an unlabelled number — and the sort state rides on the row
+        region's label rather than on an `aria-sort` that would only be valid
+        on a real `columnheader`. The sort buttons' accessible names stay
+        `Sort by <column>` whichever is active, so using a control never
+        renames it.
+  - [x] One defect found inside the milestone and fixed at the cause rather
+        than worked around: the bulk selection was derived from the current
+        view's *reading order*, which is every filtered opportunity in three
+        views and only the drawn month in the calendar — so switching to the
+        calendar shrank a live selection. It now derives from the filtered
+        set. The guard test (brief §6.5, confirmed to fail against the unfixed
+        code first): `keeps a selection made in another view, even when the
+        month hides it` in `app/DashboardPage.test.tsx`, which reported
+        `0 selected` where `1 selected` was expected. The keyboard cursor's
+        focus ring and the checked state were also only ever drawn on the
+        board's cards; both are now written against the shared
+        `opportunity-item` class every view's item carries, so a list row, a
+        table row and a calendar chip show the cursor too, and `Esc` blurs
+        whichever one has it.
+  - [x] Tests: 37 new frontend (`lib/domain.test.ts` for the eight sort
+        fields, the column model and the calendar's date arithmetic;
+        `lib/density.test.ts`; the two new blocks in `DashboardPage.test.tsx`)
+        and 3 new E2E in `e2e/15-table-calendar.spec.ts` — the table's columns
+        and header sort surviving a reload, compact density surviving one, and
+        the calendar placing a deal on its close month, accounting for the
+        undated one and walking months through the URL. 354 -> 391 frontend,
+        46 -> 49 E2E. Backend unchanged: no schema, no route, no new
+        authorization-matrix entry, because both views read the list
+        `GET /api/opportunities` already returns whole (D-061).
+  - [x] Coverage thresholds raised 96/96/94/88 -> 96/96/95/89 against a
+        measured 96.88 statements / 90.18 branches / 95.59 functions / 96.85
+        lines. Both new view components are covered outright.
+  - [x] Docs: `CLAUDE.md`'s "Two views over one list" became "Four views over
+        one list"; `docs/DESIGN-SYSTEM.md`'s density section changed from "not
+        built yet" to as-built, and its component inventory now says which
+        primitives exist.
+
+  Gate: `make check` green in the sandbox — ruff, ruff format, mypy over `app`
+  and `tools`, eslint, tsc, prettier, 305 backend tests at 97.47% combined
+  coverage (unchanged), 391 frontend tests at 96.88/90.18/95.59/96.85 against
+  the raised 96/96/95/89 thresholds, contract check clean, `pip-audit` and
+  `npm audit` clean, and 49 Playwright tests passing with axe clean on both
+  new views. Docker build and smoke test remain the host's half of the split
+  gate.
+
+  Not in this milestone, deliberately: grouping still has only the board's
+  fixed stage columns (`group_by` is still a constant — the list, table and
+  calendar all read one flat sorted list); the table's cells are read-only
+  (2.11); the calendar has no follow-up layer (Phase 4); and the frontend
+  still calls v1 paths (2.9).
 - [ ] 2.9 Finish the `/api/v2` migration and remove v1 (**D-033**, ruled by
       the human 2026-09-17). Milestone 1.3 moved only the collection reads and
       the error envelope to v2 — the mutations and single-resource reads had no

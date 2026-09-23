@@ -419,22 +419,45 @@ over 200 lines and each holding only its own form state: `AuthPanel`, `TopBar`,
 `TimelineFilterBar`, `TimelineEntryForm`, `TimelineEntryList`, `NoteBlock`,
 `AiSidebar`.
 
-### Two views over one list
+### Four views over one list
 
-Milestone 2.7 gave the dashboard a second renderer, and the shape of that is
-worth knowing before adding a third (table and calendar are 2.8):
+Milestones 2.7 and 2.8 gave the dashboard four renderers over one dataset, and
+the shape of that is worth knowing before adding a fifth:
 
 - **`DashboardPage` filters and sorts once** (`applyOpportunityView`) and hands
-  the result to `StageBoard` or `OpportunityList`. Which one is a field on the
-  URL-serialized view state (`?opportunities.view=list`), so a view is
-  linkable, survives a reload, and is what a saved view stores beside its
-  filters. Switching costs no request and keeps the cursor, the bulk selection
-  and the filters where they were.
+  the result to `StageBoard`, `OpportunityList`, `OpportunityTable` or
+  `OpportunityCalendar`. Which one is a field on the URL-serialized view state
+  (`?opportunities.view=table`), so a view is linkable, survives a reload, and
+  is what a saved view stores beside its filters. Switching costs no request
+  and keeps the cursor, the bulk selection and the filters where they were.
 - **The order the reader sees is one function**, `viewOrder` — stage column by
-  stage column on the board, sort order in the list — and `j`/`k`, `x`, `e`,
-  Enter and shift-click ranges all walk it. The card and the row render through
-  one hook, `app/useOpportunityItem.ts`, which holds the focus effect (D-072's
-  `focusin` subtlety lives there), Enter to open, and the checkbox (D-081).
+  stage column on the board, sort order in the list and the table, day by day
+  in the calendar — and `j`/`k`, `x`, `e`, Enter and shift-click ranges all
+  walk it. The card, the row, the table row and the calendar chip render
+  through one hook, `app/useOpportunityItem.ts`, which holds the focus effect
+  (D-072's `focusin` subtlety lives there), Enter to open, the checkbox
+  (D-081), and the shared `opportunity-item` class that the focus ring, the
+  checked state and `Esc` are all written against.
+- **The cursor walks what is drawn; the selection is everything filtered in.**
+  Those are the same set in three views and differ in the calendar, which
+  draws one month — so `ordered` (the cursor, ranges) comes from `viewOrder`
+  and `checkedOpportunities` comes from the filtered list. Deriving both from
+  `viewOrder` silently shrank a live selection on switching to the calendar.
+- **The table's own two settings** are the visible columns
+  (`app/ColumnPicker.tsx`, `?opportunities.columns=`) and the sort, which its
+  column headers write into the same `sortField`/`sortDirection` the filter
+  bar's dropdowns do — one setting asked two ways. It is not a `<table>`:
+  windowed rows cannot carry honest table semantics, so each cell names its
+  column in visually-hidden text and the sort state rides on the row region's
+  label (**D-090**). Inline cell editing is 2.11's, not here (**D-087**).
+- **The calendar places `expected_close_date` only.** A follow-up date lives
+  on a timeline entry and there is no cross-opportunity read for those; Phase
+  4 builds one (**D-088**). Deals with no close date are listed under the grid
+  rather than dropped. The month is `?opportunities.month=YYYY-MM`, and empty
+  means the reader's own month resolved at render, so a shared link opens
+  where the reader is. Every date is handled as `YYYY-MM-DD` text in UTC and
+  never parsed into a local `Date` — `new Date("2026-12-01")` is the previous
+  day west of Greenwich.
 - **Every stage change is the same write.** A card dropped in another column,
   the move-to-stage select on a card or row (`app/MoveToStage.tsx`), and the
   `[`/`]` chords all call `DashboardPage`'s `moveToStage`, which is
@@ -448,6 +471,15 @@ worth knowing before adding a third (table and calendar are 2.8):
   owner-only, and the select is what makes the board operable without a mouse
   (`docs/DESIGN-SYSTEM.md` calls that the requirement most likely to be
   skipped).
+- **Density is a root attribute**, not a component variant (D-075, **D-089**):
+  `lib/density.ts` stores Comfortable or Compact and writes `data-density` on
+  `<html>`, `app/globals.css` carries `--row-height`, `--row-text`,
+  `--row-line` and the two cell paddings under `:root` and
+  `[data-density="compact"]`, and anything that varies reads those. Same shape
+  as `lib/theme.ts` with two answers rather than three — nothing outside the
+  app has an opinion about row height. The control (`app/Density.tsx`) sits
+  beside the view switcher and only while the table is on screen; the theme
+  control stays in the top bar because it applies everywhere.
 - **The create/edit form is a dialog**, not a column (D-079): opened from the
   page header, by `c`, and by Edit on any card or row, on the same
   `app/Modal.tsx` shell as the palette. `TopBar` therefore carries no page
@@ -495,9 +527,15 @@ The units worth testing directly, each in its own module:
   the generated schemas, and the two view states (`TimelineFilters`,
   `OpportunityViewState`) with `applyOpportunityView`, which filters and sorts
   the already-fetched opportunity list in the client. One definition, because
-  several views read them. Also the three small functions the two opportunity
-  views share: `viewOrder` (reading order), `adjacentStage` (`[` and `]`, which
-  stop at the ends of the fixed list) and `formatMoney`.
+  several views read them. Also what the four opportunity views share:
+  `viewOrder` (reading order), `adjacentStage` (`[` and `]`, which stop at the
+  ends of the fixed list), `formatMoney`, the `sortFields` and
+  `opportunityColumns` lists with `columnsFromState`/`opportunityCell`, and the
+  calendar's date arithmetic (`resolveMonth`, `shiftMonth`, `calendarWeeks`,
+  `monthOrder`).
+- `lib/density.ts` — Comfortable and Compact as a preference resolved to one
+  root attribute. Carries no sizes, the same way `lib/theme.ts` carries no
+  colours.
 - `lib/viewState.ts` — the URL/object round trip both view states use.
 - `lib/keyboard.ts` — the keyboard map, and the listener that serves it. See
   "Keyboard map" below.
@@ -660,8 +698,8 @@ reachable by either string, so a query for a caption the app uses twice
 one of them.
 
 The board's filtering and sorting happen **in the client**, over the list
-`GET /api/opportunities` already returns whole (D-061). That changes when
-pagination reaches this list in 2.3.
+`GET /api/opportunities` already returns whole (D-061). That changes when the
+frontend moves onto `/api/v2/opportunities`'s pagination in 2.9 (D-063).
 
 `lib/api-types.ts` is generated from the OpenAPI schema; never hand-edit it.
 

@@ -778,6 +778,397 @@ describe("the list view (milestone 2.7)", () => {
   });
 });
 
+describe("the table view (milestone 2.8)", () => {
+  const deals = [
+    anOpportunity({
+      id: 10,
+      name: "Northwind rollout",
+      account_name: "Northwind",
+      stage: "Negotiation",
+      value: "185000",
+      updated_at: "2026-09-02T10:00:00Z",
+    }),
+    anOpportunity({
+      id: 11,
+      name: "Globex renewal",
+      account_name: "Globex",
+      stage: "Proposal",
+      value: "42000",
+      updated_at: "2026-09-03T10:00:00Z",
+    }),
+  ];
+
+  it("draws the default columns, and only those", async () => {
+    await renderDashboard(
+      { opportunities: deals },
+      "/?opportunities.view=table",
+    );
+
+    const row = await findCard("Northwind rollout");
+    // The five default columns plus the name, which is never optional.
+    expect(within(row).getByText("Northwind")).toBeInTheDocument();
+    expect(within(row).getByText("USD 185,000")).toBeInTheDocument();
+    expect(within(row).getByText("2026-12-01")).toBeInTheDocument();
+    // "Created" is offered by the picker and off by default.
+    expect(
+      screen.queryByRole("button", { name: "Sort by Created" }),
+    ).toBeNull();
+  });
+
+  it("turns a column on, and says so in the URL", async () => {
+    await renderDashboard(
+      { opportunities: deals },
+      "/?opportunities.view=table",
+    );
+    await screen.findByText("Northwind rollout");
+
+    await userEvent.click(screen.getByRole("button", { name: "Columns (5)" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Created" }));
+
+    expect(
+      screen.getByRole("button", { name: "Sort by Created" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Columns (6)" }),
+    ).toBeInTheDocument();
+  });
+
+  it("turns a column off again, and says so in the URL", async () => {
+    await renderDashboard(
+      { opportunities: deals },
+      "/?opportunities.view=table",
+    );
+    await screen.findByText("Northwind rollout");
+
+    await userEvent.click(screen.getByRole("button", { name: "Columns (5)" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Owner" }));
+
+    expect(screen.queryByRole("button", { name: "Sort by Owner" })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Columns (4)" }),
+    ).toBeInTheDocument();
+  });
+
+  it("refuses to turn off the last column standing", async () => {
+    await renderDashboard(
+      { opportunities: deals },
+      "/?opportunities.view=table&opportunities.columns=value",
+    );
+    await screen.findByText("Northwind rollout");
+
+    await userEvent.click(screen.getByRole("button", { name: "Columns (1)" }));
+    // A table of names alone is the list view, which is one click away in the
+    // switcher.
+    expect(screen.getByRole("checkbox", { name: "Value" })).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: "Account" })).toBeEnabled();
+  });
+
+  it("sorts from a column header, and reverses it on a second click", async () => {
+    await renderDashboard(
+      { opportunities: deals },
+      "/?opportunities.view=table",
+    );
+    await screen.findByText("Northwind rollout");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Sort by Value" }),
+    );
+    let rows = screen.getAllByRole("article");
+    expect(rows[0]).toHaveTextContent("Globex renewal");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Sort by Value" }),
+    );
+    rows = screen.getAllByRole("article");
+    expect(rows[0]).toHaveTextContent("Northwind rollout");
+  });
+
+  it("is the same setting the filter bar's sort dropdown writes", async () => {
+    await renderDashboard(
+      { opportunities: deals },
+      "/?opportunities.view=table",
+    );
+    await screen.findByText("Northwind rollout");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Sort by Value" }),
+    );
+
+    // One setting asked two ways: the dropdown shows what the header did.
+    expect(screen.getByLabelText("Sort by")).toHaveValue("value");
+    expect(screen.getByLabelText("Sort direction")).toHaveValue("asc");
+  });
+
+  it("sorts stages down the pipeline from the header too", async () => {
+    await renderDashboard(
+      { opportunities: deals },
+      "/?opportunities.view=table",
+    );
+    await screen.findByText("Northwind rollout");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Sort by Stage" }),
+    );
+
+    const rows = screen.getAllByRole("article");
+    expect(rows[0]).toHaveTextContent("Globex renewal");
+  });
+
+  it("moves a row's stage through the same control every other view uses", async () => {
+    const api = await renderDashboard(
+      { opportunities: [anOpportunity({ stage: "Prospecting" })] },
+      "/?opportunities.view=table",
+    );
+    await screen.findByText("Northwind rollout");
+
+    await userEvent.selectOptions(
+      screen.getByLabelText("Move Northwind rollout to stage"),
+      "Proposal",
+    );
+
+    await waitFor(() =>
+      expect(api.callsTo("PATCH", "/api/opportunities/10")).toHaveLength(1),
+    );
+  });
+
+  it("shows a viewer the stage as text, with no controls", async () => {
+    await renderDashboard(
+      { opportunities: [anOpportunity({ current_user_role: "viewer" })] },
+      "/?opportunities.view=table",
+    );
+
+    const row = await findCard("Northwind rollout");
+    expect(within(row).getByText("Negotiation")).toBeInTheDocument();
+    expect(within(row).queryByRole("button", { name: "Edit" })).toBeNull();
+    expect(
+      screen.queryByLabelText("Move Northwind rollout to stage"),
+    ).toBeNull();
+  });
+
+  it("edits and deletes a row, the same way every other view does", async () => {
+    const api = await renderDashboard(
+      { opportunities: [anOpportunity()] },
+      "/?opportunities.view=table",
+    );
+    const row = await findCard("Northwind rollout");
+
+    await userEvent.click(within(row).getByRole("button", { name: "Edit" }));
+    expect(await screen.findByRole("dialog")).toHaveTextContent(
+      "Edit opportunity",
+    );
+    await userEvent.keyboard("{Escape}");
+
+    await userEvent.click(
+      within(await findCard("Northwind rollout")).getByRole("button", {
+        name: "Delete",
+      }),
+    );
+    await acceptConfirmation("Northwind rollout");
+    await waitFor(() =>
+      expect(api.callsTo("DELETE", "/api/opportunities/10")).toHaveLength(1),
+    );
+  });
+
+  it("moves the cursor down the rows, and scrolls to follow it", async () => {
+    await renderDashboard(
+      { opportunities: deals },
+      "/?opportunities.view=table",
+    );
+    await screen.findByText("Northwind rollout");
+
+    // `j` twice: the sorted order is last activity first, so Globex then
+    // Northwind. `x` acts on whichever the cursor is on.
+    await userEvent.keyboard("jjx");
+    expect(checkboxFor("Northwind rollout")).toBeChecked();
+    expect(checkboxFor("Globex renewal")).not.toBeChecked();
+  });
+
+  it("keeps the declared column order however the columns were ticked", async () => {
+    await renderDashboard(
+      { opportunities: deals },
+      "/?opportunities.view=table&opportunities.columns=owner_name",
+    );
+    await screen.findByText("Northwind rollout");
+
+    await userEvent.click(screen.getByRole("button", { name: "Columns (1)" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Account" }));
+
+    // Account is declared before Owner, so it is drawn first whichever was
+    // ticked first - a table's columns read the same way for everyone.
+    const headers = screen
+      .getAllByRole("button", { name: /^Sort by / })
+      .map((button) => button.getAttribute("aria-label"));
+    expect(headers).toEqual([
+      "Sort by Opportunity",
+      "Sort by Account",
+      "Sort by Owner",
+    ]);
+  });
+
+  it("switches density, and only offers the control where it means something", async () => {
+    await renderDashboard(
+      { opportunities: deals },
+      "/?opportunities.view=table",
+    );
+    await screen.findByText("Northwind rollout");
+
+    await userEvent.selectOptions(
+      screen.getByLabelText("Row density"),
+      "compact",
+    );
+    // A root attribute, not a component variant (D-075): one block of size
+    // tokens changes and every row reads them.
+    expect(document.documentElement.dataset.density).toBe("compact");
+
+    await userEvent.click(screen.getByRole("button", { name: "Board" }));
+    expect(screen.queryByLabelText("Row density")).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Columns/ })).toBeNull();
+  });
+});
+
+describe("the calendar view (milestone 2.8)", () => {
+  const deals = [
+    anOpportunity({
+      id: 10,
+      name: "Northwind rollout",
+      expected_close_date: "2026-12-02",
+    }),
+    anOpportunity({
+      id: 11,
+      name: "Globex renewal",
+      expected_close_date: "2026-12-20",
+    }),
+    anOpportunity({
+      id: 12,
+      name: "Initech pilot",
+      expected_close_date: null,
+    }),
+    anOpportunity({
+      id: 13,
+      name: "Umbrella expansion",
+      expected_close_date: "2027-01-15",
+    }),
+  ];
+
+  const december = "/?opportunities.view=calendar&opportunities.month=2026-12";
+
+  it("places each deal on its close date and names the month", async () => {
+    await renderDashboard({ opportunities: deals }, december);
+
+    expect(
+      await screen.findByRole("heading", { name: "December 2026" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Northwind rollout")).toBeInTheDocument();
+    expect(screen.getByText("Globex renewal")).toBeInTheDocument();
+    // Closing in another month, so not on this one.
+    expect(screen.queryByText("Umbrella expansion")).toBeNull();
+  });
+
+  it("lists what it cannot place rather than dropping it", async () => {
+    await renderDashboard({ opportunities: deals }, december);
+    await screen.findByRole("heading", { name: "December 2026" });
+
+    // A view that silently omits rows is how a reader concludes they have
+    // fewer deals than they do - the failure D-076 found in the empty states.
+    expect(
+      screen.getByRole("heading", { name: "No close date (1)" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Initech pilot")).toBeInTheDocument();
+  });
+
+  it("walks to another month and back, keeping it in the URL", async () => {
+    await renderDashboard({ opportunities: deals }, december);
+    await screen.findByRole("heading", { name: "December 2026" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Next month" }));
+    expect(
+      screen.getByRole("heading", { name: "January 2027" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Umbrella expansion")).toBeInTheDocument();
+    expect(screen.queryByText("Northwind rollout")).toBeNull();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Previous month" }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "December 2026" }),
+    ).toBeInTheDocument();
+  });
+
+  it("opens on the reader's own month when the link names none", async () => {
+    await renderDashboard(
+      { opportunities: deals },
+      "/?opportunities.view=calendar",
+    );
+
+    // The month is resolved rather than stored, so a shared link opens where
+    // the reader is rather than where it was written.
+    const thisMonth = new Date().toLocaleDateString("en-US", {
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    });
+    expect(
+      await screen.findByRole("heading", { name: thisMonth }),
+    ).toBeInTheDocument();
+  });
+
+  it("comes back to the reader's own month from wherever it walked to", async () => {
+    await renderDashboard({ opportunities: deals }, december);
+    await screen.findByRole("heading", { name: "December 2026" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Next month" }));
+    await userEvent.click(screen.getByRole("button", { name: "Today" }));
+
+    const thisMonth = new Date().toLocaleDateString("en-US", {
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    });
+    expect(
+      screen.getByRole("heading", { name: thisMonth }),
+    ).toBeInTheDocument();
+  });
+
+  it("walks the drawn month with the keyboard, in date order", async () => {
+    await renderDashboard({ opportunities: deals }, december);
+    await screen.findByRole("heading", { name: "December 2026" });
+
+    // `j` twice: the 2nd, then the 20th. The undated one comes after those,
+    // and the January deal is not on screen so the cursor never reaches it.
+    await userEvent.keyboard("jx");
+    expect(
+      screen.getByRole("checkbox", {
+        name: "Select Northwind rollout for bulk actions",
+      }),
+    ).toBeChecked();
+
+    await userEvent.keyboard("jjx");
+    expect(
+      screen.getByRole("checkbox", {
+        name: "Select Initech pilot for bulk actions",
+      }),
+    ).toBeChecked();
+  });
+
+  it("keeps a selection made in another view, even when the month hides it", async () => {
+    await renderDashboard(
+      { opportunities: deals },
+      "/?opportunities.view=list",
+    );
+    await screen.findByText("Umbrella expansion");
+
+    await userEvent.click(checkboxFor("Umbrella expansion"));
+    await userEvent.click(screen.getByRole("button", { name: "Calendar" }));
+
+    // January's deal is not drawn in December, but it is still selected: the
+    // action bar acts on everything the filters let through, not on what one
+    // month happens to show.
+    expect(screen.queryByText("Umbrella expansion")).toBeNull();
+    expect(bulkBar()).toHaveTextContent("1 selected");
+  });
+});
+
 describe("what the dashboard shows when it has nothing to show", () => {
   it("explains what an opportunity is before there is one", async () => {
     await renderDashboard({ opportunities: [] });
