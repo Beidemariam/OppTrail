@@ -110,9 +110,12 @@ system's threat model.
 ### Error shapes
 
 One envelope for every failure: `{"error": {"code", "message", "fields"?}}`.
-Today hand-raised errors are `{"detail": "..."}` while Pydantic emits
-`{"detail": [...]}`, and the client flattens every 422 to "Request failed" — so
-users never learn which field was wrong. A single exception handler normalizes both.
+Hand-raised errors used to be `{"detail": "..."}` while Pydantic emitted
+`{"detail": [...]}`, and the client flattened every 422 to "Request failed" — so
+users never learned which field was wrong. A single exception handler normalizes
+both (`backend/app/errors.py`). Since milestone 2.9 removed v1 this is the only
+shape the API answers with, so `is_api_path` now separates the API from the page
+routes this process also serves rather than one version from another.
 
 ### Pagination
 
@@ -123,9 +126,22 @@ B3).
 
 ### API versioning
 
-New surface mounts under `/api/v2`. `/api/*` continues to serve v1 shapes until the
-frontend has moved, then is removed. Pagination and the notification rework are both
-breaking, so a version boundary is what makes them incremental.
+New surface mounts under `/api/v2`. `/api/*` served v1 shapes until the frontend
+had moved, then was removed — milestone 1.3 opened the boundary with the
+paginated collection reads and the error envelope, milestone 2.9 ported the
+remaining mutations and single-resource reads, moved the frontend and deleted
+v1. Pagination and the notification rework are both breaking, so a version
+boundary is what made them incremental.
+
+Everything the client calls is `/api/v2/*` today. `/api/health` is deliberately
+outside it: an operations probe read by the container's `HEALTHCHECK` and
+`scripts/docker-smoke.sh` is not part of the surface a version boundary exists
+to move (D-094).
+
+Because every collection read is paginated and four of the frontend's reads want
+the whole set — the opportunity list, a timeline, a share list, an audit log —
+`lib/queries.ts`'s `fetchAll` follows `next_cursor` to the last page rather than
+pushing the cursor into the views (D-093).
 
 ## Testing strategy
 

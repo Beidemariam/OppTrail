@@ -13,4 +13,4 @@ def test_main_prints_the_openapi_schema_as_json(
     schema = json.loads(capsys.readouterr().out)
 
     assert schema["info"]["title"] == "OppTrail API"
-    assert "/api/opportunities" in schema["paths"]
+    assert "/api/v2/opportunities" in schema["paths"]

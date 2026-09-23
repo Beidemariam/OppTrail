@@ -44,11 +44,11 @@ test("export respects the viewer, outsider and anonymous cases", async ({
     .locator(".export-actions")
     .getByRole("link", { name: "JSON" })
     .getAttribute("href");
-  const opportunityId = Number(href!.split("/")[3]);
+  const opportunityId = Number(href!.match(/\/opportunities\/(\d+)\//)![1]);
 
   // Anonymous: no session at all.
   const anonymous = await request.get(
-    `/api/opportunities/${opportunityId}/export/json`,
+    `/api/v2/opportunities/${opportunityId}/export/json`,
   );
   expect(anonymous.status()).toBe(401);
 
@@ -61,7 +61,7 @@ test("export respects the viewer, outsider and anonymous cases", async ({
 
     for (const format of ["json", "csv", "pdf"]) {
       const result = await request.get(
-        `/api/opportunities/${opportunityId}/export/${format}`,
+        `/api/v2/opportunities/${opportunityId}/export/${format}`,
       );
       expect(result.status(), `${email} exporting ${format}`).toBe(expected);
     }

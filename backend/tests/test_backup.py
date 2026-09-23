@@ -19,7 +19,7 @@ from app.settings import settings
 
 def signup(client: TestClient, email: str = "owner@example.com") -> dict:
     response = client.post(
-        "/api/auth/signup",
+        "/api/v2/auth/signup",
         json={"email": email, "password": "password123", "name": "Owner"},
     )
     assert response.status_code == 201
@@ -28,7 +28,7 @@ def signup(client: TestClient, email: str = "owner@example.com") -> dict:
 
 def create_opportunity(client: TestClient, name: str = "Expansion") -> dict:
     response = client.post(
-        "/api/opportunities",
+        "/api/v2/opportunities",
         json={
             "name": name,
             "account_name": "Acme",

@@ -28,7 +28,6 @@ from .schemas import (
     TimelineEntryCreate,
     TimelineEntryPublic,
     TimelineEntryUpdate,
-    TimelineResponse,
 )
 from .search import MATCHING_ENTRY_IDS_SQL, match_expression
 from .soft_delete import (
@@ -41,8 +40,7 @@ from .soft_delete import (
 )
 from .time_utils import utc_now
 
-router = APIRouter(tags=["timeline"])
-v2_router = APIRouter(prefix="/api/v2", tags=["timeline"])
+router = APIRouter(prefix="/api/v2", tags=["timeline"])
 
 
 def comment_from_row(row: sqlite3.Row) -> CommentPublic:
@@ -225,8 +223,11 @@ def timeline_filters(
     to_date: str | None,
     author_id: int | None,
 ) -> tuple[list[str], list[object]]:
-    """The timeline's filter set, shared by the v1 and v2 list endpoints so the
-    two cannot answer the same question differently.
+    """The timeline's filter set.
+
+    A function rather than six clauses inside the route because it is sixty
+    lines of `WHERE`; it had a second caller while v1 served the same rows
+    unpaginated (D-033) and now has one.
     """
     where = [
         "timeline_entries.opportunity_id = ?",
@@ -341,40 +342,6 @@ def entries_with_notes(
 
 
 @router.get(
-    "/api/opportunities/{opportunity_id}/timeline",
-    response_model=TimelineResponse,
-)
-def list_timeline(
-    opportunity_id: int,
-    q: str | None = None,
-    type: str | None = None,
-    from_date: str | None = Query(default=None, alias="from"),
-    to_date: str | None = Query(default=None, alias="to"),
-    author_id: int | None = None,
-    order: Literal["asc", "desc"] = "asc",
-    user: sqlite3.Row = Depends(get_current_user),
-) -> TimelineResponse:
-    where, params = timeline_filters(opportunity_id, q, type, from_date, to_date, author_id)
-    direction = "DESC" if order == "desc" else "ASC"
-
-    with db_connection() as connection:
-        require_opportunity_access(connection, opportunity_id, int(user["id"]))
-        entries = connection.execute(
-            f"""
-            SELECT timeline_entries.*, users.name AS author_name
-            FROM timeline_entries
-            LEFT JOIN users ON users.id = timeline_entries.created_by
-            WHERE {" AND ".join(where)}
-            ORDER BY timeline_entries.event_timestamp {direction},
-                timeline_entries.created_at {direction}
-            """,
-            params,
-        ).fetchall()
-
-        return TimelineResponse(entries=entries_with_notes(connection, entries))
-
-
-@v2_router.get(
     "/opportunities/{opportunity_id}/timeline",
     response_model=Page[TimelineEntryPublic],
 )
@@ -394,9 +361,9 @@ def list_timeline_page(
     and `docs/ROADMAP.md` puts threaded comments in Phase 3, which is where a
     nested page would belong if one is ever needed.
 
-    v1 tie-breaks equal `event_timestamp`s on `created_at`, which is not unique
-    and so cannot carry a cursor; v2 tie-breaks on the entry id, which orders
-    identically for rows created in sequence.
+    Equal `event_timestamp`s tie-break on the entry id rather than on
+    `created_at`: a cursor needs a column that is unique within the ordering,
+    and for rows created in sequence the two order identically.
 
     `order` (D-051) reverses both the `ORDER BY` and the cursor's comparison
     direction (`cursor_clause`'s `descending`) — reversing only the `ORDER BY`
@@ -438,7 +405,7 @@ def list_timeline_page(
 
 
 @router.post(
-    "/api/opportunities/{opportunity_id}/timeline",
+    "/opportunities/{opportunity_id}/timeline",
     response_model=TimelineEntryPublic,
     status_code=status.HTTP_201_CREATED,
 )
@@ -498,7 +465,7 @@ def create_timeline_entry(
     return entry_from_row(row, [])
 
 
-@router.patch("/api/timeline/{entry_id}", response_model=TimelineEntryPublic)
+@router.patch("/timeline/{entry_id}", response_model=TimelineEntryPublic)
 def update_timeline_entry(
     entry_id: int,
     payload: TimelineEntryUpdate,
@@ -551,7 +518,7 @@ def update_timeline_entry(
     return entry_from_row(row, [])
 
 
-@router.delete("/api/timeline/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/timeline/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_timeline_entry(
     entry_id: int,
     user: sqlite3.Row = Depends(get_current_user),
@@ -591,11 +558,9 @@ def delete_timeline_entry(
         connection.commit()
 
 
-# Restore is v2-only: it has no v1 twin to mirror, the same way
-# `POST /api/v2/notifications/mark-all-read` does not (`CLAUDE.md`, "API
-# versions"). It is what makes the undo toast a real `deleted_at = NULL`
+# Restore is what makes the undo toast a real `deleted_at = NULL`
 # (`docs/FEATURES.md` §12) rather than a re-create under a new id.
-@v2_router.post("/timeline/{entry_id}/restore", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/timeline/{entry_id}/restore", status_code=status.HTTP_204_NO_CONTENT)
 def restore_timeline_entry_route(
     entry_id: int,
     user: sqlite3.Row = Depends(get_current_user),
@@ -631,7 +596,7 @@ def restore_timeline_entry_route(
 
 
 @router.post(
-    "/api/timeline/{entry_id}/notes",
+    "/timeline/{entry_id}/notes",
     response_model=NotePublic,
     status_code=status.HTTP_201_CREATED,
 )
@@ -697,7 +662,7 @@ def create_note(
     return note_from_row(row, [])
 
 
-@router.patch("/api/notes/{note_id}", response_model=NotePublic)
+@router.patch("/notes/{note_id}", response_model=NotePublic)
 def update_note(
     note_id: int,
     payload: NoteUpdate,
@@ -775,14 +740,6 @@ def update_note(
     return note_from_row(row, [])
 
 
-NOTE_VERSION_ROWS_SQL = """
-    SELECT note_versions.*, users.name AS editor_name
-    FROM note_versions
-    JOIN users ON users.id = note_versions.edited_by
-    WHERE note_versions.note_id = ?
-"""
-
-
 def note_version_from_row(row: sqlite3.Row) -> NoteVersionPublic:
     return NoteVersionPublic(
         id=row["id"],
@@ -805,31 +762,13 @@ def require_note_access(connection: sqlite3.Connection, note_id: int, user_id: i
     require_opportunity_access(connection, note["opportunity_id"], user_id)
 
 
-@router.get("/api/notes/{note_id}/versions", response_model=list[NoteVersionPublic])
-def list_note_versions(
-    note_id: int,
-    user: sqlite3.Row = Depends(get_current_user),
-) -> list[NoteVersionPublic]:
-    with db_connection() as connection:
-        require_note_access(connection, note_id, int(user["id"]))
-        rows = connection.execute(
-            f"""
-            {NOTE_VERSION_ROWS_SQL}
-            ORDER BY note_versions.version_number ASC
-            """,
-            (note_id,),
-        ).fetchall()
-
-    return [note_version_from_row(row) for row in rows]
-
-
-@v2_router.get("/notes/{note_id}/versions", response_model=Page[NoteVersionPublic])
+@router.get("/notes/{note_id}/versions", response_model=Page[NoteVersionPublic])
 def list_note_versions_page(
     note_id: int,
     page: PageRequest = Depends(page_params),
     user: sqlite3.Row = Depends(get_current_user),
 ) -> Page[NoteVersionPublic]:
-    """Oldest version first, as v1 has it: revision history reads forwards."""
+    """Oldest version first: revision history reads forwards."""
     continuation, cursor_values = cursor_clause(
         page,
         "note_versions.version_number",
@@ -842,7 +781,10 @@ def list_note_versions_page(
         require_note_access(connection, note_id, int(user["id"]))
         rows = connection.execute(
             f"""
-            {NOTE_VERSION_ROWS_SQL}
+            SELECT note_versions.*, users.name AS editor_name
+            FROM note_versions
+            JOIN users ON users.id = note_versions.edited_by
+            WHERE note_versions.note_id = ?
             {f"AND {continuation}" if continuation else ""}
             ORDER BY note_versions.version_number ASC, note_versions.id ASC
             LIMIT ?
@@ -854,7 +796,7 @@ def list_note_versions_page(
     return Page(items=[note_version_from_row(row) for row in rows], next_cursor=next_cursor)
 
 
-@router.delete("/api/notes/{note_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/notes/{note_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_note(
     note_id: int,
     user: sqlite3.Row = Depends(get_current_user),
@@ -888,7 +830,7 @@ def delete_note(
         connection.commit()
 
 
-@v2_router.post("/notes/{note_id}/restore", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/notes/{note_id}/restore", status_code=status.HTTP_204_NO_CONTENT)
 def restore_note_route(
     note_id: int,
     user: sqlite3.Row = Depends(get_current_user),
@@ -923,7 +865,7 @@ def restore_note_route(
 
 
 @router.post(
-    "/api/notes/{note_id}/comments",
+    "/notes/{note_id}/comments",
     response_model=CommentPublic,
     status_code=status.HTTP_201_CREATED,
 )
@@ -987,7 +929,7 @@ def create_comment(
     return comment_from_row(row)
 
 
-@router.delete("/api/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_comment(
     comment_id: int,
     user: sqlite3.Row = Depends(get_current_user),
@@ -1021,7 +963,7 @@ def delete_comment(
         connection.commit()
 
 
-@v2_router.post("/comments/{comment_id}/restore", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/comments/{comment_id}/restore", status_code=status.HTTP_204_NO_CONTENT)
 def restore_comment_route(
     comment_id: int,
     user: sqlite3.Row = Depends(get_current_user),

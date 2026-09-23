@@ -1,6 +1,6 @@
 import type { components } from "./api-types";
 
-type AppNotification = components["schemas"]["NotificationPublicV2"];
+type AppNotification = components["schemas"]["NotificationPublic"];
 
 /**
  * The one sentence shown for a notification.

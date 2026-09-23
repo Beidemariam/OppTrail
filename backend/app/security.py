@@ -12,7 +12,7 @@ from starlette.datastructures import Headers, MutableHeaders
 from starlette.requests import Request
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from .errors import error_body, is_v2_path
+from .errors import error_body, is_api_path
 from .settings import settings
 
 CSRF_COOKIE_NAME = "opptrail_csrf"
@@ -116,11 +116,11 @@ class CsrfMiddleware:
         token = cookie_token or new_csrf_token()
 
         if scope["method"] not in SAFE_METHODS and not self._is_verified(scope, cookie_token):
-            # Rejected before routing, so this is the one error a v2 client can
-            # see that no exception handler produces; it carries the v2 envelope
-            # itself rather than leaving one path on the v1 shape.
+            # Rejected before routing, so this is the one error a client can
+            # see that no exception handler produces; it carries the envelope
+            # itself rather than leaving one path on a different shape.
             message = "CSRF token missing or invalid"
-            body = error_body(403, message) if is_v2_path(scope["path"]) else {"detail": message}
+            body = error_body(403, message) if is_api_path(scope["path"]) else {"detail": message}
             response = JSONResponse(body, status_code=403)
             response.raw_headers.append(
                 (b"set-cookie", csrf_set_cookie_header(token).encode("latin-1"))

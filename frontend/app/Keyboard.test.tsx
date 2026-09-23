@@ -135,7 +135,7 @@ describe("the command palette", () => {
     expect(
       await screen.findByRole("button", { name: "Create account" }),
     ).toBeInTheDocument();
-    expect(api.callsTo("POST", "/api/auth/logout")).toHaveLength(1);
+    expect(api.callsTo("POST", "/api/v2/auth/logout")).toHaveLength(1);
   });
 
   // Milestone 2.9a / D-091: the same reset the top bar's sign-out button
@@ -359,18 +359,18 @@ describe("the board under the keyboard", () => {
     // Northwind is in Negotiation; ] is Closed Won, [ is back to Proposal.
     await userEvent.keyboard("j]");
     await waitFor(() =>
-      expect(api.callsTo("PATCH", "/api/opportunities/10")).toHaveLength(1),
+      expect(api.callsTo("PATCH", "/api/v2/opportunities/10")).toHaveLength(1),
     );
-    expect(api.callsTo("PATCH", "/api/opportunities/10")[0].body).toEqual({
+    expect(api.callsTo("PATCH", "/api/v2/opportunities/10")[0].body).toEqual({
       stage: "Closed Won",
     });
 
     // `[[` is how user-event types a literal `[`.
     await userEvent.keyboard("[[");
     await waitFor(() =>
-      expect(api.callsTo("PATCH", "/api/opportunities/10")).toHaveLength(2),
+      expect(api.callsTo("PATCH", "/api/v2/opportunities/10")).toHaveLength(2),
     );
-    expect(api.callsTo("PATCH", "/api/opportunities/10")[1].body).toEqual({
+    expect(api.callsTo("PATCH", "/api/v2/opportunities/10")[1].body).toEqual({
       stage: "Negotiation",
     });
   });
@@ -383,7 +383,7 @@ describe("the board under the keyboard", () => {
 
     await userEvent.keyboard("j[[");
 
-    expect(api.callsTo("PATCH", "/api/opportunities/10")).toHaveLength(0);
+    expect(api.callsTo("PATCH", "/api/v2/opportunities/10")).toHaveLength(0);
   });
 
   it("does not move an opportunity the reader does not own", async () => {
@@ -394,7 +394,7 @@ describe("the board under the keyboard", () => {
 
     await userEvent.keyboard("j]");
 
-    expect(api.callsTo("PATCH", "/api/opportunities/10")).toHaveLength(0);
+    expect(api.callsTo("PATCH", "/api/v2/opportunities/10")).toHaveLength(0);
   });
 
   it("opens the focused card's timeline with Enter", async () => {
@@ -467,7 +467,7 @@ describe("with a timeline open", () => {
 
     await waitFor(() =>
       expect(
-        api.callsTo("POST", "/api/opportunities/10/timeline"),
+        api.callsTo("POST", "/api/v2/opportunities/10/timeline"),
       ).toHaveLength(1),
     );
   });
@@ -489,7 +489,7 @@ describe("with a timeline open", () => {
     await userEvent.keyboard(CTRL_ENTER);
 
     await waitFor(() =>
-      expect(api.callsTo("POST", "/api/timeline/100/notes")).toHaveLength(1),
+      expect(api.callsTo("POST", "/api/v2/timeline/100/notes")).toHaveLength(1),
     );
   });
 });

@@ -40,7 +40,7 @@ PROCUREMENT = "Procurement raised an objection about the addendum"
 
 def signup(client: TestClient, email: str = "owner@example.com", name: str = "Owner") -> dict:
     response = client.post(
-        "/api/auth/signup",
+        "/api/v2/auth/signup",
         json={"email": email, "password": "password123", "name": name},
     )
     assert response.status_code == 201, response.text
@@ -49,14 +49,16 @@ def signup(client: TestClient, email: str = "owner@example.com", name: str = "Ow
 
 def login(client: TestClient, email: str) -> None:
     assert (
-        client.post("/api/auth/login", json={"email": email, "password": "password123"}).status_code
+        client.post(
+            "/api/v2/auth/login", json={"email": email, "password": "password123"}
+        ).status_code
         == 200
     )
 
 
 def create_opportunity(client: TestClient, name: str = "Northwind rollout") -> dict:
     response = client.post(
-        "/api/opportunities",
+        "/api/v2/opportunities",
         json={
             "name": name,
             "account_name": "Northwind",
@@ -78,7 +80,7 @@ def create_entry(
     event_timestamp: str = "2026-09-01T10:00:00",
 ) -> dict:
     response = client.post(
-        f"/api/opportunities/{opportunity_id}/timeline",
+        f"/api/v2/opportunities/{opportunity_id}/timeline",
         json={
             "type": entry_type,
             "title": title,
@@ -91,20 +93,20 @@ def create_entry(
 
 
 def create_note(client: TestClient, entry_id: int, body: str) -> dict:
-    response = client.post(f"/api/timeline/{entry_id}/notes", json={"body": body})
+    response = client.post(f"/api/v2/timeline/{entry_id}/notes", json={"body": body})
     assert response.status_code == 201, response.text
     return response.json()
 
 
 def create_comment(client: TestClient, note_id: int, body: str) -> dict:
-    response = client.post(f"/api/notes/{note_id}/comments", json={"body": body})
+    response = client.post(f"/api/v2/notes/{note_id}/comments", json={"body": body})
     assert response.status_code == 201, response.text
     return response.json()
 
 
 def share(client: TestClient, opportunity_id: int, email: str, role: str) -> None:
     response = client.post(
-        f"/api/opportunities/{opportunity_id}/shares",
+        f"/api/v2/opportunities/{opportunity_id}/shares",
         json={"email": email, "role": role},
     )
     assert response.status_code == 201, response.text
@@ -164,7 +166,7 @@ def test_editing_a_note_replaces_its_indexed_text(client: TestClient) -> None:
 
     assert (
         client.patch(
-            f"/api/notes/{note['id']}", json={"body": "Rewritten to mention logistics"}
+            f"/api/v2/notes/{note['id']}", json={"body": "Rewritten to mention logistics"}
         ).status_code
         == 200
     )
@@ -184,7 +186,7 @@ def test_soft_deleting_a_note_removes_it_from_the_index_and_from_results(
 
     assert kinds_and_ids(search(client, "procurement")) == [("note", note["id"])]
 
-    assert client.delete(f"/api/notes/{note['id']}").status_code == 204
+    assert client.delete(f"/api/v2/notes/{note['id']}").status_code == 204
 
     assert indexed_document_ids() == []
     assert search(client, "procurement")["items"] == []
@@ -204,7 +206,7 @@ def test_the_soft_delete_cascade_empties_the_index_for_the_whole_tree(
 
     assert len(indexed_document_ids()) == 3
 
-    assert client.delete(f"/api/opportunities/{opportunity['id']}").status_code == 204
+    assert client.delete(f"/api/v2/opportunities/{opportunity['id']}").status_code == 204
 
     assert indexed_document_ids() == []
     assert search(client, "procurement")["items"] == []
@@ -218,7 +220,7 @@ def test_a_restored_row_is_indexed_again(client: TestClient) -> None:
     opportunity = create_opportunity(client)
     entry = create_entry(client, opportunity["id"], body="Nothing relevant here")
     note = create_note(client, entry["id"], "Procurement follow-up")
-    assert client.delete(f"/api/notes/{note['id']}").status_code == 204
+    assert client.delete(f"/api/v2/notes/{note['id']}").status_code == 204
     assert indexed_document_ids() == []
 
     with db_connection() as connection:
@@ -257,7 +259,7 @@ def test_updating_an_already_deleted_row_leaves_the_index_alone(client: TestClie
     opportunity = create_opportunity(client)
     entry = create_entry(client, opportunity["id"], body="Nothing relevant here")
     note = create_note(client, entry["id"], "Procurement follow-up")
-    assert client.delete(f"/api/notes/{note['id']}").status_code == 204
+    assert client.delete(f"/api/v2/notes/{note['id']}").status_code == 204
 
     with db_connection() as connection:
         connection.execute(
@@ -286,7 +288,7 @@ def test_rebuild_reproduces_the_index_the_migration_built(client: TestClient) ->
     note = create_note(client, entry["id"], "Procurement follow-up")
     create_comment(client, note["id"], "Procurement confirmed")
     deleted = create_note(client, entry["id"], "Procurement note that goes away")
-    assert client.delete(f"/api/notes/{deleted['id']}").status_code == 204
+    assert client.delete(f"/api/v2/notes/{deleted['id']}").status_code == 204
 
     before = indexed_document_ids()
 
@@ -395,7 +397,8 @@ def test_search_is_scoped_to_what_the_caller_can_read(client: TestClient) -> Non
     # And a share that is taken away takes its rows with it.
     login(client, "owner@example.com")
     assert (
-        client.delete(f"/api/opportunities/{shared['id']}/shares/{viewer['id']}").status_code == 204
+        client.delete(f"/api/v2/opportunities/{shared['id']}/shares/{viewer['id']}").status_code
+        == 204
     )
     login(client, "viewer@example.com")
     assert search(client, "procurement")["items"] == []
@@ -521,9 +524,9 @@ def test_timeline_keyword_filter_matches_entries_notes_and_comments(
     create_entry(client, opportunity["id"], title="Unrelated", body="Nothing here")
     assert note["entry_id"] == by_note["id"]
 
-    filtered = client.get(f"/api/opportunities/{opportunity['id']}/timeline?q=procurement")
+    filtered = client.get(f"/api/v2/opportunities/{opportunity['id']}/timeline?q=procurement")
 
-    assert sorted(entry["title"] for entry in filtered.json()["entries"]) == [
+    assert sorted(entry["title"] for entry in filtered.json()["items"]) == [
         "Demo",
         "Kickoff",
         "Review",
@@ -537,9 +540,9 @@ def test_timeline_keyword_filter_matches_word_prefixes(client: TestClient) -> No
     opportunity = create_opportunity(client)
     create_entry(client, opportunity["id"], title="Kickoff", body=PROCUREMENT)
 
-    filtered = client.get(f"/api/opportunities/{opportunity['id']}/timeline?q=proc")
+    filtered = client.get(f"/api/v2/opportunities/{opportunity['id']}/timeline?q=proc")
 
-    assert [entry["title"] for entry in filtered.json()["entries"]] == ["Kickoff"]
+    assert [entry["title"] for entry in filtered.json()["items"]] == ["Kickoff"]
 
 
 def test_timeline_keyword_filter_drops_deleted_notes(client: TestClient) -> None:
@@ -547,11 +550,11 @@ def test_timeline_keyword_filter_drops_deleted_notes(client: TestClient) -> None
     opportunity = create_opportunity(client)
     entry = create_entry(client, opportunity["id"], title="Demo", body="Nothing here")
     note = create_note(client, entry["id"], "Procurement asked for the addendum")
-    assert client.delete(f"/api/notes/{note['id']}").status_code == 204
+    assert client.delete(f"/api/v2/notes/{note['id']}").status_code == 204
 
-    filtered = client.get(f"/api/opportunities/{opportunity['id']}/timeline?q=procurement")
+    filtered = client.get(f"/api/v2/opportunities/{opportunity['id']}/timeline?q=procurement")
 
-    assert filtered.json()["entries"] == []
+    assert filtered.json()["items"] == []
 
 
 def test_timeline_keyword_filter_ignores_other_opportunities(client: TestClient) -> None:
@@ -562,9 +565,9 @@ def test_timeline_keyword_filter_ignores_other_opportunities(client: TestClient)
     create_entry(client, first["id"], title="Kickoff", body=PROCUREMENT)
     create_entry(client, second["id"], title="Other kickoff", body=PROCUREMENT)
 
-    filtered = client.get(f"/api/opportunities/{first['id']}/timeline?q=procurement")
+    filtered = client.get(f"/api/v2/opportunities/{first['id']}/timeline?q=procurement")
 
-    assert [entry["title"] for entry in filtered.json()["entries"]] == ["Kickoff"]
+    assert [entry["title"] for entry in filtered.json()["items"]] == ["Kickoff"]
 
 
 def test_timeline_keyword_filter_with_no_words_matches_nothing(client: TestClient) -> None:
@@ -572,9 +575,9 @@ def test_timeline_keyword_filter_with_no_words_matches_nothing(client: TestClien
     opportunity = create_opportunity(client)
     create_entry(client, opportunity["id"])
 
-    filtered = client.get(f"/api/opportunities/{opportunity['id']}/timeline?q=%21%21%21")
+    filtered = client.get(f"/api/v2/opportunities/{opportunity['id']}/timeline?q=%21%21%21")
 
-    assert filtered.json()["entries"] == []
+    assert filtered.json()["items"] == []
 
 
 # --- the reason for the index ---------------------------------------------
@@ -772,7 +775,7 @@ def test_upgrading_an_mvp_database_indexes_the_rows_it_already_has(
 
     with CsrfClient(app) as client:
         login_response = client.post(
-            "/api/auth/signup",
+            "/api/v2/auth/signup",
             json={"email": "new@example.com", "password": "password123", "name": "New"},
         )
         assert login_response.status_code == 201

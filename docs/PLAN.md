@@ -67,89 +67,96 @@ system simple per the coding standards.
 
 ## API Surface
 
-**Auth**
-- `POST /api/auth/signup`
-- `POST /api/auth/login`
-- `POST /api/auth/logout`
-- `GET  /api/auth/me`
-
-**Opportunities**
-- `GET    /api/opportunities` — owned + shared, with stage/stalled info
-- `POST   /api/opportunities`
-- `GET    /api/opportunities/{id}`
-- `PATCH  /api/opportunities/{id}` — including stage changes (auto-logs a
-  system TimelineEntry)
-- `DELETE /api/opportunities/{id}` — owner only, soft delete
-
-**Sharing**
-- `GET    /api/opportunities/{id}/shares`
-- `POST   /api/opportunities/{id}/shares` — `{email, role}`
-- `PATCH  /api/opportunities/{id}/shares/{user_id}` — `{role}`
-- `DELETE /api/opportunities/{id}/shares/{user_id}`
-
-**Timeline**
-- `GET    /api/opportunities/{id}/timeline` — supports
-  `?q=&type=&from=&to=&author_id=`
-- `POST   /api/opportunities/{id}/timeline`
-- `PATCH  /api/timeline/{entry_id}`
-- `DELETE /api/timeline/{entry_id}` — soft delete
-
-**Notes**
-- `POST   /api/timeline/{entry_id}/notes`
-- `PATCH  /api/notes/{note_id}` — sets `edited = true` and appends a
-  NoteVersion row
-- `GET    /api/notes/{note_id}/versions`
-- `DELETE /api/notes/{note_id}` — soft delete
-
-**Comments**
-- `POST   /api/notes/{note_id}/comments`
-- `DELETE /api/comments/{comment_id}` — soft delete, author or Owner only
-
-**AI Agent**
-- `POST /api/opportunities/{id}/ai/ask` — `{question}` ->
-  `{answer, referenced_entry_ids}`
-
-**Export**
-- `GET /api/opportunities/{id}/export/pdf`
-- `GET /api/opportunities/{id}/export/csv`
-- `GET /api/opportunities/{id}/export/json`
-
-**Notifications**
-- `GET   /api/notifications`
-- `PATCH /api/notifications/{id}/read`
-
-**Audit Log**
-- `GET /api/opportunities/{id}/audit-log` — owner only
-
-**v2 (`/api/v2`, added in roadmap Phase 1)**
-
-The version boundary carries two breaking response-shape changes and nothing
-else — same rows, same permissions, same filters as the v1 route each one
-mirrors (`docs/ARCHITECTURE.md`, "Pagination" / "Error shapes"):
+One surface, `/api/v2/*`. v1 (`/api/*`) served the MVP frontend and was
+removed at the end of roadmap Phase 2, once the frontend had moved
+(`docs/ROADMAP.md`'s breaking-changes table, milestone 2.9). Two rules hold
+across all of it (`docs/ARCHITECTURE.md`, "Pagination" / "Error shapes"):
 
 - Every collection read takes `?limit` (1-200, default 50) and `?cursor`, and
   answers `{"items": [...], "next_cursor": null}`.
 - Every failure answers `{"error": {"code", "message", "fields"?}}`, with
   `fields` present on validation errors.
 
-- `GET /api/v2/opportunities`
-- `GET /api/v2/stages` — the fixed stage list, which v1 carried as a field on
-  the opportunity list response
-- `GET /api/v2/opportunities/{id}/timeline` — same `?q=&type=&from=&to=&author_id=`
-- `GET /api/v2/opportunities/{id}/shares`
-- `GET /api/v2/opportunities/{id}/audit-log`
-- `GET /api/v2/notes/{note_id}/versions`
-- `GET /api/v2/notifications`
+**Auth**
+- `POST /api/v2/auth/signup`
+- `POST /api/v2/auth/login`
+- `POST /api/v2/auth/logout`
+- `POST /api/v2/auth/password` — invalidates every session of that user
+- `GET  /api/v2/auth/me`
+
+**Opportunities**
+- `GET    /api/v2/opportunities` — owned + shared, with stage/stalled info
+- `GET    /api/v2/stages` — the fixed stage list, which v1 carried as a field
+  on the opportunity list response and the envelope has no room for
+- `POST   /api/v2/opportunities`
+- `GET    /api/v2/opportunities/{id}`
+- `PATCH  /api/v2/opportunities/{id}` — including stage changes (auto-logs a
+  system TimelineEntry)
+- `DELETE /api/v2/opportunities/{id}` — owner only, soft delete
+- `POST   /api/v2/opportunities/{id}/restore` — owner only, undoes the above
+- `POST   /api/v2/opportunities/bulk` — one action over many ids, per-item
+  results
+
+**Sharing**
+- `GET    /api/v2/opportunities/{id}/shares`
+- `POST   /api/v2/opportunities/{id}/shares` — `{email, role}`
+- `PATCH  /api/v2/opportunities/{id}/shares/{user_id}` — `{role}`
+- `DELETE /api/v2/opportunities/{id}/shares/{user_id}`
+
+**Timeline**
+- `GET    /api/v2/opportunities/{id}/timeline` — supports
+  `?q=&type=&from=&to=&author_id=&order=`
+- `POST   /api/v2/opportunities/{id}/timeline`
+- `PATCH  /api/v2/timeline/{entry_id}`
+- `DELETE /api/v2/timeline/{entry_id}` — soft delete
+- `POST   /api/v2/timeline/{entry_id}/restore`
+
+**Notes**
+- `POST   /api/v2/timeline/{entry_id}/notes`
+- `PATCH  /api/v2/notes/{note_id}` — sets `edited = true` and appends a
+  NoteVersion row
+- `GET    /api/v2/notes/{note_id}/versions`
+- `DELETE /api/v2/notes/{note_id}` — soft delete
+- `POST   /api/v2/notes/{note_id}/restore`
+
+**Comments**
+- `POST   /api/v2/notes/{note_id}/comments`
+- `DELETE /api/v2/comments/{comment_id}` — soft delete, author or Owner only
+- `POST   /api/v2/comments/{comment_id}/restore`
+
+**AI Agent**
+- `POST /api/v2/opportunities/{id}/ai/ask` — `{question}` ->
+  `{answer, referenced_entry_ids}`
+
+**Export**
+- `GET /api/v2/opportunities/{id}/export/pdf`
+- `GET /api/v2/opportunities/{id}/export/csv`
+- `GET /api/v2/opportunities/{id}/export/json`
+
+**Notifications**
+- `GET   /api/v2/notifications` — full history, optional `?type=`
+- `PATCH /api/v2/notifications/{id}/read`
+- `POST  /api/v2/notifications/mark-all-read`
+
+**Audit Log**
+- `GET /api/v2/opportunities/{id}/audit-log` — owner only
+
+**Search**
 - `GET /api/v2/search` — ranked, snippeted matches in entries, notes and
   comments across every opportunity the caller can read, with the timeline's
-  filters by the same names (`?q=&type=&from=&to=&author_id=`). It has no v1
-  twin: an unbounded ranked result set is the shape the envelope exists to
-  stop shipping, so search is paginated-only (ADR 0007).
+  filters by the same names. An unbounded ranked result set is the shape the
+  envelope exists to stop shipping, so search has always been
+  paginated-only (ADR 0007).
 
-v1 stays as it is while it serves the shipped frontend, and is removed at the
-end of roadmap Phase 2 once the frontend has moved.
+**Saved views**
+- `GET/POST /api/v2/saved-views`, `PATCH/DELETE /api/v2/saved-views/{id}` —
+  creator-only write, creator-or-shared read
 
-All endpoints except `/api/auth/*` require a valid session and enforce the
+**Operations**
+- `GET /api/health` — deliberately unversioned: an operations probe
+  (ADR 0011), not part of the client surface.
+
+All endpoints except `/api/v2/auth/*` and `/api/health` require a valid session and enforce the
 Permissions Model from AGENTS.md server-side (not just hidden in the UI).
 
 ## Build Phases

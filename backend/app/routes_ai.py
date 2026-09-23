@@ -14,7 +14,7 @@ from .permissions import require_opportunity_access
 from .schemas import AiAskRequest, AiAskResponse
 from .settings import settings
 
-router = APIRouter(prefix="/api/opportunities", tags=["ai"])
+router = APIRouter(prefix="/api/v2/opportunities", tags=["ai"])
 
 
 @router.post("/{opportunity_id}/ai/ask", response_model=AiAskResponse)

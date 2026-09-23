@@ -87,7 +87,7 @@ def sign_up(email: str, name: str) -> Session:
     client.__enter__()
     response = check(
         client.post(
-            "/api/auth/signup",
+            "/api/v2/auth/signup",
             json={"email": email, "password": DEMO_PASSWORD, "name": name},
         ),
         f"signup for {email}",
@@ -97,7 +97,7 @@ def sign_up(email: str, name: str) -> Session:
 
 def create_opportunity(session: Session, **fields: Any) -> int:
     response = check(
-        session.client.post("/api/opportunities", json=fields),
+        session.client.post("/api/v2/opportunities", json=fields),
         f"creating {fields.get('name')!r}",
     )
     return int(response.json()["id"])
@@ -105,7 +105,7 @@ def create_opportunity(session: Session, **fields: Any) -> int:
 
 def add_entry(session: Session, opportunity_id: int, **fields: Any) -> int:
     response = check(
-        session.client.post(f"/api/opportunities/{opportunity_id}/timeline", json=fields),
+        session.client.post(f"/api/v2/opportunities/{opportunity_id}/timeline", json=fields),
         f"adding an entry to opportunity {opportunity_id}",
     )
     return int(response.json()["id"])
@@ -113,7 +113,7 @@ def add_entry(session: Session, opportunity_id: int, **fields: Any) -> int:
 
 def add_note(session: Session, entry_id: int, body: str) -> int:
     response = check(
-        session.client.post(f"/api/timeline/{entry_id}/notes", json={"body": body}),
+        session.client.post(f"/api/v2/timeline/{entry_id}/notes", json={"body": body}),
         f"adding a note to entry {entry_id}",
     )
     return int(response.json()["id"])
@@ -121,7 +121,7 @@ def add_note(session: Session, entry_id: int, body: str) -> int:
 
 def add_comment(session: Session, note_id: int, body: str) -> int:
     response = check(
-        session.client.post(f"/api/notes/{note_id}/comments", json={"body": body}),
+        session.client.post(f"/api/v2/notes/{note_id}/comments", json={"body": body}),
         f"commenting on note {note_id}",
     )
     return int(response.json()["id"])
@@ -130,7 +130,7 @@ def add_comment(session: Session, note_id: int, body: str) -> int:
 def share(session: Session, opportunity_id: int, email: str, role: str) -> None:
     check(
         session.client.post(
-            f"/api/opportunities/{opportunity_id}/shares",
+            f"/api/v2/opportunities/{opportunity_id}/shares",
             json={"email": email, "role": role},
         ),
         f"sharing opportunity {opportunity_id} with {email}",
@@ -236,7 +236,7 @@ def seed() -> None:
     revised = add_note(alex, proposal, "Sent the first cut with list pricing.")
     check(
         alex.client.patch(
-            f"/api/notes/{revised}",
+            f"/api/v2/notes/{revised}",
             json={"body": "Sent the first cut with list pricing, then revised to a 8% discount."},
         ),
         "editing a note to create a second version",
@@ -279,7 +279,7 @@ def seed() -> None:
 
     # Stage change: the system timeline entry is written by the API, not here.
     check(
-        alex.client.patch(f"/api/opportunities/{northwind}", json={"stage": "Negotiation"}),
+        alex.client.patch(f"/api/v2/opportunities/{northwind}", json={"stage": "Negotiation"}),
         "advancing Northwind to Negotiation",
     )
 
@@ -363,7 +363,7 @@ def seed() -> None:
         event_timestamp=days_ago(3, hour=8),
     )
     removed_note = add_note(alex, scratch, "Duplicate of the Contoso lead - removing.")
-    check(alex.client.delete(f"/api/notes/{removed_note}"), "soft-deleting a note")
+    check(alex.client.delete(f"/api/v2/notes/{removed_note}"), "soft-deleting a note")
 
     # And a deletion that was taken back (milestone 2.4b), so the log shows
     # both halves of an undo and the entry it took is readable again.
@@ -376,7 +376,7 @@ def seed() -> None:
         event_timestamp=days_ago(2, hour=11),
     )
     check(
-        alex.client.delete(f"/api/timeline/{reinstated}"),
+        alex.client.delete(f"/api/v2/timeline/{reinstated}"),
         "soft-deleting a timeline entry",
     )
     check(
@@ -388,11 +388,11 @@ def seed() -> None:
     #    (milestone 1.7) has both states to show without a click: history
     #    that survives being read, next to what is still unread.
     alex_notifications = check(
-        alex.client.get("/api/notifications"), "reading Alex's notifications"
-    ).json()["notifications"]
+        alex.client.get("/api/v2/notifications"), "reading Alex's notifications"
+    ).json()["items"]
     share_added = next(n for n in alex_notifications if n["type"] == "share_added")
     check(
-        alex.client.patch(f"/api/notifications/{share_added['id']}/read"),
+        alex.client.patch(f"/api/v2/notifications/{share_added['id']}/read"),
         "marking Alex's share notification read",
     )
 

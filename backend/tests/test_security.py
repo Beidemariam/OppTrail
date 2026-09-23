@@ -59,17 +59,17 @@ def test_safe_request_issues_a_csrf_cookie(raw_client: TestClient) -> None:
 def test_unsafe_request_without_the_csrf_header_is_rejected(raw_client: TestClient) -> None:
     csrf_token(raw_client)
 
-    response = raw_client.post("/api/auth/signup", json=SIGNUP)
+    response = raw_client.post("/api/v2/auth/signup", json=SIGNUP)
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "CSRF token missing or invalid"
+    assert response.json()["error"]["message"] == "CSRF token missing or invalid"
 
 
 def test_unsafe_request_with_a_mismatched_token_is_rejected(raw_client: TestClient) -> None:
     csrf_token(raw_client)
 
     response = raw_client.post(
-        "/api/auth/signup",
+        "/api/v2/auth/signup",
         json=SIGNUP,
         headers={"X-CSRF-Token": "not-the-cookie-value"},
     )
@@ -85,7 +85,7 @@ def test_unsafe_request_with_no_cookie_at_all_is_rejected_and_seeded(
     read, and a client with no cookie yet gets one so the retry can succeed.
     """
     response = raw_client.post(
-        "/api/auth/signup",
+        "/api/v2/auth/signup",
         json=SIGNUP,
         headers={"X-CSRF-Token": "invented"},
     )
@@ -97,13 +97,13 @@ def test_unsafe_request_with_no_cookie_at_all_is_rejected_and_seeded(
 def test_unsafe_request_with_the_matching_pair_succeeds(raw_client: TestClient) -> None:
     token = csrf_token(raw_client)
 
-    response = raw_client.post("/api/auth/signup", json=SIGNUP, headers={"X-CSRF-Token": token})
+    response = raw_client.post("/api/v2/auth/signup", json=SIGNUP, headers={"X-CSRF-Token": token})
 
     assert response.status_code == 201
 
 
 def test_csrf_rejection_still_carries_the_security_headers(raw_client: TestClient) -> None:
-    response = raw_client.post("/api/auth/signup", json=SIGNUP)
+    response = raw_client.post("/api/v2/auth/signup", json=SIGNUP)
 
     assert response.status_code == 403
     for header, value in SECURITY_HEADERS.items():
@@ -126,7 +126,7 @@ def test_session_cookie_is_httponly_and_not_secure_outside_production(
 ) -> None:
     token = csrf_token(raw_client)
 
-    response = raw_client.post("/api/auth/signup", json=SIGNUP, headers={"X-CSRF-Token": token})
+    response = raw_client.post("/api/v2/auth/signup", json=SIGNUP, headers={"X-CSRF-Token": token})
 
     session_cookie = next(
         value
@@ -141,7 +141,7 @@ def test_cookies_are_secure_in_production(production_client: TestClient) -> None
     token = csrf_token(production_client)
 
     response = production_client.post(
-        "/api/auth/signup", json=SIGNUP, headers={"X-CSRF-Token": token}
+        "/api/v2/auth/signup", json=SIGNUP, headers={"X-CSRF-Token": token}
     )
 
     assert response.status_code == 201
@@ -154,10 +154,12 @@ def test_cookies_are_secure_in_production(production_client: TestClient) -> None
 
 
 def test_login_rotates_the_session_and_invalidates_the_old_one(client: TestClient) -> None:
-    client.post("/api/auth/signup", json=SIGNUP)
+    client.post("/api/v2/auth/signup", json=SIGNUP)
     first_session = client.cookies[SESSION_COOKIE_NAME]
 
-    client.post("/api/auth/login", json={"email": SIGNUP["email"], "password": SIGNUP["password"]})
+    client.post(
+        "/api/v2/auth/login", json={"email": SIGNUP["email"], "password": SIGNUP["password"]}
+    )
     second_session = client.cookies[SESSION_COOKIE_NAME]
 
     assert second_session != first_session
@@ -167,9 +169,9 @@ def test_login_rotates_the_session_and_invalidates_the_old_one(client: TestClien
 
 
 def test_logout_deletes_the_session_row(client: TestClient) -> None:
-    client.post("/api/auth/signup", json=SIGNUP)
+    client.post("/api/v2/auth/signup", json=SIGNUP)
 
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     with db_connection() as connection:
         assert connection.execute("SELECT COUNT(*) AS n FROM sessions").fetchone()["n"] == 0

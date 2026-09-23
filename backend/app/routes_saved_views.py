@@ -23,7 +23,7 @@ from .schemas import SavedViewCreate, SavedViewPublic, SavedViewUpdate
 from .soft_delete import soft_delete_saved_view
 from .time_utils import utc_now
 
-v2_router = APIRouter(prefix="/api/v2/saved-views", tags=["saved-views"])
+router = APIRouter(prefix="/api/v2/saved-views", tags=["saved-views"])
 
 
 def saved_view_from_row(row: sqlite3.Row) -> SavedViewPublic:
@@ -82,7 +82,7 @@ def _clear_other_defaults(
     )
 
 
-@v2_router.post("", response_model=SavedViewPublic, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=SavedViewPublic, status_code=status.HTTP_201_CREATED)
 def create_saved_view(
     payload: SavedViewCreate,
     user: sqlite3.Row = Depends(get_current_user),
@@ -120,7 +120,7 @@ def create_saved_view(
     return saved_view_from_row(row)
 
 
-@v2_router.get("", response_model=Page[SavedViewPublic])
+@router.get("", response_model=Page[SavedViewPublic])
 def list_saved_views(
     page: PageRequest = Depends(page_params),
     entity: str | None = None,
@@ -168,7 +168,7 @@ def _require_creator(row: sqlite3.Row | None, user_id: int) -> sqlite3.Row:
     return row
 
 
-@v2_router.patch("/{view_id}", response_model=SavedViewPublic)
+@router.patch("/{view_id}", response_model=SavedViewPublic)
 def update_saved_view(
     view_id: int,
     payload: SavedViewUpdate,
@@ -211,7 +211,7 @@ def update_saved_view(
     return saved_view_from_row(row)
 
 
-@v2_router.delete("/{view_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{view_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_saved_view(
     view_id: int,
     user: sqlite3.Row = Depends(get_current_user),

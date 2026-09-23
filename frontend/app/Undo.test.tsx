@@ -129,7 +129,7 @@ describe("optimistic updates", () => {
     const api = await renderDashboard({
       opportunities: [anOpportunity()],
       entries: [anEntry({ notes: [aNote({ comments: [aComment()] })] })],
-      pending: ["DELETE /api/comments/300"],
+      pending: ["DELETE /api/v2/comments/300"],
     });
     await openTimeline("Northwind rollout");
     const comment = (await screen.findByText("Agreed.")).closest(
@@ -143,12 +143,12 @@ describe("optimistic updates", () => {
     await waitFor(() =>
       expect(screen.queryByText("Agreed.")).not.toBeInTheDocument(),
     );
-    expect(api.callsTo("DELETE", "/api/comments/300")).toHaveLength(1);
+    expect(api.callsTo("DELETE", "/api/v2/comments/300")).toHaveLength(1);
     // Still in flight: nothing has confirmed the delete, and the toast that
     // offers Undo has not been raised yet either.
     expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
 
-    api.release("DELETE /api/comments/300");
+    api.release("DELETE /api/v2/comments/300");
     expect(await screen.findByRole("button", { name: "Undo" })).toBeVisible();
   });
 
@@ -156,7 +156,7 @@ describe("optimistic updates", () => {
     const api = await renderDashboard({
       opportunities: [anOpportunity()],
       entries: [anEntry({ notes: [aNote()] })],
-      pending: ["PATCH /api/notes/200"],
+      pending: ["PATCH /api/v2/notes/200"],
     });
     await openTimeline("Northwind rollout");
     const note = (await screen.findByText("Budget holder is the COO.")).closest(
@@ -172,9 +172,9 @@ describe("optimistic updates", () => {
     await userEvent.click(within(note).getByRole("button", { name: "Save" }));
 
     expect(await screen.findByText("Budget holder is the CFO.")).toBeVisible();
-    api.release("PATCH /api/notes/200");
+    api.release("PATCH /api/v2/notes/200");
     await waitFor(() =>
-      expect(api.callsTo("PATCH", "/api/notes/200")).toHaveLength(1),
+      expect(api.callsTo("PATCH", "/api/v2/notes/200")).toHaveLength(1),
     );
     expect(screen.getByText("Budget holder is the CFO.")).toBeVisible();
   });
@@ -183,7 +183,7 @@ describe("optimistic updates", () => {
     await renderDashboard({
       opportunities: [anOpportunity()],
       entries: [anEntry({ notes: [aNote()] })],
-      failures: { "PATCH /api/notes/200": [403, "Not yours to edit"] },
+      failures: { "PATCH /api/v2/notes/200": [403, "Not yours to edit"] },
     });
     await openTimeline("Northwind rollout");
     const note = (await screen.findByText("Budget holder is the COO.")).closest(
@@ -230,14 +230,25 @@ describe("deleting an opportunity", () => {
     expect(
       api.callsTo("POST", "/api/v2/opportunities/10/restore"),
     ).toHaveLength(1);
-    expect(api.callsTo("POST", "/api/opportunities")).toHaveLength(0);
+    // The exact path, not `callsTo`'s substring: a restore is a POST under
+    // `/api/v2/opportunities/...` too, and the point here is that undo did
+    // not re-create the card under a new id.
+    expect(
+      api.calls.filter(
+        (call) =>
+          call.method === "POST" && call.path === "/api/v2/opportunities",
+      ),
+    ).toHaveLength(0);
   });
 
   it("reports a delete the server refuses and leaves the card alone", async () => {
     await renderDashboard({
       opportunities: [anOpportunity()],
       failures: {
-        "DELETE /api/opportunities/10": [403, "Only the owner can delete this"],
+        "DELETE /api/v2/opportunities/10": [
+          403,
+          "Only the owner can delete this",
+        ],
       },
     });
     const card = (await screen.findAllByRole("article"))[0];

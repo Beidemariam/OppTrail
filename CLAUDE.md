@@ -95,33 +95,40 @@ helper modules rather than a service layer: `permissions.py`, `time_utils.py`,
 `audit_utils.py`, `timeline_utils.py`, `notification_service.py`, `ai_service.py`,
 `export_service.py`, `search.py`.
 
-### API versions
+### One API surface
 
-Two surfaces, mounted side by side in `main.py`. `/api/*` is v1 — the shapes the
-shipped frontend reads, unchanged until it moves. `/api/v2/*` is the new surface
-(`docs/ARCHITECTURE.md`, "API versioning"), carrying the two breaking changes that
-would otherwise get more expensive with every client feature built on the old ones:
+Everything a client calls is `/api/v2/*` (`docs/ARCHITECTURE.md`, "API
+versioning"). v1 carried the shapes the MVP frontend read; milestone 1.3 opened
+the v2 boundary with the two breaking changes below, milestone 2.9 ported the
+rest, moved the frontend and removed v1. `docs/ROADMAP.md`'s breaking-changes
+table scheduled that removal for the end of Phase 2.
 
-- **Pagination** (`pagination.py`). Every v2 collection read takes `?limit`
+- **Pagination** (`pagination.py`). Every collection read takes `?limit`
   (1-200, default 50) and `?cursor` and answers `{"items", "next_cursor"}`.
   Keyset, not offset: the cursor is an opaque base64 of the last row's
   `(sort value, id)`, and each query asks for `limit + 1` rows so the last page
   reports `next_cursor: null` rather than handing back a cursor that resolves to
   nothing. Every paginated `ORDER BY` therefore ends in the row id — a sort column
   alone is not unique, and a cursor over a non-unique order skips rows.
-- **Error envelope** (`errors.py`). v2 failures are
-  `{"error": {"code", "message", "fields"?}}`; v1 stays `{"detail": ...}`. The
-  split is by request path (`is_v2_path`), which is why the two error paths that
-  never reach a handler carry it themselves: the CSRF rejection in `security.py`
-  (middleware answers before routing) and `main.py`'s `/api/{path:path}` catch-all.
+- **Error envelope** (`errors.py`). Every failure is
+  `{"error": {"code", "message", "fields"?}}`. With one surface left the path
+  test (`is_api_path`) separates the API from the page routes this same process
+  serves, not one version from another — which is why the two error paths that
+  never reach a handler carry the envelope themselves: the CSRF rejection in
+  `security.py` (middleware answers before routing) and `main.py`'s
+  `/api/{path:path}` catch-all.
 
-A v2 route mirrors its v1 twin's rows, filters and permissions exactly — the
-boundary carries response shape, not behavior. Where both versions read the same
-table the SQL lives in one module-level constant (`ACCESSIBLE_OPPORTUNITIES_SQL`,
-`SHARE_ROWS_SQL`, `AUDIT_LOG_ROWS_SQL`, `NOTE_VERSION_ROWS_SQL`,
-`timeline_filters`) so the two cannot drift. `tests/test_api_v2.py` holds the
-envelope and cursor-walk tests, including the ones that assert v1 is untouched.
-Notifications is the one deliberate exception — see "Notifications" below.
+Two paths sit outside `/api/v2` on purpose: `/api/health`, an operations probe
+read by the container's `HEALTHCHECK` and `scripts/docker-smoke.sh` rather than
+by a client (**D-094**), and that catch-all.
+
+The per-table SQL constants that existed so a v2 route could not drift from its
+v1 twin (`ACCESSIBLE_OPPORTUNITIES_SQL`, `AUDIT_LOG_ROWS_SQL`,
+`NOTE_VERSION_ROWS_SQL`) are gone with the second caller; each query is written
+where it runs. `SHARE_ROWS_SQL` stays because it is still read twice, by the
+paginated list and by `fetch_share_rows`, which the two share writes use to
+return the row they touched. `tests/test_api_v2.py` holds the envelope and
+cursor-walk tests, and the parametrized guard that every v1 path now 404s.
 
 ### Request security
 
@@ -147,7 +154,7 @@ rejections too):
 `rate_limit.py` caps login and signup per source address in-process — correct
 because the app is a single process in a single container, and the one place to
 change if that stops being true. `auth.py` rotates the session on login (the
-presented session row is deleted) and `POST /api/auth/password` invalidates every
+presented session row is deleted) and `POST /api/v2/auth/password` invalidates every
 session of that user. `uploads.py` and `sanitize.py` hold the upload and HTML
 rules for the Phase 4 and Phase 3 features that will use them; each explains in
 its docstring why it exists before its feature does.
@@ -201,32 +208,30 @@ frozen in time and must not import application code;
 
 ### Notifications
 
-Two surfaces answer different questions about the same `notifications` rows,
-deliberately: `GET /api/notifications` (v1) is unread-only, exactly as the
-MVP shipped it; `GET /api/v2/notifications` (milestone 1.7) is the inbox
-rework — full history, optional `?type=` filter, keyset-paginated. This is
-the one place a v2 route does *not* mirror its v1 twin's rows (contrast
-`CLAUDE.md`'s "API versions" section) — `docs/ROADMAP.md`'s breaking-changes
-table keeps v1's shape frozen there on purpose, because marking a
-notification read used to make it disappear (`WHERE read = 0`), which is a
-client-visible behaviour change, not just a response-shape one.
+`GET /api/v2/notifications` (milestone 1.7) is the inbox: full history,
+optional `?type=` filter, keyset-paginated. v1 answered a narrower question
+from the same rows — unread-only, so marking a notification read made it
+disappear (`WHERE read = 0`) — and that was the one place a v2 route did not
+mirror its v1 twin. It went with the rest of v1 in milestone 2.9;
+`read_at IS NULL` is the same set, and a reader now keeps what they have read.
 
 - `read_at` (nullable, `NULL` = unread) is the source of truth added by
-  revision `20260920_0003_notification_history`; the older `read` column
-  stays for v1 to keep reading. `notification_service.mark_notification_read`
+  revision `20260920_0003_notification_history`. The older boolean `read`
+  column is still written but no longer read by any route (**D-095**):
+  dropping it is a migration with no client-visible effect, so it is left for
+  whichever phase next touches this table.
+  `notification_service.mark_notification_read`
   and `mark_all_notifications_read` write both columns together — via
-  `COALESCE(read_at, ...)` so a second mark-read is idempotent — so v1's
-  column cannot drift from v2's without v1's own code changing.
+  `COALESCE(read_at, ...)` so a second mark-read is idempotent — so the column
+  stays truthful for anyone reading the database directly.
 - `grouped_key` rides along unpopulated. It exists now so Phase 5's digest
   batching (§9's "3 new comments on Acme Expansion, not three emails") is a
   query change, not another migration.
-- Marking one notification read is still only a v1 route
-  (`PATCH /api/notifications/{id}/read`); v2 adds
-  `POST /api/v2/notifications/mark-all-read` since that has no v1 twin to
-  reuse. The frontend inbox panel (`app/NotificationMenu.tsx`) reads history
-  from v2 and
-  marks read through the same v1 PATCH — one endpoint, not two, since both
-  already operate on the same row.
+- Two write routes over the same rows:
+  `PATCH /api/v2/notifications/{id}/read` for one and
+  `POST /api/v2/notifications/mark-all-read` for everything. The frontend
+  inbox panel (`app/NotificationMenu.tsx`) reads the history and marks
+  through both.
 
 ### Migrations
 
@@ -345,7 +350,7 @@ edits additionally append to `note_versions` rather than overwriting.
 The same module holds the inverse, added by milestone 2.4b so the UI could stop
 confirming and start offering Undo (`docs/UX.md`): `restore_opportunity`,
 `restore_timeline_entry`, `restore_note`, `restore_comment`, behind
-`POST /api/v2/<kind>/{id}/restore` (v2-only — no v1 twin to mirror). Three
+`POST /api/v2/<kind>/{id}/restore`. Three
 things about them:
 
 - **A restore is scoped by the delete's stamp.** One cascade writes one
@@ -503,6 +508,12 @@ read and write the app makes against the query cache: the query keys, the six
 reads, and each mutation with what it invalidates. A view calls a hook; a write
 invalidates a key. Do not add a bare `apiRequest` call to a component — that is
 the pattern ADR 0005 calls blocker B1, and 2.1 is what removed the last of it.
+Four of the reads go through `fetchAll`, which walks `next_cursor` to the last
+page: the API paginates every collection, and the board's cursor, its bulk
+selection and the calendar's month are all derived from the whole filtered
+list rather than from a window of it (**D-093**). The other two ask for one
+page with an explicit limit, because an inbox and a saved-view menu are read
+from the top.
 Two things in there are worth knowing before changing them: the AI transcript is
 cache state under `["ai-conversation", id]` because it has to outlive the route
 (D-055), and the cache is dropped on *sign-in*, not sign-out, because observers
@@ -513,7 +524,8 @@ The units worth testing directly, each in its own module:
 
 - `lib/api.ts` — `apiRequest<T>()`, the only fetch wrapper
   (`credentials: "include"`, echoes the CSRF cookie on unsafe methods, throws on
-  non-2xx using v1's `detail` or v2's `error.message`).
+  non-2xx using the envelope's `error.message` — the one shape the API answers
+  with since v1 went).
 - `lib/query.ts` — `createQueryClient()`, the single TanStack Query
   configuration (no retries: `apiRequest` throws on 401 and 422 too).
 - `lib/snippet.ts` — turns a search snippet's match offsets into runs to
@@ -571,9 +583,9 @@ The units worth testing directly, each in its own module:
   under the click that focused it, between the mousedown and the mouseup. jsdom never lays anything out, so `vitest.setup.ts` stubs
   `offsetHeight`/`offsetWidth` globally — without it the virtualizer
   (correctly) treats every test's viewport as zero pixels tall and renders
-  nothing. Data stays unpaginated (`GET /api/opportunities`, D-061); this
-  only windows what gets rendered, not what gets fetched — the switch to
-  `/api/v2/opportunities`'s pagination is milestone 2.9's (D-063).
+  nothing. This only windows what gets rendered, not what gets fetched:
+  `useOpportunities` walks `GET /api/v2/opportunities` to its last page
+  (D-063 deferred that switch to 2.9, **D-093** is how 2.9 made it).
 - `app/Modal.tsx` — the dialog shell the command palette and the shortcut
   reference share — and, since 2.7, the opportunity create/edit form — on
   Radix's `Dialog` since 2.5. Radix owns the portal, the
@@ -698,8 +710,10 @@ reachable by either string, so a query for a caption the app uses twice
 one of them.
 
 The board's filtering and sorting happen **in the client**, over the list
-`GET /api/opportunities` already returns whole (D-061). That changes when the
-frontend moves onto `/api/v2/opportunities`'s pagination in 2.9 (D-063).
+`useOpportunities` holds whole — D-061 chose that, and **D-093** kept it when
+2.9 moved the read onto paginated `GET /api/v2/opportunities`, because the
+cursor, the bulk selection and the calendar's month are derived from the same
+result and none of them is a window.
 
 `lib/api-types.ts` is generated from the OpenAPI schema; never hand-edit it.
 

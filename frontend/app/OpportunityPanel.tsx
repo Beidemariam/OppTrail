@@ -173,7 +173,7 @@ function TimelineHeading({
           <a
             key={format}
             className="secondary-button"
-            href={`/api/opportunities/${opportunity.id}/export/${format}`}
+            href={`/api/v2/opportunities/${opportunity.id}/export/${format}`}
           >
             {format.toUpperCase()}
           </a>

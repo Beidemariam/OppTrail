@@ -70,13 +70,15 @@ describe("signed out", () => {
     expect(
       await screen.findByRole("heading", { name: "Opportunities" }),
     ).toBeInTheDocument();
-    expect(api.callsTo("POST", "/api/auth/signup")).toHaveLength(1);
+    expect(api.callsTo("POST", "/api/v2/auth/signup")).toHaveLength(1);
     expect(await screen.findByText("Northwind rollout")).toBeInTheDocument();
   });
 
   it("shows the API's own message when sign-in is refused", async () => {
     renderApp({
-      failures: { "POST /api/auth/login": [401, "Invalid email or password"] },
+      failures: {
+        "POST /api/v2/auth/login": [401, "Invalid email or password"],
+      },
     });
     await screen.findByRole("button", { name: "Create account" });
 
@@ -160,9 +162,9 @@ describe("the dashboard", () => {
     );
 
     await waitFor(() =>
-      expect(api.callsTo("POST", "/api/opportunities")).toHaveLength(1),
+      expect(api.callsTo("POST", "/api/v2/opportunities")).toHaveLength(1),
     );
-    expect(api.callsTo("POST", "/api/opportunities")[0].body).toMatchObject({
+    expect(api.callsTo("POST", "/api/v2/opportunities")[0].body).toMatchObject({
       name: "Contoso pilot",
       account_name: "Contoso",
       expected_close_date: null,
@@ -194,9 +196,9 @@ describe("the dashboard", () => {
     );
 
     await waitFor(() =>
-      expect(api.callsTo("POST", "/api/opportunities")).toHaveLength(1),
+      expect(api.callsTo("POST", "/api/v2/opportunities")).toHaveLength(1),
     );
-    expect(api.callsTo("POST", "/api/opportunities")[0].body).toMatchObject({
+    expect(api.callsTo("POST", "/api/v2/opportunities")[0].body).toMatchObject({
       name: "Contoso pilot",
       account_name: "Contoso",
       value: "42000",
@@ -208,7 +210,7 @@ describe("the dashboard", () => {
 
   it("surfaces a rejected create instead of clearing the form", async () => {
     await renderDashboard({
-      failures: { "POST /api/opportunities": [422, "Stage is not valid"] },
+      failures: { "POST /api/v2/opportunities": [422, "Stage is not valid"] },
     });
 
     await openOpportunityForm();
@@ -228,12 +230,12 @@ describe("the dashboard", () => {
 
     await userEvent.click(within(card).getByRole("button", { name: "Delete" }));
     await cancelConfirmation();
-    expect(api.callsTo("DELETE", "/api/opportunities/10")).toHaveLength(0);
+    expect(api.callsTo("DELETE", "/api/v2/opportunities/10")).toHaveLength(0);
 
     await userEvent.click(within(card).getByRole("button", { name: "Delete" }));
     await acceptConfirmation("Northwind rollout");
     await waitFor(() =>
-      expect(api.callsTo("DELETE", "/api/opportunities/10")).toHaveLength(1),
+      expect(api.callsTo("DELETE", "/api/v2/opportunities/10")).toHaveLength(1),
     );
     await waitFor(() =>
       expect(screen.queryByText("Northwind rollout")).not.toBeInTheDocument(),
@@ -273,11 +275,11 @@ describe("the dashboard", () => {
     await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() =>
-      expect(api.callsTo("PATCH", "/api/opportunities/10")).toHaveLength(1),
+      expect(api.callsTo("PATCH", "/api/v2/opportunities/10")).toHaveLength(1),
     );
-    expect(api.callsTo("PATCH", "/api/opportunities/10")[0].body).toMatchObject(
-      { stage: "Closed Won" },
-    );
+    expect(
+      api.callsTo("PATCH", "/api/v2/opportunities/10")[0].body,
+    ).toMatchObject({ stage: "Closed Won" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
@@ -338,12 +340,59 @@ describe("the dashboard", () => {
   it("reports an opportunity list that will not load", async () => {
     renderApp({
       user: ALEX,
-      failures: { "GET /api/opportunities": [503, "Database is unavailable"] },
+      failures: {
+        "GET /api/v2/opportunities": [503, "Database is unavailable"],
+      },
     });
 
     expect(
       await screen.findByText("Database is unavailable"),
     ).toBeInTheDocument();
+  });
+});
+
+describe("reading a paginated collection (milestone 2.9)", () => {
+  it("walks every page of the opportunity list, not just the first", async () => {
+    // `/api/v2/opportunities` is keyset-paginated, and the board needs the
+    // whole set: its keyboard cursor, its bulk selection and the calendar's
+    // month are all derived from the filtered list, not from a window of it.
+    // `useOpportunities` therefore follows `next_cursor` to the end (D-093).
+    const api = await renderDashboard({
+      pageSize: 2,
+      opportunities: [
+        anOpportunity({ id: 10, name: "Northwind rollout" }),
+        anOpportunity({ id: 11, name: "Globex renewal" }),
+        anOpportunity({ id: 12, name: "Initech expansion" }),
+      ],
+    });
+
+    expect(await screen.findByText("Initech expansion")).toBeInTheDocument();
+    expect(screen.getByText("Northwind rollout")).toBeInTheDocument();
+    expect(screen.getByText("Globex renewal")).toBeInTheDocument();
+
+    // Two pages of two, then the page that answers `next_cursor: null`.
+    const reads = api.calls.filter(
+      (call) =>
+        call.method === "GET" && call.path.startsWith("/api/v2/opportunities?"),
+    );
+    expect(reads).toHaveLength(2);
+    expect(reads[0].path).toContain("limit=200");
+    expect(reads[1].path).toContain("cursor=2");
+  });
+
+  it("stops after one request when the first page is the last", async () => {
+    const api = await renderDashboard({
+      opportunities: [anOpportunity({ id: 10, name: "Northwind rollout" })],
+    });
+    await screen.findByText("Northwind rollout");
+
+    expect(
+      api.calls.filter(
+        (call) =>
+          call.method === "GET" &&
+          call.path.startsWith("/api/v2/opportunities?"),
+      ),
+    ).toHaveLength(1);
   });
 });
 
@@ -566,9 +615,9 @@ describe("moving an opportunity between stages (milestone 2.7)", () => {
     await dragTo(card, "Proposal");
 
     await waitFor(() =>
-      expect(api.callsTo("PATCH", "/api/opportunities/10")).toHaveLength(1),
+      expect(api.callsTo("PATCH", "/api/v2/opportunities/10")).toHaveLength(1),
     );
-    expect(api.callsTo("PATCH", "/api/opportunities/10")[0].body).toEqual({
+    expect(api.callsTo("PATCH", "/api/v2/opportunities/10")[0].body).toEqual({
       stage: "Proposal",
     });
     // The stage change is the only field the drag sends, and the card is in
@@ -628,7 +677,7 @@ describe("moving an opportunity between stages (milestone 2.7)", () => {
 
     await dragTo(card, "Prospecting");
 
-    expect(api.callsTo("PATCH", "/api/opportunities/10")).toHaveLength(0);
+    expect(api.callsTo("PATCH", "/api/v2/opportunities/10")).toHaveLength(0);
   });
 
   it("offers no drag and no stage control on an opportunity the reader does not own", async () => {
@@ -655,9 +704,9 @@ describe("moving an opportunity between stages (milestone 2.7)", () => {
     );
 
     await waitFor(() =>
-      expect(api.callsTo("PATCH", "/api/opportunities/10")).toHaveLength(1),
+      expect(api.callsTo("PATCH", "/api/v2/opportunities/10")).toHaveLength(1),
     );
-    expect(api.callsTo("PATCH", "/api/opportunities/10")[0].body).toEqual({
+    expect(api.callsTo("PATCH", "/api/v2/opportunities/10")[0].body).toEqual({
       stage: "Negotiation",
     });
   });
@@ -666,7 +715,7 @@ describe("moving an opportunity between stages (milestone 2.7)", () => {
     await renderDashboard({
       opportunities: [anOpportunity({ stage: "Prospecting" })],
       failures: {
-        "PATCH /api/opportunities/10": [403, "Only the owner may do that"],
+        "PATCH /api/v2/opportunities/10": [403, "Only the owner may do that"],
       },
     });
     const card = await findCard("Northwind rollout");
@@ -710,7 +759,7 @@ describe("the list view (milestone 2.7)", () => {
 
     // One list, drawn twice: no second request, and the stage columns are
     // gone.
-    expect(api.callsTo("GET", "/api/opportunities")).toHaveLength(1);
+    expect(api.callsTo("GET", "/api/v2/opportunities")).toHaveLength(1);
     expect(
       screen.queryByRole("region", {
         name: "Opportunities grouped by stage",
@@ -775,7 +824,7 @@ describe("the list view (milestone 2.7)", () => {
     );
 
     await waitFor(() =>
-      expect(api.callsTo("PATCH", "/api/opportunities/10")).toHaveLength(1),
+      expect(api.callsTo("PATCH", "/api/v2/opportunities/10")).toHaveLength(1),
     );
   });
 
@@ -790,7 +839,7 @@ describe("the list view (milestone 2.7)", () => {
     await acceptConfirmation("Northwind rollout");
 
     await waitFor(() =>
-      expect(api.callsTo("DELETE", "/api/opportunities/10")).toHaveLength(1),
+      expect(api.callsTo("DELETE", "/api/v2/opportunities/10")).toHaveLength(1),
     );
   });
 
@@ -958,7 +1007,7 @@ describe("the table view (milestone 2.8)", () => {
     );
 
     await waitFor(() =>
-      expect(api.callsTo("PATCH", "/api/opportunities/10")).toHaveLength(1),
+      expect(api.callsTo("PATCH", "/api/v2/opportunities/10")).toHaveLength(1),
     );
   });
 
@@ -996,7 +1045,7 @@ describe("the table view (milestone 2.8)", () => {
     );
     await acceptConfirmation("Northwind rollout");
     await waitFor(() =>
-      expect(api.callsTo("DELETE", "/api/opportunities/10")).toHaveLength(1),
+      expect(api.callsTo("DELETE", "/api/v2/opportunities/10")).toHaveLength(1),
     );
   });
 
@@ -1298,7 +1347,7 @@ describe("filtering, sorting and saved views (milestone 2.2)", () => {
     // The board's filter/sort model is applied to the already-fetched list
     // (`lib/domain.ts`'s `applyOpportunityView`), so filtering never sends a
     // second request.
-    expect(api.callsTo("GET", "/api/opportunities")).toHaveLength(1);
+    expect(api.callsTo("GET", "/api/v2/opportunities")).toHaveLength(1);
   });
 
   it("filters and sorts using every control, then clears them", async () => {
@@ -1515,7 +1564,9 @@ describe("notifications", () => {
     await userEvent.click(screen.getByRole("button", { name: "Mark read" }));
 
     await waitFor(() =>
-      expect(api.callsTo("PATCH", "/api/notifications/1/read")).toHaveLength(1),
+      expect(api.callsTo("PATCH", "/api/v2/notifications/1/read")).toHaveLength(
+        1,
+      ),
     );
     // Milestone 1.7's whole point: a read notification stays in the inbox
     // (as history) instead of disappearing, unlike v1's `WHERE read = 0`.

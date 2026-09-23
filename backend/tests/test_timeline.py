@@ -12,7 +12,7 @@ def days_ago(days: int) -> str:
 
 def signup(client: TestClient, email: str, name: str) -> dict:
     response = client.post(
-        "/api/auth/signup",
+        "/api/v2/auth/signup",
         json={"email": email, "password": "password123", "name": name},
     )
     assert response.status_code == 201
@@ -21,7 +21,7 @@ def signup(client: TestClient, email: str, name: str) -> dict:
 
 def login(client: TestClient, email: str) -> None:
     response = client.post(
-        "/api/auth/login",
+        "/api/v2/auth/login",
         json={"email": email, "password": "password123"},
     )
     assert response.status_code == 200
@@ -29,7 +29,7 @@ def login(client: TestClient, email: str) -> None:
 
 def create_opportunity(client: TestClient) -> dict:
     response = client.post(
-        "/api/opportunities",
+        "/api/v2/opportunities",
         json={
             "name": "Expansion",
             "account_name": "Acme",
@@ -52,7 +52,7 @@ def create_entry(
     event_timestamp: str = "2026-09-01T10:00:00",
 ) -> dict:
     response = client.post(
-        f"/api/opportunities/{opportunity_id}/timeline",
+        f"/api/v2/opportunities/{opportunity_id}/timeline",
         json={
             "type": entry_type,
             "title": title,
@@ -82,49 +82,49 @@ def test_entry_note_comment_crud_and_note_versions(client: TestClient) -> None:
     entry = create_entry(client, opportunity["id"])
 
     note = client.post(
-        f"/api/timeline/{entry['id']}/notes",
+        f"/api/v2/timeline/{entry['id']}/notes",
         json={"body": "Follow up with pricing details"},
     )
     assert note.status_code == 201
     note_id = note.json()["id"]
 
     comment = client.post(
-        f"/api/notes/{note_id}/comments",
+        f"/api/v2/notes/{note_id}/comments",
         json={"body": "I can help with procurement context"},
     )
     assert comment.status_code == 201
     comment_id = comment.json()["id"]
 
     edited_note = client.patch(
-        f"/api/notes/{note_id}",
+        f"/api/v2/notes/{note_id}",
         json={"body": "Follow up with pricing and procurement details"},
     )
     assert edited_note.status_code == 200
     assert edited_note.json()["edited"] is True
 
-    versions = client.get(f"/api/notes/{note_id}/versions")
+    versions = client.get(f"/api/v2/notes/{note_id}/versions")
     assert versions.status_code == 200
-    assert [version["version_number"] for version in versions.json()] == [1, 2]
+    assert [version["version_number"] for version in versions.json()["items"]] == [1, 2]
 
     updated_entry = client.patch(
-        f"/api/timeline/{entry['id']}",
+        f"/api/v2/timeline/{entry['id']}",
         json={"title": "Updated discovery call", "type": "meeting"},
     )
     assert updated_entry.status_code == 200
     assert updated_entry.json()["title"] == "Updated discovery call"
 
-    timeline = client.get(f"/api/opportunities/{opportunity['id']}/timeline")
+    timeline = client.get(f"/api/v2/opportunities/{opportunity['id']}/timeline")
     assert timeline.status_code == 200
-    manual_entry = next(item for item in timeline.json()["entries"] if item["id"] == entry["id"])
+    manual_entry = next(item for item in timeline.json()["items"] if item["id"] == entry["id"])
     assert manual_entry["notes"][0]["comments"][0]["id"] == comment_id
 
-    assert client.delete(f"/api/comments/{comment_id}").status_code == 204
-    assert client.delete(f"/api/notes/{note_id}").status_code == 204
-    assert client.delete(f"/api/timeline/{entry['id']}").status_code == 204
+    assert client.delete(f"/api/v2/comments/{comment_id}").status_code == 204
+    assert client.delete(f"/api/v2/notes/{note_id}").status_code == 204
+    assert client.delete(f"/api/v2/timeline/{entry['id']}").status_code == 204
 
-    timeline_after_delete = client.get(f"/api/opportunities/{opportunity['id']}/timeline")
+    timeline_after_delete = client.get(f"/api/v2/opportunities/{opportunity['id']}/timeline")
     assert timeline_after_delete.status_code == 200
-    assert [entry["title"] for entry in timeline_after_delete.json()["entries"]] == [
+    assert [entry["title"] for entry in timeline_after_delete.json()["items"]] == [
         "Opportunity created"
     ]
 
@@ -151,24 +151,26 @@ def test_timeline_filters_keyword_type_date_and_author(client: TestClient) -> No
         event_timestamp=days_ago(30),
     )
     note = client.post(
-        f"/api/timeline/{call['id']}/notes",
+        f"/api/v2/timeline/{call['id']}/notes",
         json={"body": "Legal team has questions"},
     )
     assert note.status_code == 201
 
-    keyword = client.get(f"/api/opportunities/{opportunity['id']}/timeline?q=legal")
-    assert [entry["title"] for entry in keyword.json()["entries"]] == ["Discovery call"]
+    keyword = client.get(f"/api/v2/opportunities/{opportunity['id']}/timeline?q=legal")
+    assert [entry["title"] for entry in keyword.json()["items"]] == ["Discovery call"]
 
-    entry_type = client.get(f"/api/opportunities/{opportunity['id']}/timeline?type=email")
-    assert [entry["title"] for entry in entry_type.json()["entries"]] == ["Proposal email"]
+    entry_type = client.get(f"/api/v2/opportunities/{opportunity['id']}/timeline?type=email")
+    assert [entry["title"] for entry in entry_type.json()["items"]] == ["Proposal email"]
 
     date_range = client.get(
-        f"/api/opportunities/{opportunity['id']}/timeline?from={days_ago(45)}&to={days_ago(15)}"
+        f"/api/v2/opportunities/{opportunity['id']}/timeline?from={days_ago(45)}&to={days_ago(15)}"
     )
-    assert [entry["title"] for entry in date_range.json()["entries"]] == ["Proposal email"]
+    assert [entry["title"] for entry in date_range.json()["items"]] == ["Proposal email"]
 
-    author = client.get(f"/api/opportunities/{opportunity['id']}/timeline?author_id={owner['id']}")
-    assert sorted(entry["title"] for entry in author.json()["entries"]) == [
+    author = client.get(
+        f"/api/v2/opportunities/{opportunity['id']}/timeline?author_id={owner['id']}"
+    )
+    assert sorted(entry["title"] for entry in author.json()["items"]) == [
         "Discovery call",
         "Opportunity created",
         "Proposal email",
@@ -209,8 +211,10 @@ def test_the_three_new_entry_types_are_accepted_and_filterable(client: TestClien
         ("objection", "Pricing pushback"),
         ("competitor_intel", "Evaluating a rival vendor"),
     ):
-        response = client.get(f"/api/opportunities/{opportunity['id']}/timeline?type={entry_type}")
-        assert [entry["title"] for entry in response.json()["entries"]] == [title]
+        response = client.get(
+            f"/api/v2/opportunities/{opportunity['id']}/timeline?type={entry_type}"
+        )
+        assert [entry["title"] for entry in response.json()["items"]] == [title]
 
 
 def test_an_unrecognized_entry_type_is_rejected(client: TestClient) -> None:
@@ -218,7 +222,7 @@ def test_an_unrecognized_entry_type_is_rejected(client: TestClient) -> None:
     opportunity = create_opportunity(client)
 
     rejected = client.post(
-        f"/api/opportunities/{opportunity['id']}/timeline",
+        f"/api/v2/opportunities/{opportunity['id']}/timeline",
         json={
             "type": "carrier_pigeon",
             "title": "Not a real type",
@@ -250,8 +254,8 @@ def test_timeline_order_direction(client: TestClient) -> None:
     )
 
     def titles(query: str) -> list[str]:
-        response = client.get(f"/api/opportunities/{opportunity['id']}/timeline{query}")
-        return [entry["title"] for entry in response.json()["entries"]]
+        response = client.get(f"/api/v2/opportunities/{opportunity['id']}/timeline{query}")
+        return [entry["title"] for entry in response.json()["items"]]
 
     assert titles("") == titles("?order=asc")
     assert titles("?order=desc") == list(reversed(titles("?order=asc")))
@@ -264,15 +268,15 @@ def test_deleting_entry_soft_deletes_related_notes_and_comments(
     opportunity = create_opportunity(client)
     entry = create_entry(client, opportunity["id"])
     note = client.post(
-        f"/api/timeline/{entry['id']}/notes",
+        f"/api/v2/timeline/{entry['id']}/notes",
         json={"body": "Entry-related note"},
     ).json()
     comment = client.post(
-        f"/api/notes/{note['id']}/comments",
+        f"/api/v2/notes/{note['id']}/comments",
         json={"body": "Entry-related comment"},
     ).json()
 
-    deleted = client.delete(f"/api/timeline/{entry['id']}")
+    deleted = client.delete(f"/api/v2/timeline/{entry['id']}")
     assert deleted.status_code == 204
 
     with db_connection() as connection:
@@ -300,26 +304,26 @@ def test_deleting_entry_soft_deletes_related_notes_and_comments(
 def test_editor_can_write_and_viewer_is_read_only(client: TestClient) -> None:
     owner = signup(client, "owner@example.com", "Owner")
     opportunity = create_opportunity(client)
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     editor = signup(client, "editor@example.com", "Editor")
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
     viewer = signup(client, "viewer@example.com", "Viewer")
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     share_opportunity(opportunity["id"], editor["id"], owner["id"], "editor")
     share_opportunity(opportunity["id"], viewer["id"], owner["id"], "viewer")
 
     login(client, "editor@example.com")
     editor_entry = create_entry(client, opportunity["id"], title="Editor meeting")
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     login(client, "viewer@example.com")
-    readable = client.get(f"/api/opportunities/{opportunity['id']}/timeline")
+    readable = client.get(f"/api/v2/opportunities/{opportunity['id']}/timeline")
     assert readable.status_code == 200
 
     blocked_entry = client.post(
-        f"/api/opportunities/{opportunity['id']}/timeline",
+        f"/api/v2/opportunities/{opportunity['id']}/timeline",
         json={
             "type": "call",
             "title": "Viewer call",
@@ -330,7 +334,7 @@ def test_editor_can_write_and_viewer_is_read_only(client: TestClient) -> None:
     assert blocked_entry.status_code == 403
 
     blocked_note = client.post(
-        f"/api/timeline/{editor_entry['id']}/notes",
+        f"/api/v2/timeline/{editor_entry['id']}/notes",
         json={"body": "Viewer note should not save"},
     )
     assert blocked_note.status_code == 403
@@ -341,32 +345,32 @@ def test_comment_delete_is_author_or_owner_only(client: TestClient) -> None:
     opportunity = create_opportunity(client)
     entry = create_entry(client, opportunity["id"])
     note = client.post(
-        f"/api/timeline/{entry['id']}/notes",
+        f"/api/v2/timeline/{entry['id']}/notes",
         json={"body": "Owner note"},
     ).json()
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     editor = signup(client, "editor@example.com", "Editor")
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
     other_editor = signup(client, "other-editor@example.com", "Other Editor")
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
     share_opportunity(opportunity["id"], editor["id"], owner["id"], "editor")
     share_opportunity(opportunity["id"], other_editor["id"], owner["id"], "editor")
 
     login(client, "editor@example.com")
     comment = client.post(
-        f"/api/notes/{note['id']}/comments",
+        f"/api/v2/notes/{note['id']}/comments",
         json={"body": "Editor comment"},
     ).json()
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     login(client, "other-editor@example.com")
-    blocked = client.delete(f"/api/comments/{comment['id']}")
+    blocked = client.delete(f"/api/v2/comments/{comment['id']}")
     assert blocked.status_code == 403
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     login(client, "owner@example.com")
-    deleted = client.delete(f"/api/comments/{comment['id']}")
+    deleted = client.delete(f"/api/v2/comments/{comment['id']}")
     assert deleted.status_code == 204
 
 
@@ -383,72 +387,78 @@ def test_editor_cannot_change_another_users_note_or_entry(client: TestClient) ->
     opportunity = create_opportunity(client)
     entry = create_entry(client, opportunity["id"], title="Owner call")
     note = client.post(
-        f"/api/timeline/{entry['id']}/notes",
+        f"/api/v2/timeline/{entry['id']}/notes",
         json={"body": "Owner note"},
     ).json()
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     editor = signup(client, "editor@example.com", "Editor")
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
     share_opportunity(opportunity["id"], editor["id"], owner["id"], "editor")
 
     login(client, "editor@example.com")
-    assert client.delete(f"/api/notes/{note['id']}").status_code == 403
-    assert client.delete(f"/api/timeline/{entry['id']}").status_code == 403
-    assert client.patch(f"/api/notes/{note['id']}", json={"body": "Editor edit"}).status_code == 403
+    assert client.delete(f"/api/v2/notes/{note['id']}").status_code == 403
+    assert client.delete(f"/api/v2/timeline/{entry['id']}").status_code == 403
     assert (
-        client.patch(f"/api/timeline/{entry['id']}", json={"title": "Editor edit"}).status_code
+        client.patch(f"/api/v2/notes/{note['id']}", json={"body": "Editor edit"}).status_code == 403
+    )
+    assert (
+        client.patch(f"/api/v2/timeline/{entry['id']}", json={"title": "Editor edit"}).status_code
         == 403
     )
 
     # An editor still owns everything they create themselves.
     own_entry = create_entry(client, opportunity["id"], title="Editor call")
     own_note = client.post(
-        f"/api/timeline/{own_entry['id']}/notes",
+        f"/api/v2/timeline/{own_entry['id']}/notes",
         json={"body": "Editor note"},
     ).json()
     assert (
-        client.patch(f"/api/timeline/{own_entry['id']}", json={"title": "Edited"}).status_code
+        client.patch(f"/api/v2/timeline/{own_entry['id']}", json={"title": "Edited"}).status_code
         == 200
     )
-    assert client.patch(f"/api/notes/{own_note['id']}", json={"body": "Edited"}).status_code == 200
-    assert client.delete(f"/api/timeline/{own_entry['id']}").status_code == 204
-    client.post("/api/auth/logout")
+    assert (
+        client.patch(f"/api/v2/notes/{own_note['id']}", json={"body": "Edited"}).status_code == 200
+    )
+    assert client.delete(f"/api/v2/timeline/{own_entry['id']}").status_code == 204
+    client.post("/api/v2/auth/logout")
 
     # The owner can change or remove anything on their own opportunity.
     login(client, "owner@example.com")
-    assert client.patch(f"/api/notes/{note['id']}", json={"body": "Owner edit"}).status_code == 200
     assert (
-        client.patch(f"/api/timeline/{entry['id']}", json={"title": "Owner edit"}).status_code
+        client.patch(f"/api/v2/notes/{note['id']}", json={"body": "Owner edit"}).status_code == 200
+    )
+    assert (
+        client.patch(f"/api/v2/timeline/{entry['id']}", json={"title": "Owner edit"}).status_code
         == 200
     )
-    assert client.delete(f"/api/notes/{note['id']}").status_code == 204
-    assert client.delete(f"/api/timeline/{entry['id']}").status_code == 204
+    assert client.delete(f"/api/v2/notes/{note['id']}").status_code == 204
+    assert client.delete(f"/api/v2/timeline/{entry['id']}").status_code == 204
 
 
 def test_owner_can_edit_an_editors_entry_and_note(client: TestClient) -> None:
     owner = signup(client, "owner@example.com", "Owner")
     opportunity = create_opportunity(client)
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     editor = signup(client, "editor@example.com", "Editor")
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
     share_opportunity(opportunity["id"], editor["id"], owner["id"], "editor")
 
     login(client, "editor@example.com")
     entry = create_entry(client, opportunity["id"], title="Editor call")
     note = client.post(
-        f"/api/timeline/{entry['id']}/notes",
+        f"/api/v2/timeline/{entry['id']}/notes",
         json={"body": "Editor note"},
     ).json()
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     login(client, "owner@example.com")
-    edited_entry = client.patch(f"/api/timeline/{entry['id']}", json={"title": "Owner retitled"})
+    edited_entry = client.patch(f"/api/v2/timeline/{entry['id']}", json={"title": "Owner retitled"})
     assert edited_entry.status_code == 200
     assert edited_entry.json()["title"] == "Owner retitled"
 
-    edited_note = client.patch(f"/api/notes/{note['id']}", json={"body": "Owner rewrote this"})
+    edited_note = client.patch(f"/api/v2/notes/{note['id']}", json={"body": "Owner rewrote this"})
     assert edited_note.status_code == 200
     assert edited_note.json()["body"] == "Owner rewrote this"
 
@@ -458,28 +468,28 @@ def test_deletions_are_recorded_in_the_audit_log(client: TestClient) -> None:
     opportunity = create_opportunity(client)
     entry = create_entry(client, opportunity["id"])
     note = client.post(
-        f"/api/timeline/{entry['id']}/notes",
+        f"/api/v2/timeline/{entry['id']}/notes",
         json={"body": "Owner note"},
     ).json()
     comment = client.post(
-        f"/api/notes/{note['id']}/comments",
+        f"/api/v2/notes/{note['id']}/comments",
         json={"body": "Owner comment"},
     ).json()
 
-    assert client.delete(f"/api/comments/{comment['id']}").status_code == 204
-    assert client.delete(f"/api/notes/{note['id']}").status_code == 204
-    assert client.delete(f"/api/timeline/{entry['id']}").status_code == 204
+    assert client.delete(f"/api/v2/comments/{comment['id']}").status_code == 204
+    assert client.delete(f"/api/v2/notes/{note['id']}").status_code == 204
+    assert client.delete(f"/api/v2/timeline/{entry['id']}").status_code == 204
 
-    audit = client.get(f"/api/opportunities/{opportunity['id']}/audit-log")
+    audit = client.get(f"/api/v2/opportunities/{opportunity['id']}/audit-log")
     assert audit.status_code == 200
-    actions = [row["action"] for row in audit.json()]
+    actions = [row["action"] for row in audit.json()["items"]]
     assert actions == ["comment_deleted", "note_deleted", "timeline_entry_deleted"]
     detail = next(
-        row["detail"] for row in audit.json() if row["action"] == "timeline_entry_deleted"
+        row["detail"] for row in audit.json()["items"] if row["action"] == "timeline_entry_deleted"
     )
     assert detail["entry_id"] == entry["id"]
 
-    assert client.delete(f"/api/opportunities/{opportunity['id']}").status_code == 204
+    assert client.delete(f"/api/v2/opportunities/{opportunity['id']}").status_code == 204
     with db_connection() as connection:
         deleted = connection.execute(
             """
@@ -502,7 +512,7 @@ def test_timestamps_are_canonical_utc_and_sort_chronologically(
     earlier_today = (datetime.now(UTC) - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
     create_entry(client, opportunity["id"], title="Earlier today", event_timestamp=earlier_today)
 
-    entries = client.get(f"/api/opportunities/{opportunity['id']}/timeline").json()["entries"]
+    entries = client.get(f"/api/v2/opportunities/{opportunity['id']}/timeline").json()["items"]
     stamps = [entry["event_timestamp"] for entry in entries]
     assert all(len(stamp) == 20 and stamp.endswith("Z") for stamp in stamps)
     assert stamps == sorted(stamps)
@@ -515,8 +525,8 @@ def test_timestamps_are_canonical_utc_and_sort_chronologically(
     # old space-separated format sorted below any "T"-separated bound.
     start_of_day = datetime.now(UTC).strftime("%Y-%m-%dT00:00:00Z")
     filtered = client.get(
-        f"/api/opportunities/{opportunity['id']}/timeline?from={start_of_day}"
-    ).json()["entries"]
+        f"/api/v2/opportunities/{opportunity['id']}/timeline?from={start_of_day}"
+    ).json()["items"]
     assert "Opportunity created" in [entry["title"] for entry in filtered]
 
 
@@ -545,13 +555,13 @@ def test_invalid_timestamps_are_rejected_and_the_dashboard_stays_up(
     opportunity = create_opportunity(client)
 
     rejected = client.post(
-        f"/api/opportunities/{opportunity['id']}/timeline",
+        f"/api/v2/opportunities/{opportunity['id']}/timeline",
         json={"type": "call", "title": "Bad", "event_timestamp": "not-a-timestamp"},
     )
     assert rejected.status_code == 422
 
     rejected_date = client.post(
-        f"/api/opportunities/{opportunity['id']}/timeline",
+        f"/api/v2/opportunities/{opportunity['id']}/timeline",
         json={
             "type": "call",
             "title": "Bad follow up",
@@ -562,4 +572,4 @@ def test_invalid_timestamps_are_rejected_and_the_dashboard_stays_up(
     assert rejected_date.status_code == 422
 
     # A rejected write must not be able to take the dashboard down for anyone.
-    assert client.get("/api/opportunities").status_code == 200
+    assert client.get("/api/v2/opportunities").status_code == 200

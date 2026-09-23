@@ -58,12 +58,12 @@ test("a user without access cannot reach the agent for that opportunity", async 
     .locator(".export-actions")
     .getByRole("link", { name: "JSON" })
     .getAttribute("href");
-  const opportunityId = Number(href!.split("/")[3]);
+  const opportunityId = Number(href!.match(/\/opportunities\/(\d+)\//)![1]);
 
   await apiSignIn(request, DANA);
 
   const asked = await request.post(
-    `/api/opportunities/${opportunityId}/ai/ask`,
+    `/api/v2/opportunities/${opportunityId}/ai/ask`,
     {
       data: { question: "Summarise everything you know about this account." },
       headers: { "X-CSRF-Token": await csrfToken(request) },

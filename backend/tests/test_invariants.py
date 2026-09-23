@@ -37,7 +37,7 @@ EXPECTED_STAGES = [
 
 def signup(client: TestClient, email: str = "owner@example.com", name: str = "Owner") -> dict:
     response = client.post(
-        "/api/auth/signup",
+        "/api/v2/auth/signup",
         json={"email": email, "password": PASSWORD, "name": name},
     )
     assert response.status_code == 201, response.text
@@ -47,7 +47,7 @@ def signup(client: TestClient, email: str = "owner@example.com", name: str = "Ow
 def create_opportunity(client: TestClient, **overrides) -> dict:
     payload = {"name": "Expansion", "account_name": "Acme", "stage": "Prospecting"}
     payload.update(overrides)
-    response = client.post("/api/opportunities", json=payload)
+    response = client.post("/api/v2/opportunities", json=payload)
     assert response.status_code == 201, response.text
     return response.json()
 
@@ -60,7 +60,7 @@ def create_entry(client: TestClient, opportunity_id: int, **overrides) -> dict:
         "event_timestamp": "2026-09-04T10:00",
     }
     payload.update(overrides)
-    response = client.post(f"/api/opportunities/{opportunity_id}/timeline", json=payload)
+    response = client.post(f"/api/v2/opportunities/{opportunity_id}/timeline", json=payload)
     assert response.status_code == 201, response.text
     return response.json()
 
@@ -118,7 +118,7 @@ def test_invariant_ai_route_uses_the_read_only_connection(monkeypatch, client: T
     monkeypatch.setattr("app.routes_ai.ask_openai", lambda **kwargs: "An answer.")
 
     response = client.post(
-        f"/api/opportunities/{opportunity['id']}/ai/ask",
+        f"/api/v2/opportunities/{opportunity['id']}/ai/ask",
         json={"question": "What happened?"},
     )
 
@@ -146,20 +146,20 @@ def test_invariant_editing_a_comment_is_refused_over_http(client: TestClient) ->
     signup(client)
     opportunity = create_opportunity(client)
     entry = create_entry(client, opportunity["id"])
-    note = client.post(f"/api/timeline/{entry['id']}/notes", json={"body": "A note"}).json()
-    comment = client.post(f"/api/notes/{note['id']}/comments", json={"body": "A comment"}).json()
+    note = client.post(f"/api/v2/timeline/{entry['id']}/notes", json={"body": "A note"}).json()
+    comment = client.post(f"/api/v2/notes/{note['id']}/comments", json={"body": "A comment"}).json()
 
     for method in ("PATCH", "PUT"):
         response = client.request(
-            method, f"/api/comments/{comment['id']}", json={"body": "Rewritten"}
+            method, f"/api/v2/comments/{comment['id']}", json={"body": "Rewritten"}
         )
         assert response.status_code in {404, 405}, (
-            f"{method} /api/comments/{{id}} answered {response.status_code}; "
+            f"{method} /api/v2/comments/{{id}} answered {response.status_code}; "
             "comments are immutable (brief §2.2)"
         )
 
-    reread = client.get(f"/api/opportunities/{opportunity['id']}/timeline").json()
-    stored = reread["entries"][0]["notes"][0]["comments"][0]
+    reread = client.get(f"/api/v2/opportunities/{opportunity['id']}/timeline").json()
+    stored = reread["items"][0]["notes"][0]["comments"][0]
     assert stored["body"] == "A comment"
 
 
@@ -172,11 +172,11 @@ def test_invariant_editing_a_note_marks_it_and_keeps_the_previous_version(
     signup(client)
     opportunity = create_opportunity(client)
     entry = create_entry(client, opportunity["id"])
-    note = client.post(f"/api/timeline/{entry['id']}/notes", json={"body": "First draft"}).json()
+    note = client.post(f"/api/v2/timeline/{entry['id']}/notes", json={"body": "First draft"}).json()
 
     assert note["edited"] is False
 
-    updated = client.patch(f"/api/notes/{note['id']}", json={"body": "Second draft"})
+    updated = client.patch(f"/api/v2/notes/{note['id']}", json={"body": "Second draft"})
     assert updated.status_code == 200, updated.text
     assert updated.json()["edited"] is True
     assert updated.json()["body"] == "Second draft"
@@ -184,7 +184,7 @@ def test_invariant_editing_a_note_marks_it_and_keeps_the_previous_version(
     # `note_versions` is seeded with version 1 at creation and appended to on
     # every edit, so the whole history is present rather than only the
     # superseded text (`routes_timeline.create_note` / `update_note`).
-    versions = client.get(f"/api/notes/{note['id']}/versions").json()
+    versions = client.get(f"/api/v2/notes/{note['id']}/versions").json()["items"]
     assert [version["body"] for version in versions] == ["First draft", "Second draft"], (
         "the superseded text must survive the edit (brief §2.3)"
     )
@@ -201,13 +201,13 @@ def test_invariant_deleting_user_data_leaves_the_row_in_place(client: TestClient
     signup(client)
     opportunity = create_opportunity(client)
     entry = create_entry(client, opportunity["id"])
-    note = client.post(f"/api/timeline/{entry['id']}/notes", json={"body": "A note"}).json()
-    comment = client.post(f"/api/notes/{note['id']}/comments", json={"body": "A comment"}).json()
+    note = client.post(f"/api/v2/timeline/{entry['id']}/notes", json={"body": "A note"}).json()
+    comment = client.post(f"/api/v2/notes/{note['id']}/comments", json={"body": "A comment"}).json()
 
-    assert client.delete(f"/api/comments/{comment['id']}").status_code == 204
-    assert client.delete(f"/api/notes/{note['id']}").status_code == 204
-    assert client.delete(f"/api/timeline/{entry['id']}").status_code == 204
-    assert client.delete(f"/api/opportunities/{opportunity['id']}").status_code == 204
+    assert client.delete(f"/api/v2/comments/{comment['id']}").status_code == 204
+    assert client.delete(f"/api/v2/notes/{note['id']}").status_code == 204
+    assert client.delete(f"/api/v2/timeline/{entry['id']}").status_code == 204
+    assert client.delete(f"/api/v2/opportunities/{opportunity['id']}").status_code == 204
 
     with db_connection() as connection:
         for table, row_id in (
@@ -234,7 +234,7 @@ def test_invariant_event_timestamp_is_editable(client: TestClient) -> None:
     entry = create_entry(client, opportunity["id"])
 
     updated = client.patch(
-        f"/api/timeline/{entry['id']}", json={"event_timestamp": "2026-01-02T03:04"}
+        f"/api/v2/timeline/{entry['id']}", json={"event_timestamp": "2026-01-02T03:04"}
     )
 
     assert updated.status_code == 200, updated.text
@@ -257,19 +257,19 @@ def test_invariant_created_at_cannot_be_set_or_changed_through_any_endpoint(
     assert entry["created_at"] != forged
 
     note = client.post(
-        f"/api/timeline/{entry['id']}/notes", json={"body": "A note", "created_at": forged}
+        f"/api/v2/timeline/{entry['id']}/notes", json={"body": "A note", "created_at": forged}
     ).json()
     assert note["created_at"] != forged
 
     comment = client.post(
-        f"/api/notes/{note['id']}/comments", json={"body": "A comment", "created_at": forged}
+        f"/api/v2/notes/{note['id']}/comments", json={"body": "A comment", "created_at": forged}
     ).json()
     assert comment["created_at"] != forged
 
     updates = (
-        ("PATCH", f"/api/opportunities/{opportunity['id']}", {"stage": "Qualification"}),
-        ("PATCH", f"/api/timeline/{entry['id']}", {"title": "Renamed"}),
-        ("PATCH", f"/api/notes/{note['id']}", {"body": "Rewritten"}),
+        ("PATCH", f"/api/v2/opportunities/{opportunity['id']}", {"stage": "Qualification"}),
+        ("PATCH", f"/api/v2/timeline/{entry['id']}", {"title": "Renamed"}),
+        ("PATCH", f"/api/v2/notes/{note['id']}", {"body": "Rewritten"}),
     )
     for method, url, payload in updates:
         response = client.request(method, url, json={**payload, "created_at": forged})
@@ -298,7 +298,7 @@ def test_invariant_stage_list_is_fixed(client: TestClient) -> None:
     assert list(schemas.Stage.__args__) == EXPECTED_STAGES  # type: ignore[attr-defined]
 
     signup(client)
-    assert client.get("/api/opportunities").json()["stages"] == EXPECTED_STAGES
+    assert client.get("/api/v2/stages").json()["items"] == EXPECTED_STAGES
 
 
 def test_invariant_a_stage_outside_the_list_is_rejected(client: TestClient) -> None:
@@ -307,10 +307,12 @@ def test_invariant_a_stage_outside_the_list_is_rejected(client: TestClient) -> N
 
     for rejected in ("Discovery", "prospecting", "Closed  Won", ""):
         created = client.post(
-            "/api/opportunities",
+            "/api/v2/opportunities",
             json={"name": "New", "account_name": "Acme", "stage": rejected},
         )
         assert created.status_code == 422, f"create accepted the stage {rejected!r}"
 
-        renamed = client.patch(f"/api/opportunities/{opportunity['id']}", json={"stage": rejected})
+        renamed = client.patch(
+            f"/api/v2/opportunities/{opportunity['id']}", json={"stage": rejected}
+        )
         assert renamed.status_code == 422, f"update accepted the stage {rejected!r}"

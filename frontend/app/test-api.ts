@@ -37,6 +37,12 @@ export interface FakeApiOptions {
    * in flight, so a test that asserts one needs a request that stays there.
    */
   pending?: string[];
+  /**
+   * Split every collection read into pages of this size. Unset means one page
+   * per read, which is what nearly every test wants; a test that cares how
+   * `fetchAll` walks `next_cursor` (`lib/queries.ts`) sets it small.
+   */
+  pageSize?: number;
 }
 
 interface Opportunity {
@@ -246,6 +252,7 @@ export class FakeApi {
   savedViews: SavedView[];
   failures: Record<string, [number, string]>;
   private pending: Set<string>;
+  private pageSize: number | undefined;
   private held = new Map<
     string,
     { wait: Promise<void>; release: () => void }
@@ -275,6 +282,7 @@ export class FakeApi {
     this.savedViews = options.savedViews ?? [];
     this.failures = options.failures ?? {};
     this.pending = new Set(options.pending ?? []);
+    this.pageSize = options.pageSize;
   }
 
   /** Lets a held request finish. */
@@ -328,20 +336,25 @@ export class FakeApi {
 
     const failure = this.failures[`${method} ${path.split("?")[0]}`];
     if (failure) {
-      // v2 answers the `{"error": {...}}` envelope and v1 answers `detail`
-      // (`backend/app/errors.py`); the fake follows, so a page that reads the
-      // wrong one fails here rather than in production.
-      const body = path.startsWith("/api/v2/")
-        ? { error: { code: "error", message: failure[1] } }
-        : { detail: failure[1] };
-      return this.json(body, failure[0]);
+      // The API has one error shape (`backend/app/errors.py`), so the fake
+      // has one too; a page that reads a different one fails here rather
+      // than in production.
+      return this.json(
+        { error: { code: "error", message: failure[1] } },
+        failure[0],
+      );
     }
 
     const bare = path.split("?")[0];
-    const segments = bare.split("/").filter(Boolean);
+    // One surface since milestone 2.9, so the `/api/v2` prefix is stripped
+    // once here and every index below is the route's own.
+    const segments = bare
+      .replace(/^\/api\/v2/, "")
+      .split("/")
+      .filter(Boolean);
 
-    if (segments[1] === "v2" && segments[4] === "restore") {
-      return this.restore(segments[2], Number(segments[3]));
+    if (segments[2] === "restore") {
+      return this.restore(segments[0], Number(segments[1]));
     }
 
     if (bare === "/api/v2/opportunities/bulk" && method === "POST") {
@@ -351,12 +364,20 @@ export class FakeApi {
     if (bare === "/api/v2/search") {
       return this.searchPage(path);
     }
-    if (bare === "/api/auth/me") {
+    if (bare === "/api/v2/auth/me") {
       return this.user
         ? this.json({ user: this.user })
-        : this.json({ detail: "Authentication required" }, 401);
+        : this.json(
+            {
+              error: {
+                code: "unauthorized",
+                message: "Authentication required",
+              },
+            },
+            401,
+          );
     }
-    if (bare === "/api/auth/login" || bare === "/api/auth/signup") {
+    if (bare === "/api/v2/auth/login" || bare === "/api/v2/auth/signup") {
       this.user = this.user ?? {
         ...ALEX,
         email: body.email,
@@ -364,16 +385,9 @@ export class FakeApi {
       };
       return this.json({ user: this.user });
     }
-    if (bare === "/api/auth/logout") {
+    if (bare === "/api/v2/auth/logout") {
       this.user = null;
       return this.json({ ok: true });
-    }
-    if (bare === "/api/notifications") {
-      return this.json({
-        notifications: this.notifications
-          .filter((item) => !item.read_at)
-          .map((item) => ({ ...item, read: false })),
-      });
     }
     if (bare === "/api/v2/notifications" && method === "GET") {
       return this.notificationsPage(path);
@@ -424,11 +438,11 @@ export class FakeApi {
       this.savedViews.push(created);
       return this.json(created, 201);
     }
-    if (segments[2] === "saved-views" && method === "PATCH") {
-      const id = Number(segments[3]);
+    if (segments[0] === "saved-views" && method === "PATCH") {
+      const id = Number(segments[1]);
       const found = this.savedViews.find((view) => view.id === id);
       if (!found || found.created_by !== this.user?.id) {
-        return this.json({ detail: "Saved view not found" }, 404);
+        return this.notFound("Saved view not found");
       }
       if (body.is_default) {
         this.savedViews.forEach((view) => {
@@ -450,25 +464,25 @@ export class FakeApi {
       });
       return this.json(found);
     }
-    if (segments[2] === "saved-views" && method === "DELETE") {
-      const id = Number(segments[3]);
+    if (segments[0] === "saved-views" && method === "DELETE") {
+      const id = Number(segments[1]);
       const found = this.savedViews.find((view) => view.id === id);
       if (!found || found.created_by !== this.user?.id) {
-        return this.json({ detail: "Saved view not found" }, 404);
+        return this.notFound("Saved view not found");
       }
       this.savedViews = this.savedViews.filter((view) => view.id !== id);
       return new Response(null, { status: 204 });
     }
-    if (segments[1] === "notifications" && method === "PATCH") {
-      const id = Number(segments[2]);
+    if (segments[0] === "notifications" && method === "PATCH") {
+      const id = Number(segments[1]);
       const found = this.notifications.find((item) => item.id === id)!;
       found.read_at = found.read_at ?? new Date().toISOString();
-      return this.json({ ...found, read: true });
+      return this.json(found);
     }
-    if (bare === "/api/opportunities" && method === "GET") {
-      return this.json({ stages: [], opportunities: this.opportunities });
+    if (bare === "/api/v2/opportunities" && method === "GET") {
+      return this.page(this.opportunities, path);
     }
-    if (bare === "/api/opportunities" && method === "POST") {
+    if (bare === "/api/v2/opportunities" && method === "POST") {
       const created = anOpportunity({
         ...body,
         id: this.nextId++,
@@ -477,8 +491,8 @@ export class FakeApi {
       this.opportunities.push(created);
       return this.json(created, 201);
     }
-    if (segments[1] === "opportunities" && segments.length === 3) {
-      const id = Number(segments[2]);
+    if (segments[0] === "opportunities" && segments.length === 2) {
+      const id = Number(segments[1]);
       if (method === "PATCH") {
         const found = this.opportunities.find((item) => item.id === id)!;
         Object.assign(found, body, {
@@ -498,24 +512,24 @@ export class FakeApi {
         return new Response(null, { status: 204 });
       }
     }
-    if (segments[3] === "timeline") {
+    if (segments[2] === "timeline") {
       if (method === "GET") {
-        return this.json({ entries: this.entries });
+        return this.page(this.entries, path);
       }
       const created = anEntry({
         ...body,
         id: this.nextId++,
-        opportunity_id: Number(segments[2]),
+        opportunity_id: Number(segments[1]),
       });
       this.entries.push(created);
       return this.json(created, 201);
     }
-    if (segments[3] === "shares" || segments[3] === "audit-log") {
-      if (segments[3] === "audit-log") {
-        return this.json(this.auditLog);
+    if (segments[2] === "shares" || segments[2] === "audit-log") {
+      if (segments[2] === "audit-log") {
+        return this.page(this.auditLog, path);
       }
       if (method === "GET") {
-        return this.json({ shares: this.shares });
+        return this.page(this.shares, path);
       }
       if (method === "POST") {
         const created: Share = {
@@ -530,7 +544,7 @@ export class FakeApi {
         this.shares.push(created);
         return this.json(created, 201);
       }
-      const userId = Number(segments[4]);
+      const userId = Number(segments[3]);
       if (method === "PATCH") {
         const found = this.shares.find((item) => item.user_id === userId)!;
         found.role = body.role;
@@ -539,15 +553,15 @@ export class FakeApi {
       this.shares = this.shares.filter((item) => item.user_id !== userId);
       return new Response(null, { status: 204 });
     }
-    if (segments[3] === "ai") {
+    if (segments[2] === "ai") {
       return this.json({
         answer: `Answer to: ${body.question}`,
         referenced_entry_ids: [100],
       });
     }
-    if (segments[1] === "timeline") {
-      const entryId = Number(segments[2]);
-      if (segments[3] === "notes") {
+    if (segments[0] === "timeline") {
+      const entryId = Number(segments[1]);
+      if (segments[2] === "notes") {
         const entry = this.entries.find((item) => item.id === entryId)!;
         const created = aNote({
           id: this.nextId++,
@@ -567,13 +581,13 @@ export class FakeApi {
       this.entries = this.entries.filter((item) => item.id !== entryId);
       return new Response(null, { status: 204 });
     }
-    if (segments[1] === "notes") {
-      const noteId = Number(segments[2]);
+    if (segments[0] === "notes") {
+      const noteId = Number(segments[1]);
       const owner = this.entries.find((entry) =>
         entry.notes.some((note) => note.id === noteId),
       )!;
       const note = owner.notes.find((item) => item.id === noteId)!;
-      if (segments[3] === "comments") {
+      if (segments[2] === "comments") {
         const created = aComment({
           id: this.nextId++,
           note_id: noteId,
@@ -595,8 +609,8 @@ export class FakeApi {
       owner.notes = owner.notes.filter((item) => item.id !== noteId);
       return new Response(null, { status: 204 });
     }
-    if (segments[1] === "comments") {
-      const commentId = Number(segments[2]);
+    if (segments[0] === "comments") {
+      const commentId = Number(segments[1]);
       for (const entry of this.entries) {
         for (const note of entry.notes) {
           const found = note.comments.find((item) => item.id === commentId);
@@ -614,9 +628,38 @@ export class FakeApi {
     }
 
     return this.json(
-      { detail: `Unhandled in the fake API: ${method} ${path}` },
+      {
+        error: {
+          code: "internal_error",
+          message: `Unhandled in the fake API: ${method} ${path}`,
+        },
+      },
       500,
     );
+  }
+
+  /**
+   * The v2 collection envelope, split at `pageSize` when a test asks for it.
+   *
+   * The cursor is an offset rather than the real route's opaque base64: a
+   * client may only echo what it was handed, so what it contains is the
+   * server's business and the fake's cursor proves the same walk.
+   */
+  private page(items: unknown[], path: string): Response {
+    if (!this.pageSize) {
+      return this.json({ items, next_cursor: null });
+    }
+    const cursor = new URLSearchParams(path.split("?")[1] ?? "").get("cursor");
+    const start = cursor ? Number(cursor) : 0;
+    const end = start + this.pageSize;
+    return this.json({
+      items: items.slice(start, end),
+      next_cursor: end < items.length ? String(end) : null,
+    });
+  }
+
+  private notFound(message: string): Response {
+    return this.json({ error: { code: "not_found", message } }, 404);
   }
 
   /**

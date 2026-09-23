@@ -106,17 +106,17 @@ def test_client_key_falls_back_when_the_transport_reports_no_peer() -> None:
 
 
 def test_login_is_rate_limited(client: TestClient, tight_limit: None) -> None:
-    client.post("/api/auth/signup", json=SIGNUP)
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/signup", json=SIGNUP)
+    client.post("/api/v2/auth/logout")
     credentials = {"email": SIGNUP["email"], "password": "wrong-password"}
 
     for _ in range(3):
-        assert client.post("/api/auth/login", json=credentials).status_code == 401
+        assert client.post("/api/v2/auth/login", json=credentials).status_code == 401
 
-    blocked = client.post("/api/auth/login", json=credentials)
+    blocked = client.post("/api/v2/auth/login", json=credentials)
 
     assert blocked.status_code == 429
-    assert blocked.json()["detail"] == "Too many attempts. Try again later."
+    assert blocked.json()["error"]["message"] == "Too many attempts. Try again later."
     assert "Retry-After" in blocked.headers
 
 
@@ -125,18 +125,18 @@ def test_signup_is_rate_limited_independently_of_login(
 ) -> None:
     for index in range(3):
         response = client.post(
-            "/api/auth/signup",
+            "/api/v2/auth/signup",
             json={**SIGNUP, "email": f"user{index}@example.com"},
         )
         assert response.status_code == 201
-        client.post("/api/auth/logout")
+        client.post("/api/v2/auth/logout")
 
-    blocked = client.post("/api/auth/signup", json={**SIGNUP, "email": "user4@example.com"})
+    blocked = client.post("/api/v2/auth/signup", json={**SIGNUP, "email": "user4@example.com"})
     assert blocked.status_code == 429
 
     # The login budget is untouched by the signup flood.
     allowed = client.post(
-        "/api/auth/login",
+        "/api/v2/auth/login",
         json={"email": "user0@example.com", "password": SIGNUP["password"]},
     )
     assert allowed.status_code == 200
@@ -149,15 +149,15 @@ def test_the_limit_is_checked_before_the_password_is_verified(
     the account but not the CPU, and the endpoint stays a denial-of-service
     amplifier.
     """
-    client.post("/api/auth/signup", json=SIGNUP)
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/signup", json=SIGNUP)
+    client.post("/api/v2/auth/logout")
     credentials = {"email": SIGNUP["email"], "password": "wrong-password"}
     for _ in range(3):
-        client.post("/api/auth/login", json=credentials)
+        client.post("/api/v2/auth/login", json=credentials)
 
     def fail_if_called(*args: object, **kwargs: object) -> bool:
         raise AssertionError("password verification ran for a rate-limited request")
 
     monkeypatch.setattr("app.routes_auth.verify_password", fail_if_called)
 
-    assert client.post("/api/auth/login", json=credentials).status_code == 429
+    assert client.post("/api/v2/auth/login", json=credentials).status_code == 429

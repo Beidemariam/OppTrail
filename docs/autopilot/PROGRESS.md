@@ -2543,27 +2543,121 @@ over the same filters; saved views in the sidebar; ⌘K to jump anywhere.
   items (E2E, audits, Docker) were not re-run for a two-file frontend fix with
   no new route, no schema change and no new E2E journey; nothing in this
   milestone touches what they cover.
-- [ ] 2.9 Finish the `/api/v2` migration and remove v1 (**D-033**, ruled by
+- [x] 2.9 Finish the `/api/v2` migration and remove v1 (**D-033**, ruled by
       the human 2026-09-17). Milestone 1.3 moved only the collection reads and
       the error envelope to v2 — the mutations and single-resource reads had no
       shape change to justify mirroring them — but `docs/ROADMAP.md`'s
       breaking-changes table says v1 is removed at the end of Phase 2, and no
       milestone scheduled the port that removal requires. This is that
-      milestone; the table stands as written.
-      - Port the remaining endpoints to `/api/v2`: every mutation and
-        single-resource read still served only under `/api/*`.
-      - Move the frontend onto v2. It still calls v1 paths through
-        `apiRequest`, so this lands in the same files 2.1 decomposes — which
-        is why it belongs in this phase rather than later, once those files
-        have been restructured around v1's shapes.
-      - Remove v1, including the per-table shared SQL constants 1.3 introduced
-        to keep the two versions from drifting; with v1 gone they collapse back
-        to one caller.
-      - Regenerate `frontend/lib/api-types.ts` and update the authorization
-        matrix, which currently carries entries for both surfaces. The
-        registry guard should fail first on the removed v1 routes.
-      - Confirm no v1 path survives: `grep -rn '\"/api/' backend/app` should
-        return only `/api/v2` routes and the catch-all in `main.py`.
+      milestone; the table stands as written. — **DONE**
+
+  - [x] **Every endpoint is under `/api/v2`.** The ported routes are the
+        twenty-four the MVP frontend called and nothing else: the four auth
+        routes, the opportunity create/read/update/delete, the three share
+        writes, the timeline create/update/delete, note create/update/delete,
+        comment create/delete, the three exports, the AI ask, and mark-one-read.
+        Each kept its rows, its permissions and its status codes exactly; the
+        only thing that moved is the path, and — where a v2 twin already
+        existed — the v1 duplicate was deleted rather than renamed. Each
+        router now has one `router` rather than a `router`/`v2_router` pair,
+        so `main.py`'s include list halved.
+  - [x] **v1 is gone.** `grep -rn '"/api/' backend/app` returns the catch-all
+        in `main.py`, `/api/health` and one docstring — nothing else
+        (**D-094** records why health stays unversioned). The guard is
+        `tests/test_v1_paths_are_gone`, parametrized over all twenty-four
+        paths: each answers 404, in the envelope, to a signed-in caller.
+        Confirmed to fail first — it passes only because the routes are
+        actually absent, and reverting any one router's prefix fails its row.
+  - [x] **The shared SQL constants collapsed** (this milestone's own line).
+        `ACCESSIBLE_OPPORTUNITIES_SQL`, `AUDIT_LOG_ROWS_SQL` and
+        `NOTE_VERSION_ROWS_SQL` existed so a v2 route could not drift from
+        its v1 twin; each had one caller left and is now written where it
+        runs. `SHARE_ROWS_SQL` stays — it is still read twice, by the
+        paginated list and by `fetch_share_rows`, which the two share writes
+        use to return the row they touched. `timeline_filters` stays a
+        function for the same reason it always should have been one: it is
+        sixty lines of `WHERE`, and inlining it into the route would be worse
+        than the duplication it was guarding against.
+  - [x] **One error shape.** `errors.py`'s `is_v2_path` became `is_api_path`:
+        with no second version there is no version to choose between, and the
+        test that remains is "is this the API, or one of the page routes this
+        same process serves". `security.py`'s CSRF rejection and `main.py`'s
+        catch-all follow. `lib/api.ts` dropped its `detail` branch, and
+        `test_the_api_has_one_error_shape` pins the three failures that reach
+        a client by different routes — a handler's 404, the catch-all's, and
+        the pre-routing CSRF 403.
+  - [x] **The frontend moved.** Every path in `lib/queries.ts` is v2, and the
+        four reads that want a whole collection — the opportunity list, a
+        timeline, a share list, an audit log — go through one new function,
+        `fetchAll`, which follows `next_cursor` to the last page. That is
+        **D-093**, the decision D-061 and D-063 both pointed at this
+        milestone: the predicate stays in the client because the board's
+        keyboard cursor, its bulk selection and the calendar's month are all
+        derived from the whole filtered set rather than from a window of it,
+        and moving it into SQL is a view-layer redesign this milestone's
+        scope does not name. Marked `needs human review: Y`.
+  - [x] **Schemas that only v1 needed are gone**: `OpportunityListResponse`,
+        `TimelineResponse`, `ShareListResponse`, `NotificationListResponse`
+        and the boolean-`read` `NotificationPublic`. `NotificationPublicV2`
+        lost its suffix — there is no second version to tell it from — which
+        is a rename through the generated types, `lib/domain.ts` and
+        `lib/notifications.ts`. The `notifications.read` **column** stays and
+        is still written (**D-095**): dropping it is a destructive migration
+        with no client-visible effect, so it is left for the phase that next
+        touches that table.
+  - [x] **Behaviour that genuinely changed, once.** v1's `GET /api/notifications`
+        was unread-only, and `CLAUDE.md` documented it as the one place a v2
+        route deliberately did not mirror its twin. Removing v1 removes that
+        read; `read_at IS NULL` is the same set, and marking one read no
+        longer makes it disappear. Two backend assertions described the old
+        behaviour and were rewritten to the new one rather than deleted, with
+        the reason in the test body (brief §6.5 allows an expectation to
+        change when it is genuinely wrong — here it described a surface the
+        roadmap scheduled for removal). No other test's expectation was
+        weakened: the rest of the suite moved paths and response envelopes
+        only.
+  - [x] **Regenerated `frontend/lib/api-types.ts`** (`make generate-client`;
+        `--check` is in the gate). The authorization matrix needed no manual
+        curation beyond the path move — `test_every_endpoint_has_a_matrix_entry`
+        checks both directions, so the fact that it passes is the proof that
+        MATRIX describes exactly the routes the app now serves and no removed
+        one.
+  - [x] Tests: 305 → 324 backend (the 24-way v1-removal guard, the one-error-
+        shape test, and a new `test_the_envelope_is_the_api_s_and_not_the_whole_server_s`
+        covering the non-API arm of `is_api_path`); 393 → 394 frontend (two
+        new `fetchAll` walk tests, one removed — `lib/api.test.ts`'s
+        "detail is a structure rather than a sentence" described FastAPI's
+        422 list, which no endpoint answers any more). The paging guard,
+        `walks every page of the opportunity list, not just the first`, was
+        confirmed to fail first: stubbing `cursor = null` after the first
+        page leaves the third opportunity unrendered. E2E unchanged at 49 —
+        no new journey, and the three specs that call the API directly moved
+        paths and stopped reading the opportunity id out of a fixed path
+        segment (it shifted by one).
+  - [x] Docs: `CLAUDE.md`'s "API versions" is now "One API surface";
+        `docs/ARCHITECTURE.md`'s versioning and error-shape sections say what
+        happened rather than what will; `docs/PLAN.md`'s API surface is
+        rewritten as the single v2 list it now is. `scripts/docker-smoke.sh`
+        and `backend/tools/seed.py` follow the new paths.
+
+  Gate: `make check` green in full (ruff, ruff format, mypy, eslint, tsc,
+  prettier, 324 backend tests at 97.13% combined coverage, 394 frontend tests
+  at 96.90/90.20/95.59/96.86 against the 96/96/95/89 thresholds, contract
+  check clean, 49 E2E with axe clean, pip-audit, npm audit). Docker build and
+  smoke test remain the host's half of the split gate.
+
+  Backend coverage moved 97.47% → 97.13%. The drop is `errors.py`: two of the
+  three `is_api_path` arms (a validation error and an unhandled exception on a
+  *non*-API path) are no longer reachable by request, because the only
+  non-API route is `serve_frontend`, which validates nothing and returns
+  rather than raises. The third arm is covered by the new test. Both remain
+  well above brief §6.2's floors, and no module with a 95% branch floor
+  (auth, permissions, soft delete, audit, AI) moved.
+
+  Not in this milestone, deliberately: server-side filtering of the
+  opportunity list (**D-093**, needs human review); dropping the
+  `notifications.read` column (**D-095**); edit history and its screen
+  (2.10); editing in place (2.11).
 
 - [ ] 2.10 Edit history for all user-editable content, with a screen
       (**AGENTS.md invariant 8** and v2 scope item 15, added 2026-09-20 after a

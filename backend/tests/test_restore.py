@@ -17,7 +17,7 @@ from app.database import db_connection
 
 def signup(client: TestClient, email: str, name: str) -> dict:
     response = client.post(
-        "/api/auth/signup",
+        "/api/v2/auth/signup",
         json={"email": email, "password": "password123", "name": name},
     )
     assert response.status_code == 201
@@ -27,7 +27,7 @@ def signup(client: TestClient, email: str, name: str) -> dict:
 def login(client: TestClient, email: str) -> None:
     assert (
         client.post(
-            "/api/auth/login",
+            "/api/v2/auth/login",
             json={"email": email, "password": "password123"},
         ).status_code
         == 200
@@ -36,7 +36,7 @@ def login(client: TestClient, email: str) -> None:
 
 def create_opportunity(client: TestClient, name: str = "Expansion") -> dict:
     response = client.post(
-        "/api/opportunities",
+        "/api/v2/opportunities",
         json={
             "name": name,
             "account_name": "Acme",
@@ -51,7 +51,7 @@ def create_opportunity(client: TestClient, name: str = "Expansion") -> dict:
 
 def create_entry(client: TestClient, opportunity_id: int, title: str = "Discovery call") -> dict:
     response = client.post(
-        f"/api/opportunities/{opportunity_id}/timeline",
+        f"/api/v2/opportunities/{opportunity_id}/timeline",
         json={
             "type": "call",
             "title": title,
@@ -64,13 +64,13 @@ def create_entry(client: TestClient, opportunity_id: int, title: str = "Discover
 
 
 def create_note(client: TestClient, entry_id: int, body: str = "Follow up in a week") -> dict:
-    response = client.post(f"/api/timeline/{entry_id}/notes", json={"body": body})
+    response = client.post(f"/api/v2/timeline/{entry_id}/notes", json={"body": body})
     assert response.status_code == 201
     return response.json()
 
 
 def create_comment(client: TestClient, note_id: int, body: str = "Agreed") -> dict:
-    response = client.post(f"/api/notes/{note_id}/comments", json={"body": body})
+    response = client.post(f"/api/v2/notes/{note_id}/comments", json={"body": body})
     assert response.status_code == 201
     return response.json()
 
@@ -105,9 +105,9 @@ def share_opportunity(opportunity_id: int, user_id: int, invited_by: int, role: 
 
 
 def timeline(client: TestClient, opportunity_id: int) -> list[dict]:
-    response = client.get(f"/api/opportunities/{opportunity_id}/timeline")
+    response = client.get(f"/api/v2/opportunities/{opportunity_id}/timeline")
     assert response.status_code == 200
-    entries: list[dict] = response.json()["entries"]
+    entries: list[dict] = response.json()["items"]
     return entries
 
 
@@ -119,9 +119,9 @@ def find_entry(client: TestClient, opportunity_id: int, entry_id: int) -> dict |
 
 
 def audit_actions(client: TestClient, opportunity_id: int) -> list[str]:
-    response = client.get(f"/api/opportunities/{opportunity_id}/audit-log")
+    response = client.get(f"/api/v2/opportunities/{opportunity_id}/audit-log")
     assert response.status_code == 200
-    return [row["action"] for row in response.json()]
+    return [row["action"] for row in response.json()["items"]]
 
 
 def test_restoring_an_entry_brings_back_the_notes_that_delete_took(client: TestClient) -> None:
@@ -134,10 +134,10 @@ def test_restoring_an_entry_brings_back_the_notes_that_delete_took(client: TestC
     # Deleted on its own first, an hour of work before the entry went. The
     # entry's restore must not resurrect it.
     separately_deleted = create_note(client, entry["id"], "Already gone")
-    assert client.delete(f"/api/notes/{separately_deleted['id']}").status_code == 204
+    assert client.delete(f"/api/v2/notes/{separately_deleted['id']}").status_code == 204
     backdate_delete("notes", separately_deleted["id"])
 
-    assert client.delete(f"/api/timeline/{entry['id']}").status_code == 204
+    assert client.delete(f"/api/v2/timeline/{entry['id']}").status_code == 204
     assert find_entry(client, opportunity["id"], entry["id"]) is None
 
     assert client.post(f"/api/v2/timeline/{entry['id']}/restore").status_code == 204, (
@@ -159,7 +159,7 @@ def test_restoring_a_note_brings_back_its_comments(client: TestClient) -> None:
     note = create_note(client, entry["id"])
     comment = create_comment(client, note["id"])
 
-    assert client.delete(f"/api/notes/{note['id']}").status_code == 204
+    assert client.delete(f"/api/v2/notes/{note['id']}").status_code == 204
     assert timeline(client, opportunity["id"])[-1]["notes"] == []
 
     assert client.post(f"/api/v2/notes/{note['id']}/restore").status_code == 204
@@ -176,7 +176,7 @@ def test_restoring_a_comment_puts_it_back_under_its_note(client: TestClient) -> 
     note = create_note(client, entry["id"])
     comment = create_comment(client, note["id"])
 
-    assert client.delete(f"/api/comments/{comment['id']}").status_code == 204
+    assert client.delete(f"/api/v2/comments/{comment['id']}").status_code == 204
     assert client.post(f"/api/v2/comments/{comment['id']}/restore").status_code == 204
 
     restored = find_entry(client, opportunity["id"], entry["id"])
@@ -195,19 +195,19 @@ def test_restoring_an_opportunity_brings_back_its_timeline_and_shares(
     entry = create_entry(client, opportunity["id"])
     note = create_note(client, entry["id"])
 
-    assert client.delete(f"/api/opportunities/{opportunity['id']}").status_code == 204
-    assert client.get(f"/api/opportunities/{opportunity['id']}").status_code == 404
+    assert client.delete(f"/api/v2/opportunities/{opportunity['id']}").status_code == 204
+    assert client.get(f"/api/v2/opportunities/{opportunity['id']}").status_code == 404
 
     assert client.post(f"/api/v2/opportunities/{opportunity['id']}/restore").status_code == 204
 
-    assert client.get(f"/api/opportunities/{opportunity['id']}").status_code == 200
+    assert client.get(f"/api/v2/opportunities/{opportunity['id']}").status_code == 200
     restored = find_entry(client, opportunity["id"], entry["id"])
     assert restored is not None
     assert [item["id"] for item in restored["notes"]] == [note["id"]]
 
     # The share came back with it, so the colleague can read the record again.
     login(client, "editor@example.com")
-    assert client.get(f"/api/opportunities/{opportunity['id']}").status_code == 200
+    assert client.get(f"/api/v2/opportunities/{opportunity['id']}").status_code == 200
 
 
 def test_restoring_an_opportunity_leaves_an_earlier_delete_alone(client: TestClient) -> None:
@@ -215,10 +215,10 @@ def test_restoring_an_opportunity_leaves_an_earlier_delete_alone(client: TestCli
     opportunity = create_opportunity(client)
     create_entry(client, opportunity["id"], "Kept")
     dropped = create_entry(client, opportunity["id"], "Dropped earlier")
-    assert client.delete(f"/api/timeline/{dropped['id']}").status_code == 204
+    assert client.delete(f"/api/v2/timeline/{dropped['id']}").status_code == 204
     backdate_delete("timeline_entries", dropped["id"])
 
-    assert client.delete(f"/api/opportunities/{opportunity['id']}").status_code == 204
+    assert client.delete(f"/api/v2/opportunities/{opportunity['id']}").status_code == 204
     assert client.post(f"/api/v2/opportunities/{opportunity['id']}/restore").status_code == 204
 
     titles = [entry["title"] for entry in timeline(client, opportunity["id"])]
@@ -233,11 +233,11 @@ def test_restore_is_recorded_in_the_audit_log(client: TestClient) -> None:
     note = create_note(client, entry["id"])
     comment = create_comment(client, note["id"])
 
-    assert client.delete(f"/api/comments/{comment['id']}").status_code == 204
+    assert client.delete(f"/api/v2/comments/{comment['id']}").status_code == 204
     assert client.post(f"/api/v2/comments/{comment['id']}/restore").status_code == 204
-    assert client.delete(f"/api/notes/{note['id']}").status_code == 204
+    assert client.delete(f"/api/v2/notes/{note['id']}").status_code == 204
     assert client.post(f"/api/v2/notes/{note['id']}/restore").status_code == 204
-    assert client.delete(f"/api/timeline/{entry['id']}").status_code == 204
+    assert client.delete(f"/api/v2/timeline/{entry['id']}").status_code == 204
     assert client.post(f"/api/v2/timeline/{entry['id']}/restore").status_code == 204
 
     # Undo adds a row rather than removing the delete's: the log is the
@@ -251,7 +251,9 @@ def test_restore_is_recorded_in_the_audit_log(client: TestClient) -> None:
         "timeline_entry_restored",
     ]
 
-    detail = client.get(f"/api/opportunities/{opportunity['id']}/audit-log").json()[-1]["detail"]
+    detail = client.get(f"/api/v2/opportunities/{opportunity['id']}/audit-log").json()["items"][-1][
+        "detail"
+    ]
     assert detail["entry_id"] == entry["id"]
     assert detail["title"] == entry["title"]
 
@@ -267,7 +269,7 @@ def test_restored_content_is_searchable_again(client: TestClient) -> None:
         return len(response.json()["items"])
 
     assert hits() == 1
-    assert client.delete(f"/api/timeline/{entry['id']}").status_code == 204
+    assert client.delete(f"/api/v2/timeline/{entry['id']}").status_code == 204
     assert hits() == 0, "a deleted entry leaves the index"
     assert client.post(f"/api/v2/timeline/{entry['id']}/restore").status_code == 204
     assert hits() == 1, "and the restore trigger puts it back"
@@ -278,7 +280,7 @@ def test_restoring_twice_is_not_found_the_second_time(client: TestClient) -> Non
     opportunity = create_opportunity(client)
     entry = create_entry(client, opportunity["id"])
 
-    assert client.delete(f"/api/timeline/{entry['id']}").status_code == 204
+    assert client.delete(f"/api/v2/timeline/{entry['id']}").status_code == 204
     assert client.post(f"/api/v2/timeline/{entry['id']}/restore").status_code == 204
 
     # Nothing is deleted any more, so there is nothing to restore. Same answer
@@ -293,7 +295,7 @@ def test_a_child_cannot_be_restored_while_its_parent_is_deleted(client: TestClie
     entry = create_entry(client, opportunity["id"])
     note = create_note(client, entry["id"])
 
-    assert client.delete(f"/api/timeline/{entry['id']}").status_code == 204
+    assert client.delete(f"/api/v2/timeline/{entry['id']}").status_code == 204
 
     # Restoring the note alone would put a row back into a tree nobody can
     # read, so the only way back is through the entry's own restore.
@@ -315,7 +317,7 @@ def test_restore_follows_the_same_rule_as_delete(client: TestClient) -> None:
     # An entry the editor wrote, deleted by the editor.
     login(client, "editor@example.com")
     entry = create_entry(client, opportunity["id"], "Editor's call")
-    assert client.delete(f"/api/timeline/{entry['id']}").status_code == 204
+    assert client.delete(f"/api/v2/timeline/{entry['id']}").status_code == 204
 
     login(client, "outsider@example.com")
     assert client.post(f"/api/v2/timeline/{entry['id']}/restore").status_code == 404
@@ -330,7 +332,7 @@ def test_restore_follows_the_same_rule_as_delete(client: TestClient) -> None:
 
     # A colleague's item is not the editor's to restore, either.
     owned_entry = create_entry(client, opportunity["id"], "Owner's call")
-    assert client.delete(f"/api/timeline/{owned_entry['id']}").status_code == 204
+    assert client.delete(f"/api/v2/timeline/{owned_entry['id']}").status_code == 204
     login(client, "editor@example.com")
     assert client.post(f"/api/v2/timeline/{owned_entry['id']}/restore").status_code == 403
 
@@ -341,7 +343,7 @@ def test_only_the_owner_can_restore_an_opportunity(client: TestClient) -> None:
     login(client, "owner@example.com")
     opportunity = create_opportunity(client)
     share_opportunity(opportunity["id"], editor["id"], owner["id"], "editor")
-    assert client.delete(f"/api/opportunities/{opportunity['id']}").status_code == 204
+    assert client.delete(f"/api/v2/opportunities/{opportunity['id']}").status_code == 204
 
     # A deleted record leaks nothing, not even to the colleague who could read
     # it an hour ago: 404, not 403.
@@ -356,8 +358,8 @@ def test_restore_needs_a_session(client: TestClient) -> None:
     signup(client, "owner@example.com", "Owner")
     opportunity = create_opportunity(client)
     entry = create_entry(client, opportunity["id"])
-    assert client.delete(f"/api/timeline/{entry['id']}").status_code == 204
-    assert client.post("/api/auth/logout").status_code == 200
+    assert client.delete(f"/api/v2/timeline/{entry['id']}").status_code == 204
+    assert client.post("/api/v2/auth/logout").status_code == 200
 
     response = client.post(f"/api/v2/timeline/{entry['id']}/restore")
     assert response.status_code == 401

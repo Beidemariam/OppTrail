@@ -5,7 +5,7 @@ from app.database import db_connection
 
 def signup(client: TestClient, email: str, name: str) -> None:
     response = client.post(
-        "/api/auth/signup",
+        "/api/v2/auth/signup",
         json={"email": email, "password": "password123", "name": name},
     )
     assert response.status_code == 201
@@ -13,7 +13,7 @@ def signup(client: TestClient, email: str, name: str) -> None:
 
 def login(client: TestClient, email: str) -> None:
     response = client.post(
-        "/api/auth/login",
+        "/api/v2/auth/login",
         json={"email": email, "password": "password123"},
     )
     assert response.status_code == 200
@@ -21,7 +21,7 @@ def login(client: TestClient, email: str) -> None:
 
 def create_opportunity(client: TestClient) -> dict:
     response = client.post(
-        "/api/opportunities",
+        "/api/v2/opportunities",
         json={
             "name": "Expansion",
             "account_name": "Acme",
@@ -45,34 +45,34 @@ def test_owner_can_create_list_get_update_and_delete_opportunity(
     assert opportunity["currency"] == "USD"
     assert opportunity["stage"] == "Prospecting"
 
-    listed = client.get("/api/opportunities")
+    listed = client.get("/api/v2/opportunities")
     assert listed.status_code == 200
-    assert listed.json()["stages"][0] == "Prospecting"
-    assert [item["id"] for item in listed.json()["opportunities"]] == [opportunity["id"]]
+    assert [item["id"] for item in listed.json()["items"]] == [opportunity["id"]]
+    assert client.get("/api/v2/stages").json()["items"][0] == "Prospecting"
 
-    fetched = client.get(f"/api/opportunities/{opportunity['id']}")
+    fetched = client.get(f"/api/v2/opportunities/{opportunity['id']}")
     assert fetched.status_code == 200
     assert fetched.json()["account_name"] == "Acme"
 
     updated = client.patch(
-        f"/api/opportunities/{opportunity['id']}",
+        f"/api/v2/opportunities/{opportunity['id']}",
         json={"stage": "Qualification", "value": "30000"},
     )
     assert updated.status_code == 200
     assert updated.json()["stage"] == "Qualification"
     assert updated.json()["value"] == "30000"
 
-    timeline = client.get(f"/api/opportunities/{opportunity['id']}/timeline")
+    timeline = client.get(f"/api/v2/opportunities/{opportunity['id']}/timeline")
     assert timeline.status_code == 200
-    system_entries = timeline.json()["entries"]
+    system_entries = timeline.json()["items"]
     assert [entry["title"] for entry in system_entries] == [
         "Opportunity created",
         "Stage changed to Qualification",
     ]
     assert all(entry["system_generated"] for entry in system_entries)
-    assert client.delete(f"/api/timeline/{system_entries[0]['id']}").status_code == 403
+    assert client.delete(f"/api/v2/timeline/{system_entries[0]['id']}").status_code == 403
 
-    deleted = client.delete(f"/api/opportunities/{opportunity['id']}")
+    deleted = client.delete(f"/api/v2/opportunities/{opportunity['id']}")
     assert deleted.status_code == 204
     with db_connection() as connection:
         active_timeline_rows = connection.execute(
@@ -85,7 +85,7 @@ def test_owner_can_create_list_get_update_and_delete_opportunity(
         ).fetchone()["count"]
     assert active_timeline_rows == 0
 
-    missing = client.get(f"/api/opportunities/{opportunity['id']}")
+    missing = client.get(f"/api/v2/opportunities/{opportunity['id']}")
     assert missing.status_code == 404
 
 
@@ -103,7 +103,7 @@ def test_a_stage_only_update_logs_the_change_and_leaves_the_rest_alone(
     opportunity = create_opportunity(client)
 
     moved = client.patch(
-        f"/api/opportunities/{opportunity['id']}",
+        f"/api/v2/opportunities/{opportunity['id']}",
         json={"stage": "Proposal"},
     )
     assert moved.status_code == 200
@@ -112,10 +112,8 @@ def test_a_stage_only_update_logs_the_change_and_leaves_the_rest_alone(
     assert moved.json()["name"] == opportunity["name"]
     assert moved.json()["expected_close_date"] == opportunity["expected_close_date"]
 
-    timeline = client.get(f"/api/opportunities/{opportunity['id']}/timeline")
-    stage_changes = [
-        entry for entry in timeline.json()["entries"] if entry["type"] == "stage_change"
-    ]
+    timeline = client.get(f"/api/v2/opportunities/{opportunity['id']}/timeline")
+    stage_changes = [entry for entry in timeline.json()["items"] if entry["type"] == "stage_change"]
     assert [entry["title"] for entry in stage_changes] == ["Stage changed to Proposal"]
     assert stage_changes[0]["body"] == "Stage changed from Prospecting to Proposal."
     assert stage_changes[0]["system_generated"]
@@ -124,25 +122,25 @@ def test_a_stage_only_update_logs_the_change_and_leaves_the_rest_alone(
 def test_non_owner_cannot_view_or_mutate_opportunity(client: TestClient) -> None:
     signup(client, "owner@example.com", "Owner")
     opportunity = create_opportunity(client)
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     signup(client, "other@example.com", "Other")
 
-    fetched = client.get(f"/api/opportunities/{opportunity['id']}")
+    fetched = client.get(f"/api/v2/opportunities/{opportunity['id']}")
     assert fetched.status_code == 404
 
     updated = client.patch(
-        f"/api/opportunities/{opportunity['id']}",
+        f"/api/v2/opportunities/{opportunity['id']}",
         json={"stage": "Qualification"},
     )
     assert updated.status_code == 404
 
-    deleted = client.delete(f"/api/opportunities/{opportunity['id']}")
+    deleted = client.delete(f"/api/v2/opportunities/{opportunity['id']}")
     assert deleted.status_code == 404
 
-    listed = client.get("/api/opportunities")
+    listed = client.get("/api/v2/opportunities")
     assert listed.status_code == 200
-    assert listed.json()["opportunities"] == []
+    assert listed.json()["items"] == []
 
 
 def test_shared_editor_can_view_but_not_mutate_opportunity(client: TestClient) -> None:
@@ -158,30 +156,30 @@ def test_shared_editor_can_view_but_not_mutate_opportunity(client: TestClient) -
     """
     signup(client, "owner@example.com", "Owner")
     opportunity = create_opportunity(client)
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     signup(client, "editor@example.com", "Editor")
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     login(client, "owner@example.com")
     added = client.post(
-        f"/api/opportunities/{opportunity['id']}/shares",
+        f"/api/v2/opportunities/{opportunity['id']}/shares",
         json={"email": "editor@example.com", "role": "editor"},
     )
     assert added.status_code == 201
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     login(client, "editor@example.com")
 
-    fetched = client.get(f"/api/opportunities/{opportunity['id']}")
+    fetched = client.get(f"/api/v2/opportunities/{opportunity['id']}")
     assert fetched.status_code == 200
     assert fetched.json()["current_user_role"] == "editor"
 
     updated = client.patch(
-        f"/api/opportunities/{opportunity['id']}",
+        f"/api/v2/opportunities/{opportunity['id']}",
         json={"stage": "Qualification"},
     )
     assert updated.status_code == 403
 
-    deleted = client.delete(f"/api/opportunities/{opportunity['id']}")
+    deleted = client.delete(f"/api/v2/opportunities/{opportunity['id']}")
     assert deleted.status_code == 403

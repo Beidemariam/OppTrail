@@ -3,27 +3,23 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .backup import latest_backup_at
 from .database import db_connection, initialize_database
-from .errors import error_body, install_error_handlers, is_v2_path
+from .errors import error_body, install_error_handlers
 from .logging_utils import RequestLoggingMiddleware, configure_logging, logger
 from .routes_ai import router as ai_router
 from .routes_auth import router as auth_router
 from .routes_export import router as export_router
 from .routes_notifications import router as notifications_router
-from .routes_notifications import v2_router as notifications_v2_router
 from .routes_opportunities import router as opportunities_router
-from .routes_opportunities import v2_router as opportunities_v2_router
-from .routes_saved_views import v2_router as saved_views_v2_router
-from .routes_search import v2_router as search_v2_router
+from .routes_saved_views import router as saved_views_router
+from .routes_search import router as search_router
 from .routes_sharing import router as sharing_router
-from .routes_sharing import v2_router as sharing_v2_router
 from .routes_timeline import router as timeline_router
-from .routes_timeline import v2_router as timeline_v2_router
 from .schemas import HealthStatus
 from .security import CsrfMiddleware, SecurityHeadersMiddleware
 from .settings import settings
@@ -45,6 +41,10 @@ install_error_handlers(app)
 app.add_middleware(CsrfMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestLoggingMiddleware)
+# One API surface, `/api/v2/*` (`docs/ARCHITECTURE.md`, "API versioning"):
+# paginated collection reads and the `{"error": {...}}` envelope throughout.
+# v1 served the MVP frontend until milestone 2.9 moved it and was removed
+# there, as `docs/ROADMAP.md`'s breaking-changes table schedules.
 app.include_router(auth_router)
 app.include_router(opportunities_router)
 app.include_router(sharing_router)
@@ -52,17 +52,13 @@ app.include_router(timeline_router)
 app.include_router(ai_router)
 app.include_router(export_router)
 app.include_router(notifications_router)
-# The v2 surface (`docs/ARCHITECTURE.md`, "API versioning"): the paginated
-# collection reads and the `{"error": {...}}` envelope. v1 above is unchanged
-# and keeps serving the shipped frontend until it moves.
-app.include_router(opportunities_v2_router)
-app.include_router(sharing_v2_router)
-app.include_router(timeline_v2_router)
-app.include_router(notifications_v2_router)
-app.include_router(search_v2_router)
-app.include_router(saved_views_v2_router)
+app.include_router(search_router)
+app.include_router(saved_views_router)
 
 
+# Unversioned on purpose (D-094): this is an operations probe — the
+# container's HEALTHCHECK, `scripts/docker-smoke.sh`, ADR 0011 — not part of
+# the client surface the version boundary exists to move.
 @app.get("/api/health", response_model=HealthStatus)
 def health_check() -> HealthStatus:
     # `get_connection()` itself asserts WAL mode, which is a write -- so a
@@ -102,10 +98,8 @@ if next_assets_dir.exists():
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     include_in_schema=False,
 )
-def api_not_found(request: Request, path: str) -> JSONResponse:
-    if is_v2_path(request.url.path):
-        return JSONResponse(error_body(404, "API endpoint not found"), status_code=404)
-    return JSONResponse({"detail": "API endpoint not found"}, status_code=404)
+def api_not_found(path: str) -> JSONResponse:
+    return JSONResponse(error_body(404, "API endpoint not found"), status_code=404)
 
 
 @app.get("/{path:path}", include_in_schema=False, response_model=None)

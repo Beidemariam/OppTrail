@@ -4,7 +4,7 @@
  */
 
 export interface paths {
-    "/api/auth/signup": {
+    "/api/v2/auth/signup": {
         parameters: {
             query?: never;
             header?: never;
@@ -14,14 +14,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Signup */
-        post: operations["signup_api_auth_signup_post"];
+        post: operations["signup_api_v2_auth_signup_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/auth/login": {
+    "/api/v2/auth/login": {
         parameters: {
             query?: never;
             header?: never;
@@ -31,14 +31,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Login */
-        post: operations["login_api_auth_login_post"];
+        post: operations["login_api_v2_auth_login_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/auth/password": {
+    "/api/v2/auth/password": {
         parameters: {
             query?: never;
             header?: never;
@@ -53,14 +53,14 @@ export interface paths {
          *     caller's, and issues a fresh one — so a stolen cookie stops working the
          *     moment the theft is responded to (brief §4.5).
          */
-        post: operations["change_password_api_auth_password_post"];
+        post: operations["change_password_api_v2_auth_password_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/auth/logout": {
+    "/api/v2/auth/logout": {
         parameters: {
             query?: never;
             header?: never;
@@ -70,14 +70,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Logout */
-        post: operations["logout_api_auth_logout_post"];
+        post: operations["logout_api_v2_auth_logout_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/auth/me": {
+    "/api/v2/auth/me": {
         parameters: {
             query?: never;
             header?: never;
@@ -85,327 +85,13 @@ export interface paths {
             cookie?: never;
         };
         /** Me */
-        get: operations["me_api_auth_me_get"];
+        get: operations["me_api_v2_auth_me_get"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
-        trace?: never;
-    };
-    "/api/opportunities": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Opportunities */
-        get: operations["list_opportunities_api_opportunities_get"];
-        put?: never;
-        /** Create Opportunity */
-        post: operations["create_opportunity_api_opportunities_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/opportunities/{opportunity_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Opportunity */
-        get: operations["get_opportunity_api_opportunities__opportunity_id__get"];
-        put?: never;
-        post?: never;
-        /** Delete Opportunity */
-        delete: operations["delete_opportunity_api_opportunities__opportunity_id__delete"];
-        options?: never;
-        head?: never;
-        /** Update Opportunity */
-        patch: operations["update_opportunity_api_opportunities__opportunity_id__patch"];
-        trace?: never;
-    };
-    "/api/opportunities/{opportunity_id}/shares": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Shares */
-        get: operations["list_shares_api_opportunities__opportunity_id__shares_get"];
-        put?: never;
-        /** Create Share */
-        post: operations["create_share_api_opportunities__opportunity_id__shares_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/opportunities/{opportunity_id}/shares/{user_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Delete Share */
-        delete: operations["delete_share_api_opportunities__opportunity_id__shares__user_id__delete"];
-        options?: never;
-        head?: never;
-        /** Update Share */
-        patch: operations["update_share_api_opportunities__opportunity_id__shares__user_id__patch"];
-        trace?: never;
-    };
-    "/api/opportunities/{opportunity_id}/audit-log": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Audit Log */
-        get: operations["list_audit_log_api_opportunities__opportunity_id__audit_log_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/opportunities/{opportunity_id}/timeline": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Timeline */
-        get: operations["list_timeline_api_opportunities__opportunity_id__timeline_get"];
-        put?: never;
-        /** Create Timeline Entry */
-        post: operations["create_timeline_entry_api_opportunities__opportunity_id__timeline_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/timeline/{entry_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Delete Timeline Entry */
-        delete: operations["delete_timeline_entry_api_timeline__entry_id__delete"];
-        options?: never;
-        head?: never;
-        /** Update Timeline Entry */
-        patch: operations["update_timeline_entry_api_timeline__entry_id__patch"];
-        trace?: never;
-    };
-    "/api/timeline/{entry_id}/notes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create Note */
-        post: operations["create_note_api_timeline__entry_id__notes_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/notes/{note_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Delete Note */
-        delete: operations["delete_note_api_notes__note_id__delete"];
-        options?: never;
-        head?: never;
-        /** Update Note */
-        patch: operations["update_note_api_notes__note_id__patch"];
-        trace?: never;
-    };
-    "/api/notes/{note_id}/versions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Note Versions */
-        get: operations["list_note_versions_api_notes__note_id__versions_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/notes/{note_id}/comments": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create Comment */
-        post: operations["create_comment_api_notes__note_id__comments_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/comments/{comment_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Delete Comment */
-        delete: operations["delete_comment_api_comments__comment_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/opportunities/{opportunity_id}/ai/ask": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Ask Ai Agent */
-        post: operations["ask_ai_agent_api_opportunities__opportunity_id__ai_ask_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/opportunities/{opportunity_id}/export/json": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Export Json */
-        get: operations["export_json_api_opportunities__opportunity_id__export_json_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/opportunities/{opportunity_id}/export/csv": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Export Csv */
-        get: operations["export_csv_api_opportunities__opportunity_id__export_csv_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/opportunities/{opportunity_id}/export/pdf": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Export Pdf */
-        get: operations["export_pdf_api_opportunities__opportunity_id__export_pdf_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/notifications": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Notifications */
-        get: operations["list_notifications_api_notifications_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/notifications/{notification_id}/read": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Mark Notification Read Route */
-        patch: operations["mark_notification_read_route_api_notifications__notification_id__read_patch"];
         trace?: never;
     };
     "/api/v2/opportunities": {
@@ -417,12 +103,19 @@ export interface paths {
         };
         /**
          * List Opportunities Page
-         * @description The v1 list, in the v2 envelope, minus `stages` — which is a fixed list
-         *     rather than a property of this page and now has its own endpoint below.
+         * @description Every opportunity the caller can read, newest activity first.
+         *
+         *     `stages` used to ride along on this response; it is a fixed list rather
+         *     than a property of this page, so it has its own endpoint below.
+         *
+         *     The access predicate was a module-level constant while v1 served the same
+         *     rows from a second query and the two could drift (D-033). With v1 removed
+         *     this is its only reader, so it is written where it runs.
          */
         get: operations["list_opportunities_page_api_v2_opportunities_get"];
         put?: never;
-        post?: never;
+        /** Create Opportunity */
+        post: operations["create_opportunity_api_v2_opportunities_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -453,6 +146,25 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v2/opportunities/{opportunity_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Opportunity */
+        get: operations["get_opportunity_api_v2_opportunities__opportunity_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Opportunity */
+        delete: operations["delete_opportunity_api_v2_opportunities__opportunity_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Opportunity */
+        patch: operations["update_opportunity_api_v2_opportunities__opportunity_id__patch"];
         trace?: never;
     };
     "/api/v2/opportunities/bulk": {
@@ -513,16 +225,35 @@ export interface paths {
         };
         /**
          * List Shares Page
-         * @description Ordered by name like v1, but tie-broken on `user_id` rather than email,
-         *     because a cursor needs a column that is unique within the ordering.
+         * @description Ordered by name, tie-broken on `user_id` rather than on email: a
+         *     cursor needs a column that is unique within the ordering.
          */
         get: operations["list_shares_page_api_v2_opportunities__opportunity_id__shares_get"];
         put?: never;
-        post?: never;
+        /** Create Share */
+        post: operations["create_share_api_v2_opportunities__opportunity_id__shares_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v2/opportunities/{opportunity_id}/shares/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Share */
+        delete: operations["delete_share_api_v2_opportunities__opportunity_id__shares__user_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Share */
+        patch: operations["update_share_api_v2_opportunities__opportunity_id__shares__user_id__patch"];
         trace?: never;
     };
     "/api/v2/opportunities/{opportunity_id}/audit-log": {
@@ -534,8 +265,8 @@ export interface paths {
         };
         /**
          * List Audit Log Page
-         * @description Oldest first, like v1: the audit log is read as a narrative of what
-         *     happened to the opportunity, so the page boundary walks forward in time.
+         * @description Oldest first: the audit log is read as a narrative of what happened to
+         *     the opportunity, so the page boundary walks forward in time.
          */
         get: operations["list_audit_log_page_api_v2_opportunities__opportunity_id__audit_log_get"];
         put?: never;
@@ -560,9 +291,9 @@ export interface paths {
          *     and `docs/ROADMAP.md` puts threaded comments in Phase 3, which is where a
          *     nested page would belong if one is ever needed.
          *
-         *     v1 tie-breaks equal `event_timestamp`s on `created_at`, which is not unique
-         *     and so cannot carry a cursor; v2 tie-breaks on the entry id, which orders
-         *     identically for rows created in sequence.
+         *     Equal `event_timestamp`s tie-break on the entry id rather than on
+         *     `created_at`: a cursor needs a column that is unique within the ordering,
+         *     and for rows created in sequence the two order identically.
          *
          *     `order` (D-051) reverses both the `ORDER BY` and the cursor's comparison
          *     direction (`cursor_clause`'s `descending`) — reversing only the `ORDER BY`
@@ -571,11 +302,30 @@ export interface paths {
          */
         get: operations["list_timeline_page_api_v2_opportunities__opportunity_id__timeline_get"];
         put?: never;
-        post?: never;
+        /** Create Timeline Entry */
+        post: operations["create_timeline_entry_api_v2_opportunities__opportunity_id__timeline_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v2/timeline/{entry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Timeline Entry */
+        delete: operations["delete_timeline_entry_api_v2_timeline__entry_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Timeline Entry */
+        patch: operations["update_timeline_entry_api_v2_timeline__entry_id__patch"];
         trace?: never;
     };
     "/api/v2/timeline/{entry_id}/restore": {
@@ -595,6 +345,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/timeline/{entry_id}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Note */
+        post: operations["create_note_api_v2_timeline__entry_id__notes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/notes/{note_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Note */
+        delete: operations["delete_note_api_v2_notes__note_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Note */
+        patch: operations["update_note_api_v2_notes__note_id__patch"];
+        trace?: never;
+    };
     "/api/v2/notes/{note_id}/versions": {
         parameters: {
             query?: never;
@@ -604,7 +389,7 @@ export interface paths {
         };
         /**
          * List Note Versions Page
-         * @description Oldest version first, as v1 has it: revision history reads forwards.
+         * @description Oldest version first: revision history reads forwards.
          */
         get: operations["list_note_versions_page_api_v2_notes__note_id__versions_get"];
         put?: never;
@@ -632,6 +417,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/notes/{note_id}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Comment */
+        post: operations["create_comment_api_v2_notes__note_id__comments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/comments/{comment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Comment */
+        delete: operations["delete_comment_api_v2_comments__comment_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/comments/{comment_id}/restore": {
         parameters: {
             query?: never;
@@ -649,6 +468,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/opportunities/{opportunity_id}/ai/ask": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ask Ai Agent */
+        post: operations["ask_ai_agent_api_v2_opportunities__opportunity_id__ai_ask_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/opportunities/{opportunity_id}/export/json": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Json */
+        get: operations["export_json_api_v2_opportunities__opportunity_id__export_json_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/opportunities/{opportunity_id}/export/csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Csv */
+        get: operations["export_csv_api_v2_opportunities__opportunity_id__export_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/opportunities/{opportunity_id}/export/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Pdf */
+        get: operations["export_pdf_api_v2_opportunities__opportunity_id__export_pdf_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/notifications": {
         parameters: {
             query?: never;
@@ -658,11 +545,12 @@ export interface paths {
         };
         /**
          * List Notifications Page
-         * @description The inbox rework (milestone 1.7): full history, not unread-only, with
-         *     an optional filter by notification type. v1 keeps reading its own
-         *     unread-only query untouched -- `docs/ROADMAP.md`'s breaking-changes table
-         *     keeps the old behaviour there rather than changing what a client already
-         *     consuming it would see.
+         * @description The inbox (milestone 1.7): full history, not unread-only, with an
+         *     optional filter by notification type.
+         *
+         *     v1 answered a narrower question here -- unread only, which meant marking
+         *     one read made it disappear. That surface is gone with the rest of v1;
+         *     `read_at IS NULL` is the same set, and a reader keeps what they have read.
          */
         get: operations["list_notifications_page_api_v2_notifications_get"];
         put?: never;
@@ -688,6 +576,23 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v2/notifications/{notification_id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Mark Notification Read Route */
+        patch: operations["mark_notification_read_route_api_v2_notifications__notification_id__read_patch"];
         trace?: never;
     };
     "/api/v2/search": {
@@ -1070,11 +975,6 @@ export interface components {
             /** Created At */
             created_at: string;
         };
-        /** NotificationListResponse */
-        NotificationListResponse: {
-            /** Notifications */
-            notifications: components["schemas"]["NotificationPublic"][];
-        };
         /** NotificationMarkAllReadResponse */
         NotificationMarkAllReadResponse: {
             /** Marked */
@@ -1167,31 +1067,16 @@ export interface components {
             /** Title */
             title: string;
         };
-        /** NotificationPublic */
-        NotificationPublic: {
-            /** Id */
-            id: number;
-            /**
-             * Type
-             * @enum {string}
-             */
-            type: "share_added" | "share_role_changed" | "share_removed" | "mention" | "shared_activity" | "comment";
-            /** Payload */
-            payload: components["schemas"]["NotificationPayloadShareAdded"] | components["schemas"]["NotificationPayloadShareRoleChanged"] | components["schemas"]["NotificationPayloadShareRemoved"] | components["schemas"]["NotificationPayloadMention"] | components["schemas"]["NotificationPayloadSharedActivity"] | components["schemas"]["NotificationPayloadComment"];
-            /** Read */
-            read: boolean;
-            /** Created At */
-            created_at: string;
-        };
         /**
-         * NotificationPublicV2
-         * @description The inbox rework's shape (milestone 1.7): `read_at` replaces `read` as
-         *     the source of truth, so a client can tell not just whether a notification
-         *     was read but order a history by it. `grouped_key` rides along now,
+         * NotificationPublic
+         * @description `read_at` is the source of truth (milestone 1.7), so a client can tell
+         *     not just whether a notification was read but order a history by it. The
+         *     older boolean `read` was v1's and went with it, though the column stays —
+         *     see `CLAUDE.md`'s "Notifications". `grouped_key` rides along now,
          *     unpopulated, ahead of Phase 5's digest batching -- see the migration's
          *     docstring for why it is added before it is used.
          */
-        NotificationPublicV2: {
+        NotificationPublic: {
             /** Id */
             id: number;
             /**
@@ -1232,13 +1117,6 @@ export interface components {
             stage: "Prospecting" | "Qualification" | "Needs Analysis" | "Proposal" | "Negotiation" | "Closed Won" | "Closed Lost";
             /** Expected Close Date */
             expected_close_date?: string | null;
-        };
-        /** OpportunityListResponse */
-        OpportunityListResponse: {
-            /** Stages */
-            stages: string[];
-            /** Opportunities */
-            opportunities: components["schemas"]["OpportunityPublic"][];
         };
         /** OpportunityPublic */
         OpportunityPublic: {
@@ -1308,10 +1186,10 @@ export interface components {
             /** Next Cursor */
             next_cursor?: string | null;
         };
-        /** Page[NotificationPublicV2] */
-        Page_NotificationPublicV2_: {
+        /** Page[NotificationPublic] */
+        Page_NotificationPublic_: {
             /** Items */
-            items: components["schemas"]["NotificationPublicV2"][];
+            items: components["schemas"]["NotificationPublic"][];
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -1507,11 +1385,6 @@ export interface components {
              */
             role: "viewer" | "editor";
         };
-        /** ShareListResponse */
-        ShareListResponse: {
-            /** Shares */
-            shares: components["schemas"]["SharePublic"][];
-        };
         /** SharePublic */
         SharePublic: {
             /** User Id */
@@ -1622,11 +1495,6 @@ export interface components {
             /** Follow Up Date */
             follow_up_date?: string | null;
         };
-        /** TimelineResponse */
-        TimelineResponse: {
-            /** Entries */
-            entries: components["schemas"]["TimelineEntryPublic"][];
-        };
         /** UserPublic */
         UserPublic: {
             /** Id */
@@ -1660,7 +1528,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    signup_api_auth_signup_post: {
+    signup_api_v2_auth_signup_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1695,7 +1563,7 @@ export interface operations {
             };
         };
     };
-    login_api_auth_login_post: {
+    login_api_v2_auth_login_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1730,7 +1598,7 @@ export interface operations {
             };
         };
     };
-    change_password_api_auth_password_post: {
+    change_password_api_v2_auth_password_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1765,7 +1633,7 @@ export interface operations {
             };
         };
     };
-    logout_api_auth_logout_post: {
+    logout_api_v2_auth_logout_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1798,7 +1666,7 @@ export interface operations {
             };
         };
     };
-    me_api_auth_me_get: {
+    me_api_v2_auth_me_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1816,897 +1684,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuthResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_opportunities_api_opportunities_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: {
-                opptrail_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OpportunityListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_opportunity_api_opportunities_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: {
-                opptrail_session?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["OpportunityCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OpportunityPublic"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_opportunity_api_opportunities__opportunity_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                opportunity_id: number;
-            };
-            cookie?: {
-                opptrail_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OpportunityPublic"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_opportunity_api_opportunities__opportunity_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                opportunity_id: number;
-            };
-            cookie?: {
-                opptrail_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_opportunity_api_opportunities__opportunity_id__patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                opportunity_id: number;
-            };
-            cookie?: {
-                opptrail_session?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["OpportunityUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OpportunityPublic"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_shares_api_opportunities__opportunity_id__shares_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                opportunity_id: number;
-            };
-            cookie?: {
-                opptrail_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ShareListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_share_api_opportunities__opportunity_id__shares_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                opportunity_id: number;
-            };
-            cookie?: {
-                opptrail_session?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ShareCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SharePublic"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_share_api_opportunities__opportunity_id__shares__user_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                opportunity_id: number;
-                user_id: number;
-            };
-            cookie?: {
-                opptrail_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_share_api_opportunities__opportunity_id__shares__user_id__patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                opportunity_id: number;
-                user_id: number;
-            };
-            cookie?: {
-                opptrail_session?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ShareUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SharePublic"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_audit_log_api_opportunities__opportunity_id__audit_log_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                opportunity_id: number;
-            };
-            cookie?: {
-                opptrail_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AuditLogEntryPublic"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_timeline_api_opportunities__opportunity_id__timeline_get: {
-        parameters: {
-            query?: {
-                q?: string | null;
-                type?: string | null;
-                from?: string | null;
-                to?: string | null;
-                author_id?: number | null;
-                order?: "asc" | "desc";
-            };
-            header?: never;
-            path: {
-                opportunity_id: number;
-            };
-            cookie?: {
-                opptrail_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TimelineResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_timeline_entry_api_opportunities__opportunity_id__timeline_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                opportunity_id: number;
-            };
-            cookie?: {
-                opptrail_session?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TimelineEntryCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TimelineEntryPublic"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_timeline_entry_api_timeline__entry_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                entry_id: number;
-            };
-            cookie?: {
-                opptrail_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_timeline_entry_api_timeline__entry_id__patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                entry_id: number;
-            };
-            cookie?: {
-                opptrail_session?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TimelineEntryUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TimelineEntryPublic"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_note_api_timeline__entry_id__notes_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                entry_id: number;
-            };
-            cookie?: {
-                opptrail_session?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["NoteCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotePublic"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_note_api_notes__note_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                note_id: number;
-            };
-            cookie?: {
-                opptrail_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_note_api_notes__note_id__patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                note_id: number;
-            };
-            cookie?: {
-                opptrail_session?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["NoteUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotePublic"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_note_versions_api_notes__note_id__versions_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                note_id: number;
-            };
-            cookie?: {
-                opptrail_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NoteVersionPublic"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_comment_api_notes__note_id__comments_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                note_id: number;
-            };
-            cookie?: {
-                opptrail_session?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CommentCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CommentPublic"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_comment_api_comments__comment_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                comment_id: number;
-            };
-            cookie?: {
-                opptrail_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    ask_ai_agent_api_opportunities__opportunity_id__ai_ask_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                opportunity_id: number;
-            };
-            cookie?: {
-                opptrail_session?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AiAskRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AiAskResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    export_json_api_opportunities__opportunity_id__export_json_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                opportunity_id: number;
-            };
-            cookie?: {
-                opptrail_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    export_csv_api_opportunities__opportunity_id__export_csv_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                opportunity_id: number;
-            };
-            cookie?: {
-                opptrail_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    export_pdf_api_opportunities__opportunity_id__export_pdf_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                opportunity_id: number;
-            };
-            cookie?: {
-                opptrail_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_notifications_api_notifications_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: {
-                opptrail_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotificationListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    mark_notification_read_route_api_notifications__notification_id__read_patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                notification_id: number;
-            };
-            cookie?: {
-                opptrail_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotificationPublic"];
                 };
             };
             /** @description Validation Error */
@@ -2754,6 +1731,41 @@ export interface operations {
             };
         };
     };
+    create_opportunity_api_v2_opportunities_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpportunityCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpportunityPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_stages_api_v2_stages_get: {
         parameters: {
             query?: never;
@@ -2772,6 +1784,107 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Page_str_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_opportunity_api_v2_opportunities__opportunity_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpportunityPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_opportunity_api_v2_opportunities__opportunity_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_opportunity_api_v2_opportunities__opportunity_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpportunityUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpportunityPublic"];
                 };
             };
             /** @description Validation Error */
@@ -2887,6 +2000,113 @@ export interface operations {
             };
         };
     };
+    create_share_api_v2_opportunities__opportunity_id__shares_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShareCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharePublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_share_api_v2_opportunities__opportunity_id__shares__user_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+                user_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_share_api_v2_opportunities__opportunity_id__shares__user_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+                user_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShareUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharePublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_audit_log_page_api_v2_opportunities__opportunity_id__audit_log_get: {
         parameters: {
             query?: {
@@ -2965,6 +2185,111 @@ export interface operations {
             };
         };
     };
+    create_timeline_entry_api_v2_opportunities__opportunity_id__timeline_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimelineEntryCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelineEntryPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_timeline_entry_api_v2_timeline__entry_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_timeline_entry_api_v2_timeline__entry_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimelineEntryUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelineEntryPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     restore_timeline_entry_route_api_v2_timeline__entry_id__restore_post: {
         parameters: {
             query?: never;
@@ -2984,6 +2309,111 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_note_api_v2_timeline__entry_id__notes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NoteCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotePublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_note_api_v2_notes__note_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                note_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_note_api_v2_notes__note_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                note_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NoteUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotePublic"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -3063,6 +2493,74 @@ export interface operations {
             };
         };
     };
+    create_comment_api_v2_notes__note_id__comments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                note_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommentCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommentPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_comment_api_v2_comments__comment_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                comment_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     restore_comment_route_api_v2_comments__comment_id__restore_post: {
         parameters: {
             query?: never;
@@ -3082,6 +2580,142 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ask_ai_agent_api_v2_opportunities__opportunity_id__ai_ask_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiAskRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiAskResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_json_api_v2_opportunities__opportunity_id__export_json_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_csv_api_v2_opportunities__opportunity_id__export_csv_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_pdf_api_v2_opportunities__opportunity_id__export_pdf_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
             };
             /** @description Validation Error */
             422: {
@@ -3115,7 +2749,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Page_NotificationPublicV2_"];
+                    "application/json": components["schemas"]["Page_NotificationPublic_"];
                 };
             };
             /** @description Validation Error */
@@ -3147,6 +2781,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NotificationMarkAllReadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_notification_read_route_api_v2_notifications__notification_id__read_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                notification_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPublic"];
                 };
             };
             /** @description Validation Error */

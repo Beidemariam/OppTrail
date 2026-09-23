@@ -1228,3 +1228,63 @@ per brief §6.5, both confirmed against the unfixed code first:
    ran) rather than by reasoning about the mutation library first. Fixed by
    switching both `TopBar.tsx` and `CommandPalette.tsx` to `mutateAsync()`,
    the pattern already established in this codebase for exactly this shape.
+
+## Phase 2 — milestone 2.9 (finish the /api/v2 migration, remove v1)
+
+```
+backend:  324 passed (was 305), 97.13% combined line+branch (was 97.47%).
+          app/errors.py               89%   line, 70% branch (was 100%)
+          app/main.py                 96%   line
+          app/routes_opportunities.py 93%   line
+          app/routes_sharing.py       91%   line
+          app/routes_timeline.py      93%   line
+          app/routes_notifications.py 100%  line
+          app/routes_auth.py          100%  line
+          Branch floors that brief §6.2 sets at 95% are untouched: auth,
+          permissions, soft_delete, audit_utils and the AI modules are all
+          at 100%.
+frontend: 394 passed (was 393), 96.90% statements, 96.86% line, 95.59%
+          functions, 90.20% branch — against the 96/96/95/89 floor 2.8 set.
+          lib/queries.ts              98.95% statements, 81.25% branch
+          app/test-api.ts             (the fake; excluded from coverage)
+e2e:      49, unchanged — no new journey. Three specs that call the API
+          directly moved onto v2 paths and stopped reading the opportunity
+          id out of a fixed path segment, which shifted by one.
+docker:   deferred to the host half — scripts/autopilot-gate.sh 2
+          (no Docker socket in this sandbox, per sandbox/README.md)
+```
+
+Full `make check` for this milestone, including `pip-audit` and `npm audit`
+(both clean) and the 49 Playwright specs with axe. No new dependency.
+
+**The coverage movement is one file and is understood.** `errors.py` went
+from 100% to 89% line / 70% branch because its three `is_api_path` guards
+each have a "not the API" arm, and removing v1 removed the requests that
+reached two of them. The only non-API route left is `main.py`'s
+`serve_frontend`, which validates nothing and returns rather than raises, so
+a validation error and an unhandled exception on a page path are no longer
+reachable by request. The third arm — an `HTTPException` on a page path, which
+is what a 405 there is — is covered by a new test,
+`test_the_envelope_is_the_api_s_and_not_the_whole_server_s`, which also states
+the rule the branch exists for: the envelope describes the API, not every
+response this process serves. The guards were kept rather than deleted for
+that reason; deleting them would make a browser's 405 on a page path answer in
+the API's shape.
+
+Test-count arithmetic, since three numbers moved at once: +24 for the
+parametrized `test_v1_paths_are_gone` guard, +1 for
+`test_the_api_has_one_error_shape` (which replaces `test_v1_keeps_its_own_shapes`),
++1 for the non-API envelope test, −7 for v1 routes whose per-route tests were
+folded into their v2 twin's (the unpaginated audit-log and note-version reads,
+the unread-only notification list, and the four list shapes that no longer
+exist). Frontend: +2 `fetchAll` walk tests, −1 for `lib/api.test.ts`'s
+"detail is a structure rather than a sentence", which described FastAPI's raw
+422 list — a body no endpoint answers with now.
+
+Two backend assertions were rewritten rather than moved, both in the
+notification suite, because removing v1 removes a behaviour rather than a
+shape: marking a notification read no longer makes it vanish from the list,
+since the unread-only read was v1's. Each carries the reason in the test body.
+Brief §6.5 allows this only for an expectation that is genuinely wrong; the
+expectation here described a surface `docs/ROADMAP.md`'s breaking-changes
+table scheduled for removal at the end of this phase.

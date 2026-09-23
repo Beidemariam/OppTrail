@@ -51,7 +51,7 @@ echo "csrf cookie     ok"
 # The image ships no seed data, so the smoke test creates its own user. That is
 # also the only way to prove signup works against the real container.
 user="smoke-$(date +%s)@example.com"
-curl -fsS -b "$jar" -c "$jar" -X POST "${api}/api/auth/signup" \
+curl -fsS -b "$jar" -c "$jar" -X POST "${api}/api/v2/auth/signup" \
   -H 'Content-Type: application/json' -H "X-CSRF-Token: ${csrf}" \
   -d "{\"email\":\"${user}\",\"password\":\"smoke-test-pw-123\",\"name\":\"Smoke Test\"}" >/dev/null
 echo "signup          ok"
@@ -59,20 +59,20 @@ echo "signup          ok"
 # Signing in rotates the CSRF token along with the session, so re-read it.
 csrf="$(awk '$6 == "opptrail_csrf" { print $7 }' "$jar")"
 
-opp="$(curl -fsS -b "$jar" -X POST "${api}/api/opportunities" \
+opp="$(curl -fsS -b "$jar" -X POST "${api}/api/v2/opportunities" \
   -H 'Content-Type: application/json' -H "X-CSRF-Token: ${csrf}" \
   -d '{"name":"Smoke opportunity","account_name":"Acme","stage":"Qualification"}')"
 opp_id="$(printf '%s' "$opp" | sed -n 's/.*"id":[ ]*\([0-9]*\).*/\1/p' | head -1)"
 [ -n "$opp_id" ] || { echo "FAIL: could not create an opportunity: $opp"; exit 1; }
 echo "opportunity     ok (id ${opp_id})"
 
-timeline="$(curl -fsS -b "$jar" "${api}/api/opportunities/${opp_id}/timeline")"
+timeline="$(curl -fsS -b "$jar" "${api}/api/v2/opportunities/${opp_id}/timeline")"
 printf '%s' "$timeline" | grep -q "Opportunity created" \
   || { echo "FAIL: the auto-generated timeline entry is missing"; exit 1; }
 echo "timeline        ok"
 
 pdf="$(mktemp)"
-curl -fsS -b "$jar" "${api}/api/opportunities/${opp_id}/export/pdf" -o "$pdf"
+curl -fsS -b "$jar" "${api}/api/v2/opportunities/${opp_id}/export/pdf" -o "$pdf"
 if [ "$(head -c 4 "$pdf")" = "%PDF" ]; then
   echo "pdf export      ok ($(wc -c < "$pdf" | tr -d ' ') bytes, %PDF verified)"
 else

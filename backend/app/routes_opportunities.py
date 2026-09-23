@@ -14,7 +14,6 @@ from .schemas import (
     BulkActionResultItem,
     BulkOpportunityAction,
     OpportunityCreate,
-    OpportunityListResponse,
     OpportunityPublic,
     OpportunityUpdate,
 )
@@ -22,8 +21,7 @@ from .soft_delete import restore_opportunity, soft_delete_opportunity
 from .time_utils import utc_days_ago, utc_now
 from .timeline_utils import create_system_timeline_entry
 
-router = APIRouter(prefix="/api/opportunities", tags=["opportunities"])
-v2_router = APIRouter(prefix="/api/v2", tags=["opportunities"])
+router = APIRouter(prefix="/api/v2", tags=["opportunities"])
 
 
 STALLED_AFTER_DAYS = 14
@@ -106,57 +104,19 @@ def fetch_opportunity_row(
     return row
 
 
-ACCESSIBLE_OPPORTUNITIES_SQL = """
-    SELECT DISTINCT
-        opportunities.*,
-        users.name AS owner_name,
-        CASE
-            WHEN opportunities.owner_id = ? THEN 'owner'
-            ELSE opportunity_shares.role
-        END AS current_user_role
-    FROM opportunities
-    JOIN users ON users.id = opportunities.owner_id
-    LEFT JOIN opportunity_shares
-        ON opportunity_shares.opportunity_id = opportunities.id
-        AND opportunity_shares.deleted_at IS NULL
-    WHERE opportunities.deleted_at IS NULL
-        AND (
-            opportunities.owner_id = ?
-            OR opportunity_shares.user_id = ?
-        )
-"""
-
-
-@router.get("", response_model=OpportunityListResponse)
-def list_opportunities(
-    user: sqlite3.Row = Depends(get_current_user),
-) -> OpportunityListResponse:
-    with db_connection() as connection:
-        rows = connection.execute(
-            f"""
-            {ACCESSIBLE_OPPORTUNITIES_SQL}
-            ORDER BY opportunities.updated_at DESC, opportunities.id DESC
-            """,
-            (user["id"], user["id"], user["id"]),
-        ).fetchall()
-
-        opportunities = [
-            opportunity_from_row(
-                row, row["current_user_role"], is_opportunity_stalled(connection, row["id"])
-            )
-            for row in rows
-        ]
-
-    return OpportunityListResponse(stages=STAGES, opportunities=opportunities)
-
-
-@v2_router.get("/opportunities", response_model=Page[OpportunityPublic])
+@router.get("/opportunities", response_model=Page[OpportunityPublic])
 def list_opportunities_page(
     page: PageRequest = Depends(page_params),
     user: sqlite3.Row = Depends(get_current_user),
 ) -> Page[OpportunityPublic]:
-    """The v1 list, in the v2 envelope, minus `stages` — which is a fixed list
-    rather than a property of this page and now has its own endpoint below.
+    """Every opportunity the caller can read, newest activity first.
+
+    `stages` used to ride along on this response; it is a fixed list rather
+    than a property of this page, so it has its own endpoint below.
+
+    The access predicate was a module-level constant while v1 served the same
+    rows from a second query and the two could drift (D-033). With v1 removed
+    this is its only reader, so it is written where it runs.
     """
     continuation, cursor_values = cursor_clause(
         page,
@@ -169,8 +129,24 @@ def list_opportunities_page(
     with db_connection() as connection:
         rows = connection.execute(
             f"""
-            {ACCESSIBLE_OPPORTUNITIES_SQL}
-            {f"AND {continuation}" if continuation else ""}
+            SELECT DISTINCT
+                opportunities.*,
+                users.name AS owner_name,
+                CASE
+                    WHEN opportunities.owner_id = ? THEN 'owner'
+                    ELSE opportunity_shares.role
+                END AS current_user_role
+            FROM opportunities
+            JOIN users ON users.id = opportunities.owner_id
+            LEFT JOIN opportunity_shares
+                ON opportunity_shares.opportunity_id = opportunities.id
+                AND opportunity_shares.deleted_at IS NULL
+            WHERE opportunities.deleted_at IS NULL
+                AND (
+                    opportunities.owner_id = ?
+                    OR opportunity_shares.user_id = ?
+                )
+                {f"AND {continuation}" if continuation else ""}
             ORDER BY opportunities.updated_at DESC, opportunities.id DESC
             LIMIT ?
             """,
@@ -188,7 +164,7 @@ def list_opportunities_page(
     return Page(items=items, next_cursor=next_cursor)
 
 
-@v2_router.get(
+@router.get(
     "/stages",
     response_model=Page[str],
     dependencies=[Depends(get_current_user)],
@@ -205,7 +181,9 @@ def list_stages() -> Page[str]:
     return Page(items=STAGES, next_cursor=None)
 
 
-@router.post("", response_model=OpportunityPublic, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/opportunities", response_model=OpportunityPublic, status_code=status.HTTP_201_CREATED
+)
 def create_opportunity(
     payload: OpportunityCreate,
     user: sqlite3.Row = Depends(get_current_user),
@@ -257,7 +235,7 @@ def create_opportunity(
     return opportunity_from_row(row, "owner", stalled)
 
 
-@router.get("/{opportunity_id}", response_model=OpportunityPublic)
+@router.get("/opportunities/{opportunity_id}", response_model=OpportunityPublic)
 def get_opportunity(
     opportunity_id: int,
     user: sqlite3.Row = Depends(get_current_user),
@@ -271,7 +249,7 @@ def get_opportunity(
     return opportunity_from_row(row, role, stalled)
 
 
-@router.patch("/{opportunity_id}", response_model=OpportunityPublic)
+@router.patch("/opportunities/{opportunity_id}", response_model=OpportunityPublic)
 def update_opportunity(
     opportunity_id: int,
     payload: OpportunityUpdate,
@@ -321,7 +299,7 @@ def update_opportunity(
     return opportunity_from_row(updated, "owner", stalled)
 
 
-@router.delete("/{opportunity_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/opportunities/{opportunity_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_opportunity(
     opportunity_id: int,
     user: sqlite3.Row = Depends(get_current_user),
@@ -346,7 +324,7 @@ def delete_opportunity(
         connection.commit()
 
 
-@v2_router.post("/opportunities/bulk", response_model=BulkActionResponse)
+@router.post("/opportunities/bulk", response_model=BulkActionResponse)
 def bulk_opportunity_action(
     payload: BulkOpportunityAction,
     user: sqlite3.Row = Depends(get_current_user),
@@ -419,13 +397,12 @@ def bulk_opportunity_action(
     return BulkActionResponse(results=results)
 
 
-# Restore is v2-only, like every route added since milestone 1.3 that has no v1
-# twin to mirror. Owner-only and answered by a lookup of its own: once an
+# Owner-only, and answered by a lookup of its own: once an
 # opportunity is deleted the share rows are deleted with it, so
 # `require_opportunity_owner` — which resolves a role through the undeleted
 # tree — cannot see it at all. Everyone who is not the owner therefore gets
 # 404, which is also the right answer: a deleted record leaks nothing.
-@v2_router.post("/opportunities/{opportunity_id}/restore", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/opportunities/{opportunity_id}/restore", status_code=status.HTTP_204_NO_CONTENT)
 def restore_opportunity_route(
     opportunity_id: int,
     user: sqlite3.Row = Depends(get_current_user),

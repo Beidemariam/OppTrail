@@ -18,7 +18,7 @@ from .schemas import AuthResponse, LoginRequest, PasswordChangeRequest, SignupRe
 from .settings import settings
 from .time_utils import utc_now
 
-router = APIRouter(prefix="/api/auth", tags=["auth"])
+router = APIRouter(prefix="/api/v2/auth", tags=["auth"])
 
 
 def public_user(row: sqlite3.Row) -> UserPublic:

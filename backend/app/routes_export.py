@@ -14,7 +14,7 @@ from .export_service import (
 )
 from .permissions import require_opportunity_access
 
-router = APIRouter(prefix="/api/opportunities", tags=["export"])
+router = APIRouter(prefix="/api/v2/opportunities", tags=["export"])
 
 
 def content_disposition(filename: str) -> str:

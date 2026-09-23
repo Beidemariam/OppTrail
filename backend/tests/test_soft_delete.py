@@ -21,7 +21,7 @@ HARD_DELETE = re.compile(r"\bDELETE\s+FROM\s+[\"'`\[]?(\w+)", re.IGNORECASE)
 
 def signup(client: TestClient, email: str, name: str) -> None:
     response = client.post(
-        "/api/auth/signup",
+        "/api/v2/auth/signup",
         json={"email": email, "password": "password123", "name": name},
     )
     assert response.status_code == 201
@@ -69,11 +69,11 @@ def test_invariant_deleting_an_opportunity_retains_every_row(client: TestClient)
     signup(client, "owner@example.com", "Owner")
     signup(client, "editor@example.com", "Editor")
     client.post(
-        "/api/auth/login",
+        "/api/v2/auth/login",
         json={"email": "owner@example.com", "password": "password123"},
     )
     opportunity_id = client.post(
-        "/api/opportunities",
+        "/api/v2/opportunities",
         json={
             "name": "Expansion",
             "account_name": "Acme",
@@ -84,13 +84,13 @@ def test_invariant_deleting_an_opportunity_retains_every_row(client: TestClient)
     ).json()["id"]
     assert (
         client.post(
-            f"/api/opportunities/{opportunity_id}/shares",
+            f"/api/v2/opportunities/{opportunity_id}/shares",
             json={"email": "editor@example.com", "role": "editor"},
         ).status_code
         == 201
     )
     entry_id = client.post(
-        f"/api/opportunities/{opportunity_id}/timeline",
+        f"/api/v2/opportunities/{opportunity_id}/timeline",
         json={
             "type": "call",
             "title": "Discovery call",
@@ -98,12 +98,13 @@ def test_invariant_deleting_an_opportunity_retains_every_row(client: TestClient)
             "event_timestamp": "2026-09-01T10:00:00",
         },
     ).json()["id"]
-    note_id = client.post(f"/api/timeline/{entry_id}/notes", json={"body": "Note"}).json()["id"]
+    note_id = client.post(f"/api/v2/timeline/{entry_id}/notes", json={"body": "Note"}).json()["id"]
     assert (
-        client.post(f"/api/notes/{note_id}/comments", json={"body": "Comment"}).status_code == 201
+        client.post(f"/api/v2/notes/{note_id}/comments", json={"body": "Comment"}).status_code
+        == 201
     )
 
-    assert client.delete(f"/api/opportunities/{opportunity_id}").status_code == 204
+    assert client.delete(f"/api/v2/opportunities/{opportunity_id}").status_code == 204
 
     with db_connection() as connection:
         for table in (

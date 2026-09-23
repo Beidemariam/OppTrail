@@ -22,19 +22,14 @@ export function csrfToken(): string {
 }
 
 /**
- * The two error shapes the API answers with: v1 sends `{"detail": ...}` and
- * v2 sends the envelope `{"error": {"code", "message"}}`
- * (`backend/app/errors.py`). Both reduce to the one sentence a caller shows.
+ * The API's one error shape, `{"error": {"code", "message"}}`
+ * (`backend/app/errors.py`), reduced to the sentence a caller shows. v1's
+ * `{"detail": ...}` was the second shape this read until milestone 2.9
+ * removed that surface.
  */
 function errorMessage(body: unknown): string {
   if (typeof body === "object" && body !== null) {
-    const { detail, error } = body as {
-      detail?: unknown;
-      error?: { message?: unknown };
-    };
-    if (typeof detail === "string") {
-      return detail;
-    }
+    const { error } = body as { error?: { message?: unknown } };
     if (typeof error?.message === "string") {
       return error.message;
     }

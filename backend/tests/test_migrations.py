@@ -231,12 +231,12 @@ def test_writes_to_a_bridged_legacy_database_are_canonical(database_url: str) ->
 
     with CsrfClient(app) as client:
         signup = client.post(
-            "/api/auth/signup",
+            "/api/v2/auth/signup",
             json={"email": "new@example.com", "password": "password123", "name": "New User"},
         )
         assert signup.status_code == 201
         opportunity = client.post(
-            "/api/opportunities",
+            "/api/v2/opportunities",
             json={
                 "name": "Expansion",
                 "account_name": "Acme",
@@ -248,7 +248,7 @@ def test_writes_to_a_bridged_legacy_database_are_canonical(database_url: str) ->
         assert opportunity.status_code == 201
         opportunity_id = opportunity.json()["id"]
         entry = client.post(
-            f"/api/opportunities/{opportunity_id}/timeline",
+            f"/api/v2/opportunities/{opportunity_id}/timeline",
             json={
                 "type": "call",
                 "title": "Discovery call",
@@ -258,20 +258,21 @@ def test_writes_to_a_bridged_legacy_database_are_canonical(database_url: str) ->
         )
         assert entry.status_code == 201
         note = client.post(
-            f"/api/timeline/{entry.json()['id']}/notes",
+            f"/api/v2/timeline/{entry.json()['id']}/notes",
             json={"body": "Note body"},
         )
         assert note.status_code == 201
         note_id = note.json()["id"]
         assert (
-            client.patch(f"/api/notes/{note_id}", json={"body": "Edited body"}).status_code == 200
+            client.patch(f"/api/v2/notes/{note_id}", json={"body": "Edited body"}).status_code
+            == 200
         )
         assert (
-            client.post(f"/api/notes/{note_id}/comments", json={"body": "A comment"}).status_code
+            client.post(f"/api/v2/notes/{note_id}/comments", json={"body": "A comment"}).status_code
             == 201
         )
         share = client.post(
-            f"/api/opportunities/{opportunity_id}/shares",
+            f"/api/v2/opportunities/{opportunity_id}/shares",
             json={"email": "legacy@example.com", "role": "editor"},
         )
         assert share.status_code == 201

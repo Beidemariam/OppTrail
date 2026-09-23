@@ -132,7 +132,7 @@ export async function openTimeline(page: Page, name: string) {
  * beforehand is already stale by the next request.
  */
 export async function apiSignIn(request: APIRequestContext, email: string) {
-  const response = await request.post("/api/auth/login", {
+  const response = await request.post("/api/v2/auth/login", {
     data: { email, password: DEMO_PASSWORD },
     headers: { "X-CSRF-Token": await csrfToken(request) },
   });

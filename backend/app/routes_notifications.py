@@ -11,28 +11,15 @@ from .notification_service import (
 )
 from .pagination import Page, PageRequest, cursor_clause, page_params, split_page
 from .schemas import (
-    NotificationListResponse,
     NotificationMarkAllReadResponse,
     NotificationPublic,
-    NotificationPublicV2,
 )
 
-router = APIRouter(prefix="/api/notifications", tags=["notifications"])
-v2_router = APIRouter(prefix="/api/v2", tags=["notifications"])
+router = APIRouter(prefix="/api/v2/notifications", tags=["notifications"])
 
 
 def notification_from_row(row: sqlite3.Row) -> NotificationPublic:
     return NotificationPublic(
-        id=row["id"],
-        type=row["type"],
-        payload=parse_notification_payload(row["type"], row["payload"]),
-        read=bool(row["read"]),
-        created_at=row["created_at"],
-    )
-
-
-def notification_from_row_v2(row: sqlite3.Row) -> NotificationPublicV2:
-    return NotificationPublicV2(
         id=row["id"],
         type=row["type"],
         payload=parse_notification_payload(row["type"], row["payload"]),
@@ -42,35 +29,18 @@ def notification_from_row_v2(row: sqlite3.Row) -> NotificationPublicV2:
     )
 
 
-@router.get("", response_model=NotificationListResponse)
-def list_notifications(
-    user: sqlite3.Row = Depends(get_current_user),
-) -> NotificationListResponse:
-    with db_connection() as connection:
-        rows = connection.execute(
-            """
-            SELECT *
-            FROM notifications
-            WHERE user_id = ? AND read = 0
-            ORDER BY created_at DESC, id DESC
-            """,
-            (user["id"],),
-        ).fetchall()
-
-    return NotificationListResponse(notifications=[notification_from_row(row) for row in rows])
-
-
-@v2_router.get("/notifications", response_model=Page[NotificationPublicV2])
+@router.get("", response_model=Page[NotificationPublic])
 def list_notifications_page(
     page: PageRequest = Depends(page_params),
     type: str | None = None,
     user: sqlite3.Row = Depends(get_current_user),
-) -> Page[NotificationPublicV2]:
-    """The inbox rework (milestone 1.7): full history, not unread-only, with
-    an optional filter by notification type. v1 keeps reading its own
-    unread-only query untouched -- `docs/ROADMAP.md`'s breaking-changes table
-    keeps the old behaviour there rather than changing what a client already
-    consuming it would see.
+) -> Page[NotificationPublic]:
+    """The inbox (milestone 1.7): full history, not unread-only, with an
+    optional filter by notification type.
+
+    v1 answered a narrower question here -- unread only, which meant marking
+    one read made it disappear. That surface is gone with the rest of v1;
+    `read_at IS NULL` is the same set, and a reader keeps what they have read.
     """
     where = ["user_id = ?"]
     params: list[object] = [user["id"]]
@@ -103,10 +73,10 @@ def list_notifications_page(
         ).fetchall()
 
     rows, next_cursor = split_page(rows, page.limit, lambda row: (row["created_at"], row["id"]))
-    return Page(items=[notification_from_row_v2(row) for row in rows], next_cursor=next_cursor)
+    return Page(items=[notification_from_row(row) for row in rows], next_cursor=next_cursor)
 
 
-@v2_router.post("/notifications/mark-all-read", response_model=NotificationMarkAllReadResponse)
+@router.post("/mark-all-read", response_model=NotificationMarkAllReadResponse)
 def mark_all_notifications_read_route(
     user: sqlite3.Row = Depends(get_current_user),
 ) -> NotificationMarkAllReadResponse:

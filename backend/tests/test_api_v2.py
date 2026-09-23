@@ -1,14 +1,15 @@
 """The `/api/v2` surface: the pagination envelope and the unified error shape.
 
-Milestone 1.3 (`docs/ROADMAP.md` Phase 1, review blocker B3). Two properties
-carry the whole milestone and are asserted here rather than assumed:
+Milestone 1.3 (`docs/ROADMAP.md` Phase 1, review blocker B3), and milestone
+2.9, which finished the port and removed v1. Three properties carry these and
+are asserted here rather than assumed:
 
 - a client can walk a collection to its end through cursors and see every row
   exactly once, whatever happens to the table between requests;
-- every v2 failure — validation, permission, unknown path, CSRF, unhandled
-  exception — arrives in one envelope, while v1 keeps the `{"detail": ...}`
-  shape the shipped frontend reads (Phase 1 acceptance: "v1 endpoints still
-  serve the existing frontend").
+- every failure — validation, permission, unknown path, CSRF, unhandled
+  exception — arrives in one envelope;
+- v1 is gone. The last test in this file is the guard for that: the paths the
+  MVP frontend called answer 404, and they answer it in the envelope.
 """
 
 import contextlib
@@ -19,12 +20,13 @@ from fastapi.testclient import TestClient
 
 from app import routes_opportunities
 from app.pagination import encode_cursor
+from app.schemas import STAGES
 from app.settings import settings
 
 
 def signup(client: TestClient, email: str = "owner@example.com", name: str = "Owner") -> dict:
     response = client.post(
-        "/api/auth/signup",
+        "/api/v2/auth/signup",
         json={"email": email, "password": "password123", "name": name},
     )
     assert response.status_code == 201
@@ -33,7 +35,7 @@ def signup(client: TestClient, email: str = "owner@example.com", name: str = "Ow
 
 def login(client: TestClient, email: str) -> None:
     response = client.post(
-        "/api/auth/login",
+        "/api/v2/auth/login",
         json={"email": email, "password": "password123"},
     )
     assert response.status_code == 200
@@ -41,7 +43,7 @@ def login(client: TestClient, email: str) -> None:
 
 def create_opportunity(client: TestClient, name: str = "Expansion") -> dict:
     response = client.post(
-        "/api/opportunities",
+        "/api/v2/opportunities",
         json={
             "name": name,
             "account_name": "Acme",
@@ -62,7 +64,7 @@ def create_entry(
     event_timestamp: str = "2026-09-01T10:00:00",
 ) -> dict:
     response = client.post(
-        f"/api/opportunities/{opportunity_id}/timeline",
+        f"/api/v2/opportunities/{opportunity_id}/timeline",
         json={
             "type": "call",
             "title": title,
@@ -167,7 +169,7 @@ def test_a_soft_deleted_row_leaves_the_page(client: TestClient) -> None:
     kept = create_opportunity(client, "Kept")["id"]
     removed = create_opportunity(client, "Removed")["id"]
 
-    assert client.delete(f"/api/opportunities/{removed}").status_code == 204
+    assert client.delete(f"/api/v2/opportunities/{removed}").status_code == 204
 
     items, _ = walk(client, "/api/v2/opportunities", limit=50)
     assert [item["id"] for item in items] == [kept]
@@ -206,7 +208,7 @@ def test_stages_are_served_as_their_own_collection(client: TestClient) -> None:
     body = client.get("/api/v2/stages").json()
 
     assert body["next_cursor"] is None
-    assert body["items"] == client.get("/api/opportunities").json()["stages"]
+    assert body["items"] == STAGES
 
 
 # --- Every collection endpoint ----------------------------------------------
@@ -216,9 +218,11 @@ def test_timeline_pages_carry_whole_entries(client: TestClient) -> None:
     owner = signup(client)
     opportunity = create_opportunity(client)
     entry = create_entry(client, opportunity["id"], "Discovery call", "2026-09-02T10:00:00")
-    note = client.post(f"/api/timeline/{entry['id']}/notes", json={"body": "Note body"})
+    note = client.post(f"/api/v2/timeline/{entry['id']}/notes", json={"body": "Note body"})
     assert note.status_code == 201
-    comment = client.post(f"/api/notes/{note.json()['id']}/comments", json={"body": "Comment body"})
+    comment = client.post(
+        f"/api/v2/notes/{note.json()['id']}/comments", json={"body": "Comment body"}
+    )
     assert comment.status_code == 201
 
     items, pages = walk(client, f"/api/v2/opportunities/{opportunity['id']}/timeline", limit=1)
@@ -300,7 +304,7 @@ def test_share_pages_are_ordered_by_name(client: TestClient) -> None:
     for name, email in (("Zoe", "zoe@example.com"), ("Adam", "adam@example.com")):
         assert (
             client.post(
-                "/api/auth/signup",
+                "/api/v2/auth/signup",
                 json={"email": email, "password": "password123", "name": name},
             ).status_code
             == 201
@@ -308,7 +312,7 @@ def test_share_pages_are_ordered_by_name(client: TestClient) -> None:
         login(client, "owner@example.com")
         assert (
             client.post(
-                f"/api/opportunities/{opportunity['id']}/shares",
+                f"/api/v2/opportunities/{opportunity['id']}/shares",
                 json={"email": email, "role": "viewer"},
             ).status_code
             == 201
@@ -324,36 +328,39 @@ def test_audit_log_pages_read_forwards(client: TestClient) -> None:
     signup(client)
     opportunity = create_opportunity(client)
     entry = create_entry(client, opportunity["id"], "Discovery call")
-    assert client.delete(f"/api/timeline/{entry['id']}").status_code == 204
+    assert client.delete(f"/api/v2/timeline/{entry['id']}").status_code == 204
     note_owner = client.post(
-        "/api/auth/signup",
+        "/api/v2/auth/signup",
         json={"email": "viewer@example.com", "password": "password123", "name": "Viewer"},
     )
     assert note_owner.status_code == 201
     login(client, "owner@example.com")
     assert (
         client.post(
-            f"/api/opportunities/{opportunity['id']}/shares",
+            f"/api/v2/opportunities/{opportunity['id']}/shares",
             json={"email": "viewer@example.com", "role": "viewer"},
         ).status_code
         == 201
     )
 
     items, _ = walk(client, f"/api/v2/opportunities/{opportunity['id']}/audit-log", limit=1)
-    v1_items = client.get(f"/api/opportunities/{opportunity['id']}/audit-log").json()
+    one_page = client.get(f"/api/v2/opportunities/{opportunity['id']}/audit-log").json()
 
     assert [item["action"] for item in items] == ["timeline_entry_deleted", "share_added"]
-    assert items == v1_items
+    # Walking a page at a time and asking for the default page of 50 answer the
+    # same rows in the same order -- the cursor does not reorder the narrative.
+    assert items == one_page["items"]
+    assert one_page["next_cursor"] is None
 
 
 def test_note_version_pages_read_forwards(client: TestClient) -> None:
     signup(client)
     opportunity = create_opportunity(client)
     entry = create_entry(client, opportunity["id"], "Discovery call")
-    note = client.post(f"/api/timeline/{entry['id']}/notes", json={"body": "First"})
+    note = client.post(f"/api/v2/timeline/{entry['id']}/notes", json={"body": "First"})
     note_id = note.json()["id"]
     for body in ("Second", "Third"):
-        assert client.patch(f"/api/notes/{note_id}", json={"body": body}).status_code == 200
+        assert client.patch(f"/api/v2/notes/{note_id}", json={"body": body}).status_code == 200
 
     items, pages = walk(client, f"/api/v2/notes/{note_id}/versions", limit=1)
 
@@ -362,18 +369,16 @@ def test_note_version_pages_read_forwards(client: TestClient) -> None:
     assert [item["body"] for item in items] == ["First", "Second", "Third"]
 
 
-def test_notification_pages_carry_the_same_rows_as_v1_in_the_v2_shape(client: TestClient) -> None:
-    """Milestone 1.7: unlike every other v2 collection, notifications is a
-    deliberate exception to "the boundary carries shape, not behaviour" — v2
-    answers full history in the `read_at`/`grouped_key` shape, v1 keeps
-    answering unread-only in the old `read` shape (`docs/ROADMAP.md`'s
-    breaking-changes table). Both still describe the same underlying row.
+def test_notification_pages_carry_full_history_in_the_read_at_shape(client: TestClient) -> None:
+    """Milestone 1.7's inbox, which is the only surface now that v1's
+    unread-only read has gone (2.9): the history is paginated like every other
+    collection, and carries `read_at`/`grouped_key` rather than a `read` flag.
     """
     signup(client)
     opportunity = create_opportunity(client)
     assert (
         client.post(
-            "/api/auth/signup",
+            "/api/v2/auth/signup",
             json={"email": "viewer@example.com", "password": "password123", "name": "Viewer"},
         ).status_code
         == 201
@@ -381,7 +386,7 @@ def test_notification_pages_carry_the_same_rows_as_v1_in_the_v2_shape(client: Te
     login(client, "owner@example.com")
     assert (
         client.post(
-            f"/api/opportunities/{opportunity['id']}/shares",
+            f"/api/v2/opportunities/{opportunity['id']}/shares",
             json={"email": "viewer@example.com", "role": "viewer"},
         ).status_code
         == 201
@@ -389,13 +394,13 @@ def test_notification_pages_carry_the_same_rows_as_v1_in_the_v2_shape(client: Te
 
     login(client, "viewer@example.com")
     items, _ = walk(client, "/api/v2/notifications", limit=1)
-    v1_items = client.get("/api/notifications").json()["notifications"]
+    one_page = client.get("/api/v2/notifications").json()["items"]
 
     assert [item["type"] for item in items] == ["share_added"]
-    assert [item["id"] for item in items] == [item["id"] for item in v1_items]
-    assert [item["payload"] for item in items] == [item["payload"] for item in v1_items]
+    assert items == one_page
     assert items[0]["read_at"] is None
     assert items[0]["grouped_key"] is None
+    assert "read" not in items[0]
 
 
 def test_v2_notification_history_survives_being_read_and_can_be_filtered_by_type(
@@ -404,7 +409,7 @@ def test_v2_notification_history_survives_being_read_and_can_be_filtered_by_type
     signup(client)
     opportunity = create_opportunity(client)
     viewer_signup = client.post(
-        "/api/auth/signup",
+        "/api/v2/auth/signup",
         json={"email": "viewer@example.com", "password": "password123", "name": "Viewer"},
     )
     assert viewer_signup.status_code == 201
@@ -412,11 +417,11 @@ def test_v2_notification_history_survives_being_read_and_can_be_filtered_by_type
 
     login(client, "owner@example.com")
     client.post(
-        f"/api/opportunities/{opportunity['id']}/shares",
+        f"/api/v2/opportunities/{opportunity['id']}/shares",
         json={"email": "viewer@example.com", "role": "viewer"},
     )
     client.patch(
-        f"/api/opportunities/{opportunity['id']}/shares/{viewer_id}",
+        f"/api/v2/opportunities/{opportunity['id']}/shares/{viewer_id}",
         json={"role": "editor"},
     )
 
@@ -424,13 +429,13 @@ def test_v2_notification_history_survives_being_read_and_can_be_filtered_by_type
     before = walk(client, "/api/v2/notifications", limit=1)[0]
     assert {item["type"] for item in before} == {"share_added", "share_role_changed"}
 
-    # Marking one read through the v1 endpoint (the only mark-read route)
-    # must not remove it from the v2 history -- that dead end is exactly
-    # what this milestone fixes.
+    # Marking one read must not remove it from the history -- that dead end
+    # is exactly what milestone 1.7 fixed, and v1's unread-only list, which
+    # had it, is gone.
     unread_id = next(item["id"] for item in before if item["type"] == "share_added")
-    marked = client.patch(f"/api/notifications/{unread_id}/read")
+    marked = client.patch(f"/api/v2/notifications/{unread_id}/read")
     assert marked.status_code == 200
-    assert marked.json()["read"] is True
+    assert marked.json()["read_at"] is not None
 
     after = walk(client, "/api/v2/notifications", limit=1)[0]
     assert {item["id"] for item in after} == {item["id"] for item in before}
@@ -446,21 +451,21 @@ def test_v2_notification_history_survives_being_read_and_can_be_filtered_by_type
 def test_v2_mark_all_notifications_read_is_scoped_to_the_caller(client: TestClient) -> None:
     owner = signup(client)
     opportunity = create_opportunity(client)
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     viewer = signup(client, "viewer@example.com", "Viewer")
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     login(client, "owner@example.com")
     client.post(
-        f"/api/opportunities/{opportunity['id']}/shares",
+        f"/api/v2/opportunities/{opportunity['id']}/shares",
         json={"email": "viewer@example.com", "role": "viewer"},
     )
     client.patch(
-        f"/api/opportunities/{opportunity['id']}/shares/{viewer['id']}",
+        f"/api/v2/opportunities/{opportunity['id']}/shares/{viewer['id']}",
         json={"role": "editor"},
     )
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     login(client, "viewer@example.com")
     response = client.post("/api/v2/notifications/mark-all-read")
@@ -473,7 +478,7 @@ def test_v2_mark_all_notifications_read_is_scoped_to_the_caller(client: TestClie
     # A second call marks nothing new -- everything is already read.
     assert client.post("/api/v2/notifications/mark-all-read").json() == {"marked": 0}
 
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
     login(client, "owner@example.com")
     assert walk(client, "/api/v2/notifications", limit=50)[0] == []
     assert owner["id"] == opportunity["owner_id"]
@@ -487,7 +492,7 @@ def test_a_permission_failure_uses_the_envelope(client: TestClient) -> None:
     opportunity = create_opportunity(client)
     assert (
         client.post(
-            "/api/auth/signup",
+            "/api/v2/auth/signup",
             json={"email": "viewer@example.com", "password": "password123", "name": "Viewer"},
         ).status_code
         == 201
@@ -495,7 +500,7 @@ def test_a_permission_failure_uses_the_envelope(client: TestClient) -> None:
     login(client, "owner@example.com")
     assert (
         client.post(
-            f"/api/opportunities/{opportunity['id']}/shares",
+            f"/api/v2/opportunities/{opportunity['id']}/shares",
             json={"email": "viewer@example.com", "role": "viewer"},
         ).status_code
         == 201
@@ -561,29 +566,75 @@ def test_an_unhandled_exception_on_a_v2_path_gets_the_envelope(
     assert hidden.json()["error"]["message"] == "Internal server error"
 
 
-# --- v1 is untouched ---------------------------------------------------------
+# --- v1 is gone --------------------------------------------------------------
 
 
-def test_v1_keeps_its_own_shapes(client: TestClient) -> None:
-    """Phase 1 acceptance: v1 endpoints still serve the existing frontend."""
+# Every path the MVP frontend called, one per router, plus the two v1-only
+# reads (the unread-only notification list, the unpaginated audit log). The
+# catch-all in `main.py` is what answers them now.
+V1_PATHS = [
+    ("GET", "/api/auth/me"),
+    ("POST", "/api/auth/login"),
+    ("GET", "/api/opportunities"),
+    ("POST", "/api/opportunities"),
+    ("GET", "/api/opportunities/1"),
+    ("PATCH", "/api/opportunities/1"),
+    ("DELETE", "/api/opportunities/1"),
+    ("GET", "/api/opportunities/1/shares"),
+    ("POST", "/api/opportunities/1/shares"),
+    ("GET", "/api/opportunities/1/audit-log"),
+    ("GET", "/api/opportunities/1/timeline"),
+    ("POST", "/api/opportunities/1/timeline"),
+    ("GET", "/api/opportunities/1/export/json"),
+    ("POST", "/api/opportunities/1/ai/ask"),
+    ("PATCH", "/api/timeline/1"),
+    ("DELETE", "/api/timeline/1"),
+    ("POST", "/api/timeline/1/notes"),
+    ("PATCH", "/api/notes/1"),
+    ("DELETE", "/api/notes/1"),
+    ("GET", "/api/notes/1/versions"),
+    ("POST", "/api/notes/1/comments"),
+    ("DELETE", "/api/comments/1"),
+    ("GET", "/api/notifications"),
+    ("PATCH", "/api/notifications/1/read"),
+]
+
+
+@pytest.mark.parametrize(("method", "path"), V1_PATHS, ids=lambda value: str(value))
+def test_v1_paths_are_gone(client: TestClient, method: str, path: str) -> None:
+    """`docs/ROADMAP.md`'s breaking-changes table: v1 is "retained until the
+    frontend moves, then removed at the end of Phase 2." Removed means removed
+    — not redirected, and not answering a different shape. A signed-in caller
+    gets the same 404 an unknown endpoint gets, in the one envelope.
+    """
     signup(client)
     create_opportunity(client)
 
-    listing = client.get("/api/opportunities").json()
-    assert set(listing) == {"stages", "opportunities"}
+    response = client.request(method, path, json={})
 
-    not_found = client.get("/api/opportunities/999")
+    assert response.status_code == 404, f"{method} {path} is still served"
+    assert response.json() == {"error": {"code": "not_found", "message": "API endpoint not found"}}
+
+
+def test_the_api_has_one_error_shape(client: TestClient) -> None:
+    """The three failures that reach a client by different routes — a handler's
+    404, the catch-all's, and the CSRF rejection that answers before routing —
+    all carry the envelope now that there is no second shape to choose between.
+    """
+    signup(client)
+
+    not_found = client.get("/api/v2/opportunities/999")
     assert not_found.status_code == 404
-    assert not_found.json() == {"detail": "Opportunity not found"}
+    assert not_found.json() == {"error": {"code": "not_found", "message": "Opportunity not found"}}
 
     unknown = client.get("/api/no-such-endpoint")
-    assert unknown.json() == {"detail": "API endpoint not found"}
+    assert unknown.json() == {"error": {"code": "not_found", "message": "API endpoint not found"}}
 
-    invalid = client.post("/api/opportunities", json={"account_name": "Acme"})
+    invalid = client.post("/api/v2/opportunities", json={"account_name": "Acme"})
     assert invalid.status_code == 422
-    assert isinstance(invalid.json()["detail"], list)
+    assert invalid.json()["error"]["fields"]["name"]
 
     plain = TestClient(client.app)
-    assert plain.post("/api/opportunities", json={}).json() == {
-        "detail": "CSRF token missing or invalid"
+    assert plain.post("/api/v2/opportunities", json={}).json() == {
+        "error": {"code": "forbidden", "message": "CSRF token missing or invalid"}
     }

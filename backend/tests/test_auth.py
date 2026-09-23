@@ -5,7 +5,7 @@ from app.database import db_connection
 
 def signup(client: TestClient, email: str = "owner@example.com") -> dict:
     response = client.post(
-        "/api/auth/signup",
+        "/api/v2/auth/signup",
         json={"email": email, "password": "password123", "name": "Owner"},
     )
     assert response.status_code == 201
@@ -15,7 +15,7 @@ def signup(client: TestClient, email: str = "owner@example.com") -> dict:
 def test_signup_sets_session_and_me_returns_user(client: TestClient) -> None:
     user = signup(client)
 
-    response = client.get("/api/auth/me")
+    response = client.get("/api/v2/auth/me")
 
     assert response.status_code == 200
     assert response.json()["user"]["id"] == user["id"]
@@ -26,7 +26,7 @@ def test_duplicate_signup_is_rejected(client: TestClient) -> None:
     signup(client)
 
     response = client.post(
-        "/api/auth/signup",
+        "/api/v2/auth/signup",
         json={"email": "OWNER@example.com", "password": "password123", "name": "Owner"},
     )
 
@@ -35,27 +35,27 @@ def test_duplicate_signup_is_rejected(client: TestClient) -> None:
 
 def test_login_and_logout_flow(client: TestClient) -> None:
     signup(client)
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     login = client.post(
-        "/api/auth/login",
+        "/api/v2/auth/login",
         json={"email": "owner@example.com", "password": "password123"},
     )
     assert login.status_code == 200
 
-    logout = client.post("/api/auth/logout")
+    logout = client.post("/api/v2/auth/logout")
     assert logout.status_code == 200
 
-    response = client.get("/api/auth/me")
+    response = client.get("/api/v2/auth/me")
     assert response.status_code == 401
 
 
 def test_invalid_login_is_rejected(client: TestClient) -> None:
     signup(client)
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     response = client.post(
-        "/api/auth/login",
+        "/api/v2/auth/login",
         json={"email": "owner@example.com", "password": "wrong-password"},
     )
 
@@ -63,13 +63,13 @@ def test_invalid_login_is_rejected(client: TestClient) -> None:
 
 
 def test_protected_endpoint_requires_session(client: TestClient) -> None:
-    response = client.get("/api/opportunities")
+    response = client.get("/api/v2/opportunities")
 
     assert response.status_code == 401
 
 
 def test_logout_without_a_session_cookie_is_a_no_op(client: TestClient) -> None:
-    response = client.post("/api/auth/logout")
+    response = client.post("/api/v2/auth/logout")
 
     assert response.status_code == 200
 
@@ -81,7 +81,7 @@ def test_expired_or_unknown_session_cookie_is_rejected(client: TestClient) -> No
         connection.execute("UPDATE sessions SET expires_at = '2000-01-01T00:00:00Z'")
         connection.commit()
 
-    response = client.get("/api/auth/me")
+    response = client.get("/api/v2/auth/me")
 
     assert response.status_code == 401
 
@@ -94,7 +94,7 @@ def test_login_purges_expired_sessions(client: TestClient) -> None:
         connection.commit()
 
     client.post(
-        "/api/auth/login",
+        "/api/v2/auth/login",
         json={"email": "owner@example.com", "password": "password123"},
     )
 
@@ -109,16 +109,16 @@ def test_password_change_requires_the_current_password(client: TestClient) -> No
     signup(client)
 
     response = client.post(
-        "/api/auth/password",
+        "/api/v2/auth/password",
         json={"current_password": "wrong-password", "new_password": "new-password123"},
     )
 
     assert response.status_code == 401
     # The old password still works.
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
     assert (
         client.post(
-            "/api/auth/login",
+            "/api/v2/auth/login",
             json={"email": "owner@example.com", "password": "password123"},
         ).status_code
         == 200
@@ -127,7 +127,7 @@ def test_password_change_requires_the_current_password(client: TestClient) -> No
 
 def test_password_change_requires_authentication(client: TestClient) -> None:
     response = client.post(
-        "/api/auth/password",
+        "/api/v2/auth/password",
         json={"current_password": "password123", "new_password": "new-password123"},
     )
 
@@ -138,7 +138,7 @@ def test_password_change_rejects_a_short_new_password(client: TestClient) -> Non
     signup(client)
 
     response = client.post(
-        "/api/auth/password",
+        "/api/v2/auth/password",
         json={"current_password": "password123", "new_password": "short"},
     )
 
@@ -151,14 +151,14 @@ def test_password_change_invalidates_every_other_session(client: TestClient) -> 
     """
     user = signup(client)
     other_device = client.post(
-        "/api/auth/login",
+        "/api/v2/auth/login",
         json={"email": "owner@example.com", "password": "password123"},
     )
     assert other_device.status_code == 200
     stolen_session = client.cookies["opptrail_session"]
 
     changed = client.post(
-        "/api/auth/password",
+        "/api/v2/auth/password",
         json={"current_password": "password123", "new_password": "new-password123"},
     )
 
@@ -166,7 +166,7 @@ def test_password_change_invalidates_every_other_session(client: TestClient) -> 
     assert changed.json()["user"]["id"] == user["id"]
     # The caller is re-issued a working session; the old one is gone.
     assert client.cookies["opptrail_session"] != stolen_session
-    assert client.get("/api/auth/me").status_code == 200
+    assert client.get("/api/v2/auth/me").status_code == 200
     with db_connection() as connection:
         sessions = connection.execute("SELECT id FROM sessions").fetchall()
     assert [row["id"] for row in sessions] == [client.cookies["opptrail_session"]]
@@ -175,21 +175,21 @@ def test_password_change_invalidates_every_other_session(client: TestClient) -> 
 def test_the_new_password_is_the_one_that_works(client: TestClient) -> None:
     signup(client)
     client.post(
-        "/api/auth/password",
+        "/api/v2/auth/password",
         json={"current_password": "password123", "new_password": "new-password123"},
     )
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     assert (
         client.post(
-            "/api/auth/login",
+            "/api/v2/auth/login",
             json={"email": "owner@example.com", "password": "password123"},
         ).status_code
         == 401
     )
     assert (
         client.post(
-            "/api/auth/login",
+            "/api/v2/auth/login",
             json={"email": "owner@example.com", "password": "new-password123"},
         ).status_code
         == 200

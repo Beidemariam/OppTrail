@@ -41,7 +41,7 @@ try:
 except (ImportError, OSError):
     WEASYPRINT_AVAILABLE = False
 
-PDF_EXPORT_ENDPOINT = Endpoint("GET", "/api/opportunities/{opportunity_id}/export/pdf")
+PDF_EXPORT_ENDPOINT = Endpoint("GET", "/api/v2/opportunities/{opportunity_id}/export/pdf")
 
 Actor = Literal["anonymous", "unrelated", "viewer", "editor", "owner"]
 
@@ -125,9 +125,9 @@ def scoped(*, viewer: int, editor: int, owner: int) -> dict[Actor, int]:
 
 MATRIX: dict[Endpoint, Case] = {
     # --- Authentication -------------------------------------------------
-    Endpoint("POST", "/api/auth/signup"): Case(
+    Endpoint("POST", "/api/v2/auth/signup"): Case(
         expected=all_actors(201),
-        url=lambda world: "/api/auth/signup",
+        url=lambda world: "/api/v2/auth/signup",
         body=lambda world, actor: {
             "email": _unique_email(actor),
             "password": PASSWORD,
@@ -135,15 +135,15 @@ MATRIX: dict[Endpoint, Case] = {
         },
         notes="Open by design: signing up is how a user comes to exist.",
     ),
-    Endpoint("POST", "/api/auth/login"): Case(
+    Endpoint("POST", "/api/v2/auth/login"): Case(
         expected=all_actors(200),
-        url=lambda world: "/api/auth/login",
+        url=lambda world: "/api/v2/auth/login",
         body=lambda world, actor: {"email": world.emails["owner"], "password": PASSWORD},
         notes="Open by design; credentials, not the session, are the control.",
     ),
-    Endpoint("POST", "/api/auth/logout"): Case(
+    Endpoint("POST", "/api/v2/auth/logout"): Case(
         expected=all_actors(200),
-        url=lambda world: "/api/auth/logout",
+        url=lambda world: "/api/v2/auth/logout",
         body=lambda world, actor: None,
         notes=(
             "Deliberately not behind get_current_user: clearing a cookie that is "
@@ -151,83 +151,83 @@ MATRIX: dict[Endpoint, Case] = {
             "client unable to discard a stale session."
         ),
     ),
-    Endpoint("POST", "/api/auth/password"): Case(
+    Endpoint("POST", "/api/v2/auth/password"): Case(
         expected=authenticated_only(200),
-        url=lambda world: "/api/auth/password",
+        url=lambda world: "/api/v2/auth/password",
         body=lambda world, actor: {
             "current_password": PASSWORD,
             "new_password": "replacement-password-123",
         },
     ),
-    Endpoint("GET", "/api/auth/me"): Case(
+    Endpoint("GET", "/api/v2/auth/me"): Case(
         expected=authenticated_only(200),
-        url=lambda world: "/api/auth/me",
+        url=lambda world: "/api/v2/auth/me",
     ),
     # --- Opportunities ---------------------------------------------------
-    Endpoint("GET", "/api/opportunities"): Case(
+    Endpoint("GET", "/api/v2/opportunities"): Case(
         expected=authenticated_only(200),
-        url=lambda world: "/api/opportunities",
+        url=lambda world: "/api/v2/opportunities",
         notes="Scoped by the query itself: the list only contains what you can see.",
     ),
-    Endpoint("POST", "/api/opportunities"): Case(
+    Endpoint("POST", "/api/v2/opportunities"): Case(
         expected=authenticated_only(201),
-        url=lambda world: "/api/opportunities",
+        url=lambda world: "/api/v2/opportunities",
         body=lambda world, actor: {
             "name": "Matrix opportunity",
             "account_name": "Acme",
             "stage": "Prospecting",
         },
     ),
-    Endpoint("GET", "/api/opportunities/{opportunity_id}"): Case(
+    Endpoint("GET", "/api/v2/opportunities/{opportunity_id}"): Case(
         expected=scoped(viewer=200, editor=200, owner=200),
-        url=lambda world: f"/api/opportunities/{world.opportunity_id}",
+        url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}",
     ),
-    Endpoint("PATCH", "/api/opportunities/{opportunity_id}"): Case(
+    Endpoint("PATCH", "/api/v2/opportunities/{opportunity_id}"): Case(
         expected=scoped(viewer=403, editor=403, owner=200),
-        url=lambda world: f"/api/opportunities/{world.opportunity_id}",
+        url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}",
         body=lambda world, actor: {"stage": "Qualification"},
         notes="Opportunity fields are the owner's: require_opportunity_owner.",
     ),
-    Endpoint("DELETE", "/api/opportunities/{opportunity_id}"): Case(
+    Endpoint("DELETE", "/api/v2/opportunities/{opportunity_id}"): Case(
         expected=scoped(viewer=403, editor=403, owner=204),
-        url=lambda world: f"/api/opportunities/{world.opportunity_id}",
+        url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}",
     ),
     # --- Sharing and audit log -------------------------------------------
-    Endpoint("GET", "/api/opportunities/{opportunity_id}/shares"): Case(
+    Endpoint("GET", "/api/v2/opportunities/{opportunity_id}/shares"): Case(
         expected=scoped(viewer=403, editor=403, owner=200),
-        url=lambda world: f"/api/opportunities/{world.opportunity_id}/shares",
+        url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/shares",
     ),
-    Endpoint("POST", "/api/opportunities/{opportunity_id}/shares"): Case(
+    Endpoint("POST", "/api/v2/opportunities/{opportunity_id}/shares"): Case(
         expected=scoped(viewer=403, editor=403, owner=201),
-        url=lambda world: f"/api/opportunities/{world.opportunity_id}/shares",
+        url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/shares",
         body=lambda world, actor: {"email": world.emails["unrelated"], "role": "viewer"},
     ),
-    Endpoint("PATCH", "/api/opportunities/{opportunity_id}/shares/{user_id}"): Case(
+    Endpoint("PATCH", "/api/v2/opportunities/{opportunity_id}/shares/{user_id}"): Case(
         expected=scoped(viewer=403, editor=403, owner=200),
         url=lambda world: (
-            f"/api/opportunities/{world.opportunity_id}/shares/{world.user_ids['viewer']}"
+            f"/api/v2/opportunities/{world.opportunity_id}/shares/{world.user_ids['viewer']}"
         ),
         body=lambda world, actor: {"role": "editor"},
     ),
-    Endpoint("DELETE", "/api/opportunities/{opportunity_id}/shares/{user_id}"): Case(
+    Endpoint("DELETE", "/api/v2/opportunities/{opportunity_id}/shares/{user_id}"): Case(
         expected=scoped(viewer=403, editor=403, owner=204),
         url=lambda world: (
-            f"/api/opportunities/{world.opportunity_id}/shares/{world.user_ids['viewer']}"
+            f"/api/v2/opportunities/{world.opportunity_id}/shares/{world.user_ids['viewer']}"
         ),
     ),
-    Endpoint("GET", "/api/opportunities/{opportunity_id}/audit-log"): Case(
+    Endpoint("GET", "/api/v2/opportunities/{opportunity_id}/audit-log"): Case(
         expected=scoped(viewer=403, editor=403, owner=200),
-        url=lambda world: f"/api/opportunities/{world.opportunity_id}/audit-log",
+        url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/audit-log",
         notes="Owner-only forensics (CLAUDE.md, Auditability).",
     ),
     # --- Timeline ---------------------------------------------------------
-    Endpoint("GET", "/api/opportunities/{opportunity_id}/timeline"): Case(
+    Endpoint("GET", "/api/v2/opportunities/{opportunity_id}/timeline"): Case(
         expected=scoped(viewer=200, editor=200, owner=200),
-        url=lambda world: f"/api/opportunities/{world.opportunity_id}/timeline",
+        url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/timeline",
     ),
-    Endpoint("POST", "/api/opportunities/{opportunity_id}/timeline"): Case(
+    Endpoint("POST", "/api/v2/opportunities/{opportunity_id}/timeline"): Case(
         expected=scoped(viewer=403, editor=201, owner=201),
-        url=lambda world: f"/api/opportunities/{world.opportunity_id}/timeline",
+        url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/timeline",
         body=lambda world, actor: {
             "type": "call",
             "title": "Matrix entry",
@@ -235,71 +235,71 @@ MATRIX: dict[Endpoint, Case] = {
             "event_timestamp": "2026-09-04T10:00",
         },
     ),
-    Endpoint("PATCH", "/api/timeline/{entry_id}"): Case(
+    Endpoint("PATCH", "/api/v2/timeline/{entry_id}"): Case(
         expected=scoped(viewer=403, editor=403, owner=200),
-        url=lambda world: f"/api/timeline/{world.entry_id}",
+        url=lambda world: f"/api/v2/timeline/{world.entry_id}",
         body=lambda world, actor: {"title": "Matrix entry, edited"},
         notes="Entry authored by the owner, so the editor is not its author (D-005).",
     ),
-    Endpoint("DELETE", "/api/timeline/{entry_id}"): Case(
+    Endpoint("DELETE", "/api/v2/timeline/{entry_id}"): Case(
         expected=scoped(viewer=403, editor=403, owner=204),
-        url=lambda world: f"/api/timeline/{world.entry_id}",
+        url=lambda world: f"/api/v2/timeline/{world.entry_id}",
     ),
-    Endpoint("POST", "/api/timeline/{entry_id}/notes"): Case(
+    Endpoint("POST", "/api/v2/timeline/{entry_id}/notes"): Case(
         expected=scoped(viewer=403, editor=201, owner=201),
-        url=lambda world: f"/api/timeline/{world.entry_id}/notes",
+        url=lambda world: f"/api/v2/timeline/{world.entry_id}/notes",
         body=lambda world, actor: {"body": "Matrix note"},
         notes="Editors add freely; only changing an existing item is restricted.",
     ),
-    Endpoint("GET", "/api/notes/{note_id}/versions"): Case(
+    Endpoint("GET", "/api/v2/notes/{note_id}/versions"): Case(
         expected=scoped(viewer=200, editor=200, owner=200),
-        url=lambda world: f"/api/notes/{world.note_id}/versions",
+        url=lambda world: f"/api/v2/notes/{world.note_id}/versions",
     ),
-    Endpoint("PATCH", "/api/notes/{note_id}"): Case(
+    Endpoint("PATCH", "/api/v2/notes/{note_id}"): Case(
         expected=scoped(viewer=403, editor=403, owner=200),
-        url=lambda world: f"/api/notes/{world.note_id}",
+        url=lambda world: f"/api/v2/notes/{world.note_id}",
         body=lambda world, actor: {"body": "Matrix note, edited"},
     ),
-    Endpoint("DELETE", "/api/notes/{note_id}"): Case(
+    Endpoint("DELETE", "/api/v2/notes/{note_id}"): Case(
         expected=scoped(viewer=403, editor=403, owner=204),
-        url=lambda world: f"/api/notes/{world.note_id}",
+        url=lambda world: f"/api/v2/notes/{world.note_id}",
     ),
-    Endpoint("POST", "/api/notes/{note_id}/comments"): Case(
+    Endpoint("POST", "/api/v2/notes/{note_id}/comments"): Case(
         expected=scoped(viewer=403, editor=201, owner=201),
-        url=lambda world: f"/api/notes/{world.note_id}/comments",
+        url=lambda world: f"/api/v2/notes/{world.note_id}/comments",
         body=lambda world, actor: {"body": "Matrix comment"},
     ),
-    Endpoint("DELETE", "/api/comments/{comment_id}"): Case(
+    Endpoint("DELETE", "/api/v2/comments/{comment_id}"): Case(
         expected=scoped(viewer=403, editor=403, owner=204),
-        url=lambda world: f"/api/comments/{world.comment_id}",
+        url=lambda world: f"/api/v2/comments/{world.comment_id}",
     ),
     # --- AI agent ---------------------------------------------------------
-    Endpoint("POST", "/api/opportunities/{opportunity_id}/ai/ask"): Case(
+    Endpoint("POST", "/api/v2/opportunities/{opportunity_id}/ai/ask"): Case(
         expected=scoped(viewer=200, editor=200, owner=200),
-        url=lambda world: f"/api/opportunities/{world.opportunity_id}/ai/ask",
+        url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/ai/ask",
         body=lambda world, actor: {"question": "What happened?"},
         notes="Read-only, so viewers may ask: require_opportunity_access.",
     ),
     # --- Export -----------------------------------------------------------
-    Endpoint("GET", "/api/opportunities/{opportunity_id}/export/json"): Case(
+    Endpoint("GET", "/api/v2/opportunities/{opportunity_id}/export/json"): Case(
         expected=scoped(viewer=200, editor=200, owner=200),
-        url=lambda world: f"/api/opportunities/{world.opportunity_id}/export/json",
+        url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/export/json",
     ),
-    Endpoint("GET", "/api/opportunities/{opportunity_id}/export/csv"): Case(
+    Endpoint("GET", "/api/v2/opportunities/{opportunity_id}/export/csv"): Case(
         expected=scoped(viewer=200, editor=200, owner=200),
-        url=lambda world: f"/api/opportunities/{world.opportunity_id}/export/csv",
+        url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/export/csv",
     ),
-    Endpoint("GET", "/api/opportunities/{opportunity_id}/export/pdf"): Case(
+    Endpoint("GET", "/api/v2/opportunities/{opportunity_id}/export/pdf"): Case(
         expected=scoped(viewer=200, editor=200, owner=200),
-        url=lambda world: f"/api/opportunities/{world.opportunity_id}/export/pdf",
+        url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/export/pdf",
     ),
     # --- Notifications ----------------------------------------------------
-    Endpoint("GET", "/api/notifications"): Case(
+    Endpoint("GET", "/api/v2/notifications"): Case(
         expected=authenticated_only(200),
-        url=lambda world: "/api/notifications",
+        url=lambda world: "/api/v2/notifications",
         notes="Scoped by the query: a user only ever reads their own rows.",
     ),
-    Endpoint("PATCH", "/api/notifications/{notification_id}/read"): Case(
+    Endpoint("PATCH", "/api/v2/notifications/{notification_id}/read"): Case(
         expected={
             "anonymous": 401,
             "unrelated": 404,
@@ -307,7 +307,7 @@ MATRIX: dict[Endpoint, Case] = {
             "editor": 404,
             "owner": 200,
         },
-        url=lambda world: f"/api/notifications/{world.notification_id}/read",
+        url=lambda world: f"/api/v2/notifications/{world.notification_id}/read",
         body=lambda world, actor: None,
         notes="The fixture's notification belongs to the owner; everyone else 404s.",
     ),
@@ -473,7 +473,7 @@ MATRIX: dict[Endpoint, Case] = {
 
 def _signup(client: TestClient, email: str, name: str) -> int:
     response = client.post(
-        "/api/auth/signup",
+        "/api/v2/auth/signup",
         json={"email": email, "password": PASSWORD, "name": name},
     )
     assert response.status_code == 201, response.text
@@ -511,21 +511,21 @@ def world(tmp_path, monkeypatch) -> World:
 
     owner = clients["owner"]
     opportunity_id = owner.post(
-        "/api/opportunities",
+        "/api/v2/opportunities",
         json={"name": "Matrix", "account_name": "Acme", "stage": "Prospecting"},
     ).json()["id"]
 
     for actor, role in (("editor", "editor"), ("viewer", "viewer")):
         assert (
             owner.post(
-                f"/api/opportunities/{opportunity_id}/shares",
+                f"/api/v2/opportunities/{opportunity_id}/shares",
                 json={"email": emails[actor], "role": role},
             ).status_code
             == 201
         )
 
     entry_id = owner.post(
-        f"/api/opportunities/{opportunity_id}/timeline",
+        f"/api/v2/opportunities/{opportunity_id}/timeline",
         json={
             "type": "call",
             "title": "Discovery call",
@@ -533,17 +533,17 @@ def world(tmp_path, monkeypatch) -> World:
             "event_timestamp": "2026-09-04T10:00",
         },
     ).json()["id"]
-    note_id = owner.post(f"/api/timeline/{entry_id}/notes", json={"body": "Owner note"}).json()[
+    note_id = owner.post(f"/api/v2/timeline/{entry_id}/notes", json={"body": "Owner note"}).json()[
         "id"
     ]
     comment_id = owner.post(
-        f"/api/notes/{note_id}/comments", json={"body": "Owner comment"}
+        f"/api/v2/notes/{note_id}/comments", json={"body": "Owner comment"}
     ).json()["id"]
 
     # The editor writing to a shared opportunity is what notifies the owner, so
     # this both seeds the notification row and keeps it owned by the owner.
     clients["editor"].post(
-        f"/api/opportunities/{opportunity_id}/timeline",
+        f"/api/v2/opportunities/{opportunity_id}/timeline",
         json={
             "type": "email",
             "title": "Editor follow-up",
@@ -551,7 +551,7 @@ def world(tmp_path, monkeypatch) -> World:
             "event_timestamp": "2026-09-05T10:00",
         },
     )
-    notifications = owner.get("/api/notifications").json()["notifications"]
+    notifications = owner.get("/api/v2/notifications").json()["items"]
     assert notifications, "expected the owner to be notified of the editor's entry"
 
     saved_view_id = owner.post(
@@ -564,7 +564,7 @@ def world(tmp_path, monkeypatch) -> World:
     # above: an endpoint's expectations must not depend on another endpoint's
     # test having run.
     deleted_entry_id = owner.post(
-        f"/api/opportunities/{opportunity_id}/timeline",
+        f"/api/v2/opportunities/{opportunity_id}/timeline",
         json={
             "type": "call",
             "title": "Deleted call",
@@ -573,31 +573,31 @@ def world(tmp_path, monkeypatch) -> World:
         },
     ).json()["id"]
     deleted_note_id = owner.post(
-        f"/api/timeline/{entry_id}/notes", json={"body": "Deleted note"}
+        f"/api/v2/timeline/{entry_id}/notes", json={"body": "Deleted note"}
     ).json()["id"]
     deleted_comment_id = owner.post(
-        f"/api/notes/{note_id}/comments", json={"body": "Deleted comment"}
+        f"/api/v2/notes/{note_id}/comments", json={"body": "Deleted comment"}
     ).json()["id"]
     for path in (
-        f"/api/timeline/{deleted_entry_id}",
-        f"/api/notes/{deleted_note_id}",
-        f"/api/comments/{deleted_comment_id}",
+        f"/api/v2/timeline/{deleted_entry_id}",
+        f"/api/v2/notes/{deleted_note_id}",
+        f"/api/v2/comments/{deleted_comment_id}",
     ):
         assert owner.delete(path).status_code == 204, path
 
     deleted_opportunity_id = owner.post(
-        "/api/opportunities",
+        "/api/v2/opportunities",
         json={"name": "Matrix deleted", "account_name": "Acme", "stage": "Prospecting"},
     ).json()["id"]
     for actor, role in (("editor", "editor"), ("viewer", "viewer")):
         assert (
             owner.post(
-                f"/api/opportunities/{deleted_opportunity_id}/shares",
+                f"/api/v2/opportunities/{deleted_opportunity_id}/shares",
                 json={"email": emails[actor], "role": role},
             ).status_code
             == 201
         )
-    assert owner.delete(f"/api/opportunities/{deleted_opportunity_id}").status_code == 204
+    assert owner.delete(f"/api/v2/opportunities/{deleted_opportunity_id}").status_code == 204
 
     yield World(
         clients=clients,

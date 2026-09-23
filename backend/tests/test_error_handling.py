@@ -31,7 +31,7 @@ def server_exceptions_not_raised(client: TestClient) -> Iterator[None]:
 
 def signup(client: TestClient, email: str = "owner@example.com") -> None:
     response = client.post(
-        "/api/auth/signup",
+        "/api/v2/auth/signup",
         json={"email": email, "password": "password123", "name": "Owner"},
     )
     assert response.status_code == 201
@@ -39,7 +39,7 @@ def signup(client: TestClient, email: str = "owner@example.com") -> None:
 
 def create_opportunity(client: TestClient) -> None:
     response = client.post(
-        "/api/opportunities",
+        "/api/v2/opportunities",
         json={
             "name": "Expansion",
             "account_name": "Acme",
@@ -58,7 +58,7 @@ def test_unhandled_exception_returns_json_detail_envelope(
     """Regression test for the API error envelope gap: before `errors.py`'s
     handler was registered, an unhandled exception fell through to Starlette's
     default plain-text 500, which broke `apiRequest<T>()`'s `response.json()`
-    parse (CLAUDE.md: it "throws on non-2xx using the API's `detail` field").
+    parse (CLAUDE.md: it throws on non-2xx using the message in the envelope).
     """
     signup(client)
     create_opportunity(client)
@@ -69,11 +69,11 @@ def test_unhandled_exception_returns_json_detail_envelope(
     monkeypatch.setattr(routes_opportunities, "is_opportunity_stalled", explode)
 
     with server_exceptions_not_raised(client):
-        response = client.get("/api/opportunities")
+        response = client.get("/api/v2/opportunities")
 
     assert response.status_code == 500
     assert response.headers["content-type"].startswith("application/json")
-    assert response.json() == {"detail": "boom"}
+    assert response.json() == {"error": {"code": "internal_error", "message": "boom"}}
     assert REQUEST_ID_HEADER in response.headers
 
 
@@ -90,7 +90,21 @@ def test_unhandled_exception_hides_details_in_production(
     monkeypatch.setattr(settings, "environment", "production")
 
     with server_exceptions_not_raised(client):
-        response = client.get("/api/opportunities")
+        response = client.get("/api/v2/opportunities")
 
     assert response.status_code == 500
-    assert response.json() == {"detail": "Internal server error"}
+    assert response.json() == {
+        "error": {"code": "internal_error", "message": "Internal server error"}
+    }
+
+
+def test_the_envelope_is_the_api_s_and_not_the_whole_server_s(client: TestClient) -> None:
+    """`errors.py`'s handlers are registered app-wide, but this process also
+    serves the exported SPA. A failure on a page path is a web-server failure
+    and keeps FastAPI's own shape -- the `{"error": ...}` envelope describes
+    the API, which is the thing a client parses (`is_api_path`).
+    """
+    response = client.post("/some/page")
+
+    assert response.status_code == 405
+    assert response.json() == {"detail": "Method Not Allowed"}

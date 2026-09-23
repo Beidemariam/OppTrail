@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 def signup(client: TestClient, email: str, name: str) -> dict:
     response = client.post(
-        "/api/auth/signup",
+        "/api/v2/auth/signup",
         json={"email": email, "password": "password123", "name": name},
     )
     assert response.status_code == 201
@@ -21,7 +21,7 @@ def signup(client: TestClient, email: str, name: str) -> dict:
 
 def login(client: TestClient, email: str) -> None:
     response = client.post(
-        "/api/auth/login",
+        "/api/v2/auth/login",
         json={"email": email, "password": "password123"},
     )
     assert response.status_code == 200

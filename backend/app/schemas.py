@@ -171,16 +171,12 @@ class OpportunityPublic(BaseModel):
         return str(value)
 
 
-class OpportunityListResponse(BaseModel):
-    stages: list[str]
-    opportunities: list[OpportunityPublic]
-
-
 # --- Bulk actions (milestone 2.4c) ------------------------------------------
 
-# The board is unpaginated up to the 400-opportunity scale milestone 2.3 built
-# for (D-061), so a select-all on today's board is bounded by that, not by an
-# arbitrary request-size guess.
+# The board holds every opportunity the reader can see — `useOpportunities`
+# walks `GET /api/v2/opportunities` to its last page (D-093) — up to the
+# 400-opportunity scale milestone 2.3 built for, so a select-all is bounded by
+# that rather than by an arbitrary request-size guess.
 BULK_ACTION_MAX_IDS = 400
 
 
@@ -318,10 +314,6 @@ class TimelineEntryPublic(BaseModel):
     notes: list[NotePublic]
 
 
-class TimelineResponse(BaseModel):
-    entries: list[TimelineEntryPublic]
-
-
 class NoteCreate(BaseModel):
     body: str = Field(min_length=1)
 
@@ -381,10 +373,6 @@ class SharePublic(BaseModel):
     invited_by: int
     invited_by_name: str
     created_at: str
-
-
-class ShareListResponse(BaseModel):
-    shares: list[SharePublic]
 
 
 AuditAction = Literal[
@@ -609,21 +597,10 @@ NOTIFICATION_PAYLOAD_MODELS: dict[str, type[BaseModel]] = {
 
 
 class NotificationPublic(BaseModel):
-    id: int
-    type: NotificationType
-    payload: NotificationPayload
-    read: bool
-    created_at: str
-
-
-class NotificationListResponse(BaseModel):
-    notifications: list[NotificationPublic]
-
-
-class NotificationPublicV2(BaseModel):
-    """The inbox rework's shape (milestone 1.7): `read_at` replaces `read` as
-    the source of truth, so a client can tell not just whether a notification
-    was read but order a history by it. `grouped_key` rides along now,
+    """`read_at` is the source of truth (milestone 1.7), so a client can tell
+    not just whether a notification was read but order a history by it. The
+    older boolean `read` was v1's and went with it, though the column stays —
+    see `CLAUDE.md`'s "Notifications". `grouped_key` rides along now,
     unpopulated, ahead of Phase 5's digest batching -- see the migration's
     docstring for why it is added before it is used.
     """

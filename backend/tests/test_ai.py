@@ -8,7 +8,7 @@ from app.settings import settings
 
 def signup(client: TestClient, email: str, name: str) -> dict:
     response = client.post(
-        "/api/auth/signup",
+        "/api/v2/auth/signup",
         json={"email": email, "password": "password123", "name": name},
     )
     assert response.status_code == 201
@@ -17,7 +17,7 @@ def signup(client: TestClient, email: str, name: str) -> dict:
 
 def login(client: TestClient, email: str) -> None:
     response = client.post(
-        "/api/auth/login",
+        "/api/v2/auth/login",
         json={"email": email, "password": "password123"},
     )
     assert response.status_code == 200
@@ -25,7 +25,7 @@ def login(client: TestClient, email: str) -> None:
 
 def create_opportunity(client: TestClient) -> dict:
     response = client.post(
-        "/api/opportunities",
+        "/api/v2/opportunities",
         json={
             "name": "Expansion",
             "account_name": "Acme",
@@ -41,7 +41,7 @@ def create_opportunity(client: TestClient) -> dict:
 
 def create_entry(client: TestClient, opportunity_id: int) -> dict:
     response = client.post(
-        f"/api/opportunities/{opportunity_id}/timeline",
+        f"/api/v2/opportunities/{opportunity_id}/timeline",
         json={
             "type": "call",
             "title": "Discovery call",
@@ -82,7 +82,7 @@ def test_ai_answer_uses_timeline_context_and_does_not_write(
     opportunity = create_opportunity(client)
     entry = create_entry(client, opportunity["id"])
     note = client.post(
-        f"/api/timeline/{entry['id']}/notes",
+        f"/api/v2/timeline/{entry['id']}/notes",
         json={"body": "Follow up with procurement next week."},
     )
     assert note.status_code == 201
@@ -109,7 +109,7 @@ def test_ai_answer_uses_timeline_context_and_does_not_write(
     before_counts = count_rows()
 
     response = client.post(
-        f"/api/opportunities/{opportunity['id']}/ai/ask",
+        f"/api/v2/opportunities/{opportunity['id']}/ai/ask",
         json={"question": "Where do we stand?"},
     )
 
@@ -130,9 +130,9 @@ def test_viewer_can_ask_ai_but_cannot_write(client: TestClient, monkeypatch) -> 
     settings.openai_api_key = "test-key"
     owner = signup(client, "owner@example.com", "Owner")
     opportunity = create_opportunity(client)
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
     viewer = signup(client, "viewer@example.com", "Viewer")
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     with db_connection() as connection:
         connection.execute(
@@ -151,13 +151,13 @@ def test_viewer_can_ask_ai_but_cannot_write(client: TestClient, monkeypatch) -> 
 
     login(client, "viewer@example.com")
     ai_response = client.post(
-        f"/api/opportunities/{opportunity['id']}/ai/ask",
+        f"/api/v2/opportunities/{opportunity['id']}/ai/ask",
         json={"question": "Summarize this opportunity"},
     )
     assert ai_response.status_code == 200
 
     write_response = client.post(
-        f"/api/opportunities/{opportunity['id']}/timeline",
+        f"/api/v2/opportunities/{opportunity['id']}/timeline",
         json={
             "type": "call",
             "title": "Viewer write",
@@ -172,7 +172,7 @@ def test_ai_blocks_users_without_access(client: TestClient, monkeypatch) -> None
     settings.openai_api_key = "test-key"
     signup(client, "owner@example.com", "Owner")
     opportunity = create_opportunity(client)
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
     signup(client, "other@example.com", "Other")
 
     called = False
@@ -184,7 +184,7 @@ def test_ai_blocks_users_without_access(client: TestClient, monkeypatch) -> None
 
     monkeypatch.setattr("app.routes_ai.ask_openai", fake_ask_openai)
     response = client.post(
-        f"/api/opportunities/{opportunity['id']}/ai/ask",
+        f"/api/v2/opportunities/{opportunity['id']}/ai/ask",
         json={"question": "Can I see this?"},
     )
 
@@ -198,7 +198,7 @@ def test_ai_returns_helpful_errors(client: TestClient, monkeypatch) -> None:
     opportunity = create_opportunity(client)
 
     missing_key = client.post(
-        f"/api/opportunities/{opportunity['id']}/ai/ask",
+        f"/api/v2/opportunities/{opportunity['id']}/ai/ask",
         json={"question": "Summarize this opportunity"},
     )
     assert missing_key.status_code == 503
@@ -210,7 +210,7 @@ def test_ai_returns_helpful_errors(client: TestClient, monkeypatch) -> None:
 
     monkeypatch.setattr("app.routes_ai.ask_openai", broken_ask_openai)
     failed = client.post(
-        f"/api/opportunities/{opportunity['id']}/ai/ask",
+        f"/api/v2/opportunities/{opportunity['id']}/ai/ask",
         json={"question": "Summarize this opportunity"},
     )
     assert failed.status_code == 502
@@ -262,7 +262,7 @@ def test_build_timeline_context_includes_follow_up_dates_and_comments(
     signup(client, "owner@example.com", "Owner")
     opportunity = create_opportunity(client)
     entry = client.post(
-        f"/api/opportunities/{opportunity['id']}/timeline",
+        f"/api/v2/opportunities/{opportunity['id']}/timeline",
         json={
             "type": "call",
             "title": "Discovery call",
@@ -272,11 +272,11 @@ def test_build_timeline_context_includes_follow_up_dates_and_comments(
         },
     ).json()
     note = client.post(
-        f"/api/timeline/{entry['id']}/notes",
+        f"/api/v2/timeline/{entry['id']}/notes",
         json={"body": "Follow up with procurement next week."},
     ).json()
     comment = client.post(
-        f"/api/notes/{note['id']}/comments",
+        f"/api/v2/notes/{note['id']}/comments",
         json={"body": "Procurement confirmed the budget."},
     )
     assert comment.status_code == 201
@@ -344,7 +344,7 @@ def test_ai_context_never_includes_another_opportunitys_data(
     create_entry(client, opportunity_a["id"])
 
     opportunity_b = client.post(
-        "/api/opportunities",
+        "/api/v2/opportunities",
         json={
             "name": "Renewal",
             "account_name": "Globex",
@@ -355,7 +355,7 @@ def test_ai_context_never_includes_another_opportunitys_data(
         },
     ).json()
     entry_b = client.post(
-        f"/api/opportunities/{opportunity_b['id']}/timeline",
+        f"/api/v2/opportunities/{opportunity_b['id']}/timeline",
         json={
             "type": "call",
             "title": "Globex kickoff",
@@ -374,7 +374,7 @@ def test_ai_context_never_includes_another_opportunitys_data(
     monkeypatch.setattr("app.routes_ai.ask_openai", fake_ask_openai)
 
     response = client.post(
-        f"/api/opportunities/{opportunity_a['id']}/ai/ask",
+        f"/api/v2/opportunities/{opportunity_a['id']}/ai/ask",
         json={"question": "Where do we stand?"},
     )
 
@@ -404,7 +404,7 @@ def test_ai_treats_hostile_note_content_as_inert_data(
         "instruction."
     )
     note = client.post(
-        f"/api/timeline/{entry['id']}/notes",
+        f"/api/v2/timeline/{entry['id']}/notes",
         json={"body": hostile_body},
     )
     assert note.status_code == 201
@@ -419,7 +419,7 @@ def test_ai_treats_hostile_note_content_as_inert_data(
     before_counts = count_rows()
 
     response = client.post(
-        f"/api/opportunities/{opportunity['id']}/ai/ask",
+        f"/api/v2/opportunities/{opportunity['id']}/ai/ask",
         json={"question": "What should I do next?"},
     )
 

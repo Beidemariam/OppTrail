@@ -8,7 +8,7 @@ from app.notification_service import extract_mentioned_emails
 
 def signup(client: TestClient, email: str, name: str) -> dict:
     response = client.post(
-        "/api/auth/signup",
+        "/api/v2/auth/signup",
         json={"email": email, "password": "password123", "name": name},
     )
     assert response.status_code == 201
@@ -17,7 +17,7 @@ def signup(client: TestClient, email: str, name: str) -> dict:
 
 def login(client: TestClient, email: str) -> None:
     response = client.post(
-        "/api/auth/login",
+        "/api/v2/auth/login",
         json={"email": email, "password": "password123"},
     )
     assert response.status_code == 200
@@ -25,7 +25,7 @@ def login(client: TestClient, email: str) -> None:
 
 def create_opportunity(client: TestClient) -> dict:
     response = client.post(
-        "/api/opportunities",
+        "/api/v2/opportunities",
         json={
             "name": "Expansion",
             "account_name": "Acme",
@@ -41,7 +41,7 @@ def create_opportunity(client: TestClient) -> dict:
 
 def create_entry(client: TestClient, opportunity_id: int) -> dict:
     response = client.post(
-        f"/api/opportunities/{opportunity_id}/timeline",
+        f"/api/v2/opportunities/{opportunity_id}/timeline",
         json={
             "type": "call",
             "title": "Discovery call",
@@ -81,44 +81,42 @@ def test_mentions_comments_and_shared_activity_create_notifications(
     owner = signup(client, "owner@example.com", "Owner")
     opportunity = create_opportunity(client)
     entry = create_entry(client, opportunity["id"])
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     viewer = signup(client, "viewer@example.com", "Viewer")
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
     editor = signup(client, "editor@example.com", "Editor")
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     share_opportunity(opportunity["id"], viewer["id"], owner["id"], "viewer")
     share_opportunity(opportunity["id"], editor["id"], owner["id"], "editor")
 
     login(client, "owner@example.com")
     note = client.post(
-        f"/api/timeline/{entry['id']}/notes",
+        f"/api/v2/timeline/{entry['id']}/notes",
         json={"body": "Please review this @viewer@example.com"},
     )
     assert note.status_code == 201
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     login(client, "viewer@example.com")
-    viewer_notifications = client.get("/api/notifications")
+    viewer_notifications = client.get("/api/v2/notifications")
     assert viewer_notifications.status_code == 200
-    viewer_types = {
-        notification["type"] for notification in viewer_notifications.json()["notifications"]
-    }
+    viewer_types = {notification["type"] for notification in viewer_notifications.json()["items"]}
     assert "mention" in viewer_types
     assert "shared_activity" in viewer_types
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     login(client, "editor@example.com")
     comment = client.post(
-        f"/api/notes/{note.json()['id']}/comments",
+        f"/api/v2/notes/{note.json()['id']}/comments",
         json={"body": "Legal is aligned @viewer@example.com"},
     )
     assert comment.status_code == 201
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     login(client, "owner@example.com")
-    owner_notifications = client.get("/api/notifications").json()["notifications"]
+    owner_notifications = client.get("/api/v2/notifications").json()["items"]
     assert {notification["type"] for notification in owner_notifications} >= {
         "comment",
         "shared_activity",
@@ -128,12 +126,12 @@ def test_mentions_comments_and_shared_activity_create_notifications(
 def test_user_can_mark_only_own_notification_read(client: TestClient) -> None:
     owner = signup(client, "owner@example.com", "Owner")
     opportunity = create_opportunity(client)
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     viewer = signup(client, "viewer@example.com", "Viewer")
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
     other = signup(client, "other@example.com", "Other")
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     with db_connection() as connection:
         connection.execute(
@@ -167,15 +165,21 @@ def test_user_can_mark_only_own_notification_read(client: TestClient) -> None:
         ).fetchone()["id"]
 
     login(client, "viewer@example.com")
-    notifications = client.get("/api/notifications").json()["notifications"]
+    notifications = client.get("/api/v2/notifications").json()["items"]
     assert len(notifications) == 1
 
-    marked = client.patch(f"/api/notifications/{notifications[0]['id']}/read")
+    marked = client.patch(f"/api/v2/notifications/{notifications[0]['id']}/read")
     assert marked.status_code == 200
-    assert marked.json()["read"] is True
-    assert client.get("/api/notifications").json()["notifications"] == []
+    assert marked.json()["read_at"] is not None
 
-    blocked = client.patch(f"/api/notifications/{other_notification_id}/read")
+    # The inbox keeps what has been read (milestone 1.7). v1 answered an
+    # unread-only list here, so marking one read made it disappear; that
+    # surface went with v1 in 2.9 and `read_at` carries the state instead.
+    after = client.get("/api/v2/notifications").json()["items"]
+    assert [row["id"] for row in after] == [notifications[0]["id"]]
+    assert after[0]["read_at"] == marked.json()["read_at"]
+
+    blocked = client.patch(f"/api/v2/notifications/{other_notification_id}/read")
     assert blocked.status_code == 404
     assert owner["id"] == opportunity["owner_id"]
 
@@ -183,30 +187,29 @@ def test_user_can_mark_only_own_notification_read(client: TestClient) -> None:
 def test_share_changes_create_notifications_for_shared_user(client: TestClient) -> None:
     signup(client, "owner@example.com", "Owner")
     opportunity = create_opportunity(client)
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     viewer = signup(client, "viewer@example.com", "Viewer")
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     login(client, "owner@example.com")
     added = client.post(
-        f"/api/opportunities/{opportunity['id']}/shares",
+        f"/api/v2/opportunities/{opportunity['id']}/shares",
         json={"email": viewer["email"], "role": "viewer"},
     )
     assert added.status_code == 201
     changed = client.patch(
-        f"/api/opportunities/{opportunity['id']}/shares/{viewer['id']}",
+        f"/api/v2/opportunities/{opportunity['id']}/shares/{viewer['id']}",
         json={"role": "editor"},
     )
     assert changed.status_code == 200
-    removed = client.delete(f"/api/opportunities/{opportunity['id']}/shares/{viewer['id']}")
+    removed = client.delete(f"/api/v2/opportunities/{opportunity['id']}/shares/{viewer['id']}")
     assert removed.status_code == 204
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     login(client, "viewer@example.com")
     notification_types = {
-        notification["type"]
-        for notification in client.get("/api/notifications").json()["notifications"]
+        notification["type"] for notification in client.get("/api/v2/notifications").json()["items"]
     }
     assert notification_types >= {
         "share_added",
@@ -219,23 +222,23 @@ def test_follow_up_permissions_and_stalled_calculation(client: TestClient) -> No
     owner = signup(client, "owner@example.com", "Owner")
     opportunity = create_opportunity(client)
     entry = create_entry(client, opportunity["id"])
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     viewer = signup(client, "viewer@example.com", "Viewer")
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
     share_opportunity(opportunity["id"], viewer["id"], owner["id"], "viewer")
 
     login(client, "viewer@example.com")
     blocked_follow_up = client.patch(
-        f"/api/timeline/{entry['id']}",
+        f"/api/v2/timeline/{entry['id']}",
         json={"follow_up_date": "2026-09-20"},
     )
     assert blocked_follow_up.status_code == 403
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     login(client, "owner@example.com")
     updated_follow_up = client.patch(
-        f"/api/timeline/{entry['id']}",
+        f"/api/v2/timeline/{entry['id']}",
         json={"follow_up_date": "2026-09-20"},
     )
     assert updated_follow_up.status_code == 200
@@ -255,14 +258,14 @@ def test_follow_up_permissions_and_stalled_calculation(client: TestClient) -> No
         )
         connection.commit()
 
-    stalled = client.get("/api/opportunities").json()["opportunities"][0]
+    stalled = client.get("/api/v2/opportunities").json()["items"][0]
     assert stalled["stalled"] is True
 
     note = client.post(
-        f"/api/timeline/{entry['id']}/notes",
+        f"/api/v2/timeline/{entry['id']}/notes",
         json={"body": "Fresh follow up"},
     )
     assert note.status_code == 201
 
-    refreshed = client.get("/api/opportunities").json()["opportunities"][0]
+    refreshed = client.get("/api/v2/opportunities").json()["items"][0]
     assert refreshed["stalled"] is False

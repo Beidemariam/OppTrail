@@ -9,7 +9,7 @@ from app.database import db_connection
 
 def signup(client: TestClient, email: str, name: str) -> dict:
     response = client.post(
-        "/api/auth/signup",
+        "/api/v2/auth/signup",
         json={"email": email, "password": "password123", "name": name},
     )
     assert response.status_code == 201
@@ -18,7 +18,7 @@ def signup(client: TestClient, email: str, name: str) -> dict:
 
 def login(client: TestClient, email: str) -> None:
     response = client.post(
-        "/api/auth/login",
+        "/api/v2/auth/login",
         json={"email": email, "password": "password123"},
     )
     assert response.status_code == 200
@@ -26,7 +26,7 @@ def login(client: TestClient, email: str) -> None:
 
 def create_opportunity(client: TestClient) -> dict:
     response = client.post(
-        "/api/opportunities",
+        "/api/v2/opportunities",
         json={
             "name": "Expansion",
             "account_name": "Acme",
@@ -47,7 +47,7 @@ def create_entry(
     event_timestamp: str,
 ) -> dict:
     response = client.post(
-        f"/api/opportunities/{opportunity_id}/timeline",
+        f"/api/v2/opportunities/{opportunity_id}/timeline",
         json={
             "type": "call",
             "title": title,
@@ -73,13 +73,13 @@ def share_opportunity(opportunity_id: int, user_id: int, invited_by: int, role: 
 
 def add_note_and_comment(client: TestClient, entry_id: int) -> tuple[dict, dict]:
     note_response = client.post(
-        f"/api/timeline/{entry_id}/notes",
+        f"/api/v2/timeline/{entry_id}/notes",
         json={"body": "Procurement follow-up needed"},
     )
     assert note_response.status_code == 201
     note = note_response.json()
     comment_response = client.post(
-        f"/api/notes/{note['id']}/comments",
+        f"/api/v2/notes/{note['id']}/comments",
         json={"body": "Loop in legal before Friday"},
     )
     assert comment_response.status_code == 201
@@ -108,9 +108,9 @@ def test_export_json_csv_and_pdf_for_owner(client: TestClient, monkeypatch) -> N
         "Hidden call",
         "2026-09-02T09:00:00",
     )
-    assert client.delete(f"/api/timeline/{hidden_entry['id']}").status_code == 204
+    assert client.delete(f"/api/v2/timeline/{hidden_entry['id']}").status_code == 204
 
-    json_response = client.get(f"/api/opportunities/{opportunity['id']}/export/json")
+    json_response = client.get(f"/api/v2/opportunities/{opportunity['id']}/export/json")
     assert json_response.status_code == 200
     assert "attachment" in json_response.headers["content-disposition"]
     data = json_response.json()
@@ -122,7 +122,7 @@ def test_export_json_csv_and_pdf_for_owner(client: TestClient, monkeypatch) -> N
     assert exported_later["notes"][0]["id"] == note["id"]
     assert exported_later["notes"][0]["comments"][0]["id"] == comment["id"]
 
-    csv_response = client.get(f"/api/opportunities/{opportunity['id']}/export/csv")
+    csv_response = client.get(f"/api/v2/opportunities/{opportunity['id']}/export/csv")
     assert csv_response.status_code == 200
     assert csv_response.headers["content-type"].startswith("text/csv")
     rows = list(csv.DictReader(StringIO(csv_response.text)))
@@ -133,7 +133,7 @@ def test_export_json_csv_and_pdf_for_owner(client: TestClient, monkeypatch) -> N
     assert comment_row["parent_note_id"] == str(note["id"])
 
     monkeypatch.setattr("app.routes_export.export_data_to_pdf", lambda data: b"%PDF-1.7")
-    pdf_response = client.get(f"/api/opportunities/{opportunity['id']}/export/pdf")
+    pdf_response = client.get(f"/api/v2/opportunities/{opportunity['id']}/export/pdf")
     assert pdf_response.status_code == 200
     assert pdf_response.headers["content-type"].startswith("application/pdf")
     assert pdf_response.content.startswith(b"%PDF")
@@ -147,32 +147,32 @@ def test_shared_users_can_export_and_unshared_user_cannot(
     owner = signup(client, "owner@example.com", "Owner")
     opportunity = create_opportunity(client)
     create_entry(client, opportunity["id"], "Shared call", "2026-09-04T10:00:00")
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     editor = signup(client, "editor@example.com", "Editor")
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
     viewer = signup(client, "viewer@example.com", "Viewer")
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
     other = signup(client, "other@example.com", "Other")
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     share_opportunity(opportunity["id"], editor["id"], owner["id"], "editor")
     share_opportunity(opportunity["id"], viewer["id"], owner["id"], "viewer")
     monkeypatch.setattr("app.routes_export.export_data_to_pdf", lambda data: b"%PDF-1.7")
 
     login(client, "editor@example.com")
-    assert client.get(f"/api/opportunities/{opportunity['id']}/export/csv").status_code == 200
-    client.post("/api/auth/logout")
+    assert client.get(f"/api/v2/opportunities/{opportunity['id']}/export/csv").status_code == 200
+    client.post("/api/v2/auth/logout")
 
     login(client, "viewer@example.com")
-    assert client.get(f"/api/opportunities/{opportunity['id']}/export/json").status_code == 200
-    client.post("/api/auth/logout")
+    assert client.get(f"/api/v2/opportunities/{opportunity['id']}/export/json").status_code == 200
+    client.post("/api/v2/auth/logout")
 
     login(client, "other@example.com")
     assert other["email"] == "other@example.com"
-    assert client.get(f"/api/opportunities/{opportunity['id']}/export/json").status_code == 404
-    assert client.get(f"/api/opportunities/{opportunity['id']}/export/csv").status_code == 404
-    assert client.get(f"/api/opportunities/{opportunity['id']}/export/pdf").status_code == 404
+    assert client.get(f"/api/v2/opportunities/{opportunity['id']}/export/json").status_code == 404
+    assert client.get(f"/api/v2/opportunities/{opportunity['id']}/export/csv").status_code == 404
+    assert client.get(f"/api/v2/opportunities/{opportunity['id']}/export/pdf").status_code == 404
 
 
 def test_csv_export_neutralizes_spreadsheet_formulas(client: TestClient) -> None:
@@ -180,11 +180,11 @@ def test_csv_export_neutralizes_spreadsheet_formulas(client: TestClient) -> None
     opportunity = create_opportunity(client)
     entry = create_entry(client, opportunity["id"], "Discovery", "2026-09-01T09:00:00")
     client.post(
-        f"/api/timeline/{entry['id']}/notes",
+        f"/api/v2/timeline/{entry['id']}/notes",
         json={"body": '=HYPERLINK("https://attacker.example","Click")'},
     )
 
-    response = client.get(f"/api/opportunities/{opportunity['id']}/export/csv")
+    response = client.get(f"/api/v2/opportunities/{opportunity['id']}/export/csv")
     assert response.status_code == 200
     rows = list(csv.DictReader(StringIO(response.text)))
     note_row = next(row for row in rows if row["row_type"] == "note")
@@ -205,7 +205,7 @@ def test_pdf_html_renders_timeline_in_order_and_escapes_bodies(
     create_entry(client, opportunity["id"], "Second call", "2026-09-04T13:00:00")
     first = create_entry(client, opportunity["id"], "First call", "2026-09-01T09:00:00")
     client.post(
-        f"/api/timeline/{first['id']}/notes",
+        f"/api/v2/timeline/{first['id']}/notes",
         json={"body": "<script>alert(1)</script> follow up"},
     )
 
@@ -231,7 +231,7 @@ def test_pdf_export_produces_a_real_pdf(client: TestClient) -> None:
     opportunity = create_opportunity(client)
     create_entry(client, opportunity["id"], "Discovery", "2026-09-01T09:00:00")
 
-    response = client.get(f"/api/opportunities/{opportunity['id']}/export/pdf")
+    response = client.get(f"/api/v2/opportunities/{opportunity['id']}/export/pdf")
     assert response.status_code == 200
     assert response.content.startswith(b"%PDF")
     assert len(response.content) > 1000

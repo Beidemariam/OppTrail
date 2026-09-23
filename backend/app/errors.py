@@ -1,20 +1,19 @@
-"""The two API error shapes, and the rule for which path gets which.
+"""The API's one error shape.
 
-v1 (`/api/*`) answers `{"detail": ...}` — FastAPI's own shape, which the
-shipped frontend's `apiRequest<T>()` reads (CLAUDE.md: it "throws on non-2xx
-using the API's `detail` field"). It does not change while it is still serving
-that frontend (`docs/ROADMAP.md` Phase 1 acceptance: "v1 endpoints still serve
-the existing frontend").
-
-v2 (`/api/v2/*`) answers the single envelope `docs/ARCHITECTURE.md` specifies:
+Every `/api/*` failure answers the envelope `docs/ARCHITECTURE.md` specifies:
 `{"error": {"code", "message", "fields"?}}`. `fields` exists only on a
-validation failure, and it is the half that matters: today a 422 reaches the UI
-as a flat "Request failed" and the user never learns which field was wrong
+validation failure, and it is the half that matters: a 422 used to reach the UI
+as a flat "Request failed" and the user never learned which field was wrong
 (`docs/REVIEW.md` M4).
 
+v1 answered FastAPI's own `{"detail": ...}` and was removed in milestone 2.9,
+so the path test below is now "is this the API at all" rather than "which
+version" — the page routes under `/` are still served by FastAPI and still
+answer as a web server, not as this API.
+
 Every error path is routed through here, including the ones that never reach a
-route handler — an unknown path, a CSRF rejection — so a v2 client has exactly
-one failure shape to parse.
+route handler — an unknown path, a CSRF rejection — so a client has exactly one
+failure shape to parse.
 """
 
 from typing import Any
@@ -30,7 +29,7 @@ from fastapi.responses import JSONResponse, Response
 from .logging_utils import REQUEST_ID_HEADER, logger
 from .settings import settings
 
-V2_PREFIX = "/api/v2"
+API_PREFIX = "/api"
 
 # Named codes rather than the bare status number: a client branches on
 # `error.code`, and "not_found" survives a status change that "404" would not.
@@ -47,8 +46,8 @@ ERROR_CODES = {
 FALLBACK_ERROR_CODE = "internal_error"
 
 
-def is_v2_path(path: str) -> bool:
-    return path == V2_PREFIX or path.startswith(f"{V2_PREFIX}/")
+def is_api_path(path: str) -> bool:
+    return path == API_PREFIX or path.startswith(f"{API_PREFIX}/")
 
 
 def error_body(
@@ -108,7 +107,7 @@ def install_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(HTTPException)
     async def http_exception_envelope(request: Request, exc: HTTPException) -> Response:
-        if not is_v2_path(request.url.path):
+        if not is_api_path(request.url.path):
             return await http_exception_handler(request, exc)
         return error_response(
             exc.status_code,
@@ -118,7 +117,7 @@ def install_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def validation_error_envelope(request: Request, exc: RequestValidationError) -> Response:
-        if not is_v2_path(request.url.path):
+        if not is_api_path(request.url.path):
             return await request_validation_exception_handler(request, exc)
         return error_response(
             422,
@@ -140,6 +139,6 @@ def install_error_handlers(app: FastAPI) -> None:
         )
         detail = "Internal server error" if settings.environment == "production" else str(exc)
         headers = {REQUEST_ID_HEADER: request_id} if request_id else None
-        if is_v2_path(request.url.path):
+        if is_api_path(request.url.path):
             return error_response(500, detail, headers=headers)
         return JSONResponse({"detail": detail}, status_code=500, headers=headers)

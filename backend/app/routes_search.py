@@ -11,10 +11,10 @@ from .search import search
 # Search is cross-opportunity, so it exists only on the paginated surface: a
 # ranked result set with no limit and no cursor is the shape the v2 envelope
 # was introduced to stop shipping (`docs/ARCHITECTURE.md`, "Pagination").
-v2_router = APIRouter(prefix="/api/v2", tags=["search"])
+router = APIRouter(prefix="/api/v2", tags=["search"])
 
 
-@v2_router.get("/search", response_model=Page[SearchResultPublic])
+@router.get("/search", response_model=Page[SearchResultPublic])
 def search_everything(
     q: str,
     page: PageRequest = Depends(page_params),

@@ -15,7 +15,7 @@ from app.database import db_connection
 
 def signup(client: TestClient, email: str, name: str) -> dict:
     response = client.post(
-        "/api/auth/signup",
+        "/api/v2/auth/signup",
         json={"email": email, "password": "password123", "name": name},
     )
     assert response.status_code == 201
@@ -25,7 +25,7 @@ def signup(client: TestClient, email: str, name: str) -> dict:
 def login(client: TestClient, email: str) -> None:
     assert (
         client.post(
-            "/api/auth/login",
+            "/api/v2/auth/login",
             json={"email": email, "password": "password123"},
         ).status_code
         == 200
@@ -34,7 +34,7 @@ def login(client: TestClient, email: str) -> None:
 
 def create_opportunity(client: TestClient, name: str = "Expansion") -> dict:
     response = client.post(
-        "/api/opportunities",
+        "/api/v2/opportunities",
         json={
             "name": name,
             "account_name": "Acme",
@@ -77,10 +77,10 @@ def test_owner_bulk_deletes_every_selected_opportunity(client: TestClient) -> No
     assert results[first["id"]] == {"id": first["id"], "status": "ok", "error": None}
     assert results[second["id"]] == {"id": second["id"], "status": "ok", "error": None}
 
-    assert client.get(f"/api/opportunities/{first['id']}").status_code == 404
-    assert client.get(f"/api/opportunities/{second['id']}").status_code == 404
+    assert client.get(f"/api/v2/opportunities/{first['id']}").status_code == 404
+    assert client.get(f"/api/v2/opportunities/{second['id']}").status_code == 404
 
-    audit = client.get(f"/api/opportunities/{first['id']}/audit-log")
+    audit = client.get(f"/api/v2/opportunities/{first['id']}/audit-log")
     # The row itself is gone, so its own audit log 404s the same way the
     # opportunity does; the delete route already proves the audit write
     # (test_timeline.py). This just proves the bulk path took the same branch,
@@ -109,12 +109,12 @@ def test_owner_bulk_changes_stage_and_logs_one_system_entry_per_item(
     assert results[second["id"]]["status"] == "ok"
 
     for opportunity_id in (first["id"], second["id"]):
-        opportunity = client.get(f"/api/opportunities/{opportunity_id}").json()
+        opportunity = client.get(f"/api/v2/opportunities/{opportunity_id}").json()
         assert opportunity["stage"] == "Qualification"
 
-        timeline = client.get(f"/api/opportunities/{opportunity_id}/timeline").json()
+        timeline = client.get(f"/api/v2/opportunities/{opportunity_id}/timeline").json()
         stage_change_titles = [
-            entry["title"] for entry in timeline["entries"] if entry["type"] == "stage_change"
+            entry["title"] for entry in timeline["items"] if entry["type"] == "stage_change"
         ]
         assert stage_change_titles == ["Stage changed to Qualification"]
 
@@ -132,9 +132,9 @@ def test_bulk_set_stage_to_the_current_stage_writes_no_system_entry(
     assert response.status_code == 200
     assert results_by_id(response.json())[opportunity["id"]]["status"] == "ok"
 
-    timeline = client.get(f"/api/opportunities/{opportunity['id']}/timeline").json()
+    timeline = client.get(f"/api/v2/opportunities/{opportunity['id']}/timeline").json()
     stage_change_titles = [
-        entry["title"] for entry in timeline["entries"] if entry["type"] == "stage_change"
+        entry["title"] for entry in timeline["items"] if entry["type"] == "stage_change"
     ]
     assert stage_change_titles == []
 
@@ -174,9 +174,9 @@ def test_bulk_action_reports_one_items_failure_without_failing_the_rest(
     }
 
     # The one legitimate delete happened despite the other two failing.
-    assert client.get(f"/api/opportunities/{keeps['id']}").status_code == 404
+    assert client.get(f"/api/v2/opportunities/{keeps['id']}").status_code == 404
     # The one owned by someone else is untouched.
-    assert client.get(f"/api/opportunities/{editor_owned['id']}").status_code == 200
+    assert client.get(f"/api/v2/opportunities/{editor_owned['id']}").status_code == 200
 
 
 def test_unrelated_user_gets_not_found_for_every_id(client: TestClient) -> None:
@@ -194,7 +194,7 @@ def test_unrelated_user_gets_not_found_for_every_id(client: TestClient) -> None:
     assert results[opportunity["id"]]["error"] == "Opportunity not found"
 
     login(client, "owner@example.com")
-    assert client.get(f"/api/opportunities/{opportunity['id']}").status_code == 200
+    assert client.get(f"/api/v2/opportunities/{opportunity['id']}").status_code == 200
     assert owner["id"]  # the fixture is read, not unused
 
 
@@ -204,7 +204,7 @@ def test_viewer_cannot_bulk_delete_a_shared_opportunity(client: TestClient) -> N
 
     login(client, "owner@example.com")
     signup(client, "viewer@example.com", "Viewer")
-    viewer_id = client.get("/api/auth/me").json()["user"]["id"]
+    viewer_id = client.get("/api/v2/auth/me").json()["user"]["id"]
 
     login(client, "owner@example.com")
     share_opportunity(opportunity["id"], viewer_id, owner["id"], "viewer")
@@ -223,7 +223,7 @@ def test_viewer_cannot_bulk_delete_a_shared_opportunity(client: TestClient) -> N
     }
 
     login(client, "owner@example.com")
-    assert client.get(f"/api/opportunities/{opportunity['id']}").status_code == 200
+    assert client.get(f"/api/v2/opportunities/{opportunity['id']}").status_code == 200
 
 
 def test_the_same_id_twice_in_one_batch_deletes_once_and_fails_the_second(
@@ -247,7 +247,7 @@ def test_the_same_id_twice_in_one_batch_deletes_once_and_fails_the_second(
 def test_anonymous_is_rejected_before_any_item_is_touched(client: TestClient) -> None:
     signup(client, "owner@example.com", "Owner")
     opportunity = create_opportunity(client)
-    client.post("/api/auth/logout")
+    client.post("/api/v2/auth/logout")
 
     response = client.post(
         "/api/v2/opportunities/bulk",
@@ -256,7 +256,7 @@ def test_anonymous_is_rejected_before_any_item_is_touched(client: TestClient) ->
     assert response.status_code == 401
 
     login(client, "owner@example.com")
-    assert client.get(f"/api/opportunities/{opportunity['id']}").status_code == 200
+    assert client.get(f"/api/v2/opportunities/{opportunity['id']}").status_code == 200
 
 
 def test_set_stage_action_requires_a_stage(client: TestClient) -> None:

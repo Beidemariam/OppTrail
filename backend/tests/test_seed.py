@@ -15,7 +15,7 @@ from tools.seed import ALEX, BLAIR, CASEY, DANA, DEMO_PASSWORD, seed
 
 
 def sign_in(client: TestClient, email: str) -> None:
-    response = client.post("/api/auth/login", json={"email": email, "password": DEMO_PASSWORD})
+    response = client.post("/api/v2/auth/login", json={"email": email, "password": DEMO_PASSWORD})
     assert response.status_code == 200, response.text
 
 
@@ -100,7 +100,7 @@ def test_seeded_permissions_match_the_printed_tour(tmp_path) -> None:
     dana = seeded_client(DANA)
 
     try:
-        alex_list = alex.get("/api/opportunities").json()["opportunities"]
+        alex_list = alex.get("/api/v2/opportunities").json()["items"]
         by_name = {opportunity["name"]: opportunity for opportunity in alex_list}
 
         assert set(by_name) == {
@@ -120,7 +120,7 @@ def test_seeded_permissions_match_the_printed_tour(tmp_path) -> None:
         # Blair edits Northwind; Casey may only read it; Dana cannot see it.
         assert (
             blair.post(
-                f"/api/opportunities/{northwind}/timeline",
+                f"/api/v2/opportunities/{northwind}/timeline",
                 json={
                     "type": "call",
                     "title": "Editor can write",
@@ -130,10 +130,10 @@ def test_seeded_permissions_match_the_printed_tour(tmp_path) -> None:
             ).status_code
             == 201
         )
-        assert casey.get(f"/api/opportunities/{northwind}").status_code == 200
+        assert casey.get(f"/api/v2/opportunities/{northwind}").status_code == 200
         assert (
             casey.post(
-                f"/api/opportunities/{northwind}/timeline",
+                f"/api/v2/opportunities/{northwind}/timeline",
                 json={
                     "type": "call",
                     "title": "Viewer cannot write",
@@ -143,8 +143,8 @@ def test_seeded_permissions_match_the_printed_tour(tmp_path) -> None:
             ).status_code
             == 403
         )
-        assert dana.get(f"/api/opportunities/{northwind}").status_code == 404
-        assert dana.get("/api/opportunities").json()["opportunities"] == []
+        assert dana.get(f"/api/v2/opportunities/{northwind}").status_code == 404
+        assert dana.get("/api/v2/opportunities").json()["items"] == []
 
         # The tour's search line: one query, four different answers, because
         # the permission filter lives inside the query (`app/search.py`).
@@ -161,7 +161,7 @@ def test_seeded_permissions_match_the_printed_tour(tmp_path) -> None:
         # The mention in the demo note notified Alex.
         mentions = [
             notification
-            for notification in alex.get("/api/notifications").json()["notifications"]
+            for notification in alex.get("/api/v2/notifications").json()["items"]
             if notification["type"] == "mention"
         ]
         assert mentions, "the seeded @mention did not produce a notification"
@@ -193,22 +193,23 @@ def test_seeded_permissions_match_the_printed_tour(tmp_path) -> None:
         assert view_names(dana, "opportunities") == ["Late-stage pipeline"]
 
         # The owner-only audit log is not empty on a fresh seed.
-        audit = alex.get(f"/api/opportunities/{northwind}/audit-log")
+        audit = alex.get(f"/api/v2/opportunities/{northwind}/audit-log")
         assert audit.status_code == 200
-        assert audit.json(), "expected share activity in the audit log"
-        assert casey.get(f"/api/opportunities/{northwind}/audit-log").status_code == 403
+        assert audit.json()["items"], "expected share activity in the audit log"
+        assert casey.get(f"/api/v2/opportunities/{northwind}/audit-log").status_code == 403
 
         # The tour says Umbrella holds an undone deletion: both halves in the
         # log, and the entry back on the timeline.
         umbrella = by_name["Umbrella discovery"]["id"]
         actions = [
-            row["action"] for row in alex.get(f"/api/opportunities/{umbrella}/audit-log").json()
+            row["action"]
+            for row in alex.get(f"/api/v2/opportunities/{umbrella}/audit-log").json()["items"]
         ]
         assert "timeline_entry_deleted" in actions
         assert "timeline_entry_restored" in actions
         titles = [
             entry["title"]
-            for entry in alex.get(f"/api/opportunities/{umbrella}/timeline").json()["entries"]
+            for entry in alex.get(f"/api/v2/opportunities/{umbrella}/timeline").json()["items"]
         ]
         assert "Qualification call" in titles
     finally:

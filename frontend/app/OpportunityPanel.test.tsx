@@ -799,7 +799,7 @@ describe("the AI panel", () => {
       opportunities: [anOpportunity()],
       entries: [anEntry()],
       failures: {
-        "POST /api/opportunities/10/ai/ask": [
+        "POST /api/v2/opportunities/10/ai/ask": [
           503,
           "OPENAI_API_KEY is not configured",
         ],
@@ -850,9 +850,9 @@ describe("changing and removing what is already there", () => {
     );
 
     await waitFor(() =>
-      expect(api.callsTo("PATCH", "/api/timeline/100")).toHaveLength(1),
+      expect(api.callsTo("PATCH", "/api/v2/timeline/100")).toHaveLength(1),
     );
-    expect(api.callsTo("PATCH", "/api/timeline/100")[0].body).toMatchObject({
+    expect(api.callsTo("PATCH", "/api/v2/timeline/100")[0].body).toMatchObject({
       title: "Discovery call (revised)",
     });
   });
@@ -878,7 +878,7 @@ describe("changing and removing what is already there", () => {
       await screen.findByRole("button", { name: "Add Entry" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Title")).toHaveValue("");
-    expect(api.callsTo("PATCH", "/api/timeline/100")).toHaveLength(0);
+    expect(api.callsTo("PATCH", "/api/v2/timeline/100")).toHaveLength(0);
   });
 
   // Milestone 2.4b: the timeline's destructive actions stopped confirming and
@@ -905,7 +905,7 @@ describe("changing and removing what is already there", () => {
         screen.queryByRole("heading", { name: "Discovery call" }),
       ).not.toBeInTheDocument(),
     );
-    expect(api.callsTo("DELETE", "/api/timeline/100")).toHaveLength(1);
+    expect(api.callsTo("DELETE", "/api/v2/timeline/100")).toHaveLength(1);
 
     await userEvent.click(await screen.findByRole("button", { name: "Undo" }));
 
@@ -914,9 +914,9 @@ describe("changing and removing what is already there", () => {
       await screen.findByRole("heading", { name: "Discovery call" }),
     ).toBeInTheDocument();
     expect(api.callsTo("POST", "/api/v2/timeline/100/restore")).toHaveLength(1);
-    expect(api.callsTo("POST", "/api/opportunities/10/timeline")).toHaveLength(
-      0,
-    );
+    expect(
+      api.callsTo("POST", "/api/v2/opportunities/10/timeline"),
+    ).toHaveLength(0);
   });
 
   it("undoes a deleted comment and a deleted note", async () => {
@@ -1007,7 +1007,7 @@ describe("changing and removing what is already there", () => {
     await userEvent.click(within(note).getByRole("button", { name: "Cancel" }));
 
     expect(screen.getByText("Budget holder is the COO.")).toBeInTheDocument();
-    expect(api.callsTo("PATCH", "/api/notes/200")).toHaveLength(0);
+    expect(api.callsTo("PATCH", "/api/v2/notes/200")).toHaveLength(0);
   });
 
   it("ignores an empty note or comment instead of posting it", async () => {
@@ -1035,7 +1035,7 @@ describe("when the API refuses", () => {
       ],
       entries: [anEntry()],
       failures: {
-        "POST /api/opportunities/10/timeline": [
+        "POST /api/v2/opportunities/10/timeline": [
           403,
           "Viewer cannot edit this opportunity",
         ],
@@ -1061,7 +1061,7 @@ describe("when the API refuses", () => {
       opportunities: [anOpportunity()],
       entries: [anEntry({ notes: [aNote()] })],
       failures: {
-        "PATCH /api/notes/200": [
+        "PATCH /api/v2/notes/200": [
           403,
           "Only the author or the opportunity owner can edit this note",
         ],
@@ -1087,7 +1087,7 @@ describe("when the API refuses", () => {
     await renderDashboard({
       opportunities: [anOpportunity()],
       entries: [anEntry({ notes: [aNote({ comments: [aComment()] })] })],
-      failures: { "DELETE /api/comments/300": [403, "Not yours to delete"] },
+      failures: { "DELETE /api/v2/comments/300": [403, "Not yours to delete"] },
     });
     await openTimeline("Northwind rollout");
 
@@ -1112,7 +1112,7 @@ describe("when the API refuses", () => {
     await renderDashboard({
       opportunities: [anOpportunity()],
       failures: {
-        "GET /api/opportunities/10/timeline": [404, "Opportunity not found"],
+        "GET /api/v2/opportunities/10/timeline": [404, "Opportunity not found"],
       },
     });
 

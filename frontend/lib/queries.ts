@@ -35,10 +35,7 @@ import type {
 import { localInputToUtc } from "./time";
 
 type AuthResponse = components["schemas"]["AuthResponse"];
-type OpportunityListResponse = components["schemas"]["OpportunityListResponse"];
-type TimelineResponse = components["schemas"]["TimelineResponse"];
-type ShareListResponse = components["schemas"]["ShareListResponse"];
-type NotificationPage = components["schemas"]["Page_NotificationPublicV2_"];
+type NotificationPage = components["schemas"]["Page_NotificationPublic_"];
 type AiAskResponse = components["schemas"]["AiAskResponse"];
 type SavedViewPage = components["schemas"]["Page_SavedViewPublic_"];
 type SavedViewCreate = components["schemas"]["SavedViewCreate"];
@@ -46,6 +43,47 @@ type SavedViewUpdate = components["schemas"]["SavedViewUpdate"];
 
 const NOTIFICATION_PAGE_SIZE = 50;
 const SAVED_VIEW_PAGE_SIZE = 100;
+/** `MAX_LIMIT` in `backend/app/pagination.py`: the largest page it will serve. */
+const MAX_PAGE_SIZE = 200;
+
+/**
+ * The v2 envelope with its item type left open. Every generated
+ * `Page_<Model>_` matches it; `fetchAll` is generic over the item, so it
+ * cannot name one of them.
+ */
+type PageOf<ItemT> = { items: ItemT[]; next_cursor?: string | null };
+
+/**
+ * Every page of a v2 collection, walked to the end (milestone 2.9, D-093).
+ *
+ * `/api/v2` paginates every collection read, and four of this app's reads want
+ * the whole set rather than a window: the board derives its keyboard cursor,
+ * its bulk selection and the calendar's month from the complete filtered list
+ * (`applyOpportunityView`), and a timeline, a share list and an audit log are
+ * each read start to finish. So the cursor is followed here rather than being
+ * pushed into the views — what a component asks for is unchanged from v1, and
+ * at the 400-opportunity scale milestone 2.3 was written for this is two or
+ * three requests, not one per row.
+ *
+ * `next_cursor` is null on the last page, so the loop ends on the server's
+ * answer rather than on a count the client compares for itself.
+ */
+async function fetchAll<ItemT>(path: string): Promise<ItemT[]> {
+  const separator = path.includes("?") ? "&" : "?";
+  const items: ItemT[] = [];
+  let cursor: string | null | undefined = null;
+
+  do {
+    const query: string = cursor ? `&cursor=${encodeURIComponent(cursor)}` : "";
+    const page: PageOf<ItemT> = await apiRequest<PageOf<ItemT>>(
+      `${path}${separator}limit=${MAX_PAGE_SIZE}${query}`,
+    );
+    items.push(...page.items);
+    cursor = page.next_cursor;
+  } while (cursor);
+
+  return items;
+}
 
 export const keys = {
   session: ["session"] as const,
@@ -86,7 +124,7 @@ export function timelinePath(
   });
 
   const suffix = params.toString() ? `?${params.toString()}` : "";
-  return `/api/opportunities/${opportunityId}/timeline${suffix}`;
+  return `/api/v2/opportunities/${opportunityId}/timeline${suffix}`;
 }
 
 /**
@@ -100,7 +138,7 @@ export function useSession() {
   return useQuery<User | null>({
     queryKey: keys.session,
     queryFn: () =>
-      apiRequest<AuthResponse>("/api/auth/me")
+      apiRequest<AuthResponse>("/api/v2/auth/me")
         .then((data) => data.user)
         .catch(() => null),
   });
@@ -110,10 +148,7 @@ export function useOpportunities(enabled: boolean) {
   return useQuery<Opportunity[]>({
     queryKey: keys.opportunities,
     enabled,
-    queryFn: () =>
-      apiRequest<OpportunityListResponse>("/api/opportunities").then(
-        (data) => data.opportunities,
-      ),
+    queryFn: () => fetchAll<Opportunity>("/api/v2/opportunities"),
   });
 }
 
@@ -121,9 +156,7 @@ export function useTimeline(opportunityId: number, filters: TimelineFilters) {
   return useQuery<TimelineEntry[]>({
     queryKey: keys.timeline(opportunityId, filters),
     queryFn: () =>
-      apiRequest<TimelineResponse>(timelinePath(opportunityId, filters)).then(
-        (data) => data.entries,
-      ),
+      fetchAll<TimelineEntry>(timelinePath(opportunityId, filters)),
   });
 }
 
@@ -132,9 +165,9 @@ export function useShares(opportunityId: number, enabled: boolean) {
     queryKey: keys.shares(opportunityId),
     enabled,
     queryFn: () =>
-      apiRequest<ShareListResponse>(
-        `/api/opportunities/${opportunityId}/shares`,
-      ).then((data) => data.shares),
+      fetchAll<OpportunityShare>(
+        `/api/v2/opportunities/${opportunityId}/shares`,
+      ),
   });
 }
 
@@ -143,8 +176,8 @@ export function useAuditLog(opportunityId: number, enabled: boolean) {
     queryKey: keys.auditLog(opportunityId),
     enabled,
     queryFn: () =>
-      apiRequest<AuditLogEntry[]>(
-        `/api/opportunities/${opportunityId}/audit-log`,
+      fetchAll<AuditLogEntry>(
+        `/api/v2/opportunities/${opportunityId}/audit-log`,
       ),
   });
 }
@@ -314,7 +347,7 @@ export function useAuthenticate() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: ({ mode, email, password, name }: Credentials) =>
-      apiRequest<AuthResponse>(`/api/auth/${mode}`, {
+      apiRequest<AuthResponse>(`/api/v2/auth/${mode}`, {
         method: "POST",
         body: JSON.stringify(
           mode === "signup" ? { email, password, name } : { email, password },
@@ -335,7 +368,7 @@ export function useAuthenticate() {
 export function useLogout() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: () => apiRequest("/api/auth/logout", { method: "POST" }),
+    mutationFn: () => apiRequest("/api/v2/auth/logout", { method: "POST" }),
     // Only the session is written here. The rest of the cache still has
     // mounted readers for one more render, and removing it under them asks the
     // API for data the user has just stopped being allowed to see; the next
@@ -364,7 +397,7 @@ export function useSaveOpportunity() {
       payload: OpportunityPayload;
     }) =>
       apiRequest<Opportunity>(
-        id ? `/api/opportunities/${id}` : "/api/opportunities",
+        id ? `/api/v2/opportunities/${id}` : "/api/v2/opportunities",
         { method: id ? "PATCH" : "POST", body: JSON.stringify(payload) },
       ),
     // A stage change writes a system timeline entry, so the timeline is stale
@@ -394,7 +427,7 @@ export function useChangeOpportunityStage() {
     Snapshot
   >({
     mutationFn: ({ id, stage }) =>
-      apiRequest<Opportunity>(`/api/opportunities/${id}`, {
+      apiRequest<Opportunity>(`/api/v2/opportunities/${id}`, {
         method: "PATCH",
         body: JSON.stringify({ stage }),
       }),
@@ -413,7 +446,9 @@ export function useDeleteOpportunity() {
   const client = useQueryClient();
   return useMutation<unknown, Error, number, Snapshot>({
     mutationFn: (opportunityId: number) =>
-      apiRequest(`/api/opportunities/${opportunityId}`, { method: "DELETE" }),
+      apiRequest(`/api/v2/opportunities/${opportunityId}`, {
+        method: "DELETE",
+      }),
     onMutate: (opportunityId) =>
       optimisticOpportunities(client, (opportunities) =>
         opportunities.filter((opportunity) => opportunity.id !== opportunityId),
@@ -432,8 +467,6 @@ export function useDeleteOpportunity() {
 /**
  * Undo, for each of the four things that can be deleted.
  *
- * Restore is a v2-only route: it has no v1 twin, like
- * `POST /api/v2/notifications/mark-all-read` (`CLAUDE.md`, "API versions").
  * Nothing here is optimistic — what comes back is a server-side cascade
  * (which notes did that delete take?), so the answer is fetched rather than
  * guessed.
@@ -536,8 +569,8 @@ export function useSaveTimelineEntry(opportunityId: number) {
     }) =>
       apiRequest<TimelineEntry>(
         entryId
-          ? `/api/timeline/${entryId}`
-          : `/api/opportunities/${opportunityId}/timeline`,
+          ? `/api/v2/timeline/${entryId}`
+          : `/api/v2/opportunities/${opportunityId}/timeline`,
         {
           method: entryId ? "PATCH" : "POST",
           body: JSON.stringify(payload),
@@ -564,7 +597,7 @@ export function useDeleteTimelineEntry() {
   const client = useQueryClient();
   return useMutation<unknown, Error, number, Snapshot>({
     mutationFn: (entryId: number) =>
-      apiRequest(`/api/timeline/${entryId}`, { method: "DELETE" }),
+      apiRequest(`/api/v2/timeline/${entryId}`, { method: "DELETE" }),
     onMutate: (entryId) =>
       optimisticTimelines(client, (entries) =>
         entries.filter((entry) => entry.id !== entryId),
@@ -583,7 +616,7 @@ export function useDeleteTimelineEntry() {
 export function useAddNote() {
   return useTimelineWrite(
     ({ entryId, body }: { entryId: number; body: string }) =>
-      apiRequest(`/api/timeline/${entryId}/notes`, {
+      apiRequest(`/api/v2/timeline/${entryId}/notes`, {
         method: "POST",
         body: JSON.stringify({ body }),
       }),
@@ -604,7 +637,7 @@ export function useSaveNote() {
     Snapshot
   >({
     mutationFn: ({ noteId, body }) =>
-      apiRequest(`/api/notes/${noteId}`, {
+      apiRequest(`/api/v2/notes/${noteId}`, {
         method: "PATCH",
         body: JSON.stringify({ body }),
       }),
@@ -625,7 +658,7 @@ export function useDeleteNote() {
   const client = useQueryClient();
   return useMutation<unknown, Error, number, Snapshot>({
     mutationFn: (noteId: number) =>
-      apiRequest(`/api/notes/${noteId}`, { method: "DELETE" }),
+      apiRequest(`/api/v2/notes/${noteId}`, { method: "DELETE" }),
     onMutate: (noteId) =>
       optimisticTimelines(client, (entries) =>
         mapNotes(entries, (notes) =>
@@ -640,7 +673,7 @@ export function useDeleteNote() {
 export function useAddComment() {
   return useTimelineWrite(
     ({ noteId, body }: { noteId: number; body: string }) =>
-      apiRequest(`/api/notes/${noteId}/comments`, {
+      apiRequest(`/api/v2/notes/${noteId}/comments`, {
         method: "POST",
         body: JSON.stringify({ body }),
       }),
@@ -651,7 +684,7 @@ export function useDeleteComment() {
   const client = useQueryClient();
   return useMutation<unknown, Error, number, Snapshot>({
     mutationFn: (commentId: number) =>
-      apiRequest(`/api/comments/${commentId}`, { method: "DELETE" }),
+      apiRequest(`/api/v2/comments/${commentId}`, { method: "DELETE" }),
     onMutate: (commentId) =>
       optimisticTimelines(client, (entries) =>
         mapNotes(entries, (notes) =>
@@ -693,7 +726,7 @@ export function useAddShare(opportunityId: number) {
   return useSharingWrite(
     opportunityId,
     (payload: { email: string; role: ShareRole }) =>
-      apiRequest(`/api/opportunities/${opportunityId}/shares`, {
+      apiRequest(`/api/v2/opportunities/${opportunityId}/shares`, {
         method: "POST",
         body: JSON.stringify(payload),
       }),
@@ -704,7 +737,7 @@ export function useUpdateShareRole(opportunityId: number) {
   return useSharingWrite(
     opportunityId,
     ({ userId, role }: { userId: number; role: ShareRole }) =>
-      apiRequest(`/api/opportunities/${opportunityId}/shares/${userId}`, {
+      apiRequest(`/api/v2/opportunities/${opportunityId}/shares/${userId}`, {
         method: "PATCH",
         body: JSON.stringify({ role }),
       }),
@@ -713,7 +746,7 @@ export function useUpdateShareRole(opportunityId: number) {
 
 export function useRemoveShare(opportunityId: number) {
   return useSharingWrite(opportunityId, (userId: number) =>
-    apiRequest(`/api/opportunities/${opportunityId}/shares/${userId}`, {
+    apiRequest(`/api/v2/opportunities/${opportunityId}/shares/${userId}`, {
       method: "DELETE",
     }),
   );
@@ -722,10 +755,8 @@ export function useRemoveShare(opportunityId: number) {
 export function useMarkNotificationRead() {
   const client = useQueryClient();
   return useMutation({
-    // Marking one read is still a v1 route; there is no v2 twin to reuse
-    // (`CLAUDE.md`, "Notifications").
     mutationFn: (notificationId: number) =>
-      apiRequest(`/api/notifications/${notificationId}/read`, {
+      apiRequest(`/api/v2/notifications/${notificationId}/read`, {
         method: "PATCH",
       }),
     onSuccess: () => invalidate(client, keys.notifications),
@@ -745,10 +776,13 @@ export function useAskAi(opportunityId: number) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (question: string) =>
-      apiRequest<AiAskResponse>(`/api/opportunities/${opportunityId}/ai/ask`, {
-        method: "POST",
-        body: JSON.stringify({ question }),
-      }),
+      apiRequest<AiAskResponse>(
+        `/api/v2/opportunities/${opportunityId}/ai/ask`,
+        {
+          method: "POST",
+          body: JSON.stringify({ question }),
+        },
+      ),
     onMutate: (question) => {
       append(client, opportunityId, { role: "user", body: question });
     },

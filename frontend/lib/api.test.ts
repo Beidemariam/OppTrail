@@ -52,7 +52,7 @@ describe("apiRequest", () => {
     document.cookie = "opptrail_csrf=abc123";
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ ok: true }));
 
-    await expect(apiRequest("/api/opportunities")).resolves.toEqual({
+    await expect(apiRequest("/api/v2/opportunities")).resolves.toEqual({
       ok: true,
     });
     expect(lastRequestInit().credentials).toBe("include");
@@ -64,7 +64,7 @@ describe("apiRequest", () => {
 
     for (const method of ["POST", "PATCH", "DELETE", "PUT", "post"]) {
       vi.mocked(fetch).mockResolvedValue(jsonResponse({}));
-      await apiRequest("/api/opportunities", { method });
+      await apiRequest("/api/v2/opportunities", { method });
       expect(headerOf("X-CSRF-Token")).toBe("abc123");
       vi.mocked(fetch).mockClear();
     }
@@ -73,42 +73,35 @@ describe("apiRequest", () => {
   it("returns nothing for a 204, which the delete routes answer with", async () => {
     vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 204 }));
     await expect(
-      apiRequest("/api/notes/1", { method: "DELETE" }),
+      apiRequest("/api/v2/notes/1", { method: "DELETE" }),
     ).resolves.toBeUndefined();
   });
 
-  it("raises the API's own detail message so the UI can show it", async () => {
+  it("ignores v1's `detail`, which no endpoint answers any more", async () => {
+    // Milestone 2.9 removed v1 and with it the second error shape. A body
+    // shaped like the old one is not a message this wrapper knows how to
+    // read, and inventing one from it would hide the real failure.
     vi.mocked(fetch).mockResolvedValue(
       jsonResponse({ detail: "Viewer cannot edit this opportunity" }, 403),
     );
 
     await expect(
-      apiRequest("/api/timeline/1", { method: "PATCH" }),
-    ).rejects.toThrow("Viewer cannot edit this opportunity");
+      apiRequest("/api/v2/timeline/1", { method: "PATCH" }),
+    ).rejects.toThrow("Request failed");
   });
 
   it("falls back when the error body is not JSON", async () => {
     vi.mocked(fetch).mockResolvedValue(
       new Response("<html>502</html>", { status: 502 }),
     );
-    await expect(apiRequest("/api/opportunities")).rejects.toThrow(
+    await expect(apiRequest("/api/v2/opportunities")).rejects.toThrow(
       "Request failed",
     );
   });
 
-  it("falls back when detail is a structure rather than a sentence", async () => {
-    // FastAPI's 422 detail is a list of field errors, not a string.
-    vi.mocked(fetch).mockResolvedValue(
-      jsonResponse({ detail: [{ loc: ["body", "stage"], msg: "bad" }] }, 422),
-    );
-    await expect(
-      apiRequest("/api/opportunities", { method: "POST" }),
-    ).rejects.toThrow("Request failed");
-  });
-
-  it("raises the v2 envelope's message", async () => {
-    // `/api/v2/*` answers `{"error": {...}}` rather than `{"detail": ...}`
-    // (`backend/app/errors.py`), and both reach the user through this wrapper.
+  it("raises the envelope's message so the UI can show it", async () => {
+    // The API's one error shape, `{"error": {...}}`
+    // (`backend/app/errors.py`), which reaches the user through this wrapper.
     vi.mocked(fetch).mockResolvedValue(
       jsonResponse(
         {
@@ -144,7 +137,7 @@ describe("apiRequest", () => {
 
   it("lets a caller's own headers win", async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({}));
-    await apiRequest("/api/opportunities", {
+    await apiRequest("/api/v2/opportunities", {
       headers: { "Content-Type": "text/plain" },
     });
     expect(headerOf("Content-Type")).toBe("text/plain");

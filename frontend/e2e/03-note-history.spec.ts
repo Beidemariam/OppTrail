@@ -12,7 +12,7 @@ import {
  * the previous text in the revision history.
  *
  * The first half is driven through the UI. The revision history is asserted
- * against `GET /api/notes/{id}/versions` because the frontend has no history
+ * against `GET /api/v2/notes/{id}/versions` because the frontend has no history
  * view yet — the endpoint and the `note_versions` table ship, the screen does
  * not. That gap is recorded in the Phase F review packet rather than closed
  * here: brief §4 rules out new user-facing features in this phase.
@@ -60,18 +60,18 @@ test("editing a note marks it as edited and keeps the previous version", async (
   // `page.request` shares the browser context's cookies; the bare `request`
   // fixture would arrive unauthenticated.
   const timeline = await page.request.get(
-    `/api/opportunities/${await opportunityId(page)}/timeline`,
+    `/api/v2/opportunities/${await opportunityId(page)}/timeline`,
   );
   expect(timeline.ok()).toBeTruthy();
-  const noteId = (await timeline.json()).entries
+  const noteId = (await timeline.json()).items
     .flatMap((entry: { notes: { id: number; body: string }[] }) => entry.notes)
     .find((candidate: { body: string }) =>
       candidate.body.includes("Second draft"),
     ).id;
 
-  const versions = await page.request.get(`/api/notes/${noteId}/versions`);
+  const versions = await page.request.get(`/api/v2/notes/${noteId}/versions`);
   expect(versions.ok()).toBeTruthy();
-  const bodies = (await versions.json()).map(
+  const bodies = (await versions.json()).items.map(
     (version: { body: string }) => version.body,
   );
   expect(bodies).toEqual([
@@ -87,5 +87,5 @@ async function opportunityId(
   const href = await page
     .locator(".export-actions a", { hasText: "JSON" })
     .getAttribute("href");
-  return Number(href!.split("/")[3]);
+  return Number(href!.match(/\/opportunities\/(\d+)\//)![1]);
 }

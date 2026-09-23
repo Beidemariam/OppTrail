@@ -72,7 +72,7 @@ export type Opportunity = components["schemas"]["OpportunityPublic"];
 export type OpportunityShare = components["schemas"]["SharePublic"];
 export type ShareRole = components["schemas"]["ShareCreate"]["role"];
 export type AuditLogEntry = components["schemas"]["AuditLogEntryPublic"];
-export type AppNotification = components["schemas"]["NotificationPublicV2"];
+export type AppNotification = components["schemas"]["NotificationPublic"];
 export type NotificationType = AppNotification["type"];
 export type TimelineEntry = components["schemas"]["TimelineEntryPublic"];
 export type TimelineNote = components["schemas"]["NotePublic"];
@@ -247,11 +247,12 @@ export function opportunityCell(
 /**
  * Filters and sorts the already-fetched opportunity list against a view
  * state. Client-side rather than a new query parameter on
- * `GET /api/opportunities`, because that endpoint already returns every
- * opportunity the caller can read unpaginated — pushing the predicate into
- * SQL has no payload-size benefit before pagination reaches this list (2.3),
- * and would otherwise have to be re-mirrored onto `/api/v2/opportunities` to
- * avoid the drift `CLAUDE.md`'s "API versions" section warns against.
+ * `GET /api/v2/opportunities` (D-061, reaffirmed at 2.9 by **D-093**):
+ * `useOpportunities` walks that endpoint to its last page, so the rows are
+ * already in the cache and a server-side predicate would send the same data
+ * back in a different order, adding a round trip to every filter press. It
+ * is also not only a filter — the keyboard cursor, the bulk selection and
+ * the calendar's month are all derived from this result.
  */
 export function applyOpportunityView(
   opportunities: Opportunity[],

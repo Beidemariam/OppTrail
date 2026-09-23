@@ -11,7 +11,6 @@ from .permissions import require_opportunity_owner
 from .schemas import (
     AuditLogEntryPublic,
     ShareCreate,
-    ShareListResponse,
     SharePublic,
     ShareUpdate,
 )
@@ -19,8 +18,7 @@ from .soft_delete import soft_delete_share
 from .time_utils import utc_now
 from .timeline_utils import create_system_timeline_entry
 
-router = APIRouter(prefix="/api/opportunities", tags=["sharing"])
-v2_router = APIRouter(prefix="/api/v2/opportunities", tags=["sharing"])
+router = APIRouter(prefix="/api/v2/opportunities", tags=["sharing"])
 
 
 def share_from_row(row: sqlite3.Row) -> SharePublic:
@@ -65,26 +63,14 @@ def fetch_share_rows(
     ).fetchall()
 
 
-@router.get("/{opportunity_id}/shares", response_model=ShareListResponse)
-def list_shares(
-    opportunity_id: int,
-    user: sqlite3.Row = Depends(get_current_user),
-) -> ShareListResponse:
-    with db_connection() as connection:
-        require_opportunity_owner(connection, opportunity_id, int(user["id"]))
-        rows = fetch_share_rows(connection, opportunity_id)
-
-    return ShareListResponse(shares=[share_from_row(row) for row in rows])
-
-
-@v2_router.get("/{opportunity_id}/shares", response_model=Page[SharePublic])
+@router.get("/{opportunity_id}/shares", response_model=Page[SharePublic])
 def list_shares_page(
     opportunity_id: int,
     page: PageRequest = Depends(page_params),
     user: sqlite3.Row = Depends(get_current_user),
 ) -> Page[SharePublic]:
-    """Ordered by name like v1, but tie-broken on `user_id` rather than email,
-    because a cursor needs a column that is unique within the ordering.
+    """Ordered by name, tie-broken on `user_id` rather than on email: a
+    cursor needs a column that is unique within the ordering.
     """
     continuation, cursor_values = cursor_clause(
         page,
@@ -345,14 +331,6 @@ def delete_share(
         connection.commit()
 
 
-AUDIT_LOG_ROWS_SQL = """
-    SELECT audit_log_entries.*, users.name AS actor_name
-    FROM audit_log_entries
-    LEFT JOIN users ON users.id = audit_log_entries.actor_id
-    WHERE audit_log_entries.opportunity_id = ?
-"""
-
-
 def audit_entry_from_row(row: sqlite3.Row) -> AuditLogEntryPublic:
     return AuditLogEntryPublic(
         id=row["id"],
@@ -365,35 +343,14 @@ def audit_entry_from_row(row: sqlite3.Row) -> AuditLogEntryPublic:
     )
 
 
-@router.get(
-    "/{opportunity_id}/audit-log",
-    response_model=list[AuditLogEntryPublic],
-)
-def list_audit_log(
-    opportunity_id: int,
-    user: sqlite3.Row = Depends(get_current_user),
-) -> list[AuditLogEntryPublic]:
-    with db_connection() as connection:
-        require_opportunity_owner(connection, opportunity_id, int(user["id"]))
-        rows = connection.execute(
-            f"""
-            {AUDIT_LOG_ROWS_SQL}
-            ORDER BY audit_log_entries.created_at ASC, audit_log_entries.id ASC
-            """,
-            (opportunity_id,),
-        ).fetchall()
-
-    return [audit_entry_from_row(row) for row in rows]
-
-
-@v2_router.get("/{opportunity_id}/audit-log", response_model=Page[AuditLogEntryPublic])
+@router.get("/{opportunity_id}/audit-log", response_model=Page[AuditLogEntryPublic])
 def list_audit_log_page(
     opportunity_id: int,
     page: PageRequest = Depends(page_params),
     user: sqlite3.Row = Depends(get_current_user),
 ) -> Page[AuditLogEntryPublic]:
-    """Oldest first, like v1: the audit log is read as a narrative of what
-    happened to the opportunity, so the page boundary walks forward in time.
+    """Oldest first: the audit log is read as a narrative of what happened to
+    the opportunity, so the page boundary walks forward in time.
     """
     continuation, cursor_values = cursor_clause(
         page,
@@ -407,7 +364,10 @@ def list_audit_log_page(
         require_opportunity_owner(connection, opportunity_id, int(user["id"]))
         rows = connection.execute(
             f"""
-            {AUDIT_LOG_ROWS_SQL}
+            SELECT audit_log_entries.*, users.name AS actor_name
+            FROM audit_log_entries
+            LEFT JOIN users ON users.id = audit_log_entries.actor_id
+            WHERE audit_log_entries.opportunity_id = ?
             {f"AND {continuation}" if continuation else ""}
             ORDER BY audit_log_entries.created_at ASC, audit_log_entries.id ASC
             LIMIT ?
