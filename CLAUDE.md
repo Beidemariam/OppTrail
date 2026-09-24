@@ -374,12 +374,24 @@ editable thing adds a `VersionedTable` there rather than a fourth `INSERT`.
   Every pre-existing row got one from its current values; for a row edited
   before the revision the earlier values were overwritten in place and are
   gone, so it reads as the oldest state this database can still show.
-- The frontend is one screen for all three (`app/HistoryDialog.tsx`):
-  `lib/domain.ts` declares which fields each kind snapshots and how each reads,
-  `versionChanges` compares two versions without knowing which kind it holds,
-  and the read hook arrives as a prop. Version 1 renders as the whole state,
-  every later one as only what it moved. The button sits beside the exports on
-  the opportunity, and on each entry and note, rendered only for the owner.
+- **A version can be put back** (milestone 3.1c, **D-116**, **D-120**):
+  `POST /api/v2/<kind>/{id}/versions/{n}/restore`, owner-only like the read.
+  Not to be confused with the `/restore` routes in "Soft deletes and undo",
+  which clear a `deleted_at`: these undo an *edit*. `versioning.py`'s
+  `apply_version` writes the snapshot back over the parent row —
+  `VersionedTable.parent_table` is what keeps that one `UPDATE` rather than
+  three — and the route then records a version for having done it, so the
+  history only grows and a restore is itself restorable. Three consequences:
+  restoring what is already current writes nothing (the server's half of
+  D-114, which also makes a retry idempotent), a restored stage writes the
+  same `stage_change` system entry any stage change writes, and a restored
+  note keeps its `edited` marker and sends no second mention notification.
+- The frontend reads all three histories inside the activity log
+  (`app/VersionChanges.tsx`, since 3.1c): `lib/domain.ts` declares which
+  fields each kind snapshots and how each reads, `versionChanges` compares two
+  versions without knowing which kind it holds, and the read hook arrives as a
+  prop. That is what keeps a value formatted as money rather than as the
+  column's raw text.
 
 ### One activity log
 
@@ -389,6 +401,14 @@ timeline, audit rows inside the sharing panel, versions one item at a time
 (**D-101**, raised by the human at the Phase 2 gate). `GET
 /api/v2/opportunities/{id}/activity` is the join, in `app/activity.py`, and it
 adds no table — every row it returns already existed.
+
+Milestone 3.1c made it the *only* destination (**D-121**): the per-item
+History buttons and the sharing panel's audit disclosure are gone, and an edit
+row here opens onto the before/after they used to answer. `GET
+/api/v2/opportunities/{id}/audit-log` and the three `GET .../versions` reads
+all remain — what moved is where a person reads them. The button is labelled
+"History" and the dialog "Activity and history", so the three words the
+reviewer used all land on one screen.
 
 - **A row keeps the visibility of the source it came from.** System entries go
   to anyone with access, because they are already on the timeline; audit rows
@@ -415,7 +435,14 @@ adds no table — every row it returns already existed.
   through `fetchAll` into `app/ActivityDialog.tsx` — one Modal, one sentence
   per row from `lib/activity.ts`, which is to this what `lib/notifications.ts`
   is to the inbox. `lib/domain.ts`'s `VersionField.field` is what keeps the
-  sentence's field names and the history screen's labels the same words.
+  sentence's field names and the expanded row's labels the same words.
+- **An edit row opens** (3.1c). The disclosure fetches that item's versions
+  when it is clicked, not when the feed is drawn, and renders version N
+  against N − 1 through `app/VersionChanges.tsx`. The Restore control offers
+  the version the edit *replaced*, which is how every recorded version except
+  the current one is reachable exactly once — including version 1, the state
+  the thing was created in. An edit row only ever reaches an owner, so the
+  control needs no second permission check of its own.
 
 A comment being posted is the one event no mechanism records (comments are
 immutable, so they have no version table); its deletion is in the audit half.
@@ -738,20 +765,22 @@ overwrote, and put it back in `onError` — `docs/UX.md`'s "applies immediately,
 reconciles on response, rolls back with an explanatory toast". Creates are not,
 deliberately: the server assigns the id, so there is nothing truthful to render
 until it answers (D-068). A delete or a restore also invalidates
-`keys.allAuditLogs`, since both write an audit row and neither knows which
-opportunity the row belongs to.
+`keys.allActivity`, since both write an audit row and neither knows which
+opportunity the row belongs to — that prefix replaced `keys.allAuditLogs`
+when 3.1c made the activity log the only reader of those rows.
 
 **Server state does not live in components.** `lib/queries.ts` declares every
-read and write the app makes against the query cache: the query keys, the seven
-reads, and each mutation with what it invalidates. A view calls a hook; a write
+read and write the app makes against the query cache: the query keys, every
+read, and each mutation with what it invalidates. A view calls a hook; a write
 invalidates a key. Do not add a bare `apiRequest` call to a component — that is
 the pattern ADR 0005 calls blocker B1, and 2.1 is what removed the last of it.
-Five of the reads go through `fetchAll`, which walks `next_cursor` to the last
+Most of the reads go through `fetchAll`, which walks `next_cursor` to the last
 page: the API paginates every collection, and the board's cursor, its bulk
 selection and the calendar's month are all derived from the whole filtered
-list rather than from a window of it (**D-093**). The other two ask for one
+list rather than from a window of it (**D-093**). The exceptions ask for one
 page with an explicit limit, because an inbox and a saved-view menu are read
-from the top.
+from the top. `useAuditLog` was a read here until 3.1c, which left the audit
+rows to the activity log rather than to a panel of their own (**D-121**).
 Two things in there are worth knowing before changing them: the AI transcript is
 cache state under `["ai-conversation", id]` because it has to outlive the route
 (D-055), and the cache is dropped on *sign-in*, not sign-out, because observers
@@ -807,6 +836,9 @@ The units worth testing directly, each in its own module:
   of "edit this where it is read" (2.11). See "Editing where content is read".
 - `app/RichTextEditor.tsx` — `RichTextEditor` and `Composer`, the two shapes
   of "write content here" (3.1). See "The composer".
+- `app/VersionChanges.tsx` — what one edit changed, and the control that puts
+  the earlier version back (3.1c). Rendered inside an activity row rather than
+  in a dialog of its own; see "Edit history" and "One activity log".
 - `app/Toasts.tsx` — the toast surface and `useUndoableDelete`, the one
   definition of "delete it, and say so with a way back" (milestone 2.4b). The
   region is a `role="status"` live region, never focused, so a reader keeps

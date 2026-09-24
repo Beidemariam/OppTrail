@@ -26,7 +26,6 @@ export interface FakeApiOptions {
   entries?: TimelineEntry[];
   notifications?: Notification[];
   shares?: Share[];
-  auditLog?: AuditEntry[];
   activity?: ActivityEvent[];
   searchResults?: SearchResult[];
   savedViews?: SavedView[];
@@ -119,16 +118,6 @@ interface Share {
   role: "viewer" | "editor";
   invited_by: number;
   invited_by_name: string;
-  created_at: string;
-}
-
-interface AuditEntry {
-  id: number;
-  opportunity_id: number;
-  actor_id: number | null;
-  actor_name: string | null;
-  action: string;
-  detail: Record<string, unknown>;
   created_at: string;
 }
 
@@ -275,7 +264,6 @@ export class FakeApi {
   entries: TimelineEntry[];
   notifications: Notification[];
   shares: Share[];
-  auditLog: AuditEntry[];
   activity: ActivityEvent[];
   searchResults: SearchResult[];
   savedViews: SavedView[];
@@ -315,7 +303,6 @@ export class FakeApi {
     this.entries = options.entries ?? [];
     this.notifications = options.notifications ?? [];
     this.shares = options.shares ?? [];
-    this.auditLog = options.auditLog ?? [];
     this.activity = options.activity ?? [];
     this.searchResults = options.searchResults ?? [];
     this.savedViews = options.savedViews ?? [];
@@ -539,6 +526,32 @@ export class FakeApi {
       return this.json(created, 201);
     }
     if (segments[0] === "opportunities" && segments[2] === "versions") {
+      if (segments[4] === "restore") {
+        return this.restoreVersion(
+          this.versions.opportunities,
+          Number(segments[1]),
+          Number(segments[3]),
+          (version) => {
+            const found = this.opportunities.find(
+              (item) => item.id === version.opportunity_id,
+            )!;
+            Object.assign(found, {
+              name: version.name,
+              account_name: version.account_name,
+              value: version.value,
+              currency: version.currency,
+              stage: version.stage,
+              expected_close_date: version.expected_close_date,
+            });
+            this.recordVersion(
+              this.versions.opportunities,
+              found.id,
+              this.opportunitySnapshot(found),
+            );
+            return found;
+          },
+        );
+      }
       return this.page(
         this.versions.opportunities.get(Number(segments[1])) ?? [],
         path,
@@ -597,10 +610,10 @@ export class FakeApi {
     if (segments[2] === "activity") {
       return this.page(this.activity, path);
     }
-    if (segments[2] === "shares" || segments[2] === "audit-log") {
-      if (segments[2] === "audit-log") {
-        return this.page(this.auditLog, path);
-      }
+    // `GET .../audit-log` has no branch here on purpose: the app stopped
+    // reading it in 3.1c (D-121), and a fake that answers a route nothing
+    // calls hides the fact that nothing calls it.
+    if (segments[2] === "shares") {
       if (method === "GET") {
         return this.page(this.shares, path);
       }
@@ -635,6 +648,29 @@ export class FakeApi {
     if (segments[0] === "timeline") {
       const entryId = Number(segments[1]);
       if (segments[2] === "versions") {
+        if (segments[4] === "restore") {
+          return this.restoreVersion(
+            this.versions.entries,
+            entryId,
+            Number(segments[3]),
+            (version) => {
+              const entry = this.entries.find((item) => item.id === entryId)!;
+              Object.assign(entry, {
+                type: version.type,
+                title: version.title,
+                body: version.body,
+                event_timestamp: version.event_timestamp,
+                follow_up_date: version.follow_up_date,
+              });
+              this.recordVersion(
+                this.versions.entries,
+                entryId,
+                this.entrySnapshot(entry),
+              );
+              return entry;
+            },
+          );
+        }
         return this.page(this.versions.entries.get(entryId) ?? [], path);
       }
       if (segments[2] === "notes") {
@@ -677,6 +713,26 @@ export class FakeApi {
     if (segments[0] === "notes") {
       const noteId = Number(segments[1]);
       if (segments[2] === "versions") {
+        if (segments[4] === "restore") {
+          return this.restoreVersion(
+            this.versions.notes,
+            noteId,
+            Number(segments[3]),
+            (version) => {
+              const restored = this.entries
+                .flatMap((entry) => entry.notes)
+                .find((item) => item.id === noteId)!;
+              restored.body = version.body;
+              restored.edited = true;
+              this.recordVersion(
+                this.versions.notes,
+                noteId,
+                this.noteSnapshot(restored),
+              );
+              return restored;
+            },
+          );
+        }
         return this.page(this.versions.notes.get(noteId) ?? [], path);
       }
       const owner = this.entries.find((entry) =>
@@ -809,6 +865,29 @@ export class FakeApi {
       editor_name: this.user?.name ?? "Owner",
       created_at: item.updated_at,
     };
+  }
+
+  /**
+   * Putting a recorded version back (milestone 3.1c).
+   *
+   * Stateful like the rest of this fake: the snapshot is written over the
+   * live object and appended as a new version, so a test that restores and
+   * then reads the history sees what the server would have answered — the
+   * restore recorded as an edit of its own rather than the history rewound.
+   */
+  private restoreVersion<VersionT extends { version_number: number }>(
+    history: Map<number, VersionT[]>,
+    id: number,
+    versionNumber: number,
+    apply: (version: VersionT) => unknown,
+  ): Response {
+    const version = (history.get(id) ?? []).find(
+      (candidate) => candidate.version_number === versionNumber,
+    );
+    if (!version) {
+      return this.notFound("Version not found");
+    }
+    return this.json(apply(version));
   }
 
   /** Appends a snapshot as the next version, numbering it like the API does. */

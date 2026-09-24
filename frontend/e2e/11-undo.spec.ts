@@ -5,6 +5,7 @@ import {
   entry,
   entryForm,
   expectNoAccessibilityViolations,
+  openHistory,
   openTimeline,
   createOpportunity,
   signUp,
@@ -90,11 +91,12 @@ test("an undone deletion is both events in the owner's audit log", async ({
   ).toBeVisible();
 
   // Undo does not erase the delete: the log is what happened, in order
-  // (`AGENTS.md`, auditability).
-  await page.locator(".audit-panel summary").click();
-  const log = page.locator(".audit-list");
-  await expect(log).toContainText("timeline_entry_deleted");
-  await expect(log).toContainText("timeline_entry_restored");
+  // (`AGENTS.md`, auditability). Read from the opportunity's own history
+  // since 3.1c, where the audit rows are sentences rather than the JSON the
+  // sharing panel's disclosure used to print (D-121).
+  const log = await openHistory(page);
+  await expect(log).toContainText("deleted the entry");
+  await expect(log).toContainText("restored the entry");
 });
 
 test("deleting a note and a comment both leave an audit trail", async ({
@@ -130,8 +132,7 @@ test("deleting a note and a comment both leave an audit trail", async ({
   await note.getByRole("button", { name: "Delete" }).click();
   await expect(note).toHaveCount(0);
 
-  await page.locator(".audit-panel summary").click();
-  const log = page.locator(".audit-list");
-  await expect(log).toContainText("comment_deleted");
-  await expect(log).toContainText("note_deleted");
+  const log = await openHistory(page);
+  await expect(log).toContainText("deleted a comment");
+  await expect(log).toContainText("deleted a note");
 });

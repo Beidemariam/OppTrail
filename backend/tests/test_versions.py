@@ -276,3 +276,211 @@ def test_versions_are_numbered_without_gaps_under_the_unique_index(client: TestC
         ]
 
     assert numbers == [1, 2, 3, 4]
+
+
+# --- Restoring a version (milestone 3.1c, D-116 / D-120) --------------------
+#
+# The existing `POST /<kind>/{id}/restore` routes undo a soft delete. These
+# undo an *edit*: they write a recorded version back over the live row. The
+# rule the whole group turns on is that restoring is itself an edit, so the
+# history only ever grows and a restore can be restored from.
+
+
+def test_restoring_an_opportunity_version_brings_the_old_values_back(
+    client: TestClient,
+) -> None:
+    signup(client)
+    opportunity = create_opportunity(client)
+    assert (
+        client.patch(
+            f"/api/v2/opportunities/{opportunity['id']}",
+            json={"value": "250000", "name": "Expansion, trimmed"},
+        ).status_code
+        == 200
+    )
+
+    restored = client.post(f"/api/v2/opportunities/{opportunity['id']}/versions/1/restore")
+
+    assert restored.status_code == 200
+    assert restored.json()["value"] == "485000"
+    assert restored.json()["name"] == "Expansion"
+
+
+def test_restoring_appends_a_version_rather_than_truncating_the_history(
+    client: TestClient,
+) -> None:
+    """The property that makes a restore safe: nothing recorded is removed, so
+    the state the restore replaced is itself recoverable."""
+    signup(client)
+    opportunity = create_opportunity(client)
+    assert (
+        client.patch(
+            f"/api/v2/opportunities/{opportunity['id']}", json={"value": "250000"}
+        ).status_code
+        == 200
+    )
+
+    assert (
+        client.post(f"/api/v2/opportunities/{opportunity['id']}/versions/1/restore").status_code
+        == 200
+    )
+
+    history = versions(client, f"/api/v2/opportunities/{opportunity['id']}/versions")
+    assert [(version["version_number"], version["value"]) for version in history] == [
+        (1, "485000"),
+        (2, "250000"),
+        (3, "485000"),
+    ]
+
+    # And the restore is itself restorable, which is what "never destructive"
+    # has to mean: version 2 is still there to go back to.
+    assert (
+        client.post(f"/api/v2/opportunities/{opportunity['id']}/versions/2/restore").status_code
+        == 200
+    )
+    assert [
+        version["value"]
+        for version in versions(client, f"/api/v2/opportunities/{opportunity['id']}/versions")
+    ] == ["485000", "250000", "485000", "250000"]
+
+
+def test_restoring_a_stage_narrates_it_on_the_timeline(client: TestClient) -> None:
+    """Every stage change writes the same system entry, including the one a
+    restore performs — otherwise the timeline and the record disagree."""
+    signup(client)
+    opportunity = create_opportunity(client)
+    assert (
+        client.patch(
+            f"/api/v2/opportunities/{opportunity['id']}", json={"stage": "Negotiation"}
+        ).status_code
+        == 200
+    )
+
+    assert (
+        client.post(f"/api/v2/opportunities/{opportunity['id']}/versions/1/restore").status_code
+        == 200
+    )
+
+    timeline = client.get(f"/api/v2/opportunities/{opportunity['id']}/timeline")
+    assert timeline.status_code == 200
+    stage_entries = [
+        entry["body"] for entry in timeline.json()["items"] if entry["type"] == "stage_change"
+    ]
+    assert stage_entries == [
+        "Stage changed from Proposal to Negotiation.",
+        "Stage changed from Negotiation to Proposal.",
+    ]
+
+
+def test_restoring_what_is_already_current_writes_nothing(client: TestClient) -> None:
+    """The server's half of D-114: an edit that changes nothing records
+    nothing, so restoring twice does not pad the history with copies."""
+    signup(client)
+    opportunity = create_opportunity(client)
+    assert (
+        client.patch(
+            f"/api/v2/opportunities/{opportunity['id']}", json={"value": "250000"}
+        ).status_code
+        == 200
+    )
+
+    for _ in range(2):
+        assert (
+            client.post(f"/api/v2/opportunities/{opportunity['id']}/versions/1/restore").status_code
+            == 200
+        )
+
+    assert [
+        version["value"]
+        for version in versions(client, f"/api/v2/opportunities/{opportunity['id']}/versions")
+    ] == ["485000", "250000", "485000"]
+
+
+def test_restoring_a_timeline_entry_version_puts_the_body_back(client: TestClient) -> None:
+    signup(client)
+    opportunity = create_opportunity(client)
+    entry = create_entry(client, opportunity["id"])
+    assert (
+        client.patch(
+            f"/api/v2/timeline/{entry['id']}",
+            json={"title": "Discovery call, revised", "body": "Shorter summary."},
+        ).status_code
+        == 200
+    )
+
+    restored = client.post(f"/api/v2/timeline/{entry['id']}/versions/1/restore")
+
+    assert restored.status_code == 200
+    assert restored.json()["title"] == "Discovery call"
+    assert restored.json()["body"] == "Walked the procurement process."
+    assert [
+        version["version_number"]
+        for version in versions(client, f"/api/v2/timeline/{entry['id']}/versions")
+    ] == [1, 2, 3]
+
+
+def test_restoring_a_note_version_puts_the_text_back_and_keeps_the_marker(
+    client: TestClient,
+) -> None:
+    """`edited` stays set: the note was edited, and a restore is another edit
+    rather than a way to make one disappear."""
+    signup(client)
+    opportunity = create_opportunity(client)
+    entry = create_entry(client, opportunity["id"])
+    note = client.post(f"/api/v2/timeline/{entry['id']}/notes", json={"body": "First draft"})
+    assert note.status_code == 201
+    note_id = note.json()["id"]
+    assert (
+        client.patch(f"/api/v2/notes/{note_id}", json={"body": "Second draft"}).status_code == 200
+    )
+
+    restored = client.post(f"/api/v2/notes/{note_id}/versions/1/restore")
+
+    assert restored.status_code == 200
+    assert restored.json()["body"] == "First draft"
+    assert restored.json()["edited"] is True
+    assert [
+        version["body"] for version in versions(client, f"/api/v2/notes/{note_id}/versions")
+    ] == ["First draft", "Second draft", "First draft"]
+
+
+def test_restoring_a_version_that_was_never_recorded_is_a_404(client: TestClient) -> None:
+    signup(client)
+    opportunity = create_opportunity(client)
+    entry = create_entry(client, opportunity["id"])
+    note = client.post(f"/api/v2/timeline/{entry['id']}/notes", json={"body": "Only draft"})
+    assert note.status_code == 201
+
+    assert (
+        client.post(f"/api/v2/opportunities/{opportunity['id']}/versions/9/restore").status_code
+        == 404
+    )
+    assert client.post(f"/api/v2/timeline/{entry['id']}/versions/9/restore").status_code == 404
+    assert client.post(f"/api/v2/notes/{note.json()['id']}/versions/9/restore").status_code == 404
+
+
+def test_a_restore_reaches_the_activity_log_as_the_edit_it_is(client: TestClient) -> None:
+    """A restore leaves a version row, so the merged feed reports it the way it
+    reports any other edit — which is true: the fields moved (D-120)."""
+    signup(client)
+    opportunity = create_opportunity(client)
+    assert (
+        client.patch(
+            f"/api/v2/opportunities/{opportunity['id']}", json={"value": "250000"}
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(f"/api/v2/opportunities/{opportunity['id']}/versions/1/restore").status_code
+        == 200
+    )
+
+    activity = client.get(f"/api/v2/opportunities/{opportunity['id']}/activity")
+    assert activity.status_code == 200
+    edits = [
+        event["detail"]
+        for event in activity.json()["items"]
+        if event["detail"]["source"] == "version"
+    ]
+    assert [edit["version_number"] for edit in edits] == [2, 3]
+    assert all(edit["changed_fields"] == ["value"] for edit in edits)

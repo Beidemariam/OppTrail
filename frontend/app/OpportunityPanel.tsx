@@ -6,7 +6,6 @@ import { useParams, useSearchParams } from "react-router";
 import {
   emptyTimelineFilters,
   formatMoney,
-  opportunityVersionFields,
   type Access,
   type Opportunity,
   type TimelineFilters,
@@ -17,16 +16,10 @@ import {
   canManageOpportunity,
   canWriteTimeline,
 } from "../lib/permissions";
-import {
-  useOpportunities,
-  useOpportunityVersions,
-  useSession,
-  useTimeline,
-} from "../lib/queries";
+import { useOpportunities, useSession, useTimeline } from "../lib/queries";
 import { paramsWithState, stateFromParams } from "../lib/viewState";
 import { ActivityButton } from "./ActivityDialog";
 import { AiSidebar } from "./AiSidebar";
-import { HistoryButton } from "./HistoryDialog";
 import { OpportunityField, useOpportunityFieldSave } from "./InlineEdit";
 import { SavedViewsMenu } from "./SavedViewsMenu";
 import { SharingPanel } from "./SharingPanel";
@@ -235,20 +228,11 @@ function TimelineHeading({
       </div>
       <div className="export-actions">
         <ExportControl opportunityId={opportunity.id} />
-        {/* Every role: the log answers with the events the reader's role may
-            see rather than refusing them (milestone 3.0, D-101). */}
+        {/* One destination for what happened here, offered to every role:
+            the log answers with the events the reader's role may see rather
+            than refusing them, and an edit row opens to the field-by-field
+            record that used to need its own button (3.0, 3.1c, D-121). */}
         <ActivityButton opportunityId={opportunity.id} />
-        {/* Owner-only, like the sharing panel and the audit log below it
-            (milestone 2.10, D-096). This one is the field-by-field record
-            behind the "changed Name and Value" line the activity log shows. */}
-        {canManage && (
-          <HistoryButton
-            title={`History of ${opportunity.name}`}
-            fields={opportunityVersionFields}
-            itemId={opportunity.id}
-            useVersions={useOpportunityVersions}
-          />
-        )}
         <button type="button" className="secondary-button" onClick={onRefresh}>
           Refresh
         </button>

@@ -2,23 +2,17 @@
 
 import { useRef, useState } from "react";
 
-import {
-  noteVersionFields,
-  type Access,
-  type TimelineNote,
-} from "../lib/domain";
+import { type Access, type TimelineNote } from "../lib/domain";
 import { submitOnModEnter } from "../lib/keyboard";
 import { normalizeMarkdown } from "../lib/markdown";
 import {
   useAddComment,
   useDeleteComment,
   useDeleteNote,
-  useNoteVersions,
   useRestoreComment,
   useRestoreNote,
   useSaveNote,
 } from "../lib/queries";
-import { HistoryButton } from "./HistoryDialog";
 import { useInlineEditor } from "./InlineEdit";
 import { MarkdownText } from "./MarkdownText";
 import { Composer, RichTextEditor } from "./RichTextEditor";
@@ -87,17 +81,10 @@ export function NoteBlock({
           {note.author_name}
           {note.edited ? " | edited" : ""}
         </p>
+        {/* The note's own history is read in the opportunity's history
+            dialog, which is the one destination since 3.1c (D-121). */}
         {access.canChangeItem(note.created_by) && (
           <div className="inline-actions">
-            {/* Owner-only, like the other two histories (milestone 2.10). */}
-            {access.canManage && (
-              <HistoryButton
-                title="History of this note"
-                fields={noteVersionFields}
-                itemId={note.id}
-                useVersions={useNoteVersions}
-              />
-            )}
             <button
               ref={editTriggerRef}
               type="button"

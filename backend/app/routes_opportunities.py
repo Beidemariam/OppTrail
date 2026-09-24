@@ -26,7 +26,13 @@ from .share_utils import upsert_share_row
 from .soft_delete import restore_opportunity, soft_delete_opportunity, soft_delete_share
 from .time_utils import utc_days_ago, utc_now
 from .timeline_utils import create_system_timeline_entry
-from .versioning import OPPORTUNITY_VERSIONS, record_version
+from .versioning import (
+    OPPORTUNITY_VERSIONS,
+    apply_version,
+    fetch_version,
+    record_version,
+    version_is_current,
+)
 
 router = APIRouter(prefix="/api/v2", tags=["opportunities"])
 
@@ -388,6 +394,74 @@ def list_opportunity_versions_page(
 
     rows, next_cursor = split_page(rows, page.limit, lambda row: (row["version_number"], row["id"]))
     return Page(items=[opportunity_version_from_row(row) for row in rows], next_cursor=next_cursor)
+
+
+@router.post(
+    "/opportunities/{opportunity_id}/versions/{version_number}/restore",
+    response_model=OpportunityPublic,
+)
+def restore_opportunity_version(
+    opportunity_id: int,
+    version_number: int,
+    user: sqlite3.Row = Depends(get_current_user),
+) -> OpportunityPublic:
+    """Put a recorded version back as the current one (milestone 3.1c, D-116).
+
+    Owner-only, the rule the history read already has (D-096), and not to be
+    confused with `POST /opportunities/{id}/restore`, which undoes a soft
+    delete: this one undoes an *edit*, by writing an old snapshot back over
+    the live row.
+
+    Restoring is itself an edit, so it appends a version rather than
+    truncating the history -- restoring is never destructive and can itself be
+    undone by restoring again (D-120). A stage that moves in the process
+    writes the same `stage_change` system entry a stage change always writes,
+    because the timeline must not disagree with the record.
+    """
+    with db_connection() as connection:
+        require_opportunity_owner(connection, opportunity_id, int(user["id"]))
+        version = fetch_version(connection, OPPORTUNITY_VERSIONS, opportunity_id, version_number)
+        if version is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Opportunity version not found",
+            )
+        row = fetch_opportunity_row(connection, opportunity_id)
+        assert row is not None
+
+        if not version_is_current(OPPORTUNITY_VERSIONS, version, row):
+            apply_version(
+                connection,
+                OPPORTUNITY_VERSIONS,
+                opportunity_id,
+                version,
+                {"updated_at": utc_now()},
+            )
+            if version["stage"] != row["stage"]:
+                create_system_timeline_entry(
+                    connection=connection,
+                    opportunity_id=opportunity_id,
+                    created_by=int(user["id"]),
+                    entry_type="stage_change",
+                    title=f"Stage changed to {version['stage']}",
+                    body=f"Stage changed from {row['stage']} to {version['stage']}.",
+                )
+            restored = fetch_opportunity_row(connection, opportunity_id)
+            assert restored is not None
+            record_version(
+                connection,
+                OPPORTUNITY_VERSIONS,
+                opportunity_id,
+                restored,
+                int(user["id"]),
+                restored["updated_at"],
+            )
+            connection.commit()
+            row = restored
+
+        stalled = is_opportunity_stalled(connection, opportunity_id)
+
+    return opportunity_from_row(row, "owner", stalled)
 
 
 @router.get(

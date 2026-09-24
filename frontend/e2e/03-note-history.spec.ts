@@ -3,6 +3,7 @@ import {
   addNote,
   entry,
   entryForm,
+  openHistory,
   openTimeline,
   createOpportunity,
   signUp,
@@ -11,19 +12,20 @@ import {
 /**
  * Critical journey 3 (brief §6.3): edit a note, see the edit marker, and find
  * the previous text in the revision history — plus the other two histories
- * milestone 2.10 added beside it.
+ * milestone 2.10 added beside it, and the restore milestone 3.1c added under
+ * them.
  *
- * Driven entirely through the UI since 2.10. It used to read the versions over
- * `GET /api/v2/notes/{id}/versions` because the frontend had no history view:
- * the table and the endpoint shipped in Phase F, the screen did not. It does
- * now, for all three editable things, and the History button is owner-only
- * (D-096) — the signed-up user here owns what they create.
+ * Driven entirely through the UI since 2.10, and through *one* destination
+ * since 3.1c: the per-item History buttons and the sharing panel's audit
+ * disclosure were folded into the opportunity's own history, where an edit
+ * row opens onto what it changed (D-121). Owner-only rows, and the signed-up
+ * user here owns what they create.
  */
 test("editing a note marks it as edited and keeps the previous version", async ({
   page,
 }) => {
   const suffix = Math.random().toString(36).slice(2, 8);
-  const opportunity = `History ${suffix}`;
+  const opportunity = `Revision log ${suffix}`;
 
   await signUp(page, `history-${suffix}@opptrail.test`, "History Tester");
   await createOpportunity(page, opportunity, {
@@ -57,22 +59,29 @@ test("editing a note marks it as edited and keeps the previous version", async (
   await expect(note).toContainText("Second draft, with the 8% discount.");
   await expect(note.getByText("edited")).toBeVisible();
 
-  // The revision history, on the screen milestone 2.10 gave it.
-  await note.getByRole("button", { name: "History" }).click();
-  const dialog = page.getByRole("dialog");
-  await expect(
-    dialog.getByRole("heading", { name: "History of this note" }),
-  ).toBeVisible();
-  const versions = dialog.locator("li.history-version");
-  await expect(versions).toHaveCount(2);
-  await expect(versions.first()).toContainText(
-    "First draft of the pricing summary.",
-  );
-  await expect(versions.nth(1)).toContainText(
+  const dialog = await openHistory(page);
+  const edit = dialog
+    .locator("li.activity-event")
+    .filter({ hasText: "changed Body on a note" });
+  await expect(edit).toHaveCount(1);
+
+  // Nothing about what changed is fetched until the row is opened.
+  await expect(dialog.locator(".history-fields")).toHaveCount(0);
+  await edit.getByRole("button", { name: "What changed" }).click();
+  await expect(edit).toContainText(
     "First draft of the pricing summary. to Second draft, with the 8% discount.",
   );
+
+  // And the way back. Version 1 is the note as first written, reached as the
+  // "before" of the edit that replaced it (D-120).
+  await edit.getByRole("button", { name: "Restore version 1" }).click();
+  await expect(dialog.getByRole("button", { name: "Close" })).toBeVisible();
   await dialog.getByRole("button", { name: "Close" }).click();
   await expect(dialog).toBeHidden();
+  await expect(note).toContainText("First draft of the pricing summary.");
+  // Restoring is an edit of its own, so the marker stays: the note was
+  // edited, and the history now records three states rather than one.
+  await expect(note.getByText("edited")).toBeVisible();
 });
 
 /**
@@ -104,22 +113,21 @@ test("an opportunity's history keeps the value an edit replaced", async ({
   await form.getByRole("button", { name: "Save changes" }).click();
   await expect(form).toBeHidden();
 
-  await page
-    .locator(".timeline-heading")
-    .getByRole("button", { name: "History" })
-    .click();
-  const dialog = page.getByRole("dialog");
-  await expect(
-    dialog.getByRole("heading", { name: `History of ${opportunity}` }),
-  ).toBeVisible();
-  const versions = dialog.locator("li.history-version");
-  await expect(versions).toHaveCount(2);
-  await expect(versions.first()).toContainText("USD 485,000");
-  await expect(versions.nth(1)).toContainText("USD 485,000 to USD 250,000");
+  const dialog = await openHistory(page);
+  const edit = dialog
+    .locator("li.activity-event")
+    .filter({ hasText: "changed Value on this opportunity" });
+  await edit.getByRole("button", { name: "What changed" }).click();
+  await expect(edit).toContainText("USD 485,000 to USD 250,000");
+
+  await edit.getByRole("button", { name: "Restore version 1" }).click();
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator(".opportunity-facts")).toContainText("USD 485,000");
 });
 
 /**
- * Milestone 3.0: the three mechanisms read as one list.
+ * Milestone 3.0, completed by 3.1c: the three mechanisms read as one list.
  *
  * The point of the journey is that a reader asking "who did what when" finds
  * one screen rather than three — so this drives an event of each kind through
@@ -127,7 +135,7 @@ test("an opportunity's history keeps the value an edit replaced", async ({
  * editing it, an audit row from deleting an entry) and reads them back off
  * the one dialog, in order.
  */
-test("the activity log merges what was recorded, edited and deleted", async ({
+test("the history merges what was recorded, edited and deleted", async ({
   page,
 }) => {
   const suffix = Math.random().toString(36).slice(2, 8);
@@ -164,18 +172,7 @@ test("the activity log merges what was recorded, edited and deleted", async ({
     0,
   );
 
-  // Exact: since 2.11 the heading's own fields are edit triggers named by
-  // their value (D-100), so a deal whose name contains this word would
-  // otherwise match two buttons in this region.
-  await page
-    .locator(".timeline-heading")
-    .getByRole("button", { name: "Activity", exact: true })
-    .click();
-  const dialog = page.getByRole("dialog");
-  await expect(
-    dialog.getByRole("heading", { name: "Activity log" }),
-  ).toBeVisible();
-
+  const dialog = await openHistory(page);
   const events = dialog.locator("li.activity-event");
   await expect(events).toHaveCount(3);
   await expect(events.first()).toContainText(

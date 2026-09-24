@@ -1776,3 +1776,59 @@ libraries are missing, not a permission bug masquerading as one.
 Coverage floors (brief §6.2) all met, unchanged from 3.1a. Authorization-
 matrix endpoints: 56, unchanged. No new decisions beyond this entry's note on
 the node_modules assumption, recorded in DECISIONS.md as D-119.
+
+---
+
+## Phase 3 — milestone 3.1c (restore a previous version, one place to read history, D-116)
+
+Three new routes and a consolidation on the screen that reads them. The
+frontend test count *fell* by two (487 → 485) while coverage rose, which is
+the shape of this milestone: `app/History.test.tsx` and `app/HistoryDialog.tsx`
+were deleted with the destination they tested, and the assertions worth
+keeping moved into `app/Activity.test.tsx` (3 cases → 7) beside a new
+`app/VersionChanges.test.tsx` (5 cases).
+
+```
+backend:  403 passed (up from 392), 97.49% line / 90.61% branch — the line
+          figure is unchanged to two decimals because the new code is small
+          and fully covered: app/versioning.py 100.00%, and the three restore
+          routes are exercised by nine cases in tests/test_versions.py plus
+          three authorization-matrix entries.
+frontend: 485 passed (from 487), 97.20% statements / 91.61% branch / 95.69%
+          functions / 97.17% line — every figure above the 3.1b baseline
+          (97.12 / 91.57 / 95.53 / 97.08) and above vitest.config.ts's
+          thresholds (96 / 90 / 95 / 96), which were not touched.
+contract: scripts/generate-api-client.sh --check               up to date
+          (regenerated: the three restore routes are the only additions)
+e2e:      61 passed, axe clean. Same count — 03-note-history.spec.ts's three
+          journeys were rewritten against the single destination rather than
+          added to, and 11-undo.spec.ts's two audit-trail reads moved from
+          the sharing panel's disclosure to the same dialog.
+audits:   pip-audit clean, npm audit 0 vulnerabilities.
+docker:   deferred to the host half — scripts/autopilot-gate.sh 3
+          (no Docker socket in this sandbox, per sandbox/README.md)
+```
+
+Authorization-matrix endpoints: 59, up from 56 — one per restore route. Each
+is `scoped(viewer=403, editor=403, owner=200)`, the rule the history read it
+restores from already had (D-096). The matrix test failed as intended before
+the entries were added, naming all three paths.
+
+Two coverage notes worth keeping, since both are about what was *removed*
+rather than added:
+
+- `lib/domain.ts`'s `versionChanges` lost its `previous === undefined`
+  branch. It rendered version 1 as a whole state, which only the deleted
+  per-item dialog ever asked for; the activity log always compares a version
+  against the one before it. Making the parameter required deleted dead code
+  rather than leaving an untested branch behind — the file is now 100%
+  statements.
+- `app/VersionChanges.tsx`'s remaining low-traffic branches (the history
+  failing to load, an edit whose fields all render the same, a version the
+  feed named but the history does not hold) are covered by
+  `app/VersionChanges.test.tsx` driving the component directly. They are
+  unreachable through the feed by construction, which is exactly why they
+  needed a test that does not go through it.
+
+Coverage floors (brief §6.2) all met. New decisions: D-120 (what a restore
+writes) and D-121 (one destination, `needs human review: Y`).

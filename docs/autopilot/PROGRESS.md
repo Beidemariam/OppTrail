@@ -3169,7 +3169,7 @@ each other.
       the frontend `node_modules` volume being empty at that moment, which is
       the same nocopy behaviour behind D-048. Establish why before assuming.
 
-- [ ] 3.1c Restore a previous version, and one place to read history
+- [x] 3.1c Restore a previous version, and one place to read history
       (**D-116**, requested by the human at the editor checkpoint).
       **Restore.** Nothing can put an old value back today: the existing
       `restore` routes (`routes_opportunities.py:692`, `restore_note`,
@@ -3187,7 +3187,7 @@ each other.
       being a separate destination. Keep the per-row role filtering 3.0
       established — this must not widen who sees audit rows.
 
-- [ ] 3.2- [ ] 3.2 Mention autocomplete, fixing requirement 13's discoverability
+- [ ] 3.2 Mention autocomplete, fixing requirement 13's discoverability
       (today mentions require typing a full email address by hand). **Also
       carries the slash-command menu and "links to other entries"**, which
       3.1 left to it (**D-111**): all three are one `@tiptap/suggestion`
@@ -3557,6 +3557,70 @@ sandbox cannot run E2E at all; it depends on mount state at session start.
       gate. Figures in `COVERAGE.md`.
 - [x] **Decisions** — **D-119** records the node_modules-mount correction and
       the second, independent cause behind the 16-edit-in-place failure.
+
+### 3.1c Restore a previous version, and one place to read history (D-116) — **DONE**
+
+Two halves of one milestone, as D-116 scheduled them: the restore routes, and
+the consolidation that gives them somewhere to live. No migration, no new
+table — the versions were already recorded.
+
+- [x] **Restore, as an edit rather than a rewind.** Three routes,
+      `POST /api/v2/{opportunities/{id},timeline/{id},notes/{id}}/versions/{n}/restore`,
+      owner-only like the history read (D-096) and deliberately distinct from
+      the `/restore` routes that clear a `deleted_at`. `versioning.py` gained
+      `fetch_version`, `version_is_current` and `apply_version`, plus
+      `VersionedTable.parent_table` — the write back is the same `UPDATE` over
+      `fields` for all three kinds, so it is one statement rather than three.
+      Each route then records a version for having restored, so the history
+      only ever grows and the state a restore replaced is itself restorable.
+      **D-120** records the three consequences that needed deciding: restoring
+      what is already current writes nothing (the server's half of D-114,
+      which also makes a retry idempotent), a restored stage writes the same
+      `stage_change` system entry any stage change writes, and a restored note
+      keeps its `edited` marker and sends no second mention notification.
+- [x] **One destination.** The activity log is now the only place a person
+      reads what happened here (**D-121**). The per-item History buttons on
+      the opportunity heading, on every entry and on every note are gone, and
+      so is the sharing panel's `Audit Log` disclosure; an edit row in the
+      feed opens instead onto the before/after those screens used to answer,
+      through `app/VersionChanges.tsx`. The button is labelled "History" and
+      the dialog "Activity and history", so the three words the reviewer used
+      land on one screen. Per-row role filtering is untouched, which was
+      D-116's constraint: an edit row only ever reaches an owner, which is
+      also why the Restore control inside one needs no permission check of
+      its own.
+- [x] **Restore is reached from the version an edit replaced**, not from the
+      one it wrote. Every recorded version except the current one is the
+      "before" of exactly one edit row, so each is reachable exactly once —
+      including version 1, the state the thing was created in, which the feed
+      excludes as a row of its own (D-097).
+- [x] **Nothing on the API was removed.** `GET .../audit-log` and the three
+      `GET .../versions` reads all remain, registered in the authorization
+      matrix as before; what moved is where a person reads them. The frontend
+      dropped `useAuditLog` and `keys.allAuditLogs` — every mutation that
+      named that prefix already named `keys.allActivity` beside it.
+- [x] **Tests.** Backend: nine cases in `tests/test_versions.py` covering the
+      round trip, the append-only property (restore, then restore the
+      restore), the stage narration, the idempotent no-op, all three kinds,
+      the 404 on a version never recorded, and the restore reaching the
+      activity feed as the edit it is; three new authorization-matrix entries.
+      Frontend: `app/Activity.test.tsx` rewritten around the one destination
+      (expanding an opportunity, an entry and a note edit, and restoring
+      through two of the three routes), `app/VersionChanges.test.tsx` added
+      for the states the feed never produces, `app/test-api.ts` taught to
+      restore statefully. E2E: `03-note-history.spec.ts` rewritten to drive
+      history and restore through the single dialog, `11-undo.spec.ts` reads
+      the audit trail there instead of from the sharing panel, and
+      `helpers.ts` gained `openHistory`.
+- [x] **Gate.** `make check` green in the sandbox: typecheck, lint, prettier,
+      backend 403 tests / 97.6% line coverage, frontend 485 tests
+      (97.14 / 91.39 / 95.69 / 97.10), generated client current, `pip-audit`
+      and `npm audit` clean, and the full `npm run e2e` — 61 passed, axe
+      clean. Docker build and smoke test deferred to the host per the split
+      gate. Figures in `COVERAGE.md`.
+- [x] **Decisions** — **D-120** (what a restore writes) and **D-121** (one
+      destination, and what was removed to get there; `needs human review: Y`,
+      since it retires surfaces the human used at the checkpoint).
 
 ### Acceptance
 

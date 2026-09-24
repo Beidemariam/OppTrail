@@ -2,20 +2,14 @@
 
 import { useRef } from "react";
 
-import {
-  timelineEntryVersionFields,
-  type Access,
-  type TimelineEntry,
-} from "../lib/domain";
+import { type Access, type TimelineEntry } from "../lib/domain";
 import {
   useAddNote,
   useDeleteTimelineEntry,
   useRestoreTimelineEntry,
-  useTimelineEntryVersions,
 } from "../lib/queries";
 import { formatTimestamp } from "../lib/time";
 import { EntryTypeBadge } from "./EntryTypeBadge";
-import { HistoryButton } from "./HistoryDialog";
 import { useInlineEditor } from "./InlineEdit";
 import { MarkdownText } from "./MarkdownText";
 import { NoteBlock } from "./NoteBlock";
@@ -108,21 +102,12 @@ function TimelineEntryCard({
             )}
           </div>
           {/* A system entry is history, not content: it cannot be edited or
-              deleted through the API (`AGENTS.md`, auditability), so it has no
-              edit history either. */}
+              deleted through the API (`AGENTS.md`, auditability). What an
+              edit to an ordinary entry replaced is read in the opportunity's
+              own history rather than from a button here (3.1c, D-121). */}
           {access.canChangeItem(entry.created_by) &&
             !entry.system_generated && (
               <div className="inline-actions">
-                {/* Editing is the author's or the owner's; reading what an
-                    edit replaced is the owner's alone (milestone 2.10). */}
-                {access.canManage && (
-                  <HistoryButton
-                    title="History of this timeline entry"
-                    fields={timelineEntryVersionFields}
-                    itemId={entry.id}
-                    useVersions={useTimelineEntryVersions}
-                  />
-                )}
                 <button
                   ref={editTriggerRef}
                   type="button"

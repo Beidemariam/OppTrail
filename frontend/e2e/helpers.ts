@@ -173,6 +173,28 @@ export async function openTimeline(page: Page, name: string) {
 }
 
 /**
+ * Opens the opportunity's history — the one destination for what happened
+ * here since milestone 3.1c (D-121), holding what the activity log, the
+ * per-item history dialogs and the sharing panel's audit disclosure used to
+ * answer separately.
+ *
+ * `exact` because the heading's own fields are edit triggers named by their
+ * value since 2.11 (D-100), so a deal whose name contains this word would
+ * otherwise match two controls in this region.
+ */
+export async function openHistory(page: Page) {
+  await page
+    .locator(".timeline-heading")
+    .getByRole("button", { name: "History", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByRole("heading", { name: "Activity and history" }),
+  ).toBeVisible();
+  return dialog;
+}
+
+/**
  * Signs in over the API rather than the UI, for the checks that are about what
  * the server answers rather than what the page shows.
  *

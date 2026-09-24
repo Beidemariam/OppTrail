@@ -193,6 +193,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/opportunities/{opportunity_id}/versions/{version_number}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Opportunity Version
+         * @description Put a recorded version back as the current one (milestone 3.1c, D-116).
+         *
+         *     Owner-only, the rule the history read already has (D-096), and not to be
+         *     confused with `POST /opportunities/{id}/restore`, which undoes a soft
+         *     delete: this one undoes an *edit*, by writing an old snapshot back over
+         *     the live row.
+         *
+         *     Restoring is itself an edit, so it appends a version rather than
+         *     truncating the history -- restoring is never destructive and can itself be
+         *     undone by restoring again (D-120). A stage that moves in the process
+         *     writes the same `stage_change` system entry a stage change always writes,
+         *     because the timeline must not disagree with the record.
+         */
+        post: operations["restore_opportunity_version_api_v2_opportunities__opportunity_id__versions__version_number__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/opportunities/{opportunity_id}/activity": {
         parameters: {
             query?: never;
@@ -441,6 +472,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/timeline/{entry_id}/versions/{version_number}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Timeline Entry Version
+         * @description Put a recorded version of an entry back as the current one (3.1c).
+         *
+         *     Owner-only, like the history it restores from (D-096), and distinct from
+         *     `POST /timeline/{id}/restore`, which undoes a soft delete. A system entry
+         *     needs no special case here: it cannot be edited, so it has exactly one
+         *     version, which is always the current one -- and restoring what is already
+         *     current writes nothing (D-120).
+         */
+        post: operations["restore_timeline_entry_version_api_v2_timeline__entry_id__versions__version_number__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/timeline/{entry_id}/restore": {
         parameters: {
             query?: never;
@@ -512,6 +569,35 @@ export interface paths {
         get: operations["list_note_versions_page_api_v2_notes__note_id__versions_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/notes/{note_id}/versions/{version_number}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Note Version
+         * @description Put a recorded version of a note back as the current body (3.1c).
+         *
+         *     Owner-only through the same check the history read uses, and the same
+         *     write `PATCH /notes/{id}` performs: the body changes, `edited` stays set
+         *     because the note *was* edited, and a version is appended so the text this
+         *     restore replaced is itself recoverable (D-120).
+         *
+         *     No mention notification is sent. The body is not new -- whoever it names
+         *     was told when it was first written -- and announcing it a second time
+         *     would make every restore a fresh ping (D-120).
+         */
+        post: operations["restore_note_version_api_v2_notes__note_id__versions__version_number__restore_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2310,6 +2396,40 @@ export interface operations {
             };
         };
     };
+    restore_opportunity_version_api_v2_opportunities__opportunity_id__versions__version_number__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+                version_number: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpportunityPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_activity_page_api_v2_opportunities__opportunity_id__activity_get: {
         parameters: {
             query?: {
@@ -2810,6 +2930,40 @@ export interface operations {
             };
         };
     };
+    restore_timeline_entry_version_api_v2_timeline__entry_id__versions__version_number__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: number;
+                version_number: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelineEntryPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     restore_timeline_entry_route_api_v2_timeline__entry_id__restore_post: {
         parameters: {
             query?: never;
@@ -2969,6 +3123,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Page_NoteVersionPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_note_version_api_v2_notes__note_id__versions__version_number__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                note_id: number;
+                version_number: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotePublic"];
                 };
             };
             /** @description Validation Error */

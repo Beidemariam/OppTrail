@@ -16,13 +16,12 @@ import {
   type UseMutationResult,
 } from "@tanstack/react-query";
 
-import type { ActivityEvent } from "./activity";
+import type { ActivityEditTarget, ActivityEvent } from "./activity";
 import { apiRequest } from "./api";
 import type { components } from "./api-types";
 import type {
   AiChatMessage,
   AppNotification,
-  AuditLogEntry,
   FollowUp,
   NoteVersion,
   Opportunity,
@@ -98,14 +97,6 @@ export const keys = {
   /** Every page of every opportunity's timeline, for a write to invalidate. */
   allTimelines: ["timeline"] as const,
   shares: (opportunityId: number) => ["shares", opportunityId] as const,
-  auditLog: (opportunityId: number) => ["audit-log", opportunityId] as const,
-  /**
-   * Every opportunity's audit log. A delete or a restore writes an audit row
-   * (`backend/app/audit_utils.py`) and knows only the id of the thing it
-   * removed, not which opportunity that hangs under — so it invalidates the
-   * prefix rather than resolving the owner first.
-   */
-  allAuditLogs: ["audit-log"] as const,
   notifications: ["notifications"] as const,
   /**
    * One item's edit history (milestone 2.10), keyed by what kind of thing it
@@ -128,11 +119,12 @@ export const keys = {
   /** One opportunity's merged activity log (milestone 3.0). */
   activity: (opportunityId: number) => ["activity", opportunityId] as const,
   /**
-   * Every opportunity's activity log. The feed merges the system entries, the
-   * audit rows and the version rows (`backend/app/activity.py`), so every
-   * write that invalidates one of those three invalidates this beside it —
-   * and like `allAuditLogs`, a delete knows its own id rather than which
-   * opportunity it hung under.
+   * Every opportunity's activity log, and since milestone 3.1c the only
+   * place those rows are read: the feed merges the system entries, the audit
+   * rows and the version rows (`backend/app/activity.py`), so every write
+   * that touches one of the three invalidates this. A delete knows its own
+   * id rather than which opportunity it hung under, which is why the prefix
+   * is invalidated rather than one key.
    */
   allActivity: ["activity"] as const,
   /** One month's follow-up layer for the calendar (milestone 3.0b, D-088),
@@ -208,17 +200,6 @@ export function useShares(opportunityId: number, enabled: boolean) {
   });
 }
 
-export function useAuditLog(opportunityId: number, enabled: boolean) {
-  return useQuery<AuditLogEntry[]>({
-    queryKey: keys.auditLog(opportunityId),
-    enabled,
-    queryFn: () =>
-      fetchAll<AuditLogEntry>(
-        `/api/v2/opportunities/${opportunityId}/audit-log`,
-      ),
-  });
-}
-
 /**
  * The merged activity log for one opportunity (milestone 3.0, D-101).
  *
@@ -287,6 +268,45 @@ export function useNoteVersions(noteId: number, enabled: boolean) {
     enabled,
     queryFn: () => fetchAll<NoteVersion>(`/api/v2/notes/${noteId}/versions`),
   });
+}
+
+/**
+ * Put a recorded version back as the current one (milestone 3.1c, D-116).
+ *
+ * The write side of the three reads above, and not the `useRestore*` hooks
+ * further down: those clear a `deleted_at`, this one undoes an *edit*. The
+ * server writes the old snapshot back and appends a version for having done
+ * it, so what comes back is a new current state and a longer history —
+ * everything that reads either is invalidated rather than patched in place.
+ */
+export function useRestoreVersion(
+  target: ActivityEditTarget,
+  targetId: number,
+) {
+  const client = useQueryClient();
+  return useMutation<unknown, Error, number>({
+    mutationFn: (versionNumber: number) =>
+      apiRequest(`${versionPath(target, targetId)}/${versionNumber}/restore`, {
+        method: "POST",
+      }),
+    onSuccess: () =>
+      invalidate(
+        client,
+        keys.opportunities,
+        keys.allTimelines,
+        keys.allVersions,
+        keys.allActivity,
+      ),
+  });
+}
+
+function versionPath(target: ActivityEditTarget, targetId: number): string {
+  if (target === "opportunity") {
+    return `/api/v2/opportunities/${targetId}/versions`;
+  }
+  return target === "timeline_entry"
+    ? `/api/v2/timeline/${targetId}/versions`
+    : `/api/v2/notes/${targetId}/versions`;
 }
 
 /**
@@ -586,7 +606,6 @@ export function useDeleteOpportunity() {
         client,
         keys.opportunities,
         keys.allTimelines,
-        keys.allAuditLogs,
         keys.allActivity,
       ),
   });
@@ -615,7 +634,6 @@ export function useRestoreOpportunity() {
     (id) => `/api/v2/opportunities/${id}/restore`,
     keys.opportunities,
     keys.allTimelines,
-    keys.allAuditLogs,
     keys.allActivity,
   );
 }
@@ -625,7 +643,6 @@ export function useRestoreTimelineEntry() {
     (id) => `/api/v2/timeline/${id}/restore`,
     keys.allTimelines,
     keys.opportunities,
-    keys.allAuditLogs,
     keys.allActivity,
   );
 }
@@ -634,7 +651,6 @@ export function useRestoreNote() {
   return useRestore(
     (id) => `/api/v2/notes/${id}/restore`,
     keys.allTimelines,
-    keys.allAuditLogs,
     keys.allActivity,
   );
 }
@@ -643,7 +659,6 @@ export function useRestoreComment() {
   return useRestore(
     (id) => `/api/v2/comments/${id}/restore`,
     keys.allTimelines,
-    keys.allAuditLogs,
     keys.allActivity,
   );
 }
@@ -679,7 +694,6 @@ export function useBulkOpportunityAction() {
         client,
         keys.opportunities,
         keys.allTimelines,
-        keys.allAuditLogs,
         keys.allVersions,
         keys.allActivity,
         keys.allSavedViews,
@@ -754,7 +768,6 @@ export function useDeleteTimelineEntry() {
         client,
         keys.allTimelines,
         keys.opportunities,
-        keys.allAuditLogs,
         keys.allActivity,
       ),
   });
@@ -814,13 +827,7 @@ export function useDeleteNote() {
         ),
       ),
     onError: (_error, _noteId, snapshot) => rollback(client, snapshot),
-    onSettled: () =>
-      invalidate(
-        client,
-        keys.allTimelines,
-        keys.allAuditLogs,
-        keys.allActivity,
-      ),
+    onSettled: () => invalidate(client, keys.allTimelines, keys.allActivity),
   });
 }
 
@@ -851,19 +858,14 @@ export function useDeleteComment() {
         ),
       ),
     onError: (_error, _commentId, snapshot) => rollback(client, snapshot),
-    onSettled: () =>
-      invalidate(
-        client,
-        keys.allTimelines,
-        keys.allAuditLogs,
-        keys.allActivity,
-      ),
+    onSettled: () => invalidate(client, keys.allTimelines, keys.allActivity),
   });
 }
 
 /**
  * Sharing writes. Each one also appends a system timeline entry and an audit
- * row (`backend/app/routes_sharing.py`), so all three reads are invalidated.
+ * row (`backend/app/routes_sharing.py`), so the timeline and the activity log
+ * are invalidated beside the share list itself.
  */
 function useSharingWrite<TVariables>(
   opportunityId: number,
@@ -876,7 +878,6 @@ function useSharingWrite<TVariables>(
       invalidate(
         client,
         keys.shares(opportunityId),
-        keys.auditLog(opportunityId),
         keys.activity(opportunityId),
         keys.allTimelines,
       ),

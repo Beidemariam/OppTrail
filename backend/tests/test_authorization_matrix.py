@@ -349,6 +349,37 @@ MATRIX: dict[Endpoint, Case] = {
         url=lambda world: f"/api/v2/notes/{world.note_id}/versions",
         notes="Open to every role until 2.10 gave the three histories one rule.",
     ),
+    # Restoring a version (milestone 3.1c). The same rule as reading the
+    # history it restores from — owner-only, 403 for a viewer or editor who
+    # can see the item, 404 for an outsider — and not to be confused with the
+    # `/restore` routes below, which undo a soft delete rather than an edit.
+    Endpoint("POST", "/api/v2/opportunities/{opportunity_id}/versions/{version_number}/restore"): (
+        Case(
+            expected=scoped(viewer=403, editor=403, owner=200),
+            url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/versions/1/restore",
+            body=lambda world, actor: None,
+            notes=(
+                "Version 1 is the state the fixture created, and nothing has "
+                "edited it since, so the owner's call restores what is already "
+                "current and writes nothing (D-120)."
+            ),
+        )
+    ),
+    Endpoint("POST", "/api/v2/timeline/{entry_id}/versions/{version_number}/restore"): Case(
+        expected=scoped(viewer=403, editor=403, owner=200),
+        url=lambda world: f"/api/v2/timeline/{world.entry_id}/versions/1/restore",
+        body=lambda world, actor: None,
+    ),
+    Endpoint("POST", "/api/v2/notes/{note_id}/versions/{version_number}/restore"): Case(
+        expected=scoped(viewer=403, editor=403, owner=200),
+        url=lambda world: f"/api/v2/notes/{world.note_id}/versions/1/restore",
+        body=lambda world, actor: None,
+        notes=(
+            "Owner-only even though an editor may edit their own note: putting "
+            "an old version back is a history operation, and the history is the "
+            "owner's (D-096, D-120)."
+        ),
+    ),
     # --- Unified activity log (milestone 3.0) -----------------------------
     Endpoint("GET", "/api/v2/opportunities/{opportunity_id}/activity"): Case(
         expected=scoped(viewer=200, editor=200, owner=200),

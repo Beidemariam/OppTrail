@@ -677,7 +677,7 @@ describe("what each role is offered", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows the owner the sharing panel and audit log", async () => {
+  it("shows the owner the sharing panel, and the audit log nowhere near it", async () => {
     await renderDashboard({
       opportunities: [anOpportunity()],
       entries: [anEntry()],
@@ -692,17 +692,6 @@ describe("what each role is offered", () => {
           created_at: "2026-09-03T09:00:00Z",
         },
       ],
-      auditLog: [
-        {
-          id: 1,
-          opportunity_id: 10,
-          actor_id: ALEX.id,
-          actor_name: ALEX.name,
-          action: "share_added",
-          detail: { email: BLAIR.email },
-          created_at: "2026-09-03T09:00:00Z",
-        },
-      ],
     });
     await openTimeline("Northwind rollout");
 
@@ -710,8 +699,10 @@ describe("what each role is offered", () => {
       await screen.findByRole("heading", { name: "Sharing" }),
     ).toBeInTheDocument();
     expect(await screen.findByText(BLAIR.email)).toBeInTheDocument();
-    expect(screen.getByText("Audit Log")).toBeInTheDocument();
-    expect(screen.getByText("share_added")).toBeInTheDocument();
+    // The audit log used to hang off this panel as a third destination. Since
+    // 3.1c its rows are read in the opportunity's history dialog, where they
+    // are sentences rather than a JSON payload (D-121).
+    expect(screen.queryByText("Audit Log")).not.toBeInTheDocument();
   });
 
   it("shares, promotes and removes a colleague", async () => {

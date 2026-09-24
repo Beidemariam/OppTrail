@@ -85,7 +85,7 @@ export type BulkActionResultItem =
 /* --- Edit history (milestone 2.10) ---------------------------------------
  *
  * Three histories over three different shapes, read through one screen
- * (`app/HistoryDialog.tsx`). What differs between them is only which fields a
+ * (`app/VersionChanges.tsx`). What differs between them is only which fields a
  * version snapshots and how each one reads, so that is all that is declared
  * per kind; the comparison below is written once.
  */
@@ -162,37 +162,28 @@ export const noteVersionFields: VersionField<NoteVersion>[] = [
 ];
 
 /**
- * One line of a version block: a field, what it says now, and what it said
- * before if this version is what changed it.
+ * One line of a version block: a field, what it said before, and what the
+ * edit made it say.
  */
 export interface VersionChange {
   label: string;
-  before: string | null;
+  before: string;
   after: string;
 }
 
 /**
- * What one version is, read against the one before it.
+ * What one version changed, read against the one before it.
  *
- * The first version has nothing to be read against, so it is the whole state —
- * that is the point of recording it at creation. Every later version shows
- * only the fields it moved, because a history answers "what changed" and the
- * unchanged ones are already on the line above. A version that changed nothing
- * (a save of an untouched form) is an empty list, which the dialog says in
- * words rather than drawing as a gap.
+ * Only the fields it moved, because a history answers "what changed" and the
+ * rest of the snapshot is what it already said. Version 1 is never passed
+ * here: it is the state the thing was created in rather than an edit, and the
+ * activity log excludes it for the same reason (D-097).
  */
 export function versionChanges<VersionT>(
   fields: VersionField<VersionT>[],
   version: VersionT,
-  previous: VersionT | undefined,
+  previous: VersionT,
 ): VersionChange[] {
-  if (!previous) {
-    return fields.map((field) => ({
-      label: field.label,
-      before: null,
-      after: field.read(version),
-    }));
-  }
   return fields
     .map((field) => ({
       label: field.label,

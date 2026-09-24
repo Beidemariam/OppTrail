@@ -5,24 +5,29 @@ import { FormEvent, useState } from "react";
 import type { ShareRole } from "../lib/domain";
 import {
   useAddShare,
-  useAuditLog,
   useRemoveShare,
   useShares,
   useUpdateShareRole,
 } from "../lib/queries";
-import { formatTimestamp } from "../lib/time";
 import { useConfirm } from "./ConfirmDialog";
 
 /**
- * Sharing and the audit log, both owner-only
- * (`backend/app/permissions.py`, `require_opportunity_owner`). The panel is
- * rendered only for an owner; the server is what enforces that.
+ * Sharing, owner-only (`backend/app/permissions.py`,
+ * `require_opportunity_owner`). The panel is rendered only for an owner; the
+ * server is what enforces that.
+ *
+ * The audit log used to hang off the bottom of this panel as a third place a
+ * reader could go looking for what happened. Milestone 3.1c folded it into
+ * the opportunity's own history dialog, where every deletion and restore it
+ * records already appears as a sentence and every access change is narrated
+ * by the system entry written beside it (D-121). `GET
+ * /api/v2/opportunities/{id}/audit-log` is untouched — what moved is where a
+ * person reads it.
  */
 export function SharingPanel({ opportunityId }: { opportunityId: number }) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<ShareRole>("viewer");
   const shares = useShares(opportunityId, true);
-  const auditLog = useAuditLog(opportunityId, true);
   const addShare = useAddShare(opportunityId);
   const updateRole = useUpdateShareRole(opportunityId);
   const removeShare = useRemoveShare(opportunityId);
@@ -120,24 +125,6 @@ export function SharingPanel({ opportunityId }: { opportunityId: number }) {
           ))}
         </div>
       )}
-
-      <details className="audit-panel">
-        <summary>Audit Log</summary>
-        {(auditLog.data ?? []).length === 0 ? (
-          <p className="empty-state">No audit events yet</p>
-        ) : (
-          <div className="audit-list">
-            {(auditLog.data ?? []).map((item) => (
-              <div className="audit-row" key={item.id}>
-                <strong>{item.action}</strong>
-                <span>{formatTimestamp(item.created_at)}</span>
-                <p>{item.actor_name ?? "System"}</p>
-                <code>{JSON.stringify(item.detail)}</code>
-              </div>
-            ))}
-          </div>
-        )}
-      </details>
     </section>
   );
 }

@@ -43,7 +43,14 @@ from .soft_delete import (
     soft_delete_timeline_entry,
 )
 from .time_utils import utc_now
-from .versioning import NOTE_VERSIONS, TIMELINE_ENTRY_VERSIONS, record_version
+from .versioning import (
+    NOTE_VERSIONS,
+    TIMELINE_ENTRY_VERSIONS,
+    apply_version,
+    fetch_version,
+    record_version,
+    version_is_current,
+)
 
 router = APIRouter(prefix="/api/v2", tags=["timeline"])
 
@@ -699,6 +706,71 @@ def list_timeline_entry_versions_page(
     )
 
 
+@router.post(
+    "/timeline/{entry_id}/versions/{version_number}/restore",
+    response_model=TimelineEntryPublic,
+)
+def restore_timeline_entry_version(
+    entry_id: int,
+    version_number: int,
+    user: sqlite3.Row = Depends(get_current_user),
+) -> TimelineEntryPublic:
+    """Put a recorded version of an entry back as the current one (3.1c).
+
+    Owner-only, like the history it restores from (D-096), and distinct from
+    `POST /timeline/{id}/restore`, which undoes a soft delete. A system entry
+    needs no special case here: it cannot be edited, so it has exactly one
+    version, which is always the current one -- and restoring what is already
+    current writes nothing (D-120).
+    """
+    with db_connection() as connection:
+        entry = fetch_entry_context(connection, entry_id)
+        if not entry:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Timeline entry not found",
+            )
+        require_opportunity_owner(connection, entry["opportunity_id"], int(user["id"]))
+        version = fetch_version(connection, TIMELINE_ENTRY_VERSIONS, entry_id, version_number)
+        if version is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Timeline entry version not found",
+            )
+        current = connection.execute(
+            "SELECT * FROM timeline_entries WHERE id = ?",
+            (entry_id,),
+        ).fetchone()
+
+        if not version_is_current(TIMELINE_ENTRY_VERSIONS, version, current):
+            apply_version(connection, TIMELINE_ENTRY_VERSIONS, entry_id, version, {})
+            restored = connection.execute(
+                "SELECT * FROM timeline_entries WHERE id = ?",
+                (entry_id,),
+            ).fetchone()
+            record_version(
+                connection,
+                TIMELINE_ENTRY_VERSIONS,
+                entry_id,
+                restored,
+                int(user["id"]),
+                utc_now(),
+            )
+            connection.commit()
+
+        row = connection.execute(
+            """
+            SELECT timeline_entries.*, users.name AS author_name
+            FROM timeline_entries
+            LEFT JOIN users ON users.id = timeline_entries.created_by
+            WHERE timeline_entries.id = ?
+            """,
+            (entry_id,),
+        ).fetchone()
+
+    return entry_from_row(row, [])
+
+
 @router.delete("/timeline/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_timeline_entry(
     entry_id: int,
@@ -986,6 +1058,75 @@ def list_note_versions_page(
 
     rows, next_cursor = split_page(rows, page.limit, lambda row: (row["version_number"], row["id"]))
     return Page(items=[note_version_from_row(row) for row in rows], next_cursor=next_cursor)
+
+
+@router.post(
+    "/notes/{note_id}/versions/{version_number}/restore",
+    response_model=NotePublic,
+)
+def restore_note_version(
+    note_id: int,
+    version_number: int,
+    user: sqlite3.Row = Depends(get_current_user),
+) -> NotePublic:
+    """Put a recorded version of a note back as the current body (3.1c).
+
+    Owner-only through the same check the history read uses, and the same
+    write `PATCH /notes/{id}` performs: the body changes, `edited` stays set
+    because the note *was* edited, and a version is appended so the text this
+    restore replaced is itself recoverable (D-120).
+
+    No mention notification is sent. The body is not new -- whoever it names
+    was told when it was first written -- and announcing it a second time
+    would make every restore a fresh ping (D-120).
+    """
+    with db_connection() as connection:
+        require_note_history_access(connection, note_id, int(user["id"]))
+        version = fetch_version(connection, NOTE_VERSIONS, note_id, version_number)
+        if version is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Note version not found",
+            )
+        current = connection.execute(
+            "SELECT * FROM notes WHERE id = ?",
+            (note_id,),
+        ).fetchone()
+
+        if not version_is_current(NOTE_VERSIONS, version, current):
+            updated_at = utc_now()
+            apply_version(
+                connection,
+                NOTE_VERSIONS,
+                note_id,
+                version,
+                {"updated_at": updated_at, "edited": 1},
+            )
+            restored = connection.execute(
+                "SELECT * FROM notes WHERE id = ?",
+                (note_id,),
+            ).fetchone()
+            record_version(
+                connection,
+                NOTE_VERSIONS,
+                note_id,
+                restored,
+                int(user["id"]),
+                updated_at,
+            )
+            connection.commit()
+
+        row = connection.execute(
+            """
+            SELECT notes.*, users.name AS author_name
+            FROM notes
+            JOIN users ON users.id = notes.created_by
+            WHERE notes.id = ?
+            """,
+            (note_id,),
+        ).fetchone()
+
+    return note_from_row(row, [])
 
 
 @router.delete("/notes/{note_id}", status_code=status.HTTP_204_NO_CONTENT)
