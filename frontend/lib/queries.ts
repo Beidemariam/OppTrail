@@ -26,6 +26,7 @@ import type {
   NoteVersion,
   Opportunity,
   OpportunityFieldPatch,
+  OpportunityMember,
   OpportunityShare,
   OpportunityVersion,
   SavedView,
@@ -97,6 +98,14 @@ export const keys = {
   /** Every page of every opportunity's timeline, for a write to invalidate. */
   allTimelines: ["timeline"] as const,
   shares: (opportunityId: number) => ["shares", opportunityId] as const,
+  /** Who is on one opportunity, for the mention autocomplete (milestone 3.2).
+   * Separate from `shares` because it is a different read with a different
+   * rule: the owner is a row, and every role may ask. */
+  members: (opportunityId: number) => ["members", opportunityId] as const,
+  /** Every opportunity's member list, for a write that changes who has
+   * access without knowing which lists are open — a bulk `assign_owner`
+   * (3.0a) changes the owner row of each id it touched. */
+  allMembers: ["members"] as const,
   notifications: ["notifications"] as const,
   /**
    * One item's edit history (milestone 2.10), keyed by what kind of thing it
@@ -196,6 +205,24 @@ export function useShares(opportunityId: number, enabled: boolean) {
     queryFn: () =>
       fetchAll<OpportunityShare>(
         `/api/v2/opportunities/${opportunityId}/shares`,
+      ),
+  });
+}
+
+/**
+ * Everyone a mention on this opportunity would reach (milestone 3.2, D-123):
+ * the owner and every share, which is what the `@` trigger offers.
+ *
+ * Read for every role, unlike `useShares` beside it, and read whole — a deal
+ * has a handful of participants, and the autocomplete filters the list in the
+ * client as the reader types rather than asking the server per keystroke.
+ */
+export function useMembers(opportunityId: number) {
+  return useQuery<OpportunityMember[]>({
+    queryKey: keys.members(opportunityId),
+    queryFn: () =>
+      fetchAll<OpportunityMember>(
+        `/api/v2/opportunities/${opportunityId}/members`,
       ),
   });
 }
@@ -698,6 +725,7 @@ export function useBulkOpportunityAction() {
         keys.allActivity,
         keys.allSavedViews,
         keys.notifications,
+        keys.allMembers,
       ),
   });
 }
@@ -878,6 +906,7 @@ function useSharingWrite<TVariables>(
       invalidate(
         client,
         keys.shares(opportunityId),
+        keys.members(opportunityId),
         keys.activity(opportunityId),
         keys.allTimelines,
       ),

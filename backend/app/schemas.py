@@ -464,6 +464,24 @@ class SharePublic(BaseModel):
     created_at: str
 
 
+class OpportunityMemberPublic(BaseModel):
+    """One person who can read this opportunity (milestone 3.2, **D-123**).
+
+    The mention autocomplete's source, and the reason this is not
+    `SharePublic`: a mention only notifies someone who already has access
+    (`notification_service.notify_mentions`), so the list a composer offers has
+    to be the owner *and* the shares, while a share row describes a grant and
+    has no row for the owner at all. It carries no `invited_by` and no
+    `created_at` -- who invited whom is the sharing panel's business, and that
+    stays owner-only.
+    """
+
+    user_id: int
+    email: str
+    name: str
+    role: CurrentUserRole
+
+
 AuditAction = Literal[
     "opportunity_deleted",
     "opportunity_restored",

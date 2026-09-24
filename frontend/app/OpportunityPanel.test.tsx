@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -1333,5 +1333,80 @@ describe("when the API refuses", () => {
     expect(
       await screen.findByText("Opportunity not found"),
     ).toBeInTheDocument();
+  });
+});
+
+describe("the composer's triggers (milestone 3.2)", () => {
+  it("offers the people on this deal, read from the opportunity's members", async () => {
+    await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [anEntry()],
+      shares: [
+        {
+          user_id: BLAIR.id,
+          email: BLAIR.email,
+          name: BLAIR.name,
+          role: "editor",
+          invited_by: ALEX.id,
+          invited_by_name: ALEX.name,
+          created_at: "2026-09-01T09:00:00Z",
+        },
+      ],
+    });
+    await openTimeline("Northwind rollout");
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Add note" }),
+    );
+    writeInEditor(screen.getByLabelText("Add a note to this entry"), "cc @bl");
+
+    // The owner and the share, which is what `GET .../members` answers and
+    // what a mention can actually reach (D-123). Scoped to the popup: the
+    // dashboard behind it is full of `<select>` options.
+    const people = await screen.findByRole("listbox", { name: "People" });
+    expect(within(people).getByRole("option")).toHaveTextContent(BLAIR.email);
+  });
+
+  it("links to another entry on this timeline, and the link lands on it", async () => {
+    const api = await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [
+        anEntry(),
+        anEntry({ id: 101, title: "Security review", type: "meeting" }),
+      ],
+    });
+    await openTimeline("Northwind rollout");
+
+    await userEvent.click(
+      (await screen.findAllByRole("button", { name: "Add note" }))[0],
+    );
+    const editor = screen.getByLabelText("Add a note to this entry");
+    writeInEditor(editor, "As agreed in #secur");
+    await screen.findByRole("option", { name: /Security review/ });
+    fireEvent.keyDown(editor, { key: "Enter" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Add Note" }));
+    await waitFor(() =>
+      expect(
+        api.calls.some(
+          (call) =>
+            call.method === "POST" &&
+            call.path === "/api/v2/timeline/100/notes" &&
+            (call.body as { body: string }).body ===
+              "As agreed in [Security review](/opportunities/10?entry=101)",
+        ),
+      ).toBe(true),
+    );
+
+    // Following it stays inside the app, and marks the entry it named so the
+    // reader can see which of the two the note meant (D-124).
+    await userEvent.click(
+      await screen.findByRole("link", { name: "Security review" }),
+    );
+    await waitFor(() =>
+      expect(
+        document.querySelector(".timeline-entry.is-linked"),
+      ).toHaveTextContent("Security review"),
+    );
   });
 });

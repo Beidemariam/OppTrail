@@ -89,7 +89,8 @@ websockets, no ORM — raw `sqlite3` with `Row` factory throughout.
 
 Routers are split by domain and all mounted in `main.py`: `routes_auth`,
 `routes_opportunities` (also owns the merged activity log),
-`routes_sharing` (also owns the audit log endpoint),
+`routes_sharing` (also owns the audit log endpoint and the member list the
+mention autocomplete reads),
 `routes_timeline` (entries, notes, comments, note versions), `routes_ai`,
 `routes_export`, `routes_notifications`, `routes_search`. Shared logic lives in small
 helper modules rather than a service layer: `permissions.py`, `time_utils.py`,
@@ -317,7 +318,8 @@ leak.
 - `require_author_or_owner` — author of the item or the opportunity owner;
   `require_edit_permission` and `require_delete_permission` are both thin wrappers
   over it
-- `require_opportunity_owner` — sharing and audit log
+- `require_opportunity_owner` — sharing, audit log and version history
+  (the member list beside them is `require_opportunity_access`: D-123)
 
 Editors add entries, notes, and comments freely, but changing an existing one —
 editing it or deleting it — is reserved to its author and the opportunity owner.
@@ -530,16 +532,61 @@ already stored. It is entirely frontend; no route, schema or table changed.
 - **Entry bodies are Markdown too** (**D-109**). They used to print as plain
   text, so a list typed into the one field a call gets logged into showed its
   dashes.
-- **Slash commands, mention autocomplete and links to other entries are 3.2**
-  (**D-111**) — one `@tiptap/suggestion` popup with three triggers, built once.
 - **Two things about testing it.** `userEvent.type` cannot drive ProseMirror
   under jsdom (it applies a typed character by reading back the DOM mutation a
   browser would have made), so `app/test-editor.ts`'s `writeInEditor` pastes
   instead — a real action, no seam in the component — and `clearEditor` deletes
   a selection, which is a ProseMirror command (**D-113**). Typing itself, and
-  with it the Markdown input rules, is `e2e/18-rich-text.spec.ts`.
-  `vitest.setup.ts` stubs the geometry ProseMirror asks for, for the same
-  reason the virtualizer needed `offsetHeight`.
+  with it the Markdown input rules, is `e2e/18-rich-text.spec.ts` and
+  `e2e/19-suggestions.spec.ts`. `vitest.setup.ts` stubs the geometry
+  ProseMirror asks for, for the same reason the virtualizer needed
+  `offsetHeight`.
+
+### The three typed triggers
+
+Milestone 3.2 is `@`, `/` and `#` in that composer: who to notify, which block
+to start, which earlier entry to point at. They are one mechanism —
+a `@tiptap/suggestion` plugin per character, one menu, one keyboard rule
+(**D-111**, which is why 3.1 shipped none of them) — declared as data in
+`lib/suggestions.ts` and rendered by `app/Suggestions.tsx`. `docs/FEATURES.md`
+§7 is the requirement: mentions needed a full email address typed from memory,
+which made requirement 13 effectively undiscoverable.
+
+- **A mention is still plain `@email` text** (**D-122**), so nothing about
+  storage, the renderer or `notification_service.MENTION_RE` changed. The
+  autocomplete types the address a person could not remember; it does not
+  introduce a node the sanitizer has never seen.
+- **Who it offers comes from one new read**, `GET
+  /api/v2/opportunities/{id}/members` — the owner *and* every share, which is
+  the set a mention can actually reach, and open to every role rather than to
+  the owner (**D-123**): a viewer writing a comment mentions the same people.
+  What stays owner-only is the grant itself, `GET .../shares`, which carries
+  who invited whom and when.
+- **The slash menu is the blocks, not the marks.** The toolbar already carries
+  bold through quote; this carries what a reader would otherwise have to know a
+  Markdown input rule for — a heading, a code block, a divider. Every item is a
+  command over a node `lib/markdown.ts` declares, so the menu cannot write a
+  block `MarkdownText` will not render.
+- **A link to an entry is a relative Markdown link** (**D-124**):
+  `[title](/opportunities/3?entry=17)`. The href needs no protocol so the
+  sanitizer keeps it unchanged, `app/MarkdownText.tsx` renders a same-app href
+  as a router `Link` rather than reloading the SPA, and `OpportunityPanel`
+  reads `?entry=` to scroll that card into view and mark it
+  (`.timeline-entry.is-linked`). It is not a filter, so it is not part of
+  `TimelineFilters` and carries no `timeline.` prefix.
+- **The editable keeps focus throughout.** The menu is a `listbox` the
+  editable points at with `aria-activedescendant` — set on `editor.view.dom` in
+  an effect, because `editorProps.attributes` is read once at creation — driven
+  by the arrow keys the plugin hands over, and a mouse choice is taken on
+  `mousedown` with the default prevented. `Escape` closes the menu and stops
+  there: the native event's propagation is stopped so the `Composer` behind it
+  does not also close and lose the draft.
+- **The plugins are built once and read a ref.** Rebuilding the extension list
+  when the member list arrives would rebuild the editor and throw away the
+  document under the cursor. That is also the one place in the frontend with an
+  `eslint-disable` for `react-hooks/refs`: the closures are plugin callbacks,
+  nothing in them runs during a render, and the two alternatives are worse
+  (see the comment, and **D-125**).
 
 ### Editing where content is read
 
@@ -781,6 +828,8 @@ list rather than from a window of it (**D-093**). The exceptions ask for one
 page with an explicit limit, because an inbox and a saved-view menu are read
 from the top. `useAuditLog` was a read here until 3.1c, which left the audit
 rows to the activity log rather than to a panel of their own (**D-121**).
+`useMembers` (3.2) is the composer's `@` list, invalidated by every sharing
+write and by a bulk `assign_owner`.
 Two things in there are worth knowing before changing them: the AI transcript is
 cache state under `["ai-conversation", id]` because it has to outlive the route
 (D-055), and the cache is dropped on *sign-in*, not sign-out, because observers
@@ -832,10 +881,15 @@ The units worth testing directly, each in its own module:
   tokens themselves.
 - `lib/markdown.ts` — the node set the composer and the renderer share, and
   Markdown to and from an editor document (3.1). See "The composer".
+- `lib/suggestions.ts` — what `@`, `/` and `#` offer, and what choosing one
+  inserts: text, a link, or a command over the block (3.2). Holds no editor
+  call, so the whole list is tested without a DOM.
 - `app/InlineEdit.tsx` — `useInlineEditor` and `InlineEdit`, the two shapes
   of "edit this where it is read" (2.11). See "Editing where content is read".
 - `app/RichTextEditor.tsx` — `RichTextEditor` and `Composer`, the two shapes
   of "write content here" (3.1). See "The composer".
+- `app/Suggestions.tsx` — the popup all three triggers share, and the context
+  that tells it who is on this deal (3.2). See "The three typed triggers".
 - `app/VersionChanges.tsx` — what one edit changed, and the control that puts
   the earlier version back (3.1c). Rendered inside an activity row rather than
   in a dialog of its own; see "Edit history" and "One activity log".
@@ -850,7 +904,9 @@ The units worth testing directly, each in its own module:
 - `app/MarkdownText.tsx` — entry, note and comment bodies (all three since
   3.1), rendered through `rehype-sanitize` with an explicit
   `http`/`https`/`mailto` protocol allowlist, which is `lib/markdown.ts`'s
-  `linkProtocols`. Keep that allowlist if you touch the Markdown pipeline. Its
+  `linkProtocols`. Keep that allowlist if you touch the Markdown pipeline. A
+  href starting with `/` is rendered as a router `Link` (3.2, D-124) —
+  everything else opens in a new tab. Its
   one control is a checklist's box, which `remark-gfm` emits unnamed — named
   here, because an unlabelled form control fails axe for the whole screen.
 - `app/VirtualList.tsx` — a generic `<T>` wrapper over

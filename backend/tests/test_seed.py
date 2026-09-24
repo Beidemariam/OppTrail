@@ -150,6 +150,20 @@ def test_seeded_permissions_match_the_printed_tour(tmp_path) -> None:
         assert dana.get(f"/api/v2/opportunities/{northwind}").status_code == 404
         assert dana.get("/api/v2/opportunities").json()["items"] == []
 
+        # The composer's `@` list (milestone 3.2): the tour says Dana is on
+        # nobody's, and that the read is offered to whoever can already read
+        # the deal -- so a viewer gets it and an outsider gets the same 404
+        # every opportunity-scoped route gives them.
+        def member_emails(session: CsrfClient) -> list[str]:
+            page = session.get(f"/api/v2/opportunities/{northwind}/members")
+            assert page.status_code == 200, page.text
+            return sorted(item["email"] for item in page.json()["items"])
+
+        assert member_emails(alex) == sorted([ALEX, BLAIR, CASEY])
+        assert member_emails(casey) == sorted([ALEX, BLAIR, CASEY])
+        assert DANA not in member_emails(alex)
+        assert dana.get(f"/api/v2/opportunities/{northwind}/members").status_code == 404
+
         # The tour's search line: one query, four different answers, because
         # the permission filter lives inside the query (`app/search.py`).
         def finance_hits(session: CsrfClient) -> list[str]:

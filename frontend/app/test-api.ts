@@ -121,6 +121,11 @@ interface Share {
   created_at: string;
 }
 
+/** Who is on the opportunity, for the mention autocomplete (milestone 3.2).
+ * Derived from the owner and the shares rather than stored, the way the
+ * server derives it (`backend/app/routes_sharing.py`). */
+type Member = components["schemas"]["OpportunityMemberPublic"];
+
 /** The merged activity log's row shape, straight from the generated client. */
 type ActivityEvent = components["schemas"]["ActivityEventPublic"];
 
@@ -613,6 +618,30 @@ export class FakeApi {
     // `GET .../audit-log` has no branch here on purpose: the app stopped
     // reading it in 3.1c (D-121), and a fake that answers a route nothing
     // calls hides the fact that nothing calls it.
+    if (segments[2] === "members") {
+      const opportunity = this.opportunities.find(
+        (item) => item.id === Number(segments[1]),
+      );
+      const members: Member[] = [
+        ...(opportunity
+          ? [
+              {
+                user_id: opportunity.owner_id,
+                email: `${opportunity.owner_name.toLowerCase()}@opptrail.test`,
+                name: opportunity.owner_name,
+                role: "owner" as const,
+              },
+            ]
+          : []),
+        ...this.shares.map((share) => ({
+          user_id: share.user_id,
+          email: share.email,
+          name: share.name,
+          role: share.role,
+        })),
+      ].sort((left, right) => left.name.localeCompare(right.name));
+      return this.page(members, path);
+    }
     if (segments[2] === "shares") {
       if (method === "GET") {
         return this.page(this.shares, path);

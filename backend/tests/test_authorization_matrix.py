@@ -197,6 +197,15 @@ MATRIX: dict[Endpoint, Case] = {
         expected=scoped(viewer=403, editor=403, owner=200),
         url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/shares",
     ),
+    # Milestone 3.2 (D-123): who is on the deal, for the mention autocomplete.
+    # Every role, unlike the share list above it -- a mention only reaches
+    # someone who already has access, so a viewer writing a comment needs the
+    # same list the owner does. What stays owner-only is the grant: who invited
+    # whom and when (tests/test_sharing.py holds both halves).
+    Endpoint("GET", "/api/v2/opportunities/{opportunity_id}/members"): Case(
+        expected=scoped(viewer=200, editor=200, owner=200),
+        url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/members",
+    ),
     Endpoint("POST", "/api/v2/opportunities/{opportunity_id}/shares"): Case(
         expected=scoped(viewer=403, editor=403, owner=201),
         url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/shares",

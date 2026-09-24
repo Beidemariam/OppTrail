@@ -70,6 +70,10 @@ export const notificationTypeOptions = [
 export type User = components["schemas"]["UserPublic"];
 export type Opportunity = components["schemas"]["OpportunityPublic"];
 export type OpportunityShare = components["schemas"]["SharePublic"];
+/** Someone who can read one opportunity: the owner, or one share (milestone
+ * 3.2, D-123). The mention autocomplete's source — see `lib/suggestions.ts`. */
+export type OpportunityMember =
+  components["schemas"]["OpportunityMemberPublic"];
 export type ShareRole = components["schemas"]["ShareCreate"]["role"];
 export type AuditLogEntry = components["schemas"]["AuditLogEntryPublic"];
 export type AppNotification = components["schemas"]["NotificationPublic"];

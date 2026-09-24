@@ -3187,7 +3187,7 @@ each other.
       being a separate destination. Keep the per-row role filtering 3.0
       established — this must not widen who sees audit rows.
 
-- [ ] 3.2 Mention autocomplete, fixing requirement 13's discoverability
+- [x] 3.2 Mention autocomplete, fixing requirement 13's discoverability
       (today mentions require typing a full email address by hand). **Also
       carries the slash-command menu and "links to other entries"**, which
       3.1 left to it (**D-111**): all three are one `@tiptap/suggestion`
@@ -3621,6 +3621,87 @@ table — the versions were already recorded.
 - [x] **Decisions** — **D-120** (what a restore writes) and **D-121** (one
       destination, and what was removed to get there; `needs human review: Y`,
       since it retires surfaces the human used at the checkpoint).
+
+### 3.2 The composer's three typed triggers (D-111) — **DONE**
+
+`@`, `/` and `#`, built once as D-111 said they had to be: a
+`@tiptap/suggestion` plugin per character over one menu, one keyboard rule and
+one declaration of what each offers. One new read on the backend, no schema
+change, no migration.
+
+- [x] **`@` completes a colleague, and the mention is unchanged** (**D-122**).
+      What it inserts is the plain `@address` text a person would have typed,
+      so `notification_service.MENTION_RE`, the stored Markdown, the sanitizer
+      and `MarkdownText` are all untouched — `docs/FEATURES.md` §7's complaint
+      was never that mentions do not work, it was that nobody can type an
+      address from memory. Matched on name as well as address, which is the
+      half that makes it discoverable.
+- [x] **Who it may offer is a new route** (**D-123**): `GET
+      /api/v2/opportunities/{id}/members`, the owner plus every live share —
+      the set `notify_mentions` will actually deliver to, which is why it is
+      not `GET .../shares` (owner-only, and with no row for the owner). Open
+      to every role: an editor writing a note mentions the same people. The
+      grant itself stays owner-only. Keyset-paginated by name like everything
+      else, 404 for an outsider, registered in the authorization matrix.
+      **`needs human review: Y`** — it makes colleagues' addresses readable by
+      every role on one deal.
+- [x] **`/` offers the blocks, not the marks.** The toolbar already carries
+      bold through quote, so this carries what a reader would otherwise have
+      to know an input rule for: headings, a code block, a divider. Every item
+      is a command over a node `lib/markdown.ts` already declares, which is
+      D-108's rule — a menu that could write a block `MarkdownText` cannot
+      render is a document that cannot be read back.
+- [x] **`#` links to another entry on this timeline** (**D-124**), as a
+      relative Markdown link `[title](/opportunities/3?entry=17)`. No new
+      route (a second Next route would split the SPA, ADR 0005), no protocol
+      so the sanitizer keeps it, and `app/MarkdownText.tsx` renders a same-app
+      href through the router rather than reloading the application into a
+      second tab. `OpportunityPanel` reads `?entry=` and the card scrolls
+      itself into view and stays marked while the URL names it — a link that
+      lands a reader at the top of a fifty-entry timeline has told them
+      nothing. It is not a filter, so it carries no `timeline.` prefix.
+- [x] **The editable keeps focus the whole time** — the menu is a `listbox`
+      the editable points at with `aria-activedescendant`, moved with the
+      arrow keys the plugin hands over, completed with Enter or Tab, and taken
+      on `mousedown` with the default prevented so even a click does not move
+      the caret. `Escape` closes the menu and stops the native event there, or
+      the same keystroke would also close the `Composer` and take the draft
+      with it. axe is clean with a menu open (`e2e/19-suggestions.spec.ts`).
+- [x] **The plugins are built once and read a ref** (**D-125**). Rebuilding
+      the extension list when the member list arrives would rebuild the editor
+      and discard the document under the cursor. That is the one
+      `eslint-disable` in the frontend (`react-hooks/refs`): the rule flags any
+      closure built during a render that captures a ref, and these are the
+      plugin's own callbacks, none of which run during a render. The two
+      honest alternatives are worse and are named in the comment. Positioning
+      is `props.clientRect()` against the composer rather than the plugin's
+      `mount`, which would adopt a React-rendered node into `document.body`.
+- [x] **Tests.** Backend: two cases in `tests/test_sharing.py` (the owner and
+      every live share, a removed share gone, a viewer getting the same list
+      while `GET .../shares` still refuses them, the cursor walk, and 404 for
+      an outsider), plus the matrix entry and a `test_seed.py` assertion that
+      keeps the new tour paragraph true. Frontend: `lib/suggestions.test.ts`
+      (13, no DOM — matching, the three insert shapes, and that every slash
+      command is a command over a declared node), `app/Suggestions.test.tsx`
+      (11 — each trigger, the arrow keys and `aria-activedescendant`, the
+      mouse path, the empty state handing Enter back, and the Escape rule,
+      which was confirmed to fail without the `stopPropagation`), and two
+      `OpportunityPanel` journeys for the wiring: the member read reaching a
+      composer, and a link written, posted, followed and landed on. E2E:
+      `e2e/19-suggestions.spec.ts` types all three in a real browser, which is
+      the half jsdom cannot do (D-113), and runs axe with the menu open.
+- [x] **Docs.** `CLAUDE.md` gains "The three typed triggers" beside "The
+      composer", and the routers, permissions, `lib/` and `app/` lists name
+      the new modules; `make seed`'s tour gains a 3.2 paragraph — **and loses
+      two stale 3.1c ones**, which still told a reader to press a per-item
+      History button and an Activity button that D-121 had removed.
+- [x] **Decisions** — **D-122** (mentions stay plain text), **D-123** (the
+      member list and who may read it; `needs human review: Y`), **D-124**
+      (the entry link, its target and what happens on arrival), **D-125** (the
+      popup's positioning and how the plugins stay current).
+
+Gate: `make check` green in the sandbox, Docker half deferred to the host per
+the split gate. Figures in `COVERAGE.md`.
 
 ### Acceptance
 

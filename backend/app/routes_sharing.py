@@ -7,9 +7,10 @@ from .auth import get_current_user
 from .database import db_connection
 from .notification_service import create_notification
 from .pagination import Page, PageRequest, cursor_clause, page_params, split_page
-from .permissions import require_opportunity_owner
+from .permissions import require_opportunity_access, require_opportunity_owner
 from .schemas import (
     AuditLogEntryPublic,
+    OpportunityMemberPublic,
     ShareCreate,
     SharePublic,
     ShareUpdate,
@@ -61,6 +62,79 @@ def fetch_share_rows(
         """,
         (opportunity_id,),
     ).fetchall()
+
+
+MEMBER_ROWS_SQL = """
+    SELECT owner.id AS user_id, owner.email, owner.name, 'owner' AS role
+    FROM opportunities
+    JOIN users AS owner ON owner.id = opportunities.owner_id
+    WHERE opportunities.id = ? AND opportunities.deleted_at IS NULL
+    UNION ALL
+    SELECT shared_user.id AS user_id, shared_user.email, shared_user.name,
+           opportunity_shares.role AS role
+    FROM opportunity_shares
+    JOIN users AS shared_user ON shared_user.id = opportunity_shares.user_id
+    WHERE opportunity_shares.opportunity_id = ?
+        AND opportunity_shares.deleted_at IS NULL
+"""
+
+
+@router.get("/{opportunity_id}/members", response_model=Page[OpportunityMemberPublic])
+def list_members_page(
+    opportunity_id: int,
+    page: PageRequest = Depends(page_params),
+    user: sqlite3.Row = Depends(get_current_user),
+) -> Page[OpportunityMemberPublic]:
+    """Everyone who can read this opportunity, for the mention autocomplete
+    (milestone 3.2, **D-123**).
+
+    Open to every role, unlike the share list beside it: a mention is only
+    delivered to someone who already has access, so a composer that cannot see
+    that set can only offer to notify nobody -- which is requirement 13's
+    discoverability problem restated. What it answers with is the same three
+    facts the timeline already prints beside every entry plus the address a
+    mention is written with; the grant itself -- who invited whom, and when --
+    stays in `GET .../shares`, owner-only.
+
+    The owner is a row here, which is why this is a `UNION ALL` over the
+    two places access comes from rather than a read of `opportunity_shares`:
+    ownership is implicit in `opportunities.owner_id` and has no share row
+    (`permissions.py`).
+    """
+    continuation, cursor_values = cursor_clause(
+        page,
+        "members.name",
+        "members.user_id",
+        descending=False,
+    )
+    params: list[object] = [opportunity_id, opportunity_id, *cursor_values, page.limit + 1]
+
+    with db_connection() as connection:
+        require_opportunity_access(connection, opportunity_id, int(user["id"]))
+        rows = connection.execute(
+            f"""
+            SELECT members.user_id, members.email, members.name, members.role
+            FROM ({MEMBER_ROWS_SQL}) AS members
+            {f"WHERE {continuation}" if continuation else ""}
+            ORDER BY members.name ASC, members.user_id ASC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+
+    rows, next_cursor = split_page(rows, page.limit, lambda row: (row["name"], row["user_id"]))
+    return Page(
+        items=[
+            OpportunityMemberPublic(
+                user_id=row["user_id"],
+                email=row["email"],
+                name=row["name"],
+                role=row["role"],
+            )
+            for row in rows
+        ],
+        next_cursor=next_cursor,
+    )
 
 
 @router.get("/{opportunity_id}/shares", response_model=Page[SharePublic])

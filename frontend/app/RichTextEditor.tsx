@@ -3,11 +3,18 @@
 import type { ChainedCommands, Editor } from "@tiptap/core";
 import { Placeholder } from "@tiptap/extensions";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
-import { useMemo, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 
 import { submitOnModEnter } from "../lib/keyboard";
 import { contentExtensions, markdownFromDoc } from "../lib/markdown";
 import { useInlineEditor } from "./InlineEdit";
+import { useSuggestionMenu } from "./Suggestions";
 
 /**
  * The composer, for every place this app takes user-written content
@@ -20,7 +27,7 @@ import { useInlineEditor } from "./InlineEdit";
  * Markdown, the same text the API has always stored — see `lib/markdown.ts`
  * for the node set and why it is the renderer's and not a wider one.
  *
- * Three things about this component are load bearing:
+ * Five things about this component are load bearing:
  *
  * - **It is uncontrolled, like the `<textarea>` it replaces.** `value` seeds
  *   the document once, at creation, and every keystroke reports Markdown back
@@ -39,6 +46,13 @@ import { useInlineEditor } from "./InlineEdit";
  *   there is nothing to focus. `autoFocus` is therefore the editor's own job,
  *   done in `onCreate`, while returning focus to the trigger on close stays
  *   the hook's.
+ * - **The three typed triggers are one hook.** `@`, `/` and `#` open the same
+ *   menu (`app/Suggestions.tsx`, milestone 3.2), and it is rendered inside this
+ *   wrapper rather than in a portal so it is positioned against the composer the
+ *   reader is typing in. What each offers comes from `lib/suggestions.ts`; what
+ *   this component owns is that the editable points at the highlighted option,
+ *   which cannot ride on `editorProps.attributes` because it changes on every
+ *   arrow key and those are read once when the editor is created.
  * - **`onKeyDown` is the caller's, on the wrapper.** `Ctrl Enter` submits the
  *   composer a reader is typing in (`lib/keyboard.ts`), and that stays the
  *   caller's rule: the keystroke bubbles out of the editable exactly as it did
@@ -65,11 +79,17 @@ export function RichTextEditor({
    * of what it edits, false for one field of a form. */
   autoFocus?: boolean;
 }) {
+  const suggestions = useSuggestionMenu();
+
   // Placeholder text is per composer, so the extension list is per instance.
   // `contentExtensions` is still the one declaration of the node set.
   const extensions = useMemo(
-    () => [...contentExtensions, Placeholder.configure({ placeholder })],
-    [placeholder],
+    () => [
+      ...contentExtensions,
+      Placeholder.configure({ placeholder }),
+      ...suggestions.extensions,
+    ],
+    [placeholder, suggestions.extensions],
   );
 
   // `immediatelyRender` is explicit because TipTap turns it *off* when it
@@ -107,10 +127,27 @@ export function RichTextEditor({
       onChange(markdownFromDoc(changed.getJSON())),
   });
 
+  // Which option is highlighted is an attribute on the editable element, which
+  // belongs to ProseMirror: the hook says what it should be and this puts it
+  // there, so a reader on a screen reader hears the choice their arrow key
+  // landed on while the caret stays in the sentence.
+  useEffect(() => {
+    const editable = editor.view.dom;
+    if (suggestions.activeOptionId) {
+      editable.setAttribute(
+        "aria-activedescendant",
+        suggestions.activeOptionId,
+      );
+    } else {
+      editable.removeAttribute("aria-activedescendant");
+    }
+  }, [editor, suggestions.activeOptionId]);
+
   return (
     <div className="rich-editor" onKeyDown={onKeyDown}>
       <Toolbar editor={editor} />
       <EditorContent editor={editor} />
+      {suggestions.menu}
     </div>
   );
 }

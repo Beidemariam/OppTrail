@@ -1832,3 +1832,62 @@ rather than added:
 
 Coverage floors (brief §6.2) all met. New decisions: D-120 (what a restore
 writes) and D-121 (one destination, `needs human review: Y`).
+
+---
+
+## Phase 3 — milestone 3.2 (the composer's three typed triggers, D-111)
+
+One new backend read and a frontend feature that is mostly declaration: what
+`@`, `/` and `#` offer is data in `lib/suggestions.ts`, which is why the
+largest test file added takes no DOM at all.
+
+```
+backend:  406 passed (up from 403), 97.51% total / 90.61% branch — the new
+          route is exercised by two cases in tests/test_sharing.py, one
+          matrix entry and one tour assertion in test_seed.py.
+frontend: 510 passed (from 485), 97.31% statements / 91.86% branch / 95.94%
+          functions / 97.28% line — every figure above the 3.1c baseline
+          (97.20 / 91.61 / 95.69 / 97.17) and above vitest.config.ts's
+          thresholds (96 / 90 / 95 / 96), which were not touched: the gain is
+          a few tenths, which is churn rather than a ratchet worth keeping.
+contract: scripts/generate-api-client.sh --check               up to date
+          (regenerated: GET /api/v2/opportunities/{id}/members and
+          OpportunityMemberPublic are the only additions)
+e2e:      64 passed (from 61), axe clean — including an audit taken with a
+          suggestion menu open, which is the state the aria-activedescendant
+          wiring had to survive.
+audits:   pip-audit clean, npm audit 0 vulnerabilities across the one added
+          package (@tiptap/suggestion 3.31.3, pinned exact like its four
+          siblings, no dependencies of its own).
+docker:   deferred to the host half — scripts/autopilot-gate.sh 3
+          (no Docker socket in this sandbox, per sandbox/README.md)
+```
+
+Authorization-matrix endpoints: 60, up from 59 — `GET
+/api/v2/opportunities/{id}/members`, `scoped(viewer=200, editor=200,
+owner=200)`, which is the widening D-123 records. The matrix test failed as
+intended before the entry was added, naming the path.
+
+Three notes on what the numbers do and do not show:
+
+- **The new modules are covered by tests that do not need a browser.**
+  `lib/suggestions.ts` is 100%: the matching, the three insert shapes and the
+  slash commands are all pure, and the commands are run against a recording
+  chain rather than an editor. `app/Suggestions.tsx` is 98.21% line — the one
+  uncovered line is the `!menu` guard in the key handler, which the plugin
+  cannot reach (it only calls `onKeyDown` while its state is active).
+- **The gap those numbers leave is typing**, and it is the same gap D-113
+  named for 3.1: a paste opens the menu under jsdom, but the Markdown input
+  rules and the caret are a browser's. `e2e/19-suggestions.spec.ts` types all
+  three triggers in Chromium, which is why the E2E count moved by three rather
+  than one.
+- **One pre-existing figure improved for a reason worth noting**:
+  `app/MarkdownText.tsx` gained a branch (a relative href renders as a router
+  `Link`) and stayed at 100% line, because both sides of it are asserted —
+  the in-app link in `app/OpportunityPanel.test.tsx`'s journey and the
+  external one in the existing protocol-allowlist tests.
+
+Coverage floors (brief §6.2) all met. New decisions: D-122 (mentions stay
+plain `@address` text), D-123 (the member list and who may read it, `needs
+human review: Y`), D-124 (the entry link, its target and what happens on
+arrival), D-125 (how the popup is positioned and kept current).

@@ -16,13 +16,20 @@ import {
   canManageOpportunity,
   canWriteTimeline,
 } from "../lib/permissions";
-import { useOpportunities, useSession, useTimeline } from "../lib/queries";
+import {
+  useMembers,
+  useOpportunities,
+  useSession,
+  useTimeline,
+} from "../lib/queries";
+import type { SuggestionSources } from "../lib/suggestions";
 import { paramsWithState, stateFromParams } from "../lib/viewState";
 import { ActivityButton } from "./ActivityDialog";
 import { AiSidebar } from "./AiSidebar";
 import { OpportunityField, useOpportunityFieldSave } from "./InlineEdit";
 import { SavedViewsMenu } from "./SavedViewsMenu";
 import { SharingPanel } from "./SharingPanel";
+import { SuggestionSourceProvider } from "./Suggestions";
 import { TimelineEntryForm } from "./TimelineEntryForm";
 import { TimelineEntryList } from "./TimelineEntryList";
 import { TimelineFilterBar } from "./TimelineFilterBar";
@@ -63,6 +70,13 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
       paramsWithState(searchParams, next, emptyTimelineFilters, "timeline"),
     );
   }
+  // An entry named in the URL is one a link pointed at (milestone 3.2,
+  // **D-124**): `lib/suggestions.ts` writes `?entry=`, and this is the other
+  // half of it — the entry is scrolled to and marked so a reader arriving from
+  // a note lands on the thing it referred to rather than at the top of a
+  // timeline.
+  const linkedEntryId = Number(searchParams.get("entry")) || null;
+
   // The views above are a full screen of board or list, so an opportunity
   // opened from the bottom of a column would otherwise land below the fold and
   // leave the reader looking at the thing they just clicked away from
@@ -72,12 +86,38 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
   // return is a hook that sometimes does not run.
   const panelRef = useRef<HTMLElement>(null);
   useEffect(() => {
+    // Not when a link named an entry (milestone 3.2): that entry scrolls itself
+    // into view, and this would then scroll straight past it back to the top —
+    // child effects run before a parent's, so the last request would win.
+    if (linkedEntryId) {
+      return;
+    }
     panelRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
-  }, [opportunityId]);
+  }, [opportunityId, linkedEntryId]);
   const entryTitleRef = useRef<HTMLInputElement>(null);
   const session = useSession();
   const opportunities = useOpportunities(true);
   const timeline = useTimeline(opportunityId, filters);
+  // What the composers' `@` and `#` triggers offer (milestone 3.2). The people
+  // are a read of their own; the entries are the timeline *unfiltered*, because
+  // a link may point at an entry the filter bar is currently hiding — with no
+  // filters applied that is the same query key as the read above, so the common
+  // case costs no second request.
+  const members = useMembers(opportunityId);
+  const linkable = useTimeline(opportunityId, emptyTimelineFilters);
+  const suggestions: SuggestionSources = {
+    opportunityId,
+    people: (members.data ?? []).map((member) => ({
+      email: member.email,
+      name: member.name,
+      role: member.role,
+    })),
+    entries: (linkable.data ?? []).map((entry) => ({
+      id: entry.id,
+      title: entry.title,
+      type: entry.type,
+    })),
+  };
 
   // `c` means "create the thing this screen is about", so while a timeline is
   // open it composes an entry rather than an opportunity (milestone 2.4a).
@@ -111,57 +151,60 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
   };
 
   return (
-    <section className="timeline-panel" ref={panelRef}>
-      {/* The timeline itself, first (milestone 3.1a, D-115): the opportunity's
+    <SuggestionSourceProvider sources={suggestions}>
+      <section className="timeline-panel" ref={panelRef}>
+        {/* The timeline itself, first (milestone 3.1a, D-115): the opportunity's
           own record used to open this panel, so a reader scrolled past it to
           reach what they came here for. That block now sits in the sidebar
           column instead, beneath the AI panel. */}
-      <div className="timeline-column">
-        <SavedViewsMenu
-          entity="timeline"
-          state={filters}
-          defaults={emptyTimelineFilters}
-          onApply={setFilters}
-        />
+        <div className="timeline-column">
+          <SavedViewsMenu
+            entity="timeline"
+            state={filters}
+            defaults={emptyTimelineFilters}
+            onApply={setFilters}
+          />
 
-        <TimelineFilterBar filters={filters} onApply={setFilters} />
+          <TimelineFilterBar filters={filters} onApply={setFilters} />
 
-        {/* The composer only, since milestone 2.11: editing an existing entry
+          {/* The composer only, since milestone 2.11: editing an existing entry
             happens in that entry's own card, where the reader already is. */}
-        {access.canWriteTimeline && (
-          <TimelineEntryForm
-            opportunityId={opportunityId}
-            editing={null}
-            titleRef={entryTitleRef}
-            onDone={() => {}}
+          {access.canWriteTimeline && (
+            <TimelineEntryForm
+              opportunityId={opportunityId}
+              editing={null}
+              titleRef={entryTitleRef}
+              onDone={() => {}}
+            />
+          )}
+
+          {timeline.isError ? (
+            <p className="error">{timeline.error.message}</p>
+          ) : timeline.isPending ? (
+            <p className="status">Loading timeline...</p>
+          ) : (
+            <TimelineEntryList
+              entries={timeline.data}
+              opportunityId={opportunityId}
+              access={access}
+              linkedEntryId={linkedEntryId}
+            />
+          )}
+        </div>
+
+        <div className="sidebar-column">
+          <AiSidebar opportunityId={opportunityId} />
+
+          <TimelineHeading
+            opportunity={opportunity}
+            canManage={access.canManage}
+            onRefresh={() => void timeline.refetch()}
           />
-        )}
 
-        {timeline.isError ? (
-          <p className="error">{timeline.error.message}</p>
-        ) : timeline.isPending ? (
-          <p className="status">Loading timeline...</p>
-        ) : (
-          <TimelineEntryList
-            entries={timeline.data}
-            opportunityId={opportunityId}
-            access={access}
-          />
-        )}
-      </div>
-
-      <div className="sidebar-column">
-        <AiSidebar opportunityId={opportunityId} />
-
-        <TimelineHeading
-          opportunity={opportunity}
-          canManage={access.canManage}
-          onRefresh={() => void timeline.refetch()}
-        />
-
-        {access.canManage && <SharingPanel opportunityId={opportunityId} />}
-      </div>
-    </section>
+          {access.canManage && <SharingPanel opportunityId={opportunityId} />}
+        </div>
+      </section>
+    </SuggestionSourceProvider>
   );
 }
 

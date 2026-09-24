@@ -306,6 +306,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/opportunities/{opportunity_id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Members Page
+         * @description Everyone who can read this opportunity, for the mention autocomplete
+         *     (milestone 3.2, **D-123**).
+         *
+         *     Open to every role, unlike the share list beside it: a mention is only
+         *     delivered to someone who already has access, so a composer that cannot see
+         *     that set can only offer to notify nobody -- which is requirement 13's
+         *     discoverability problem restated. What it answers with is the same three
+         *     facts the timeline already prints beside every entry plus the address a
+         *     mention is written with; the grant itself -- who invited whom, and when --
+         *     stays in `GET .../shares`, owner-only.
+         *
+         *     The owner is a row here, which is why this is a `UNION ALL` over the
+         *     two places access comes from rather than a read of `opportunity_shares`:
+         *     ownership is implicit in `opportunities.owner_id` and has no share row
+         *     (`permissions.py`).
+         */
+        get: operations["list_members_page_api_v2_opportunities__opportunity_id__members_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/opportunities/{opportunity_id}/shares": {
         parameters: {
             query?: never;
@@ -1494,6 +1528,31 @@ export interface components {
             /** Expected Close Date */
             expected_close_date?: string | null;
         };
+        /**
+         * OpportunityMemberPublic
+         * @description One person who can read this opportunity (milestone 3.2, **D-123**).
+         *
+         *     The mention autocomplete's source, and the reason this is not
+         *     `SharePublic`: a mention only notifies someone who already has access
+         *     (`notification_service.notify_mentions`), so the list a composer offers has
+         *     to be the owner *and* the shares, while a share row describes a grant and
+         *     has no row for the owner at all. It carries no `invited_by` and no
+         *     `created_at` -- who invited whom is the sharing panel's business, and that
+         *     stays owner-only.
+         */
+        OpportunityMemberPublic: {
+            /** User Id */
+            user_id: number;
+            /** Email */
+            email: string;
+            /** Name */
+            name: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "owner" | "viewer" | "editor";
+        };
         /** OpportunityPublic */
         OpportunityPublic: {
             /** Id */
@@ -1610,6 +1669,13 @@ export interface components {
         Page_NotificationPublic_: {
             /** Items */
             items: components["schemas"]["NotificationPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[OpportunityMemberPublic] */
+        Page_OpportunityMemberPublic_: {
+            /** Items */
+            items: components["schemas"]["OpportunityMemberPublic"][];
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -2520,6 +2586,42 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_members_page_api_v2_opportunities__opportunity_id__members_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_OpportunityMemberPublic_"];
+                };
             };
             /** @description Validation Error */
             422: {

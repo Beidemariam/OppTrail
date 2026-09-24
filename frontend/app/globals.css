@@ -1779,6 +1779,77 @@ a.danger-button {
   gap: 8px;
 }
 
+/* --- The suggestion menu (milestone 3.2) ---
+   One popup for all three triggers (`app/Suggestions.tsx`). It is positioned
+   inside the composer rather than in a portal, so the composer is the
+   containing block and the caret's offset is all the placement it needs. */
+.rich-editor {
+  position: relative;
+}
+
+.suggestion-menu {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-overlay);
+  max-height: 240px;
+  max-width: 320px;
+  min-width: 200px;
+  overflow: auto;
+  padding: 4px;
+  position: absolute;
+  z-index: 20;
+}
+
+.suggestion-menu ul {
+  display: grid;
+  gap: 2px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.suggestion-menu li {
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: grid;
+  gap: 2px;
+  padding: 6px 8px;
+}
+
+/* The highlighted option, moved with the arrow keys while focus stays in the
+   text: the same selected fill a pressed toolbar control carries. */
+.suggestion-menu li.is-active {
+  background: var(--bg-selected);
+}
+
+.suggestion-label {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.suggestion-detail,
+.suggestion-empty {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  margin: 0;
+}
+
+.suggestion-empty {
+  padding: 6px 8px;
+}
+
+/* The entry a link pointed at (milestone 3.2, D-124): marked for as long as
+   the URL names it, so a reader arriving from a note can see which of fifty
+   cards it meant. */
+.timeline-entry.is-linked .timeline-entry-body {
+  background: var(--bg-selected);
+  border-radius: var(--radius-sm);
+  outline: 2px solid var(--border-strong);
+  outline-offset: 4px;
+}
+
 .meta-row {
   align-items: center;
   color: var(--text-secondary);

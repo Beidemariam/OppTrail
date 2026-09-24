@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 
 import { type Access, type TimelineEntry } from "../lib/domain";
 import {
@@ -17,15 +17,19 @@ import { Composer } from "./RichTextEditor";
 import { TimelineEntryForm } from "./TimelineEntryForm";
 import { useUndoableDelete } from "./Toasts";
 
-/** The opportunity's history, oldest first, as the API ordered it. */
+/** The opportunity's history, in the order the API returned it. */
 export function TimelineEntryList({
   entries,
   opportunityId,
   access,
+  linkedEntryId,
 }: {
   entries: TimelineEntry[];
   opportunityId: number;
   access: Access;
+  /** The entry a link pointed at, if the reader arrived through one
+   * (milestone 3.2, `?entry=` in `app/OpportunityPanel.tsx`). */
+  linkedEntryId?: number | null;
 }) {
   if (entries.length === 0) {
     return <p className="empty-state">No timeline entries match this view.</p>;
@@ -39,6 +43,7 @@ export function TimelineEntryList({
           entry={entry}
           opportunityId={opportunityId}
           access={access}
+          linked={entry.id === linkedEntryId}
         />
       ))}
     </div>
@@ -58,11 +63,24 @@ function TimelineEntryCard({
   entry,
   opportunityId,
   access,
+  linked,
 }: {
   entry: TimelineEntry;
   opportunityId: number;
   access: Access;
+  /** Whether a link brought the reader here (milestone 3.2). */
+  linked: boolean;
 }) {
+  // A link to an entry lands on the entry, not on the top of its timeline
+  // (milestone 3.2, D-124): the card scrolls itself into view and stays marked
+  // for as long as the URL names it, which is what tells the reader which of
+  // fifty cards the note they came from was talking about.
+  const cardRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (linked) {
+      cardRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+  }, [linked]);
   const editTriggerRef = useRef<HTMLButtonElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const editor = useInlineEditor(editTriggerRef, titleRef);
@@ -77,7 +95,10 @@ function TimelineEntryCard({
   const failure = [addNote, deleteEntry].find((mutation) => mutation.isError);
 
   return (
-    <article className="timeline-entry">
+    <article
+      className={`timeline-entry${linked ? " is-linked" : ""}`}
+      ref={cardRef}
+    >
       <div className={`timeline-marker ${entry.type}`} />
       <div className="timeline-entry-body">
         <div className="timeline-entry-header">
