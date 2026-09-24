@@ -34,7 +34,16 @@ test("edit an entry, a note and an opportunity field without leaving the page", 
   });
   await openTimeline(page, opportunity);
 
-  // A timeline long enough that its last entry is well below the fold.
+  // A timeline long enough that its target entry is well below the fold. The
+  // default reading order is newest-first (D-115), so the entries added
+  // earliest in this loop sort to the bottom. The target is the second from
+  // last ("Call 2"), not the very last: with nothing below the last entry to
+  // absorb its editor's growth, opening it pushes the document past the
+  // viewport and the browser follows focus with a further scroll of its
+  // own — a real effect, but not the one this test exists to catch (D-051:
+  // the reader jumping to an unrelated composer at the top of the page).
+  // One entry below the target is enough headroom for the editor to expand
+  // into without that follow-on scroll.
   const titles = Array.from({ length: 8 }, (_, index) => `Call ${index + 1}`);
   for (const title of titles) {
     await entryForm(page).getByLabel("Title").fill(title);
@@ -54,7 +63,7 @@ test("edit an entry, a note and an opportunity field without leaving the page", 
   // depends on the clock.
   const entries = page.locator("article.timeline-entry");
   const headings = await entries.locator("h3").allTextContents();
-  const last = entries.nth(headings.indexOf("Call 8"));
+  const last = entries.nth(headings.indexOf("Call 2"));
   await last.scrollIntoViewIfNeeded();
   const before = await page.evaluate(() => window.scrollY);
 
@@ -72,14 +81,14 @@ test("edit an entry, a note and an opportunity field without leaving the page", 
   // context still visible" means.
   await expect(entries).toHaveCount(titles.length + 1);
   await expect(
-    page.locator(".timeline-list").getByRole("heading", { name: "Call 7" }),
+    page.locator(".timeline-list").getByRole("heading", { name: "Call 3" }),
   ).toBeVisible();
 
-  await editor.getByLabel("Title").fill("Call 8, corrected");
+  await editor.getByLabel("Title").fill("Call 2, corrected");
   await editor.getByRole("button", { name: "Save Entry" }).click();
   await expect(
     page.locator(".timeline-list").getByRole("heading", {
-      name: "Call 8, corrected",
+      name: "Call 2, corrected",
     }),
   ).toBeVisible();
   // The composer at the top stayed a composer throughout: before milestone

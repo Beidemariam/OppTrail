@@ -1709,3 +1709,70 @@ default was `"asc"`, false now that the default is itself `"desc"`. Rewritten
 against `order: "asc"` (the value opposite the new default) so the assertion
 still tests what it was written to test: that being at the defaults, with no
 view applied, does not read as a view being applied.
+
+## Phase 3 — milestone 3.1b (rework: 3.1a's unexecuted gate, D-118)
+
+Three E2E assertions, no application code. Unlike 3.1a's session, this one's
+sandbox had a populated `frontend/node_modules` (D-118 named that volume as
+the likely reason the suite could not run before) and the cached Chromium
+1194 build — so the full 61-spec suite executed here, in the sandbox, rather
+than deferring to the host. That contradicts the standing assumption in this
+phase's earlier entries that E2E is host-only; it is not structurally
+host-only, only occasionally blocked by the sandbox's node_modules mount
+being empty at session start. Worth re-checking at the next gate rather than
+assumed either way.
+
+```
+backend:  unchanged — no backend file touched. 392 passed, 97.49% coverage
+          (re-run as part of this session's check-fast).
+frontend: unchanged test count and coverage — 487 passed, 97.12% statements /
+          91.57% branch / 95.53% functions / 97.08% line. Only e2e/*.spec.ts
+          files changed; vitest does not run against frontend/e2e.
+contract: scripts/generate-api-client.sh --check               up to date
+e2e:      61 passed (up from 58 passed / 3 failed at D-118's diagnosis), axe
+          clean. Same count as milestone 3.1's 61 — no journey added or
+          removed, three specs corrected in place.
+audits:   pip-audit clean, npm audit 0 vulnerabilities.
+docker:   deferred to the host half — scripts/autopilot-gate.sh 3
+          (no Docker socket in this sandbox, per sandbox/README.md)
+```
+
+Both real regressions D-118 found trace to the same root cause (the
+newest-first default from 3.1a) but needed different fixes:
+
+- `09-saved-views.spec.ts:115` — the assertion's before/after swapped: the
+  default is now newest-first, so the oldest entry starts at the *bottom*
+  with no control touched; selecting "Oldest first" is what now needs to
+  move it to the top. Straightforward once the ordering itself was accounted
+  for.
+- `16-edit-in-place.spec.ts:22` — not a simple default swap. Retargeting the
+  test at the literal last entry in the new order ("Call 1") reproduced the
+  suite's own assertion under a *different* real cause: with nothing left
+  below the very last entry to absorb its editor's growth, opening it grows
+  the document past the viewport and the browser follows the newly-focused
+  `Title` input with a scroll of its own (measured: 391px, against the
+  test's 40px budget). That is a genuine browser behaviour, not the bug this
+  test exists to catch (D-051 — the reader jumping to an unrelated composer
+  at the top of the page), and it would have fired for *any* entry sitting
+  flush against the viewport's bottom edge, in either reading order — it
+  surfaced now only because 3.1a's default flip changed which entry that is.
+  Confirmed empirically (a throwaway debug spec instrumenting `scrollY`
+  before/after, deleted after use) that targeting the second-from-last entry
+  instead — one entry of headroom below it — reproduces zero scroll
+  regardless of order. Retargeted to that entry (now "Call 2", context
+  entry "Call 3") rather than loosening the 40px budget, which would have
+  papered over a real, if separate, effect.
+
+The third failure, `05-export.spec.ts:43`, confirmed not a defect: it is the
+WeasyPrint-native-library gap `CLAUDE.md` documents, present on a bare host
+and absent here (this sandbox has the libraries — the probe returned 200 and
+the PDF assertions ran for real rather than skipping). Added the guard D-118
+asked for: a one-time probe as the owner before the permission loop, `test.skip`
+on a `500` from that probe with a message naming the cause, matching
+`tests/test_export.py:224-228`'s `pytest.skip` on the same condition. The
+probe is scoped to the owner specifically so a `500` can only mean the
+libraries are missing, not a permission bug masquerading as one.
+
+Coverage floors (brief §6.2) all met, unchanged from 3.1a. Authorization-
+matrix endpoints: 56, unchanged. No new decisions beyond this entry's note on
+the node_modules assumption, recorded in DECISIONS.md as D-119.

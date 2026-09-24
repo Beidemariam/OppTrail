@@ -118,26 +118,28 @@ test("the timeline can be read newest-first, and that reading is linkable", asyn
   await signIn(page, ALEX);
   await openTimeline(page, NORTHWIND);
 
+  // Newest-first is the default (3.1a, D-115): the oldest entry starts at
+  // the bottom of the list with no control touched.
   const oldest = "Intro call with the VP of Operations";
-  await expect(entries(page).first()).toContainText(oldest);
+  await expect(entries(page).last()).toContainText(oldest);
 
   await page
     .getByLabel("Timeline reading order")
-    .selectOption({ label: "Newest first" });
+    .selectOption({ label: "Oldest first" });
   await page.getByRole("button", { name: "Filter" }).click();
 
-  await expect(entries(page).last()).toContainText(oldest);
-  await expect(page).toHaveURL(/timeline\.order=desc/);
+  await expect(entries(page).first()).toContainText(oldest);
+  await expect(page).toHaveURL(/timeline\.order=asc/);
 
   // The order survives a reload, and the board's own filter is still beside it
   // in the same query string rather than having replaced it.
   await page.getByLabel("Filter by stage").selectOption("Negotiation");
   await page.getByRole("button", { name: "Apply" }).click();
-  await expect(page).toHaveURL(/timeline\.order=desc/);
+  await expect(page).toHaveURL(/timeline\.order=asc/);
 
   await page.reload();
-  await expect(entries(page).last()).toContainText(oldest);
-  await expect(page.getByLabel("Timeline reading order")).toHaveValue("desc");
+  await expect(entries(page).first()).toContainText(oldest);
+  await expect(page.getByLabel("Timeline reading order")).toHaveValue("asc");
   await expect(cards(page)).toHaveCount(1);
 });
 

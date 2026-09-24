@@ -3140,7 +3140,7 @@ each other.
         know how version control works."* Label the baseline for what it is —
         the value as first recorded, not an edit — so a one-row history reads as
         complete rather than broken.
-- [ ] 3.1b **Rework: 3.1a committed on an unverified gate and the E2E suite is
+- [x] 3.1b **Rework: 3.1a committed on an unverified gate and the E2E suite is
       red** (**D-118**). 3.1a changed three E2E specs and could not execute
       them, deferring to the phase gate. I ran them on the host instead: **58
       passed, 3 failed.** Two are real regressions from 3.1a's own change; the
@@ -3513,6 +3513,50 @@ Entirely frontend, no migration, no route, no schema.
       edited specs are confirmed type-correct and lint-clean by
       `check-fast`'s `tsc`/`eslint` pass over `frontend/e2e/**/*.ts`, and full
       execution is deferred to the Phase 3 gate. Figures in `COVERAGE.md`.
+
+### 3.1b Rework: 3.1a committed on an unverified gate (D-118) — **DONE**
+
+This session's sandbox had a populated `frontend/node_modules` and the cached
+Chromium 1194 build, so the full 61-spec E2E suite ran directly here rather
+than needing the host — confirming D-118's guess (an empty node_modules mount,
+not a missing browser) and correcting the standing assumption that this
+sandbox cannot run E2E at all; it depends on mount state at session start.
+
+- [x] **`09-saved-views.spec.ts:115`** — the before/after swapped to match
+      the new newest-first default: the oldest entry now starts at the
+      *bottom* with no control touched, and selecting "Oldest first" is what
+      moves it to the top. URL assertions flipped from `timeline.order=desc`
+      to `=asc` to match.
+- [x] **`16-edit-in-place.spec.ts:22`** — needed more than the ordering fix.
+      Retargeting at the new literal-last entry ("Call 1") still failed, on a
+      391px scroll unrelated to ordering: with nothing below the very last
+      entry to absorb its editor's growth, opening it grows the document past
+      the viewport and the browser's own focus-follow scrolls to keep the
+      newly-revealed `Title` input in view. Real browser behaviour, not
+      D-051's bug (jumping to an unrelated composer elsewhere on the page) —
+      it would fire for any entry flush against the viewport's bottom edge,
+      in either reading order. Confirmed via a throwaway instrumented spec
+      (written, run to print `scrollY` before/after, then deleted) that the
+      second-from-last entry has enough headroom below it to reproduce zero
+      scroll. Retargeted there (now "Call 2", context entry "Call 3") rather
+      than loosening the 40px budget, which would have masked a real
+      regression of the kind this test exists to catch. Recorded as **D-119**.
+- [x] **`05-export.spec.ts:43`** — confirmed not a defect (WeasyPrint's
+      native libraries, present in the container and on this session's
+      sandbox but absent on a bare host). Added the guard D-118 asked for: a
+      probe as the owner before the permission loop, `test.skip` on a `500`
+      from that probe, matching `tests/test_export.py:224-228`'s
+      `pytest.skip` on the same import failure. This sandbox has the
+      libraries, so the probe returned 200 and the guard did not trigger —
+      the PDF assertions ran for real.
+- [x] **Full gate, this time actually executed**: `make check-fast` green
+      (backend 392, 97.49% coverage; frontend 487, 97.12%/91.57%/95.53%/
+      97.08%; generated client current) plus `pip-audit` and `npm audit`
+      clean, plus the full `npm run e2e` — **61 passed**, axe clean, in the
+      sandbox. Docker build/smoke still deferred to the host per the split
+      gate. Figures in `COVERAGE.md`.
+- [x] **Decisions** — **D-119** records the node_modules-mount correction and
+      the second, independent cause behind the 16-edit-in-place failure.
 
 ### Acceptance
 
