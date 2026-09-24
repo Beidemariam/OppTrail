@@ -3116,7 +3116,49 @@ each other.
 
 - [x] 3.1 TipTap serializing to Markdown — no content migration (ADR 0005
       rationale, `FEATURES.md` §4).
-- [ ] 3.2 Mention autocomplete, fixing requirement 13's discoverability
+- [ ] 3.1a Four corrections from the editor checkpoint (**D-115**). All small,
+      grouped so they land in one pass rather than interrupting later milestones.
+      - **Timeline defaults to newest-first.** The control already exists
+        (`TimelineFilterBar`, "Timeline reading order") and works; the default
+        in `lib/domain.ts:234` is `"asc"`, so the reviewer saw oldest-first and
+        asked for a feature that had shipped. Flip the default to `"desc"` and
+        update the tests that assert it. One line plus assertions — but check
+        the control is *discoverable*, since a shipped option nobody finds is
+        the same as a missing one.
+      - **One export control, not two.** `OpportunityPanel.tsx:228`'s
+        `.export-actions` offers CSV and JSON per opportunity, and
+        `BulkActionBar.tsx` offers export over a selection. The two scopes are
+        genuinely different, so the fix is not to delete one: collapse the
+        per-opportunity pair into a single control with a format choice, and
+        make it obvious which scope each acts on.
+      - **Timeline first on the opportunity screen.** The header and top-level
+        fields currently sit above the timeline, so the reviewer scrolls past
+        them to reach what they came for. Move that block to the right column
+        beneath the AI panel, leaving the timeline as the first thing read.
+      - **Say what a version list means.** An item edited zero times shows a
+        single "V1" with no explanation, and the reviewer's note was *"I don't
+        know how version control works."* Label the baseline for what it is —
+        the value as first recorded, not an edit — so a one-row history reads as
+        complete rather than broken.
+- [ ] 3.1c Restore a previous version, and one place to read history
+      (**D-116**, requested by the human at the editor checkpoint).
+      **Restore.** Nothing can put an old value back today: the existing
+      `restore` routes (`routes_opportunities.py:692`, `restore_note`,
+      `restore_comment`) undo *soft deletes*, not edits. Add a restore for each
+      versioned entity that writes the chosen version's content back as the new
+      current value — which itself appends a version, so history stays
+      append-only and restoring is never destructive. Owner-only, matching
+      D-096. This is what makes the history worth keeping rather than archival.
+      **One place to read it.** Three surfaces answer overlapping questions:
+      `Activity` (the merged feed from 3.0), `History` (per-item versions), and
+      the owner-only audit log. The reviewer asked for them under one menu or
+      combined with a label. Activity already merges the sources at deal level;
+      the natural completion is that an activity row for an edit can expand to
+      the before/after it already has the data for, and the audit log stops
+      being a separate destination. Keep the per-row role filtering 3.0
+      established — this must not widen who sees audit rows.
+
+- [ ] 3.2- [ ] 3.2 Mention autocomplete, fixing requirement 13's discoverability
       (today mentions require typing a full email address by hand). **Also
       carries the slash-command menu and "links to other entries"**, which
       3.1 left to it (**D-111**): all three are one `@tiptap/suggestion`
