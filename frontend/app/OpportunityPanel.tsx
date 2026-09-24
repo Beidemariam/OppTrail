@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router";
 
 import {
@@ -119,47 +119,55 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
 
   return (
     <section className="timeline-panel" ref={panelRef}>
-      <TimelineHeading
-        opportunity={opportunity}
-        canManage={access.canManage}
-        onRefresh={() => void timeline.refetch()}
-      />
-
-      {access.canManage && <SharingPanel opportunityId={opportunityId} />}
-
-      <SavedViewsMenu
-        entity="timeline"
-        state={filters}
-        defaults={emptyTimelineFilters}
-        onApply={setFilters}
-      />
-
-      <TimelineFilterBar filters={filters} onApply={setFilters} />
-
-      {/* The composer only, since milestone 2.11: editing an existing entry
-          happens in that entry's own card, where the reader already is. */}
-      {access.canWriteTimeline && (
-        <TimelineEntryForm
-          opportunityId={opportunityId}
-          editing={null}
-          titleRef={entryTitleRef}
-          onDone={() => {}}
+      {/* The timeline itself, first (milestone 3.1a, D-115): the opportunity's
+          own record used to open this panel, so a reader scrolled past it to
+          reach what they came here for. That block now sits in the sidebar
+          column instead, beneath the AI panel. */}
+      <div className="timeline-column">
+        <SavedViewsMenu
+          entity="timeline"
+          state={filters}
+          defaults={emptyTimelineFilters}
+          onApply={setFilters}
         />
-      )}
 
-      {timeline.isError ? (
-        <p className="error">{timeline.error.message}</p>
-      ) : timeline.isPending ? (
-        <p className="status">Loading timeline...</p>
-      ) : (
-        <TimelineEntryList
-          entries={timeline.data}
-          opportunityId={opportunityId}
-          access={access}
+        <TimelineFilterBar filters={filters} onApply={setFilters} />
+
+        {/* The composer only, since milestone 2.11: editing an existing entry
+            happens in that entry's own card, where the reader already is. */}
+        {access.canWriteTimeline && (
+          <TimelineEntryForm
+            opportunityId={opportunityId}
+            editing={null}
+            titleRef={entryTitleRef}
+            onDone={() => {}}
+          />
+        )}
+
+        {timeline.isError ? (
+          <p className="error">{timeline.error.message}</p>
+        ) : timeline.isPending ? (
+          <p className="status">Loading timeline...</p>
+        ) : (
+          <TimelineEntryList
+            entries={timeline.data}
+            opportunityId={opportunityId}
+            access={access}
+          />
+        )}
+      </div>
+
+      <div className="sidebar-column">
+        <AiSidebar opportunityId={opportunityId} />
+
+        <TimelineHeading
+          opportunity={opportunity}
+          canManage={access.canManage}
+          onRefresh={() => void timeline.refetch()}
         />
-      )}
 
-      <AiSidebar opportunityId={opportunityId} />
+        {access.canManage && <SharingPanel opportunityId={opportunityId} />}
+      </div>
     </section>
   );
 }
@@ -226,15 +234,7 @@ function TimelineHeading({
         </p>
       </div>
       <div className="export-actions">
-        {(["pdf", "csv", "json"] as const).map((format) => (
-          <a
-            key={format}
-            className="secondary-button"
-            href={`/api/v2/opportunities/${opportunity.id}/export/${format}`}
-          >
-            {format.toUpperCase()}
-          </a>
-        ))}
+        <ExportControl opportunityId={opportunity.id} />
         {/* Every role: the log answers with the events the reader's role may
             see rather than refusing them (milestone 3.0, D-101). */}
         <ActivityButton opportunityId={opportunity.id} />
@@ -254,6 +254,44 @@ function TimelineHeading({
         </button>
       </div>
     </div>
+  );
+}
+
+type ExportFormat = "pdf" | "csv" | "json";
+
+const exportFormats: ExportFormat[] = ["pdf", "csv", "json"];
+
+/**
+ * One control for the three export formats (milestone 3.1a, D-115): three
+ * always-visible PDF/CSV/JSON links read as a cluster of controls that could
+ * be mistaken for the bulk action bar's own export-by-selection pair
+ * (`BulkActionBar.tsx`) — a genuinely different scope, so the fix collapses
+ * the per-opportunity trio rather than merging the two. The link's own text
+ * names the format it will download, so picking one is visible without a
+ * second label.
+ */
+function ExportControl({ opportunityId }: { opportunityId: number }) {
+  const [format, setFormat] = useState<ExportFormat>("pdf");
+  return (
+    <>
+      <select
+        aria-label="Export format"
+        value={format}
+        onChange={(event) => setFormat(event.target.value as ExportFormat)}
+      >
+        {exportFormats.map((candidate) => (
+          <option key={candidate} value={candidate}>
+            {candidate.toUpperCase()}
+          </option>
+        ))}
+      </select>
+      <a
+        className="secondary-button"
+        href={`/api/v2/opportunities/${opportunityId}/export/${format}`}
+      >
+        Export {format.toUpperCase()}
+      </a>
+    </>
   );
 }
 

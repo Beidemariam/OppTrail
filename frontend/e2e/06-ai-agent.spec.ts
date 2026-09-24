@@ -54,9 +54,12 @@ test("a user without access cannot reach the agent for that opportunity", async 
 }) => {
   await signIn(page, ALEX);
   await openTimeline(page, NORTHWIND);
-  const href = await page
-    .locator(".export-actions")
-    .getByRole("link", { name: "JSON" })
+  const exportControl = page.locator(".export-actions");
+  await exportControl
+    .getByLabel("Export format")
+    .selectOption({ label: "JSON" });
+  const href = await exportControl
+    .getByRole("link", { name: "Export JSON" })
     .getAttribute("href");
   const opportunityId = Number(href!.match(/\/opportunities\/(\d+)\//)![1]);
 

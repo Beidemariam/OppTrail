@@ -231,7 +231,7 @@ export const emptyTimelineFilters: TimelineFilters = {
   from: "",
   to: "",
   author_id: "",
-  order: "asc",
+  order: "desc",
 };
 
 /**

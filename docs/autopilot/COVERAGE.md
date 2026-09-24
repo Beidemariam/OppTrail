@@ -1654,3 +1654,58 @@ posted straight to the API — which the composer never sees, and where the
 sanitizer is the only thing between it and the reader. That second half is the
 property the test was always about, and it is the one Phase 5's email ingestion
 will depend on.
+
+## Phase 3 — milestone 3.1a (four corrections from the editor checkpoint, D-115)
+
+Entirely frontend, no migration, no route, no schema — the backend figures are
+unchanged from milestone 3.1. Four fixes: the timeline's default reading order
+flipped to newest-first (`lib/domain.ts`'s `emptyTimelineFilters`), the three
+always-visible per-opportunity export links collapsed into one format-choice
+control, the opportunity header and sharing panel moved into the sidebar
+column beneath the AI panel so the timeline is the first thing on the page,
+and a one-row version history now says "recorded when this was created"
+instead of a bare "Version 1".
+
+```
+backend:  ruff check, ruff format --check, mypy app tools    all clean
+          392 passed (unchanged — no backend file touched)
+          97.49% combined line+branch (--cov-fail-under=90 enforced)
+          pip-audit                                          not re-run this
+          session (unchanged dependencies; last run clean at milestone 3.1)
+frontend: tsc --noEmit, eslint, prettier --check              all clean
+          (the same pre-existing warnings, 0 errors)
+          487 passed (unchanged count — two existing assertions rewritten,
+          not added: lib/domain.test.ts's saved-view-matching case, which
+          coincided with the new default and had to pick a value that still
+          disagrees with it; no new test file)
+          97.12% statements / 91.57% branch / 95.53% functions / 97.08% line
+          (thresholds met; fractionally down from milestone 3.1's 97.17/91.55/
+          95.65/97.14 — noise from moved lines, not a coverage regression)
+contract: scripts/generate-api-client.sh --check               up to date
+          (no API change to regenerate against)
+e2e:      not executed this session — no cached Playwright browser and no
+          milestone-commit requirement to run it (brief §3.4: check-fast is
+          the milestone gate, full check with e2e is the phase-end gate).
+          Three specs edited to match the new UI
+          (01-opportunity-lifecycle.spec.ts's reading-order assertion,
+          05-export.spec.ts and 06-ai-agent.spec.ts's export-control
+          locators) and confirmed type-correct and lint-clean by check-fast's
+          tsc/eslint pass, which covers `frontend/e2e/**/*.ts`. Full E2E
+          execution is deferred to the Phase 3 gate.
+docker:   deferred to the host half — scripts/autopilot-gate.sh 3
+          (no Docker socket in this sandbox, per sandbox/README.md)
+```
+
+Coverage floors (brief §6.2) all met: backend >= 90% line / >= 80% branch
+(97.49% combined); frontend >= 80% line (97.08%).
+
+Authorization-matrix endpoints: 56, unchanged — this milestone adds no route.
+
+One test coincided with the changed default and needed rewriting rather than
+just re-running: `lib/domain.test.ts`'s "recognises the view the filters on
+screen amount to" used a saved view pinned to `order: "desc"` and asserted
+that the bare `emptyTimelineFilters` state did *not* match it — true when the
+default was `"asc"`, false now that the default is itself `"desc"`. Rewritten
+against `order: "asc"` (the value opposite the new default) so the assertion
+still tests what it was written to test: that being at the defaults, with no
+view applied, does not read as a view being applied.

@@ -1151,16 +1151,23 @@ a.danger-button {
   padding: 16px;
 }
 
-.timeline-heading {
-  grid-column: 1 / -1;
+.timeline-column {
+  display: grid;
+  gap: 16px;
+  grid-column: 1;
 }
 
-.sharing-panel,
-.filter-bar,
-.timeline-form,
-.timeline-list,
-.timeline-panel > .empty-state {
-  grid-column: 1;
+/* Stretched to the row's full height by the grid's default item alignment
+   (so `.ai-sidebar`'s `position: sticky` below has room to stick while the
+   timeline column scrolls past it), but its own rows keep their content size
+   rather than stretching to fill that space — milestone 3.1a moved the
+   opportunity's header and the sharing panel here, beneath the AI sidebar,
+   so the timeline itself is the first thing on the page (D-115). */
+.sidebar-column {
+  align-content: start;
+  display: grid;
+  gap: 16px;
+  grid-column: 2;
 }
 
 .empty-panel {
@@ -1298,14 +1305,11 @@ a.danger-button {
 }
 
 .ai-sidebar {
-  align-self: start;
   background: var(--bg-app);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
   display: grid;
   gap: 12px;
-  grid-column: 2;
-  grid-row: 2 / span 6;
   padding: 14px;
   position: sticky;
   top: 18px;
@@ -2255,13 +2259,8 @@ kbd {
     grid-template-columns: 1fr;
   }
 
-  .timeline-panel,
-  .sharing-panel,
-  .filter-bar,
-  .timeline-form,
-  .timeline-list,
-  .timeline-panel > .empty-state,
-  .ai-sidebar {
+  .timeline-column,
+  .sidebar-column {
     grid-column: 1;
   }
 
@@ -2270,7 +2269,6 @@ kbd {
   }
 
   .ai-sidebar {
-    grid-row: auto;
     position: static;
   }
 

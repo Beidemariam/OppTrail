@@ -278,19 +278,22 @@ describe("what a saved view is, said in words (milestone 2.13)", () => {
   it("recognises the view the filters on screen amount to", () => {
     // Nothing records which view is applied - applying one only writes its
     // filters into the URL - so the applied view is the one the state
-    // matches, and changing any filter stops it matching.
-    const view = aSavedView({ filters: { order: "desc" } });
+    // matches, and changing any filter stops it matching. Picked opposite the
+    // default reading order (D-115 flipped `emptyTimelineFilters.order` to
+    // "desc") so the third case - the raw defaults, no view applied - is
+    // actually a state the view's own filter disagrees with.
+    const view = aSavedView({ filters: { order: "asc" } });
     expect(
       matchesSavedView(
         view,
-        { ...emptyTimelineFilters, order: "desc" },
+        { ...emptyTimelineFilters, order: "asc" },
         emptyTimelineFilters,
       ),
     ).toBe(true);
     expect(
       matchesSavedView(
         view,
-        { ...emptyTimelineFilters, order: "desc", q: "acme" },
+        { ...emptyTimelineFilters, order: "asc", q: "acme" },
         emptyTimelineFilters,
       ),
     ).toBe(false);

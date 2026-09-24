@@ -76,14 +76,14 @@ test("sign up, create an opportunity, add entries, change stage", async ({
 
   await expect(timeline.locator("article.timeline-entry")).toHaveCount(3);
 
-  // Default reading order is oldest first (`event_timestamp` ascending,
-  // `lib/domain.ts`'s `emptyTimelineFilters`), so the system entry and the
-  // two typed entries — each an hour further out than the last — read back
-  // in the order their event times actually put them in.
+  // Default reading order is newest first (`event_timestamp` descending,
+  // `lib/domain.ts`'s `emptyTimelineFilters`, D-115), so the system entry and
+  // the two typed entries — each an hour further out than the last — read
+  // back in the reverse of the order their event times actually put them in.
   await expect(timeline.locator("article.timeline-entry h3")).toHaveText([
-    "Opportunity created",
-    "Discovery call",
     "Solution review",
+    "Discovery call",
+    "Opportunity created",
   ]);
 
   // Changing the stage must append a system entry nobody can edit.

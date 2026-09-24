@@ -3116,7 +3116,7 @@ each other.
 
 - [x] 3.1 TipTap serializing to Markdown — no content migration (ADR 0005
       rationale, `FEATURES.md` §4).
-- [ ] 3.1a Four corrections from the editor checkpoint (**D-115**). All small,
+- [x] 3.1a Four corrections from the editor checkpoint (**D-115**). All small,
       grouped so they land in one pass rather than interrupting later milestones.
       - **Timeline defaults to newest-first.** The control already exists
         (`TimelineFilterBar`, "Timeline reading order") and works; the default
@@ -3427,6 +3427,63 @@ they chose Markdown over ProseMirror JSON.
 Gate: `make check` green (Docker half deferred to the host per the split
 gate). Backend 392 tests, unchanged — this milestone is entirely frontend.
 Frontend 450 → 487, E2E 60 → 61. Figures in `COVERAGE.md`.
+
+### 3.1a Four corrections from the editor checkpoint (D-115) — **DONE**
+
+Entirely frontend, no migration, no route, no schema.
+
+- [x] **Timeline defaults to newest-first.** `lib/domain.ts`'s
+      `emptyTimelineFilters.order` flipped `"asc"` → `"desc"`. The control
+      itself (`TimelineFilterBar`'s "Timeline reading order" select) already
+      carried a visible caption beside its `aria-label`, per D-082's rule that
+      every filter control names itself visibly — checked against that rule
+      rather than restyled, since the reviewer's complaint was the default
+      pointed the wrong way, not that the control was hard to find (**D-117**
+      records the reasoning). `e2e/01-opportunity-lifecycle.spec.ts`'s reading
+      order assertion and comment flipped to match; `lib/domain.test.ts`'s
+      saved-view-matching case had incidentally pinned its distinguishing
+      value to `"desc"` and needed rewriting against `"asc"` instead, or the
+      new default made its own "no view applied" case pass for the wrong
+      reason.
+- [x] **One export control, not two.** `OpportunityPanel.tsx`'s
+      `.export-actions` now renders one `ExportControl`: a format `<select>`
+      (`aria-label="Export format"`) plus a single link whose text and `href`
+      track the chosen format (`Export PDF` / `Export CSV` / `Export JSON`),
+      replacing the three always-visible per-format links. `BulkActionBar`'s
+      own export-by-selection pair is untouched — a different scope, kept
+      separate, per the milestone's own instruction — and the new link's
+      format-qualified text is what keeps the two from reading as the same
+      control. `e2e/05-export.spec.ts` and `e2e/06-ai-agent.spec.ts` updated
+      to select a format before reading the link's `href`.
+- [x] **Timeline first on the opportunity screen.** `OpportunityTimeline`'s
+      JSX split into `.timeline-column` (saved views, filter bar, composer,
+      entry list — unchanged order) and `.sidebar-column` (`AiSidebar`, then
+      `TimelineHeading`, then `SharingPanel`). D-117 records moving
+      `SharingPanel` along with the header, not named by D-115: leaving it in
+      the left column would still put a block above the entry list for
+      owners, the role that raised this. CSS: `globals.css`'s two-column grid
+      on `.timeline-panel` now wraps each column in a grid item
+      (`.timeline-column`, `.sidebar-column`) instead of assigning
+      `grid-column` to six individual children; `.sidebar-column`'s
+      `align-content: start` keeps `AiSidebar`'s `position: sticky` working
+      across the column's full stretched height while `TimelineHeading` and
+      `SharingPanel` sit at their natural size beneath it, rather than being
+      spread out by the extra space. Mobile breakpoint updated to match (two
+      selectors instead of seven).
+- [x] **Say what a version list means.** `HistoryDialog.tsx`'s per-version
+      line reads `Version 1 — recorded when this was created` for the first
+      row instead of a bare `Version 1`; every later row is unchanged. No
+      change to `VersionFields` — the before/after list underneath already
+      renders correctly for a baseline (no "before" column), it just was not
+      labelled as one.
+- [x] **Tests** — `lib/domain.test.ts`'s rewritten case (above), no new test
+      files. `make check-fast` green: typecheck, lint, prettier, backend 392
+      (unchanged), frontend 487 (unchanged count, two assertions rewritten).
+      E2E not executed this session — no cached Playwright browser, and
+      milestone commits only require `check-fast` (brief §3.4); the three
+      edited specs are confirmed type-correct and lint-clean by
+      `check-fast`'s `tsc`/`eslint` pass over `frontend/e2e/**/*.ts`, and full
+      execution is deferred to the Phase 3 gate. Figures in `COVERAGE.md`.
 
 ### Acceptance
 

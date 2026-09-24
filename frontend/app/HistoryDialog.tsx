@@ -101,8 +101,13 @@ function HistoryBody<VersionT extends VersionRow>({
       {query.data.map((version, index) => (
         <li className="history-version" key={version.id}>
           <p className="meta-row">
-            Version {version.version_number} | {version.editor_name} |{" "}
-            {formatTimestamp(version.created_at)}
+            {/* A single row with nothing to compare against reads as broken
+                rather than complete without saying what it is (milestone
+                3.1a, D-115): the value as first recorded, not an edit. */}
+            {index === 0
+              ? `Version ${version.version_number} — recorded when this was created`
+              : `Version ${version.version_number}`}{" "}
+            | {version.editor_name} | {formatTimestamp(version.created_at)}
           </p>
           <VersionFields
             changes={versionChanges(

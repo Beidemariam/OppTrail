@@ -11,9 +11,11 @@ import {
 
 /**
  * Critical journey 11 (brief §6.3): CSV, JSON and PDF export respect
- * permissions. The UI half is three links on the timeline panel; the
- * permission half is checked by requesting the same URLs as each actor, which
- * is where a leak would actually appear.
+ * permissions. The UI half is one control on the timeline panel — a format
+ * choice plus a single export link (milestone 3.1a, D-115 collapsed the
+ * three always-visible format links into this) — and the permission half is
+ * checked by requesting the same URLs as each actor, which is where a leak
+ * would actually appear.
  */
 test("the owner can export in every format from the timeline", async ({
   page,
@@ -21,15 +23,19 @@ test("the owner can export in every format from the timeline", async ({
   await signIn(page, ALEX);
   await openTimeline(page, NORTHWIND);
 
-  const links = page.locator(".export-actions");
+  const exportControl = page.locator(".export-actions");
+  const formatSelect = exportControl.getByLabel("Export format");
+  let jsonHref: string | null = null;
   for (const format of ["PDF", "CSV", "JSON"]) {
-    await expect(links.getByRole("link", { name: format })).toBeVisible();
+    await formatSelect.selectOption({ label: format });
+    const link = exportControl.getByRole("link", { name: `Export ${format}` });
+    await expect(link).toBeVisible();
+    if (format === "JSON") {
+      jsonHref = await link.getAttribute("href");
+    }
   }
 
-  const href = await links
-    .getByRole("link", { name: "JSON" })
-    .getAttribute("href");
-  const response = await page.request.get(href!);
+  const response = await page.request.get(jsonHref!);
   expect(response.status()).toBe(200);
   expect((await response.json()).opportunity.name).toBe(NORTHWIND);
 });
@@ -40,9 +46,12 @@ test("export respects the viewer, outsider and anonymous cases", async ({
 }) => {
   await signIn(page, ALEX);
   await openTimeline(page, NORTHWIND);
-  const href = await page
-    .locator(".export-actions")
-    .getByRole("link", { name: "JSON" })
+  const exportControl = page.locator(".export-actions");
+  await exportControl
+    .getByLabel("Export format")
+    .selectOption({ label: "JSON" });
+  const href = await exportControl
+    .getByRole("link", { name: "Export JSON" })
     .getAttribute("href");
   const opportunityId = Number(href!.match(/\/opportunities\/(\d+)\//)![1]);
 
