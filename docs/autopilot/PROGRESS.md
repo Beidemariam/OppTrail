@@ -3140,6 +3140,35 @@ each other.
         know how version control works."* Label the baseline for what it is —
         the value as first recorded, not an edit — so a one-row history reads as
         complete rather than broken.
+- [ ] 3.1b **Rework: 3.1a committed on an unverified gate and the E2E suite is
+      red** (**D-118**). 3.1a changed three E2E specs and could not execute
+      them, deferring to the phase gate. I ran them on the host instead: **58
+      passed, 3 failed.** Two are real regressions from 3.1a's own change; the
+      third is the documented macOS limitation and is not a defect.
+      - `09-saved-views.spec.ts:115` — *"the timeline can be read newest-first,
+        and that reading is linkable"*. It asserts the first entry is the
+        **oldest**, which was true when the default was ascending. 3.1a flipped
+        the default to descending and this assertion was not updated.
+      - `16-edit-in-place.spec.ts:22` — same cause, a count/ordering assertion
+        against the old default.
+      - `05-export.spec.ts:43` — **not a defect.** It fails only because the
+        E2E web server runs on the host, where WeasyPrint's native libraries
+        are absent (`OSError: cannot load library 'libgobject-2.0-0'`), so the
+        PDF case returns the wrong status. This is the gap `CLAUDE.md` already
+        documents; it passes in the container. Do not "fix" it by weakening the
+        assertion — if anything is owed here it is a skip guarded on WeasyPrint
+        being importable, matching `tests/test_export.py:224-228`.
+      **The process lesson, which matters more than the two assertions:** a
+      milestone was recorded done with a gate that had not been run. The brief
+      forbids marking a milestone done on a red gate, and an *unexecuted* gate
+      is not a green one. When the E2E suite cannot run in the sandbox, the
+      milestone is not complete — say so and stop, rather than deferring to a
+      gate several milestones away where the cause is expensive to attribute.
+      Note the sandbox's Playwright cache (`chromium-1194`) **does** match the
+      project's pinned 1.56.1, so the browser was available; the likely cause is
+      the frontend `node_modules` volume being empty at that moment, which is
+      the same nocopy behaviour behind D-048. Establish why before assuming.
+
 - [ ] 3.1c Restore a previous version, and one place to read history
       (**D-116**, requested by the human at the editor checkpoint).
       **Restore.** Nothing can put an old value back today: the existing
