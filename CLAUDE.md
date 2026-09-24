@@ -91,7 +91,7 @@ Routers are split by domain and all mounted in `main.py`: `routes_auth`,
 `routes_opportunities` (also owns the merged activity log),
 `routes_sharing` (also owns the audit log endpoint and the member list the
 mention autocomplete reads),
-`routes_timeline` (entries, notes, comments, note versions), `routes_ai`,
+`routes_timeline` (entries, notes, comment threads, note versions), `routes_ai`,
 `routes_export`, `routes_notifications`, `routes_search`. Shared logic lives in small
 helper modules rather than a service layer: `permissions.py`, `time_utils.py`,
 `audit_utils.py`, `timeline_utils.py`, `notification_service.py`, `ai_service.py`,
@@ -448,6 +448,10 @@ reviewer used all land on one screen.
 
 A comment being posted is the one event no mechanism records (comments are
 immutable, so they have no version table); its deletion is in the audit half.
+Resolving a thread (3.3) is not recorded here either: it is read where it
+happened, on the thread, which names who closed it and when — and putting it
+in the audit log would widen `AGENTS.md` invariant 7 past deletions and
+sharing (**D-128**).
 
 ### The bulk action bar
 
@@ -588,6 +592,48 @@ which made requirement 13 effectively undiscoverable.
   nothing in them runs during a render, and the two alternatives are worse
   (see the comment, and **D-125**).
 
+### Threaded comments
+
+Milestone 3.3 gave a note's comments two things `docs/FEATURES.md` §7 asks
+for: a reply that is visibly an answer, and a way to say the discussion is
+over. Revision `20260924_0007_comment_threads` adds three columns to
+`comments` — `parent_id`, `resolved_at`, `resolved_by` — and no table.
+
+- **One level, enforced in the route.** A reply's parent must itself be a
+  thread root and must be on the same note; anything else is a 400 or a 404
+  rather than a silent reparenting (**D-127**). The column could hold a
+  deeper tree and the API will not write one: a discussion that indents four
+  times is the unreadable thing resolve exists to prevent, and depth is the
+  cheapest thing to add later if it is ever wanted.
+- **The read shape is the thread.** `CommentThread` is `CommentPublic` plus
+  the resolved pair and `replies`, so `NotePublic.comments` is a list of
+  threads and a reply is never a top-level row. `threads_from_rows` groups
+  one flat, chronological query — a reply cannot precede the root it names,
+  so one pass in that order is enough. Writing a comment still answers with
+  the single `CommentPublic` that was written.
+- **Resolving is author-or-owner** (**D-128**), the rule that decides who may
+  change any existing timeline item (D-005), resolved through
+  `require_edit_permission` like the rest. It is `POST .../resolve` and
+  `POST .../unresolve` rather than a PATCH, because a comment PATCH is the
+  route `AGENTS.md` invariant 2 says must not exist — and resolving changes
+  no `body`. Both directions are idempotent, so the first resolver is the one
+  recorded and a retry is safe.
+- **A thread is a level of the delete cascade.** `soft_delete_comment` stamps
+  the replies with the root's own `deleted_at` and `restore_comment` brings
+  back exactly that stamp, so one Undo restores the thread and a reply
+  deleted separately stays deleted (D-067). A reply whose root is deleted
+  cannot be restored alone — `fetch_deleted_comment_context` refuses it, the
+  same answer a note under a deleted entry gets.
+- **A reply notifies two people at most.** `notify_note_comment` takes a set
+  since 3.3 — the note's author and the author of the comment being answered
+  — and when they are the same person that is one notification, not two.
+- **The frontend draws a thread, not a list** (`app/CommentThread.tsx`).
+  Reply sits on the thread rather than on each message, because a control on
+  a reply would ask for what the API refuses; a resolved thread collapses to
+  "Resolved by <name>" with Show beside it, which is reading rather than
+  reopening. Resolve is not optimistic (`useResolveThread`): what the reader
+  is shown is a name the cache does not hold.
+
 ### Editing where content is read
 
 `AGENTS.md` v2 scope item 12 — "content is edited where it is read, not in a
@@ -647,7 +693,8 @@ Four things about it are load bearing:
 
 Nothing is hard-deleted. `soft_delete.py` is the only place user data is deleted:
 it stamps `deleted_at` and cascades it down the opportunity → entry → note →
-comment tree, and every read query filters `deleted_at IS NULL` at each level.
+comment → reply tree (the last level since 3.3), and every read query filters
+`deleted_at IS NULL` at each level.
 Routes call those helpers rather than writing their own `UPDATE ... SET
 deleted_at`, so a new delete path cannot quietly forget a level of the tree. An
 edit to any of the three editable things additionally appends a version rather
@@ -893,6 +940,8 @@ The units worth testing directly, each in its own module:
 - `app/VersionChanges.tsx` — what one edit changed, and the control that puts
   the earlier version back (3.1c). Rendered inside an activity row rather than
   in a dialog of its own; see "Edit history" and "One activity log".
+- `app/CommentThread.tsx` — one discussion on a note: its replies, its Reply
+  control and its resolved state (3.3). See "Threaded comments".
 - `app/Toasts.tsx` — the toast surface and `useUndoableDelete`, the one
   definition of "delete it, and say so with a way back" (milestone 2.4b). The
   region is a `role="status"` live region, never focused, so a reader keeps

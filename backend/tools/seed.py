@@ -119,12 +119,27 @@ def add_note(session: Session, entry_id: int, body: str) -> int:
     return int(response.json()["id"])
 
 
-def add_comment(session: Session, note_id: int, body: str) -> int:
+def add_comment(
+    session: Session,
+    note_id: int,
+    body: str,
+    parent_id: int | None = None,
+) -> int:
+    payload: dict[str, object] = {"body": body}
+    if parent_id is not None:
+        payload["parent_id"] = parent_id
     response = check(
-        session.client.post(f"/api/v2/notes/{note_id}/comments", json={"body": body}),
+        session.client.post(f"/api/v2/notes/{note_id}/comments", json=payload),
         f"commenting on note {note_id}",
     )
     return int(response.json()["id"])
+
+
+def resolve_thread(session: Session, comment_id: int) -> None:
+    check(
+        session.client.post(f"/api/v2/comments/{comment_id}/resolve"),
+        f"resolving the thread on comment {comment_id}",
+    )
 
 
 def share(session: Session, opportunity_id: int, email: str, role: str) -> None:
@@ -238,7 +253,20 @@ def seed() -> None:
         demo,
         f"Permissions questions came from the security lead. @{ALEX} can you send the model?",
     )
-    add_comment(alex, demo_note, "Sent the permissions summary. They want viewer-only for finance.")
+    # Milestone 3.3: the two shapes a discussion has. One thread is answered
+    # and closed; one is still open, so the demo shows both states rather
+    # than only the tidy one.
+    permissions_question = add_comment(
+        alex, demo_note, "Sent the permissions summary. They want viewer-only for finance."
+    )
+    add_comment(
+        blair,
+        demo_note,
+        "Confirmed with the security lead - viewer-only is enough.",
+        parent_id=permissions_question,
+    )
+    resolve_thread(alex, permissions_question)
+    add_comment(blair, demo_note, "Still open: who signs off on the pilot clause?")
 
     proposal = add_entry(
         alex,
@@ -597,7 +625,18 @@ def main(argv: list[str] | None = None) -> int:
         "  entries and links to the one chosen, which opens the timeline with\n"
         "  that entry marked. Dana, who shares nothing, is on nobody's '@'\n"
         "  list: GET /api/v2/opportunities/1/members answers the owner and the\n"
-        "  shares, and only to someone who can already read the deal."
+        "  shares, and only to someone who can already read the deal.\n"
+        "\n"
+        "  Threaded comments (milestone 3.3) are on the demo entry's note.\n"
+        "  Alex's question about permissions has Blair's answer under it and\n"
+        "  is marked resolved, so it reads as one line - 'Resolved by Alex\n"
+        "  Rivera' with Show underneath it - while Blair's question about the\n"
+        "  pilot clause is still open and still visible. Reply sits on the\n"
+        "  thread rather than on each message: replies are one level deep on\n"
+        "  purpose. Sign in as Blair and Resolve is offered on their own\n"
+        "  thread but not on Alex's, which is the author-or-owner rule the\n"
+        "  rest of the timeline already uses; Casey, a viewer, is offered\n"
+        "  neither Reply nor Resolve."
     )
     return 0
 

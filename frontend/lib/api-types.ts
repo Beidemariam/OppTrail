@@ -664,7 +664,16 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Create Comment */
+        /**
+         * Create Comment
+         * @description Open a thread on this note, or reply to one (milestone 3.3).
+         *
+         *     `parent_id` must name a live comment on *this* note that is itself a
+         *     thread root. A reply to a reply is refused rather than flattened, because
+         *     silently reparenting it would put an answer under the wrong question
+         *     (D-127); naming a comment on another note is the same request written
+         *     wrong.
+         */
         post: operations["create_comment_api_v2_notes__note_id__comments_post"];
         delete?: never;
         options?: never;
@@ -700,6 +709,40 @@ export interface paths {
         put?: never;
         /** Restore Comment Route */
         post: operations["restore_comment_route_api_v2_comments__comment_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/comments/{comment_id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolve Comment */
+        post: operations["resolve_comment_api_v2_comments__comment_id__resolve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/comments/{comment_id}/unresolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Unresolve Comment */
+        post: operations["unresolve_comment_api_v2_comments__comment_id__unresolve_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1254,13 +1297,24 @@ export interface components {
         CommentCreate: {
             /** Body */
             body: string;
+            /** Parent Id */
+            parent_id?: number | null;
         };
-        /** CommentPublic */
+        /**
+         * CommentPublic
+         * @description One comment, whether it opened a thread or replied to one.
+         *
+         *     `parent_id` is NULL for a thread root (milestone 3.3). Threading is one
+         *     level deep by rule rather than by column (D-127), so this is also the
+         *     shape of every reply and a reply never carries replies of its own.
+         */
         CommentPublic: {
             /** Id */
             id: number;
             /** Note Id */
             note_id: number;
+            /** Parent Id */
+            parent_id: number | null;
             /** Body */
             body: string;
             /** Created By */
@@ -1269,6 +1323,40 @@ export interface components {
             author_name: string;
             /** Created At */
             created_at: string;
+        };
+        /**
+         * CommentThread
+         * @description A thread root read with its replies and its resolved state.
+         *
+         *     Resolving belongs to the thread, so these three fields live on the root
+         *     and only the root — a reply's own row carries NULL in all of them
+         *     (`routes_timeline.resolve_comment` refuses a reply). Reading a thread is
+         *     what a note's comments are; writing one still answers with the single
+         *     `CommentPublic` that was written.
+         */
+        CommentThread: {
+            /** Id */
+            id: number;
+            /** Note Id */
+            note_id: number;
+            /** Parent Id */
+            parent_id: number | null;
+            /** Body */
+            body: string;
+            /** Created By */
+            created_by: number;
+            /** Author Name */
+            author_name: string;
+            /** Created At */
+            created_at: string;
+            /** Resolved At */
+            resolved_at: string | null;
+            /** Resolved By */
+            resolved_by: number | null;
+            /** Resolved By Name */
+            resolved_by_name: string | null;
+            /** Replies */
+            replies: components["schemas"]["CommentPublic"][];
         };
         /**
          * FollowUpPublic
@@ -1349,7 +1437,7 @@ export interface components {
             /** Edited */
             edited: boolean;
             /** Comments */
-            comments: components["schemas"]["CommentPublic"][];
+            comments: components["schemas"]["CommentThread"][];
         };
         /** NoteUpdate */
         NoteUpdate: {
@@ -3390,6 +3478,72 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resolve_comment_api_v2_comments__comment_id__resolve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                comment_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommentThread"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unresolve_comment_api_v2_comments__comment_id__unresolve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                comment_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommentThread"];
+                };
             };
             /** @description Validation Error */
             422: {

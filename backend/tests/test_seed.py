@@ -69,6 +69,21 @@ def test_seed_populates_every_shipped_feature(tmp_path) -> None:
         edited_notes = connection.execute(
             "SELECT COUNT(*) AS count FROM notes WHERE edited = 1"
         ).fetchone()["count"]
+        # The tour's milestone 3.3 paragraph promises both states of a
+        # discussion: one thread answered and closed, one still open.
+        replies = connection.execute(
+            "SELECT COUNT(*) AS count FROM comments WHERE parent_id IS NOT NULL"
+        ).fetchone()["count"]
+        resolved_threads = connection.execute(
+            "SELECT COUNT(*) AS count FROM comments WHERE resolved_at IS NOT NULL"
+        ).fetchone()["count"]
+        open_threads = connection.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM comments
+            WHERE parent_id IS NULL AND resolved_at IS NULL
+            """
+        ).fetchone()["count"]
 
     assert counts["users"] == 4
     assert counts["opportunities"] == 5
@@ -91,6 +106,9 @@ def test_seed_populates_every_shipped_feature(tmp_path) -> None:
     assert {"share_added", "shared_activity", "mention", "comment"} <= notification_types
     assert soft_deleted_notes == 1
     assert edited_notes == 1
+    assert replies > 0
+    assert resolved_threads > 0
+    assert open_threads > 0
 
 
 def test_seeded_permissions_match_the_printed_tour(tmp_path) -> None:

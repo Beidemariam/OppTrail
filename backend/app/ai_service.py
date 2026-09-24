@@ -95,9 +95,16 @@ def build_timeline_context(
                 (note["id"],),
             ).fetchall()
             for comment in comments:
+                # Threading and resolve state are part of what the discussion
+                # says (milestone 3.3): a reply read as a fresh comment turns
+                # an answer into a second question, and a settled thread read
+                # as an open one makes the agent report a concern that the
+                # deal has already dealt with.
+                kind = "Reply" if comment["parent_id"] else "Comment"
+                resolved = " (thread resolved)" if comment["resolved_at"] else ""
                 lines.append(
-                    f"    Comment by {comment['author_name']} at "
-                    f"{comment['created_at']}: {comment['body']}"
+                    f"    {kind} by {comment['author_name']} at "
+                    f"{comment['created_at']}{resolved}: {comment['body']}"
                 )
         lines.append("")
 

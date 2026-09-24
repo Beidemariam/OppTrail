@@ -41,9 +41,22 @@ USER_DATA_TABLES = (
 
 
 def soft_delete_comment(connection: sqlite3.Connection, comment_id: int) -> None:
+    """Delete one comment, and the replies under it if it started a thread.
+
+    Threading (milestone 3.3) added a level to the tree this module cascades
+    down, and it is the same rule as every other level: a reply is readable
+    only through the comment it answers, so leaving it behind would leave an
+    answer to a question nobody can see. Replies take the parent's stamp, so
+    one Undo brings the whole thread back.
+    """
+    deleted_at = utc_now()
+    connection.execute(
+        "UPDATE comments SET deleted_at = ? WHERE parent_id = ? AND deleted_at IS NULL",
+        (deleted_at, comment_id),
+    )
     connection.execute(
         "UPDATE comments SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
-        (utc_now(), comment_id),
+        (deleted_at, comment_id),
     )
 
 
@@ -189,7 +202,15 @@ def restore_note(connection: sqlite3.Connection, note_id: int, deleted_at: str) 
 
 
 def restore_comment(connection: sqlite3.Connection, comment_id: int, deleted_at: str) -> None:
-    """Undo one `soft_delete_comment`."""
+    """Undo one `soft_delete_comment`, replies included.
+
+    Scoped by the stamp like every other restore: a reply deleted separately
+    an hour earlier carries a different one and stays deleted.
+    """
+    connection.execute(
+        "UPDATE comments SET deleted_at = NULL WHERE parent_id = ? AND deleted_at = ?",
+        (comment_id, deleted_at),
+    )
     connection.execute(
         "UPDATE comments SET deleted_at = NULL WHERE id = ? AND deleted_at = ?",
         (comment_id, deleted_at),

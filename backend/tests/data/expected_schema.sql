@@ -12,6 +12,8 @@ CREATE INDEX idx_audit_log_entries_opportunity_id ON audit_log_entries(opportuni
 
 CREATE INDEX idx_comments_note_id ON comments(note_id);
 
+CREATE INDEX idx_comments_parent_id ON comments(parent_id);
+
 CREATE INDEX idx_notes_entry_id ON notes(entry_id);
 
 CREATE INDEX idx_notifications_user_id ON notifications(user_id);
@@ -41,6 +43,9 @@ CREATE TABLE audit_log_entries (
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
+-- Revision 0007 appended the last three columns with ALTER TABLE ADD COLUMN,
+-- which is where SQLite records them: after `deleted_at`, not where a rewrite
+-- of this table would put them.
 CREATE TABLE comments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     note_id INTEGER NOT NULL REFERENCES notes(id),
@@ -48,7 +53,7 @@ CREATE TABLE comments (
     created_by INTEGER NOT NULL REFERENCES users(id),
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     deleted_at TEXT
-);
+, parent_id INTEGER REFERENCES comments(id), resolved_at TEXT, resolved_by INTEGER REFERENCES users(id));
 
 CREATE TABLE note_versions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

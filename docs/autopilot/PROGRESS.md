@@ -3193,9 +3193,20 @@ each other.
       3.1 left to it (**D-111**): all three are one `@tiptap/suggestion`
       popup with different triggers, and building one of them twice is the
       duplication `AGENTS.md`'s standards rule out.
-- [ ] 3.3 Threaded comments, reactions, resolve/unresolve, watchers. Schema:
-      `comments` gains `parent_id`, `resolved_at`; new `reactions`, `watchers`
-      tables.
+- [x] 3.3 Threaded comments and resolve/unresolve. Schema: `comments` gains
+      `parent_id`, `resolved_at` (and `resolved_by`). Split from the roadmap's
+      single line by **D-126**: four features over three schema changes is
+      more than one session can take to a gate that has actually been run,
+      which is the lesson 3.1b paid for. Nothing leaves Phase 3 — the other
+      half is 3.3a below, and the phase cannot reach `AWAITING_REVIEW`
+      without it.
+- [ ] 3.3a Reactions and watchers (**D-126**), the other half of the
+      roadmap's 3.3. New `reactions` and `watchers` tables. Watchers carry a
+      permission question of their own: `docs/FEATURES.md` §7 says "follow an
+      opportunity you are not shared on", and in this app absence of access
+      is a 404 — so either watching presupposes access (a notification
+      preference), or it is a new way to reach a deal and invariant 7 has to
+      say so. That decision belongs with the milestone.
 - [ ] 3.4 SSE endpoint and client invalidation (ADR 0003); 409 edit guard on
       notes.
 - [ ] 3.5 PDF export renders Markdown, closing the other half of requirement
@@ -3699,6 +3710,74 @@ change, no migration.
       member list and who may read it; `needs human review: Y`), **D-124**
       (the entry link, its target and what happens on arrival), **D-125** (the
       popup's positioning and how the plugins stay current).
+
+Gate: `make check` green in the sandbox, Docker half deferred to the host per
+the split gate. Figures in `COVERAGE.md`.
+
+### 3.3 Threaded comments and resolve/unresolve (D-126) — **DONE**
+
+A note's comments are threads now, and a finished one says so. Three columns
+on `comments` (revision `20260924_0007_comment_threads`), no new table, and
+two new routes.
+
+- [x] **A reply is one level deep, and the route is what enforces it**
+      (**D-127**). `parent_id` names the comment being answered; it must be
+      on the same note and must itself be a thread root, or the request is a
+      404 or a 400 rather than a silently reparented answer. Arbitrary depth
+      is the recursive model, recursive component and indentation rule that
+      `FEATURES.md` §7 does not ask for — its complaint is that a question
+      and its answer are two rows that only happen to be adjacent.
+- [x] **The read shape is the thread.** `CommentThread` is `CommentPublic`
+      plus `resolved_at` / `resolved_by` / `resolved_by_name` and `replies`,
+      so `NotePublic.comments` is a list of threads and a reply is never a
+      top-level row. One flat chronological query is grouped in a single
+      pass — a reply cannot precede the root it names. Writing still answers
+      with the one comment that was written.
+- [x] **Resolving is author-or-owner** (**D-128**), through the same
+      `require_edit_permission` every other change to an existing item uses
+      (D-005). `POST .../resolve` and `POST .../unresolve`, never a comment
+      PATCH: invariant 2 holds because no `body` moves. Both directions are
+      idempotent, so the first resolver is the one recorded and a retry is
+      safe. It is recorded on the thread and nowhere else — an audit row
+      would widen invariant 7 past deletions and sharing, which is the
+      human's call.
+- [x] **A thread is a level of the delete cascade.** `soft_delete_comment`
+      takes the replies with the root's own stamp and `restore_comment`
+      brings back exactly that stamp, so one Undo restores the thread while a
+      reply deleted separately stays deleted (D-067). A reply under a deleted
+      root cannot be restored alone, the same answer a note under a deleted
+      entry gets. Both halves were confirmed to fail before the cascade was
+      written.
+- [x] **A reply notifies the two people it is addressed to** — the note's
+      author and the author of the comment being answered — and once each
+      when they are the same person. `notify_note_comment` takes a set.
+- [x] **The screen draws a thread** (`app/CommentThread.tsx`). Reply sits on
+      the thread rather than on each message, because a control on a reply
+      would ask for what the API refuses; a resolved thread collapses to
+      "Resolved by <name>" with Show beside it, which is reading rather than
+      reopening; Resolve appears only where `canChangeItem` holds. Not
+      optimistic: the line shown is a name the cache does not hold.
+- [x] **Tests.** Backend: `tests/test_comment_threads.py` (14 — the read
+      shape, both rejections of a bad parent, the two notification cases,
+      idempotent resolve with the first resolver kept, the permission
+      matrix around resolve, a reply refusing to be resolved alone, the
+      cascade and its stamp-scoped undo, the orphan restore, and a reply
+      leaving the FTS5 index with its thread), plus two matrix entries, a
+      new `test_invariant_resolving_a_thread_writes_no_body` — 3.3 is the
+      first write to an existing comment row, so invariant 2 needs a guard
+      that names it — and three seed assertions. Frontend: `app/CommentThread.test.tsx` (9 — the reply
+      shape and the request it sends, one Reply control per thread, resolve
+      collapsing, Show without reopening, Reopen, the viewer and editor
+      cases, and a reply deleted without its thread). E2E:
+      `e2e/20-threaded-comments.spec.ts` — a question answered, closed,
+      re-read and reopened in a real browser with axe on the expanded
+      thread, and Blair answering Alex's thread without being offered
+      Resolve.
+- [x] **Docs.** `CLAUDE.md` gains "Threaded comments" and the soft-delete,
+      activity-log, router and `app/` entries name the new level;
+      `make seed` gains a resolved thread, an open one and a tour paragraph.
+- [x] **Decisions** — **D-126** (the split), **D-127** (one level, enforced
+      in the route), **D-128** (who resolves, and where it is recorded).
 
 Gate: `make check` green in the sandbox, Docker half deferred to the host per
 the split gate. Figures in `COVERAGE.md`.

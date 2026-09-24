@@ -23,6 +23,7 @@ from .permissions import (
 from .schemas import (
     CommentCreate,
     CommentPublic,
+    CommentThread,
     FollowUpPublic,
     NoteCreate,
     NotePublic,
@@ -59,6 +60,7 @@ def comment_from_row(row: sqlite3.Row) -> CommentPublic:
     return CommentPublic(
         id=row["id"],
         note_id=row["note_id"],
+        parent_id=row["parent_id"],
         body=row["body"],
         created_by=row["created_by"],
         author_name=row["author_name"],
@@ -66,7 +68,60 @@ def comment_from_row(row: sqlite3.Row) -> CommentPublic:
     )
 
 
-def note_from_row(row: sqlite3.Row, comments: list[CommentPublic]) -> NotePublic:
+def thread_from_row(row: sqlite3.Row, replies: list[CommentPublic]) -> CommentThread:
+    """A thread root, its replies, and who called it finished (milestone 3.3).
+
+    `resolved_by_name` is carried beside the id for the same reason
+    `author_name` is: the reader is shown a person, and a second request per
+    thread to turn an id into a name is a round trip the page unit already
+    rules out.
+    """
+    return CommentThread(
+        id=row["id"],
+        note_id=row["note_id"],
+        parent_id=row["parent_id"],
+        body=row["body"],
+        created_by=row["created_by"],
+        author_name=row["author_name"],
+        created_at=row["created_at"],
+        resolved_at=row["resolved_at"],
+        resolved_by=row["resolved_by"],
+        resolved_by_name=row["resolved_by_name"],
+        replies=replies,
+    )
+
+
+def threads_from_rows(rows: list[sqlite3.Row]) -> list[CommentThread]:
+    """Group one note's comments into threads, roots in the order read.
+
+    The rows arrive flat and chronological, and a reply always exists after
+    the root it answers (its parent had to be there to be named), so one pass
+    in that order fills every thread before it is used.
+    """
+    threads: dict[int, list[CommentPublic]] = {
+        row["id"]: [] for row in rows if row["parent_id"] is None
+    }
+    for row in rows:
+        parent_id = row["parent_id"]
+        if parent_id is not None and parent_id in threads:
+            threads[parent_id].append(comment_from_row(row))
+    return [thread_from_row(row, threads[row["id"]]) for row in rows if row["parent_id"] is None]
+
+
+# Every read of a comment carries the two names it is displayed with: its
+# author's, and — for a resolved thread — the name of whoever resolved it.
+COMMENT_ROWS_SQL = """
+    SELECT
+        comments.*,
+        users.name AS author_name,
+        resolvers.name AS resolved_by_name
+    FROM comments
+    JOIN users ON users.id = comments.created_by
+    LEFT JOIN users AS resolvers ON resolvers.id = comments.resolved_by
+"""
+
+
+def note_from_row(row: sqlite3.Row, comments: list[CommentThread]) -> NotePublic:
     return NotePublic(
         id=row["id"],
         entry_id=row["entry_id"],
@@ -208,16 +263,25 @@ def fetch_deleted_comment_context(
     connection: sqlite3.Connection,
     comment_id: int,
 ) -> sqlite3.Row | None:
-    """A deleted comment whose note, entry and opportunity are all still here."""
+    """A deleted comment whose note, entry and opportunity are all still here.
+
+    Since milestone 3.3 the thread root counts as a level of that tree: a
+    reply put back under a deleted root would be a comment answering nothing,
+    which is the same shape the other restore paths already refuse. Deleting
+    a root takes its replies with it, so the ordinary undo restores the whole
+    thread and never reaches this case.
+    """
     row: sqlite3.Row | None = connection.execute(
         """
         SELECT comments.*, timeline_entries.opportunity_id
         FROM comments
+        LEFT JOIN comments AS parent ON parent.id = comments.parent_id
         JOIN notes ON notes.id = comments.note_id
         JOIN timeline_entries ON timeline_entries.id = notes.entry_id
         JOIN opportunities ON opportunities.id = timeline_entries.opportunity_id
         WHERE comments.id = ?
             AND comments.deleted_at IS NOT NULL
+            AND (comments.parent_id IS NULL OR parent.deleted_at IS NULL)
             AND notes.deleted_at IS NULL
             AND timeline_entries.deleted_at IS NULL
             AND opportunities.deleted_at IS NULL
@@ -327,22 +391,24 @@ def entries_with_notes(
     ).fetchall()
 
     note_ids = [note["id"] for note in notes]
-    comments_by_note_id: dict[int, list[CommentPublic]] = {}
+    comments_by_note_id: dict[int, list[CommentThread]] = {}
     if note_ids:
         note_placeholders = ",".join("?" for _ in note_ids)
         comments = connection.execute(
             f"""
-            SELECT comments.*, users.name AS author_name
-            FROM comments
-            JOIN users ON users.id = comments.created_by
+            {COMMENT_ROWS_SQL}
             WHERE comments.deleted_at IS NULL
                 AND comments.note_id IN ({note_placeholders})
             ORDER BY comments.created_at ASC, comments.id ASC
             """,
             note_ids,
         ).fetchall()
+        rows_by_note_id: dict[int, list[sqlite3.Row]] = {}
         for comment in comments:
-            comments_by_note_id.setdefault(comment["note_id"], []).append(comment_from_row(comment))
+            rows_by_note_id.setdefault(comment["note_id"], []).append(comment)
+        comments_by_note_id = {
+            note_id: threads_from_rows(rows) for note_id, rows in rows_by_note_id.items()
+        }
 
     notes_by_entry_id: dict[int, list[NotePublic]] = {}
     for note in notes:
@@ -1207,6 +1273,14 @@ def create_comment(
     payload: CommentCreate,
     user: sqlite3.Row = Depends(get_current_user),
 ) -> CommentPublic:
+    """Open a thread on this note, or reply to one (milestone 3.3).
+
+    `parent_id` must name a live comment on *this* note that is itself a
+    thread root. A reply to a reply is refused rather than flattened, because
+    silently reparenting it would put an answer under the wrong question
+    (D-127); naming a comment on another note is the same request written
+    wrong.
+    """
     with db_connection() as connection:
         note = fetch_note_context(connection, note_id)
         if not note:
@@ -1216,18 +1290,45 @@ def create_comment(
             )
         require_timeline_write(connection, note["opportunity_id"], int(user["id"]))
 
+        parent: sqlite3.Row | None = None
+        if payload.parent_id is not None:
+            parent = connection.execute(
+                """
+                SELECT id, created_by, parent_id
+                FROM comments
+                WHERE id = ? AND note_id = ? AND deleted_at IS NULL
+                """,
+                (payload.parent_id, note_id),
+            ).fetchone()
+            if not parent:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Comment not found",
+                )
+            if parent["parent_id"] is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Replies go under the comment that started the thread",
+                )
+
         cursor = connection.execute(
             """
-            INSERT INTO comments (note_id, body, created_by, created_at)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO comments (note_id, parent_id, body, created_by, created_at)
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (note_id, payload.body, user["id"], utc_now()),
+            (note_id, payload.parent_id, payload.body, user["id"], utc_now()),
         )
         assert cursor.lastrowid is not None
         comment_id = int(cursor.lastrowid)
+        # Whoever the comment is addressed to: the note's author always, and
+        # the author of the comment being answered. One notification each,
+        # even when they are the same person.
+        recipients = {int(note["created_by"])}
+        if parent:
+            recipients.add(int(parent["created_by"]))
         notify_note_comment(
             connection,
-            int(note["created_by"]),
+            recipients,
             int(user["id"]),
             note["opportunity_id"],
             comment_id,
@@ -1250,12 +1351,7 @@ def create_comment(
         )
         connection.commit()
         row = connection.execute(
-            """
-            SELECT comments.*, users.name AS author_name
-            FROM comments
-            JOIN users ON users.id = comments.created_by
-            WHERE comments.id = ?
-            """,
+            f"{COMMENT_ROWS_SQL} WHERE comments.id = ?",
             (comment_id,),
         ).fetchone()
 
@@ -1328,3 +1424,85 @@ def restore_comment_route(
             },
         )
         connection.commit()
+
+
+def set_thread_resolved(
+    comment_id: int,
+    user: sqlite3.Row,
+    resolved: bool,
+) -> CommentThread:
+    """Declare a thread finished, or open it again (milestone 3.3).
+
+    The rule is `require_author_or_owner` on the thread's root, the same one
+    that decides who may change any existing timeline item (D-005): the
+    person who asked can say it is answered, and the opportunity's owner can
+    say so about any thread on their deal. Nothing here touches `body` —
+    `AGENTS.md` invariant 2 holds, and resolving is a state about a
+    discussion rather than an edit of what anyone wrote, which is also why it
+    is a POST and not the comment PATCH that must never exist.
+
+    Both directions are idempotent, so a retry of either is safe and the
+    first resolver is the one recorded (D-128).
+    """
+    with db_connection() as connection:
+        comment = fetch_comment_context(connection, comment_id)
+        if not comment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Comment not found",
+            )
+        if comment["parent_id"] is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A reply is resolved with the thread it belongs to",
+            )
+        require_edit_permission(
+            connection,
+            comment["opportunity_id"],
+            int(user["id"]),
+            comment["created_by"],
+            "Only the author or owner can resolve this thread",
+        )
+        if resolved:
+            connection.execute(
+                """
+                UPDATE comments
+                SET resolved_at = COALESCE(resolved_at, ?),
+                    resolved_by = COALESCE(resolved_by, ?)
+                WHERE id = ?
+                """,
+                (utc_now(), user["id"], comment_id),
+            )
+        else:
+            connection.execute(
+                "UPDATE comments SET resolved_at = NULL, resolved_by = NULL WHERE id = ?",
+                (comment_id,),
+            )
+        connection.commit()
+        rows = connection.execute(
+            f"""
+            {COMMENT_ROWS_SQL}
+            WHERE comments.deleted_at IS NULL
+                AND (comments.id = ? OR comments.parent_id = ?)
+            ORDER BY comments.created_at ASC, comments.id ASC
+            """,
+            (comment_id, comment_id),
+        ).fetchall()
+
+    return threads_from_rows(rows)[0]
+
+
+@router.post("/comments/{comment_id}/resolve", response_model=CommentThread)
+def resolve_comment(
+    comment_id: int,
+    user: sqlite3.Row = Depends(get_current_user),
+) -> CommentThread:
+    return set_thread_resolved(comment_id, user, resolved=True)
+
+
+@router.post("/comments/{comment_id}/unresolve", response_model=CommentThread)
+def unresolve_comment(
+    comment_id: int,
+    user: sqlite3.Row = Depends(get_current_user),
+) -> CommentThread:
+    return set_thread_resolved(comment_id, user, resolved=False)

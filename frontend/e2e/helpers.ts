@@ -114,7 +114,9 @@ export function entryForm(page: Page) {
 export async function openComposer(
   scope: Page | Locator,
   trigger: string,
-  label: string,
+  /** A pattern where the name carries a value — a reply names the person
+   * being answered (milestone 3.3). */
+  label: string | RegExp,
 ) {
   await scope.getByRole("button", { name: trigger, exact: true }).click();
   const editor = scope.getByLabel(label);

@@ -1891,3 +1891,66 @@ Coverage floors (brief §6.2) all met. New decisions: D-122 (mentions stay
 plain `@address` text), D-123 (the member list and who may read it, `needs
 human review: Y`), D-124 (the entry link, its target and what happens on
 arrival), D-125 (how the popup is positioned and kept current).
+
+---
+
+## Phase 3 — milestone 3.3 (threaded comments and resolve/unresolve, D-126)
+
+Three columns on one table, two routes, one new component. The read shape
+changed for every caller of a note's comments, which is why the backend count
+moves further than the two routes alone would explain — the assembly, the
+delete cascade and the reply's notification are each their own case.
+
+```
+backend:  423 passed (up from 406), 97.64% total / 91.36% branch — from
+          tests/test_comment_threads.py (14), one new invariant test
+          (resolving writes no body), two authorization-matrix entries and
+          three seed assertions. The modules this milestone
+          touched: soft_delete.py 100%, permissions.py 100% (unchanged, no
+          new rule), notification_service.py 97%, routes_timeline.py 95%.
+frontend: 519 passed (from 510), 97.34% statements / 91.72% branch / 96.00%
+          functions / 97.31% line — statements, functions and lines above
+          3.2's (97.31 / 95.94 / 97.28), branches a shade under it (91.86),
+          and all four well above vitest.config.ts's thresholds
+          (96 / 90 / 95 / 96), which were not touched.
+          `app/CommentThread.tsx` is 100% line and 86.2% branch: what is
+          uncovered there is the `?? "a colleague"` fallback for a resolver
+          whose name is missing (the API always sends it) and the two error
+          paragraphs, which need a failing mutation to render.
+contract: scripts/generate-api-client.sh --check               up to date
+          (regenerated: CommentThread is new, CommentPublic gains parent_id,
+          CommentCreate gains parent_id, NotePublic.comments is now a list of
+          threads)
+e2e:      66 passed (from 64), axe clean — including an audit of a resolved
+          thread expanded again, which is the one state with a disclosure
+          control in it.
+audits:   pip-audit clean, npm audit 0 vulnerabilities. No dependency was
+          added: threading is a schema change and a component.
+docker:   deferred to the host half — scripts/autopilot-gate.sh 3
+          (no Docker socket in this sandbox, per sandbox/README.md)
+```
+
+Authorization-matrix endpoints: 62, up from 60 — `POST
+/api/v2/comments/{id}/resolve` and `.../unresolve`, both
+`scoped(viewer=403, editor=403, owner=200)`, which is the author-or-owner
+rule (D-128) read through the matrix's fixture, where the comment belongs to
+the owner. The matrix test failed as intended before the entries were added,
+naming both paths.
+
+Two notes on what the numbers do and do not show:
+
+- **The cascade guards were confirmed red first** (brief §6.5). With the
+  reply cascade removed from `soft_delete_comment`, exactly two of the new
+  tests fail — the thread-delete round trip and the one that proves a reply
+  leaves the FTS5 index with its thread — and they fail for the right
+  reason, on the reply that stayed behind.
+- **`routes_timeline.py` at 95%** is unchanged in kind from before this
+  milestone: the misses are `HTTPException` raises on rows that other tests
+  cover through a different route, not the new code. Every branch of
+  `create_comment`'s parent validation and of `set_thread_resolved` is
+  asserted, including both idempotent paths.
+
+Coverage floors (brief §6.2) all met. New decisions: D-126 (splitting the
+roadmap's 3.3, with reactions and watchers left as 3.3a inside this phase),
+D-127 (one level of threading, enforced in the route), D-128 (who may
+resolve, and that it is recorded on the thread rather than in the audit log).

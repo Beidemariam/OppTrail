@@ -278,6 +278,20 @@ MATRIX: dict[Endpoint, Case] = {
         expected=scoped(viewer=403, editor=403, owner=204),
         url=lambda world: f"/api/v2/comments/{world.comment_id}",
     ),
+    # Resolving a thread is the author-or-owner rule (D-128), so the editor
+    # is refused on the owner's thread exactly as they are for deleting it.
+    # Both directions are idempotent, which is what lets the matrix call them
+    # in any order against one shared world.
+    Endpoint("POST", "/api/v2/comments/{comment_id}/resolve"): Case(
+        expected=scoped(viewer=403, editor=403, owner=200),
+        url=lambda world: f"/api/v2/comments/{world.comment_id}/resolve",
+        body=lambda world, actor: None,
+    ),
+    Endpoint("POST", "/api/v2/comments/{comment_id}/unresolve"): Case(
+        expected=scoped(viewer=403, editor=403, owner=200),
+        url=lambda world: f"/api/v2/comments/{world.comment_id}/unresolve",
+        body=lambda world, actor: None,
+    ),
     # --- AI agent ---------------------------------------------------------
     Endpoint("POST", "/api/v2/opportunities/{opportunity_id}/ai/ask"): Case(
         expected=scoped(viewer=200, editor=200, owner=200),

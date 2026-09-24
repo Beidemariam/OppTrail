@@ -309,12 +309,36 @@ class TimelineEntryUpdate(BaseModel):
 
 
 class CommentPublic(BaseModel):
+    """One comment, whether it opened a thread or replied to one.
+
+    `parent_id` is NULL for a thread root (milestone 3.3). Threading is one
+    level deep by rule rather than by column (D-127), so this is also the
+    shape of every reply and a reply never carries replies of its own.
+    """
+
     id: int
     note_id: int
+    parent_id: int | None
     body: str
     created_by: int
     author_name: str
     created_at: str
+
+
+class CommentThread(CommentPublic):
+    """A thread root read with its replies and its resolved state.
+
+    Resolving belongs to the thread, so these three fields live on the root
+    and only the root — a reply's own row carries NULL in all of them
+    (`routes_timeline.resolve_comment` refuses a reply). Reading a thread is
+    what a note's comments are; writing one still answers with the single
+    `CommentPublic` that was written.
+    """
+
+    resolved_at: str | None
+    resolved_by: int | None
+    resolved_by_name: str | None
+    replies: list[CommentPublic]
 
 
 class NotePublic(BaseModel):
@@ -326,7 +350,7 @@ class NotePublic(BaseModel):
     created_at: str
     updated_at: str
     edited: bool
-    comments: list[CommentPublic]
+    comments: list[CommentThread]
 
 
 class TimelineEntryPublic(BaseModel):
@@ -433,6 +457,11 @@ class TimelineEntryVersionPublic(BaseModel):
 
 class CommentCreate(BaseModel):
     body: str = Field(min_length=1)
+    # Absent means "open a new thread on this note", which is what every
+    # comment written before milestone 3.3 did. Whether the named comment is
+    # a legal parent — same note, still here, and itself a root — is resolved
+    # against the database in `routes_timeline.create_comment`.
+    parent_id: int | None = None
 
     @field_validator("body")
     @classmethod

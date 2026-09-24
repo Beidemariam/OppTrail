@@ -163,6 +163,28 @@ def test_invariant_editing_a_comment_is_refused_over_http(client: TestClient) ->
     assert stored["body"] == "A comment"
 
 
+def test_invariant_resolving_a_thread_writes_no_body(client: TestClient) -> None:
+    """Milestone 3.3 added the first write to an existing comment row.
+
+    It is a state about the discussion, not an edit of what anyone wrote, and
+    that distinction is the whole reason it is allowed to exist beside
+    invariant 2 (D-128). This is what holds it to that.
+    """
+    signup(client)
+    opportunity = create_opportunity(client)
+    entry = create_entry(client, opportunity["id"])
+    note = client.post(f"/api/v2/timeline/{entry['id']}/notes", json={"body": "A note"}).json()
+    comment = client.post(f"/api/v2/notes/{note['id']}/comments", json={"body": "A comment"}).json()
+
+    resolved = client.post(f"/api/v2/comments/{comment['id']}/resolve")
+    assert resolved.status_code == 200
+    assert resolved.json()["body"] == "A comment"
+    assert client.post(f"/api/v2/comments/{comment['id']}/unresolve").status_code == 200
+
+    reread = client.get(f"/api/v2/opportunities/{opportunity['id']}/timeline").json()
+    assert reread["items"][0]["notes"][0]["comments"][0]["body"] == "A comment"
+
+
 # --- §2.3 Notes are editable, with an edit marker -------------------------
 
 

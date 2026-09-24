@@ -1,6 +1,7 @@
 import json
 import re
 import sqlite3
+from collections.abc import Iterable
 from typing import cast
 
 from .schemas import NOTIFICATION_PAYLOAD_MODELS, NotificationPayload
@@ -168,21 +169,29 @@ def notify_shared_activity(
 
 def notify_note_comment(
     connection: sqlite3.Connection,
-    note_owner_id: int,
+    recipient_ids: Iterable[int],
     actor_id: int,
     opportunity_id: int,
     comment_id: int,
 ) -> None:
-    if note_owner_id == actor_id:
-        return
-    create_notification(
-        connection,
-        note_owner_id,
-        "comment",
-        {
-            "opportunity_id": opportunity_id,
-            "source_type": "comment",
-            "source_id": comment_id,
-            "actor_id": actor_id,
-        },
-    )
+    """Tell the people a comment is addressed to that it was written.
+
+    A set rather than one id since milestone 3.3: a reply is addressed to the
+    author of the comment it answers as well as to the note's author, and
+    when those are the same person that is still one notification. Nobody is
+    told about their own comment.
+    """
+    for recipient_id in sorted(set(recipient_ids)):
+        if recipient_id == actor_id:
+            continue
+        create_notification(
+            connection,
+            recipient_id,
+            "comment",
+            {
+                "opportunity_id": opportunity_id,
+                "source_type": "comment",
+                "source_id": comment_id,
+                "actor_id": actor_id,
+            },
+        )

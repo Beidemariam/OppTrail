@@ -64,10 +64,20 @@ interface Opportunity {
 interface Comment {
   id: number;
   note_id: number;
+  parent_id: number | null;
   body: string;
   created_by: number;
   author_name: string;
   created_at: string;
+}
+
+/** A thread root as the timeline read returns it (milestone 3.3): its
+ * replies come with it, and so does whoever called it finished. */
+interface CommentThread extends Comment {
+  resolved_at: string | null;
+  resolved_by: number | null;
+  resolved_by_name: string | null;
+  replies: Comment[];
 }
 
 interface Note {
@@ -79,7 +89,7 @@ interface Note {
   created_at: string;
   updated_at: string;
   edited: boolean;
-  comments: Comment[];
+  comments: CommentThread[];
 }
 
 interface TimelineEntry {
@@ -196,14 +206,38 @@ export function aNote(overrides: Partial<Note> = {}): Note {
   };
 }
 
-export function aComment(overrides: Partial<Comment> = {}): Comment {
+export function aComment(
+  overrides: Partial<CommentThread> = {},
+): CommentThread {
   return {
     id: 300,
     note_id: 200,
+    parent_id: null,
     body: "Agreed.",
     created_by: ALEX.id,
     author_name: ALEX.name,
     created_at: "2026-09-02T14:10:00Z",
+    resolved_at: null,
+    resolved_by: null,
+    resolved_by_name: null,
+    replies: [],
+    ...overrides,
+  };
+}
+
+/** A reply, for a test that wants a thread with an answer already in it. */
+export function aReply(
+  parent: CommentThread,
+  overrides: Partial<Comment> = {},
+): Comment {
+  return {
+    id: parent.id + 1,
+    note_id: parent.note_id,
+    parent_id: parent.id,
+    body: "Confirmed.",
+    created_by: BLAIR.id,
+    author_name: BLAIR.name,
+    created_at: "2026-09-02T14:12:00Z",
     ...overrides,
   };
 }
@@ -298,7 +332,7 @@ export class FakeApi {
     notes: new Map<number, { index: number; entryId: number; item: Note }>(),
     comments: new Map<
       number,
-      { index: number; noteId: number; item: Comment }
+      { index: number; noteId: number; item: CommentThread }
     >(),
   };
 
@@ -772,9 +806,22 @@ export class FakeApi {
         const created = aComment({
           id: this.nextId++,
           note_id: noteId,
+          parent_id: body.parent_id ?? null,
           body: body.body,
+          created_by: this.user?.id ?? ALEX.id,
+          author_name: this.user?.name ?? ALEX.name,
         });
-        note.comments.push(created);
+        // A reply lands under the thread it names; anything else opens one
+        // (milestone 3.3). The one-level rule is the server's, so the fake
+        // never has to look deeper than a root's own replies.
+        const parent = note.comments.find(
+          (thread) => thread.id === created.parent_id,
+        );
+        if (parent) {
+          parent.replies.push(created);
+        } else {
+          note.comments.push(created);
+        }
         return this.json(created, 201);
       }
       if (method === "PATCH") {
@@ -804,6 +851,26 @@ export class FakeApi {
     }
     if (segments[0] === "comments") {
       const commentId = Number(segments[1]);
+      if (segments[2] === "resolve" || segments[2] === "unresolve") {
+        const resolved = segments[2] === "resolve";
+        for (const entry of this.entries) {
+          for (const note of entry.notes) {
+            const thread = note.comments.find((item) => item.id === commentId);
+            if (thread) {
+              thread.resolved_at = resolved ? "2026-09-02T15:00:00Z" : null;
+              thread.resolved_by = resolved ? (this.user?.id ?? ALEX.id) : null;
+              thread.resolved_by_name = resolved
+                ? (this.user?.name ?? ALEX.name)
+                : null;
+              return this.json(thread);
+            }
+          }
+        }
+        return this.json(
+          { error: { code: "not_found", message: "Comment not found" } },
+          404,
+        );
+      }
       for (const entry of this.entries) {
         for (const note of entry.notes) {
           const found = note.comments.find((item) => item.id === commentId);
@@ -815,6 +882,13 @@ export class FakeApi {
             });
           }
           note.comments = note.comments.filter((item) => item.id !== commentId);
+          // Deleting a reply leaves its thread alone, exactly as the cascade
+          // in `soft_delete.soft_delete_comment` does.
+          for (const thread of note.comments) {
+            thread.replies = thread.replies.filter(
+              (reply) => reply.id !== commentId,
+            );
+          }
         }
       }
       return new Response(null, { status: 204 });

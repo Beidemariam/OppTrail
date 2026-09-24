@@ -859,12 +859,26 @@ export function useDeleteNote() {
   });
 }
 
+/**
+ * Open a thread on a note, or answer one (milestone 3.3).
+ *
+ * `parentId` is what makes it a reply. Not optimistic, like every other
+ * create: the server assigns the id (D-068).
+ */
 export function useAddComment() {
   return useTimelineWrite(
-    ({ noteId, body }: { noteId: number; body: string }) =>
+    ({
+      noteId,
+      body,
+      parentId,
+    }: {
+      noteId: number;
+      body: string;
+      parentId?: number;
+    }) =>
       apiRequest(`/api/v2/notes/${noteId}/comments`, {
         method: "POST",
-        body: JSON.stringify({ body }),
+        body: JSON.stringify({ body, parent_id: parentId ?? null }),
       }),
   );
 }
@@ -874,20 +888,47 @@ export function useDeleteComment() {
   return useMutation<unknown, Error, number, Snapshot>({
     mutationFn: (commentId: number) =>
       apiRequest(`/api/v2/comments/${commentId}`, { method: "DELETE" }),
+    // Deleting a thread takes its replies with it on the server
+    // (`soft_delete.soft_delete_comment`), so the optimistic half removes
+    // both — otherwise the replies hang under nothing until the refetch
+    // lands.
     onMutate: (commentId) =>
       optimisticTimelines(client, (entries) =>
         mapNotes(entries, (notes) =>
           notes.map((note) => ({
             ...note,
-            comments: note.comments.filter(
-              (comment) => comment.id !== commentId,
-            ),
+            comments: note.comments
+              .filter((thread) => thread.id !== commentId)
+              .map((thread) => ({
+                ...thread,
+                replies: thread.replies.filter(
+                  (reply) => reply.id !== commentId,
+                ),
+              })),
           })),
         ),
       ),
     onError: (_error, _commentId, snapshot) => rollback(client, snapshot),
     onSettled: () => invalidate(client, keys.allTimelines, keys.allActivity),
   });
+}
+
+/**
+ * Declare a thread finished, or open it again (milestone 3.3).
+ *
+ * Not optimistic, unlike the deletes beside it: what the reader is shown is
+ * "Resolved by <name>", and the cache holds an id rather than the name to
+ * put there. The server answers with the thread it wrote, so the refetch is
+ * the only honest source of that line.
+ */
+export function useResolveThread() {
+  return useTimelineWrite(
+    ({ commentId, resolved }: { commentId: number; resolved: boolean }) =>
+      apiRequest(
+        `/api/v2/comments/${commentId}/${resolved ? "resolve" : "unresolve"}`,
+        { method: "POST" },
+      ),
+  );
 }
 
 /**

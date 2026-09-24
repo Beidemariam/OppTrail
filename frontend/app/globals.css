@@ -1929,6 +1929,44 @@ a.danger-button {
   padding: 5px 8px;
 }
 
+/* One discussion on a note (milestone 3.3). Replies are indented against a
+   rule rather than boxed again, so a thread reads as one block; the depth is
+   fixed at one level, so nothing here has to nest. */
+.comment-thread {
+  display: grid;
+  gap: 8px;
+}
+
+/* Finished, and collapsed to its outcome: the state that keeps a long deal's
+   discussion readable. */
+.comment-thread.is-resolved {
+  background: var(--bg-sunken);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+
+.comment-thread.is-collapsed,
+.comment-resolved-header {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.comment-resolved {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  margin: 0;
+}
+
+.comment-replies {
+  border-left: 2px solid var(--border-subtle);
+  display: grid;
+  gap: 8px;
+  margin-left: 12px;
+  padding-left: 12px;
+}
+
 .search-form {
   align-items: flex-end;
   flex-direction: row;

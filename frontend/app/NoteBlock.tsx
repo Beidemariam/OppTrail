@@ -13,6 +13,7 @@ import {
   useRestoreNote,
   useSaveNote,
 } from "../lib/queries";
+import { CommentThread } from "./CommentThread";
 import { useInlineEditor } from "./InlineEdit";
 import { MarkdownText } from "./MarkdownText";
 import { Composer, RichTextEditor } from "./RichTextEditor";
@@ -136,23 +137,18 @@ export function NoteBlock({
 
       {failure && <p className="error">{failure.error?.message}</p>}
 
+      {/* Since 3.3 a note's comments are threads, not a flat list: each one
+          draws its own replies, its Reply control and its resolved state
+          (`app/CommentThread.tsx`). Undo stays here, so one toast serves
+          every comment on the note. */}
       <div className="comment-list">
-        {note.comments.map((item) => (
-          <div className="comment-row" key={item.id}>
-            <div>
-              <strong>{item.author_name}</strong>
-              <MarkdownText content={item.body} />
-            </div>
-            {access.canChangeItem(item.created_by) && (
-              <button
-                type="button"
-                className="danger-button compact"
-                onClick={() => removeComment(item.id)}
-              >
-                Delete
-              </button>
-            )}
-          </div>
+        {note.comments.map((thread) => (
+          <CommentThread
+            key={thread.id}
+            thread={thread}
+            access={access}
+            onDelete={removeComment}
+          />
         ))}
       </div>
 

@@ -80,6 +80,10 @@ export type AppNotification = components["schemas"]["NotificationPublic"];
 export type NotificationType = AppNotification["type"];
 export type TimelineEntry = components["schemas"]["TimelineEntryPublic"];
 export type TimelineNote = components["schemas"]["NotePublic"];
+/** One discussion on a note: the comment that opened it, the replies under
+ * it, and whether anyone has called it finished (milestone 3.3). */
+export type CommentThread = components["schemas"]["CommentThread"];
+export type Comment = components["schemas"]["CommentPublic"];
 /** One entry with a follow-up date, read across every opportunity (milestone
  * 3.0b, D-088) — the calendar's second layer. */
 export type FollowUp = components["schemas"]["FollowUpPublic"];
