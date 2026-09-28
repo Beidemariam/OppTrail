@@ -666,3 +666,40 @@ def test_a_deleted_entry_leaves_the_numbering_to_the_entries_that_remain(
     assert client.post(f"/api/v2/timeline/{first['id']}/restore").status_code == 204
     items = client.get(f"/api/v2/opportunities/{opportunity['id']}/timeline").json()["items"]
     assert next(item["sequence"] for item in items if item["id"] == second["id"]) == 2
+
+
+def test_each_opportunity_numbers_its_entries_from_one(client: TestClient) -> None:
+    """The numbering is per deal, which is what `sequence_peers.opportunity_id
+    = timeline_entries.opportunity_id` in `ENTRY_SEQUENCE_SQL` is for.
+
+    Worth a test of its own rather than trusting the partition by reading it:
+    a correlated subquery that loses its partition still returns plausible
+    ascending numbers, just global ones -- so the failure mode is a second
+    opportunity whose timeline starts at #4 instead of #1, and nothing about
+    the first deal looks wrong. The two deals here interleave in time on
+    purpose, so a global numbering could not accidentally produce this answer.
+    """
+    signup(client, "owner@example.com", "Owner")
+    first = create_opportunity(client)
+    second = create_opportunity(client)
+
+    create_entry(client, first["id"], title="First deal, older", event_timestamp=days_ago(20))
+    create_entry(client, second["id"], title="Second deal, older", event_timestamp=days_ago(15))
+    create_entry(client, first["id"], title="First deal, newer", event_timestamp=days_ago(10))
+    create_entry(client, second["id"], title="Second deal, newer", event_timestamp=days_ago(5))
+
+    def numbering(opportunity_id: int) -> dict[str, int]:
+        items = client.get(f"/api/v2/opportunities/{opportunity_id}/timeline").json()["items"]
+        return {item["title"]: item["sequence"] for item in items}
+
+    # Three entries each: the two above and "Opportunity created", stamped now.
+    assert numbering(first["id"]) == {
+        "First deal, older": 1,
+        "First deal, newer": 2,
+        "Opportunity created": 3,
+    }
+    assert numbering(second["id"]) == {
+        "Second deal, older": 1,
+        "Second deal, newer": 2,
+        "Opportunity created": 3,
+    }
