@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from .ai_service import (
     ask_openai,
     build_timeline_context,
-    extract_referenced_entry_ids,
+    extract_referenced_entry_numbers,
 )
 from .auth import get_current_user
 from .database import read_only_connection
@@ -33,7 +33,7 @@ def ask_ai_agent(
     # connection refuses writes at the SQLite level.
     with read_only_connection() as connection:
         require_opportunity_access(connection, opportunity_id, int(user["id"]))
-        timeline_context, entry_ids = build_timeline_context(connection, opportunity_id)
+        timeline_context, entry_numbers = build_timeline_context(connection, opportunity_id)
 
     try:
         answer = ask_openai(
@@ -57,5 +57,5 @@ def ask_ai_agent(
 
     return AiAskResponse(
         answer=answer,
-        referenced_entry_ids=extract_referenced_entry_ids(answer, entry_ids),
+        referenced_entry_numbers=extract_referenced_entry_numbers(answer, entry_numbers),
     )

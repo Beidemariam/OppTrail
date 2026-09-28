@@ -4428,6 +4428,17 @@ definition: **#1 is the oldest thing that happened on the deal**, ranked by
       that matters, and it was confirmed to fail with the AI service reverted:
       an answer citing a number the reader cannot find is the original defect,
       and citing the row id is how it looked.
+- [x] **`referenced_entry_ids` became `referenced_entry_numbers`** (**D-140**),
+      found by asking the running app a real question rather than by test. The
+      answer cited `#40` and `#39`, matching the cards — and the field came back
+      `[40, 39]`, which is wrong: it keeps a cited `#N` only if `N` is a valid
+      row *id*, so it was checking one numbering against another. On this deal
+      id 1 is "Opportunity created" while sequence 1 is the March discussion, so
+      it both rejected real citations and admitted numbers naming unrelated
+      rows. The guard test above passed throughout, because this defect is one
+      layer further out — in what the route does with the model's reply — and
+      only a real call reaches it. Recorded in `docs/ROADMAP.md`'s
+      breaking-changes table.
 
 **Still Phase 4: live links in the AI's answers.** The shape exists already —
 D-124's `[title](/opportunities/1?entry=17)`, rendered as a router `Link`, with

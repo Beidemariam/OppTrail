@@ -52,7 +52,12 @@ def build_timeline_context(
         """,
         (opportunity_id,),
     ).fetchall()
-    entry_ids = [int(entry["id"]) for entry in entries]
+    # The numbers this context actually cites, which is what an answer's
+    # citations are checked against (milestone 3.9, **D-140**). They are the
+    # per-deal sequence, not the row ids: `#7` in an answer means the card
+    # printed `#7`, and validating it against ids would both reject a real
+    # citation and accept a number that happens to match an unrelated row.
+    entry_numbers = [int(entry["sequence"]) for entry in entries]
 
     lines = [
         "Opportunity:",
@@ -122,16 +127,25 @@ def build_timeline_context(
     if not entries:
         lines.append("No timeline entries yet.")
 
-    return "\n".join(lines), entry_ids
+    return "\n".join(lines), entry_numbers
 
 
-def extract_referenced_entry_ids(answer: str, available_entry_ids: list[int]) -> list[int]:
-    available = set(available_entry_ids)
+def extract_referenced_entry_numbers(answer: str, available_entry_numbers: list[int]) -> list[int]:
+    """Which entries an answer cited, as the numbers the timeline prints.
+
+    Renamed from `extract_referenced_entry_ids` in milestone 3.9 (**D-140**),
+    and it is the rename that matters rather than the code: the model cites
+    `[Entry #number, date]` now, so validating those numbers against row ids
+    silently produced a list that was wrong in both directions. The answer's
+    numbers and the reader's cards are the same numbering, and this checks one
+    against the other.
+    """
+    available = set(available_entry_numbers)
     referenced = []
     for match in re.findall(r"Entry\s+#(\d+)", answer):
-        entry_id = int(match)
-        if entry_id in available and entry_id not in referenced:
-            referenced.append(entry_id)
+        entry_number = int(match)
+        if entry_number in available and entry_number not in referenced:
+            referenced.append(entry_number)
     return referenced
 
 

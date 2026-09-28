@@ -1268,8 +1268,8 @@ export interface components {
         AiAskResponse: {
             /** Answer */
             answer: string;
-            /** Referenced Entry Ids */
-            referenced_entry_ids: number[];
+            /** Referenced Entry Numbers */
+            referenced_entry_numbers: number[];
         };
         /** AuditDetailCommentDeleted */
         AuditDetailCommentDeleted: {

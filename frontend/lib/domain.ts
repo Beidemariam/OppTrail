@@ -661,7 +661,7 @@ export function matchesSavedView<T extends Record<string, string>>(
 export interface AiChatMessage {
   role: "user" | "assistant";
   body: string;
-  referenced_entry_ids?: number[];
+  referenced_entry_numbers?: number[];
 }
 
 /**

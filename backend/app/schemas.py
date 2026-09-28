@@ -804,7 +804,12 @@ class AiAskRequest(BaseModel):
 
 class AiAskResponse(BaseModel):
     answer: str
-    referenced_entry_ids: list[int]
+    # The entry numbers the answer cited (milestone 3.9, **D-140**) -- the
+    # per-deal sequence the timeline prints, not row ids, so a reader can find
+    # what the model named. Renamed from `referenced_entry_ids`, which became a
+    # lie the moment the context started citing numbers;
+    # `docs/ROADMAP.md`'s breaking-changes table records it.
+    referenced_entry_numbers: list[int]
 
 
 class HealthStatus(BaseModel):

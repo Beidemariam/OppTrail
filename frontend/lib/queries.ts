@@ -1125,7 +1125,7 @@ export function useAskAi(opportunityId: number) {
       append(client, opportunityId, {
         role: "assistant",
         body: answer.answer,
-        referenced_entry_ids: answer.referenced_entry_ids,
+        referenced_entry_numbers: answer.referenced_entry_numbers,
       });
     },
   });

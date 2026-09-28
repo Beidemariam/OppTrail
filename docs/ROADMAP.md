@@ -310,6 +310,7 @@ guidelines.
 | Entry `type` enum extension | 2 | CHECK constraint | Additive only; no existing value changes |
 | Rich text | 3 | None | Storage stays Markdown — the deliberate payoff of the original choice |
 | Note edit guard | 3 | `PATCH /api/v2/notes/{id}` requires `updated_at` | Required rather than optional: an optional guard is no guard, and the value is already on `NotePublic`, so a client echoes back what it read (ADR 0003) |
+| Entry numbers | 3 | `TimelineEntryPublic` gains `sequence`; `AiAskResponse.referenced_entry_ids` becomes `referenced_entry_numbers` | The first is additive. The second is a rename because the field's contents changed meaning: the AI cites the number the timeline prints, and a field named `_ids` holding sequence numbers is a trap for the Phase 4 work that will want ids for links (D-139, D-140) |
 
 ## Total
 

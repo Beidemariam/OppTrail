@@ -772,7 +772,7 @@ export class FakeApi {
     if (segments[2] === "ai") {
       return this.json({
         answer: `Answer to: ${body.question}`,
-        referenced_entry_ids: [100],
+        referenced_entry_numbers: [1],
       });
     }
     if (segments[0] === "timeline") {

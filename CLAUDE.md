@@ -917,7 +917,11 @@ could not find. That number is a **per-deal sequence** (3.9, **D-139**) — #1 i
 the oldest thing that happened on the deal — and both sides read one
 expression, `timeline_utils.ENTRY_SEQUENCE_SQL`, rather than each counting for
 itself. `tests/test_ai.py::test_the_context_cites_the_numbers_the_timeline_prints`
-is what fails if they drift. It is a reading aid and not an identity: a
+is what fails if they drift. `AiAskResponse.referenced_entry_numbers` is the
+same numbering (renamed from `referenced_entry_ids` by **D-140**, which is the
+defect a real model call found and the context test could not: the field kept a
+cited `#N` only if `N` was a valid row id, so it was validating one numbering
+against another). It is a reading aid and not an identity: a
 backdated insert renumbers what follows, and the row id is what `?entry=`
 links carry. Making the model emit `?entry=` links instead (D-124's shape, which
 `app/MarkdownText.tsx` already renders as a router `Link`) is Phase 4 work,

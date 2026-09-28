@@ -51,10 +51,10 @@ export function AiSidebar({ opportunityId }: { opportunityId: number }) {
           messages.map((message, index) => (
             <div className={`ai-message ${message.role}`} key={index}>
               <p>{message.body}</p>
-              {message.referenced_entry_ids &&
-                message.referenced_entry_ids.length > 0 && (
+              {message.referenced_entry_numbers &&
+                message.referenced_entry_numbers.length > 0 && (
                   <span>
-                    Entries: {message.referenced_entry_ids.join(", ")}
+                    Entries: {message.referenced_entry_numbers.join(", ")}
                   </span>
                 )}
             </div>

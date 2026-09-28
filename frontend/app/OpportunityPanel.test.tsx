@@ -855,7 +855,9 @@ describe("the AI panel", () => {
     expect(
       await within(sidebar).findByText("Answer to: Where do we stand?"),
     ).toBeInTheDocument();
-    expect(within(sidebar).getByText("Entries: 100")).toBeInTheDocument();
+    // The numbers the answer cited, which are the ones printed on the cards
+    // rather than row ids (milestone 3.9, D-140).
+    expect(within(sidebar).getByText("Entries: 1")).toBeInTheDocument();
   });
 
   it("keeps the conversation when the reader looks at another opportunity", async () => {

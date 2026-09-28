@@ -103,7 +103,7 @@ def test_ai_answer_uses_timeline_context_and_does_not_write(
         captured["question"] = question
         captured["timeout"] = timeout
         captured["max_retries"] = max_retries
-        return f"Budget and legal objections are open [Entry #{entry['id']}, 2026-09-04]."
+        return f"Budget and legal objections are open [Entry #{entry['sequence']}, 2026-09-04]."
 
     monkeypatch.setattr("app.routes_ai.ask_openai", fake_ask_openai)
     before_counts = count_rows()
@@ -114,7 +114,12 @@ def test_ai_answer_uses_timeline_context_and_does_not_write(
     )
 
     assert response.status_code == 200
-    assert response.json()["referenced_entry_ids"] == [entry["id"]]
+    # The cited number is the one the timeline prints, not the row id
+    # (milestone 3.9, D-140) -- and here they differ, because creating the
+    # opportunity wrote a system entry stamped now while this entry is
+    # backdated to September 4th.
+    assert response.json()["referenced_entry_numbers"] == [entry["sequence"]]
+    assert entry["sequence"] != entry["id"]
     assert "Budget and legal objections" in response.json()["answer"]
     assert captured["api_key"] == "test-key"
     assert captured["model"] == "test-model"
@@ -229,10 +234,10 @@ def test_build_timeline_context_reports_a_missing_opportunity(client: TestClient
     # database an earlier test in the run happened to leave initialized at
     # that path, an order dependence brief §6.5 forbids.
     with db_connection() as connection:
-        context, entry_ids = ai_service.build_timeline_context(connection, 999999)
+        context, entry_numbers = ai_service.build_timeline_context(connection, 999999)
 
     assert context == "Opportunity not found."
-    assert entry_ids == []
+    assert entry_numbers == []
 
 
 def test_build_timeline_context_reports_no_entries_yet(client: TestClient) -> None:
@@ -250,10 +255,10 @@ def test_build_timeline_context_reports_no_entries_yet(client: TestClient) -> No
         assert cursor.lastrowid is not None
         opportunity_id = int(cursor.lastrowid)
 
-        context, entry_ids = ai_service.build_timeline_context(connection, opportunity_id)
+        context, entry_numbers = ai_service.build_timeline_context(connection, opportunity_id)
 
     assert "No timeline entries yet." in context
-    assert entry_ids == []
+    assert entry_numbers == []
 
 
 def test_build_timeline_context_includes_follow_up_dates_and_comments(
@@ -282,18 +287,18 @@ def test_build_timeline_context_includes_follow_up_dates_and_comments(
     assert comment.status_code == 201
 
     with db_connection() as connection:
-        context, entry_ids = ai_service.build_timeline_context(connection, opportunity["id"])
+        context, entry_numbers = ai_service.build_timeline_context(connection, opportunity["id"])
 
     assert "Follow up: 2026-09-11" in context
     assert "Comment by Owner" in context
     assert "Procurement confirmed the budget." in context
-    assert entry["id"] in entry_ids
+    assert entry["sequence"] in entry_numbers
 
 
-def test_extract_referenced_entry_ids_deduplicates_and_ignores_unknown_ids() -> None:
+def test_extract_referenced_entry_numbers_deduplicates_and_ignores_unknown() -> None:
     answer = "See [Entry #4, today] and again [Entry #4, today], plus [Entry #9, today]."
 
-    assert ai_service.extract_referenced_entry_ids(answer, [4]) == [4]
+    assert ai_service.extract_referenced_entry_numbers(answer, [4]) == [4]
 
 
 def test_invariant_ai_agent_has_no_write_tools(monkeypatch) -> None:
