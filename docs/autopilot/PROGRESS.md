@@ -4276,6 +4276,56 @@ disclosure.
 affordances, one grid track and two form layouts.
 
 
+### 3.8 The button rule, and the geometry nobody tests (D-138) — **OPEN**
+
+The 3.7 re-review passed all five checks and raised four items. One is the
+third report of a single defect, and the other three are small.
+
+- **Buttons break to one letter per line whenever a flex row squeezes them,
+  everywhere in the app.** D-136 finding 4 read this as a sharing-panel bug and
+  fixed it there; the cause is `globals.css`'s base button block, which sets
+  `min-width: 0`, `white-space: normal` and `overflow-wrap: anywhere` on
+  `.primary-button`, `.secondary-button` and `.danger-button` alike. Measured on
+  the shipped 3.7 build: `Edit` **38x89** and `Delete` **43x124** on every
+  timeline entry at 960px and 1100px; `Columns (5)` **44x175** and
+  `New opportunity` **42x227** in the table view at 600px and below. Fix the
+  rule, not the call sites: a control holds its label's width, and the row it
+  sits in wraps or the text beside it yields (`min-width: 0` belongs on the
+  text, not on the button).
+- **Nothing in this project asserts rendered geometry**, which is why three
+  phases and two gates shipped this. Add a Playwright sweep — six screens
+  (board, list, table, calendar, timeline, search) at eight widths from 1440 to
+  420 — failing on any control taller than wide and on any page whose
+  `body.scrollWidth` exceeds the viewport. Two known overflows to fix with it:
+  7-187px in the table view below 600px, and 87px at 420px on every screen,
+  from `.user-block` in the top bar (483px) and `.stage-column`'s fixed
+  minimum.
+- **The activity log should read newest-first** (`r37-01`: *"Make activity show
+  latest first"*). It is oldest-first today, matching the audit log, and the
+  timeline beside it defaults to newest-first (D-137) — so the two histories of
+  one deal disagree about reading order. Reversing a keyset cursor means
+  reversing the comparison, not only the `ORDER BY` (`pagination.py`).
+- **The sidebar renders too large.** *"I'd rather have everything rendered a bit
+  smaller so it shows cleaner layout and space than everything being big and
+  wrapped."* The opportunity fields, the sharing panel and their controls are at
+  body scale in a 360px column. `lib/density.ts` already exists for exactly this
+  kind of choice (D-075, D-089) but is table-only; decide whether the sidebar
+  reads a smaller scale unconditionally or joins density.
+
+Deferred to Phase 4, because both halves are features rather than fixes:
+**entry numbers on timeline cards, and live links in the AI's answers.** The
+reviewer's note is precise about why — *"the AI answer includes time stamps and
+entry numbers. the timeline doesn't show entry number"* — so the model cites
+something the reader cannot find. The link half is nearly free: D-124 already
+defines `[title](/opportunities/3?entry=17)`, the renderer already turns a
+same-app href into a router `Link`, and `OpportunityPanel` already scrolls
+`?entry=` into view. And the model is *already* given the ids —
+`ai_service.build_timeline_context` writes every entry as
+`[Entry #<id>, <timestamp>]` — which is precisely why the citations look like
+this: the model cites a number the screen never prints. So both halves are
+small, and one of them is a prompt line plus a card label.
+
+
 ### Acceptance
 
 - A bullet list can be typed in a note (impossible today — single-line
