@@ -512,21 +512,34 @@ textarea {
   font-weight: 700;
 }
 
+/* A control holds its label (milestone 3.8, **D-138**).
+
+   This rule used to say `min-width: 0`, `white-space: normal` and
+   `overflow-wrap: anywhere`, which is how a button in a flex row that ran out
+   of room came to render one letter per line -- `Share` at 30x106, `Delete` at
+   43x124, `New opportunity` at 42x227. It reached three gate reviews and was
+   reported three times, each time read as a different local layout bug.
+
+   `nowrap` plus `flex-shrink: 0` is the inverse trade: a label that cannot fit
+   overflows its container, which is visible and fixable, rather than
+   collapsing into a column of characters, which reads as broken. The rows that
+   used to squeeze a button now wrap or yield their text instead -- see
+   `.inline-actions` and friends below, and `e2e/23-responsive.spec.ts`, which
+   fails the build if any control renders taller than wide again. */
 .primary-button,
 .secondary-button,
 .danger-button {
   align-items: center;
   border-radius: var(--radius-sm);
   display: inline-flex;
+  flex-shrink: 0;
   font-weight: 700;
   justify-content: center;
   line-height: 1.15;
   min-height: 44px;
-  min-width: 0;
-  overflow-wrap: anywhere;
   padding: 9px 14px;
   text-align: center;
-  white-space: normal;
+  white-space: nowrap;
 }
 
 a.primary-button,
@@ -576,9 +589,16 @@ a.danger-button {
   font-weight: 700;
 }
 
+/* The account block: theme, search, notifications, who you are, sign out.
+   `wrap` since milestone 3.8 (**D-138**). Every child here is unshrinkable at
+   its own minimum -- the chip and both ghost buttons are `nowrap` -- so the
+   block's own min-content is 483px, and below about 500px it pushed 87px past
+   the right edge and scrolled the whole page sideways. The bar above it
+   already stacks at this width; this row is the one that had nowhere to go. */
 .user-block {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
   margin-left: auto;
   position: relative;
@@ -709,9 +729,14 @@ a.danger-button {
   margin: var(--space-1) 0 0;
 }
 
+/* The screen's own controls, beside its title: the view switcher, density,
+   Create. `wrap` for the reason `.user-block` above wraps (3.8, **D-138**) --
+   a segmented control with four 64px minimums and a button beside it cannot
+   shrink, so on a narrow screen the row has to become two. */
 .page-actions {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-3);
 }
 
@@ -1176,6 +1201,48 @@ a.danger-button {
   grid-template-columns: minmax(0, 1fr);
 }
 
+/* The sidebar reads one step down (milestone 3.8).
+
+   The AI panel, the opportunity's own fields and the sharing panel share a
+   360px column, and every one of them was drawn at the scale the main column
+   uses -- so a heading wrapped, a form wrapped, and the reviewer asked for
+   "everything rendered a bit smaller so it shows cleaner layout and space
+   than everything being big and wrapped."
+
+   Scoped to the column rather than expressed as a variant of each component,
+   the way `lib/density.ts` puts row height on a root attribute rather than in
+   a prop (D-075, D-089): what changes is where these things are, not what
+   they are. 34px controls are the filter bar's own size and clear WCAG 2.2
+   AA's 24px target minimum (D-002), so this is a scale change and not an
+   accessibility one. */
+.sidebar-column {
+  font-size: var(--text-sm);
+}
+
+.sidebar-column h2,
+.sidebar-column .section-heading h3 {
+  font-size: var(--text-base);
+}
+
+.sidebar-column .primary-button,
+.sidebar-column .secondary-button,
+.sidebar-column .danger-button,
+.sidebar-column select,
+.sidebar-column input {
+  font-size: var(--text-sm);
+  min-height: 34px;
+  padding: var(--space-1) var(--space-2);
+}
+
+.sidebar-column .sharing-panel {
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+
+.sidebar-column .share-row {
+  padding: var(--space-2);
+}
+
 .empty-panel {
   align-items: center;
   display: flex;
@@ -1208,6 +1275,11 @@ a.danger-button {
   padding: 8px 12px;
 }
 
+/* A heading beside its controls. `wrap` is what the buttons' `flex-shrink: 0`
+   needs to be safe (3.8): when the two no longer fit side by side the controls
+   move to their own line, rather than the buttons giving up their width. The
+   text side is what yields first -- `min-width: 0` lets it shrink and ellipsize
+   inside its own box, which is the half of the row that can afford to. */
 .timeline-heading,
 .timeline-entry-header,
 .section-heading,
@@ -1215,8 +1287,21 @@ a.danger-button {
 .inline-actions {
   align-items: flex-start;
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   justify-content: space-between;
+}
+
+.timeline-heading > *:first-child,
+.timeline-entry-header > *:first-child,
+.section-heading > *:first-child,
+.note-header > *:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.inline-actions {
+  flex: 0 0 auto;
 }
 
 .filter-bar,
@@ -1892,6 +1977,17 @@ a.danger-button {
   font-size: var(--text-sm);
   gap: 8px;
   margin: 0;
+}
+
+/* An entry's number, quiet enough to ignore and present enough to match
+   against what the AI cites (milestone 3.8). Tabular so a column of them lines
+   up, and `--text-xs` so it reads as a reference rather than as content. Not
+   grouped with the badges below: it is text in the meta row, not a pill. */
+.entry-number {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
 }
 
 .type-badge,
@@ -2715,14 +2811,20 @@ kbd {
   padding: var(--space-3);
 }
 
+/* Previous month, the month, Next month, Today. `wrap` for the same reason as
+   `.page-actions` (3.8, **D-138**): three unshrinkable controls and a heading
+   need two rows on a phone, not four narrower buttons. */
 .calendar-toolbar {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
 }
 
 .calendar-toolbar h2 {
-  flex: 1;
+  /* `min-width: 0` so the month label is what gives room, not the controls. */
+  flex: 1 1 0;
+  min-width: 0;
   font-size: var(--text-lg);
   line-height: var(--line-lg);
   margin: 0;

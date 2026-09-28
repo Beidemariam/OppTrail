@@ -520,6 +520,14 @@ is a person meeting the screen cold.
   other than `stage`, because a stage change already writes its own system
   entry. Version 1 is excluded everywhere by the join to the preceding
   version — it is the creation baseline, not an edit (D-097).
+- **The route answers oldest-first; the reader sees newest-first** (3.8). The
+  timeline beside it defaults to newest-first (D-137), so the two histories of
+  one deal used to disagree about which end was the present. `useActivity`
+  reverses the list `fetchAll` has already read whole — the route stays
+  oldest-first because it is keyset-paginated and because an audit log is
+  oldest-first for the same reason a log file is, and reversing five merged
+  keyset queries would mean reversing each comparison as well as each
+  `ORDER BY` for a feed never read a page at a time.
 - **The id is `rank * ACTIVITY_STRIDE + source row id`**, five id spaces held
   a trillion apart, in the spirit of `search.py`'s FTS5 rowid. The rank leads
   because it is also the tie-break: every timestamp is second-resolution
@@ -901,7 +909,13 @@ SQLite itself raises on any write from that path, and it is a pragma rather than
 `mode=ro` URI because the database runs in WAL. It then assembles the full
 chronological timeline as text (`ai_service.build_timeline_context`), sends it with
 the question via `client.responses.create(..., store=False)`, and returns a string.
-No tool surface is exposed to the model, and none should be added. Both halves are
+No tool surface is exposed to the model, and none should be added. The context
+names every entry as `[Entry #<id>, <timestamp>]`, which is why a timeline card
+prints `#<id>` in its meta row since milestone 3.8: the model cited a number
+the screen did not show, so an answer referred to something the reader could
+not find. Making the model emit `?entry=` links instead (D-124's shape, which
+`app/MarkdownText.tsx` already renders as a router `Link`) is Phase 4 work,
+with the attachment citations. Both halves are
 pinned by `test_invariant_*` tests. Viewers may ask
 questions; the endpoint uses `require_opportunity_access`, not
 `require_timeline_write`.
@@ -1002,6 +1016,14 @@ the shape of that is worth knowing before adding a fifth:
   app has an opinion about row height. The control (`app/Density.tsx`) sits
   beside the view switcher and only while the table is on screen; the theme
   control stays in the top bar because it applies everywhere.
+- **The sidebar reads one step down** (3.8): `.sidebar-column` sets a smaller
+  font size and 34px controls for everything inside it — the AI panel, the
+  opportunity's own fields, the sharing panel. Scoped to the column rather than
+  made a variant of each component, the same reasoning `lib/density.ts` uses
+  for row height (D-075, D-089): what changes is where these things are, not
+  what they are. 34px is the filter bar's own control height and clears WCAG
+  2.2 AA's 24px target minimum, so this is a scale change and not an
+  accessibility one.
 - **A field is edited where it is read** (2.11): the account, value and close
   date cells, and the same fields on the opportunity's own heading, are
   `app/InlineEdit.tsx` over one declaration in `lib/domain.ts`
@@ -1302,6 +1324,24 @@ load bearing:
   fails there, naming the token, before axe renders a page. `DEFERRED_AXE_RULES`
   in `e2e/helpers.ts` is now empty, and `e2e/07-accessibility.spec.ts` audits
   every screen once per `prefers-color-scheme`.
+- **A control holds its label, and geometry is tested** (milestone 3.8,
+  **D-138**). The base button rule carried `min-width: 0` with
+  `overflow-wrap: anywhere` from the MVP, so any flex row short of room broke a
+  button's label to one character per line — `Share` at 30x106, `Delete` at
+  43x124, `New opportunity` at 42x227. It was reported at three gate reviews
+  and each report was read as a different local layout bug. The rule now says
+  `white-space: nowrap` and `flex-shrink: 0`; the rows that used to squeeze a
+  control (`.inline-actions` and the four heading rows beside it,
+  `.user-block`, `.page-actions`, `.calendar-toolbar`) wrap instead, and the
+  text half of each carries the `min-width: 0` that lets it yield. The trade is
+  deliberate: a label that cannot fit now overflows, which is visible, rather
+  than collapsing, which reads as broken — and **`e2e/23-responsive.spec.ts` is
+  what makes the trade safe.** It walks six screens at eight widths from 1440
+  to 420 and fails on any control taller than wide or any page whose
+  `body.scrollWidth` exceeds the viewport, collecting every violation rather
+  than stopping at the first. Nothing in this project measured a rendered box
+  before it, which is how a defect this visible survived three phases and two
+  gates.
 - **The theme is one attribute, resolved in JavaScript** (D-074), not a
   `prefers-color-scheme` block: a media query cannot be added to a selector list,
   so supporting an explicit choice that way would mean two copies of the dark

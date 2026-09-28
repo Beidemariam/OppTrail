@@ -63,6 +63,22 @@ describe("the timeline", () => {
     expect(screen.getByText("Agreed.")).toBeInTheDocument();
   });
 
+  it("numbers each entry, because the AI cites entries by that number", async () => {
+    // `ai_service.build_timeline_context` writes every entry as
+    // `[Entry #<id>, <timestamp>]`, so an answer says "Entry #100" — which
+    // was unfindable on screen until milestone 3.8.
+    await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [anEntry({ id: 100, title: "Discovery call" })],
+    });
+    await openTimeline("Northwind rollout");
+
+    const entry = (
+      await screen.findByRole("heading", { name: "Discovery call" })
+    ).closest("article")!;
+    expect(within(entry).getByText("#100")).toBeInTheDocument();
+  });
+
   it("opens the timeline a deep link arrived with", async () => {
     await renderDashboard(
       { opportunities: [anOpportunity()], entries: [anEntry()] },

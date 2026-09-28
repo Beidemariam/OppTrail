@@ -183,11 +183,13 @@ test("the history merges what was recorded, edited and deleted", async ({
   const dialog = await openHistory(page);
   const events = dialog.locator("li.activity-event");
   await expect(events).toHaveCount(3);
-  await expect(events.first()).toContainText(
-    `${opportunity} was created for Umbrella.`,
-  );
+  // Newest first since milestone 3.8, matching the timeline behind the dialog:
+  // the three events are read in the reverse of the order they happened.
+  await expect(events.first()).toContainText("deleted the entry");
   await expect(events.nth(1)).toContainText(
     "changed Value on this opportunity",
   );
-  await expect(events.nth(2)).toContainText("deleted the entry");
+  await expect(events.nth(2)).toContainText(
+    `${opportunity} was created for Umbrella.`,
+  );
 });

@@ -104,6 +104,14 @@ function TimelineEntryCard({
         <div className="timeline-entry-header">
           <div>
             <div className="meta-row">
+              {/* The entry's own number (milestone 3.8). The AI already cites
+                  entries this way -- `ai_service.build_timeline_context`
+                  writes every one as `[Entry #<id>, <timestamp>]` -- so
+                  without it on the card the model was naming something the
+                  reader had no way to find. Rendered quietly, and as the id
+                  rather than a per-opportunity sequence, because that is the
+                  number both the model and `?entry=` links use. */}
+              <span className="entry-number">#{entry.id}</span>
               <EntryTypeBadge type={entry.type} />
               {entry.system_generated && (
                 <span className="system-badge">System</span>

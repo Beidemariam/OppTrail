@@ -292,15 +292,27 @@ export function useMembers(opportunityId: number) {
  * dialog that shows it scrolls rather than paging. `enabled` is the dialog
  * being open, so a timeline costs no request until someone asks what
  * happened.
+ *
+ * **Newest first** since milestone 3.8, and reversed here rather than in the
+ * query: the timeline beside it defaults to newest-first (D-137), so a reader
+ * met the two histories of one deal disagreeing about which end was the
+ * present. The route stays oldest-first — it is keyset-paginated, and
+ * `AGENTS.md`'s audit log is oldest-first for the same forensic reason a log
+ * file is — so the change is one `reverse()` over a list `fetchAll` has
+ * already read to its last page. Reversing the five merged keyset queries
+ * instead would mean reversing each comparison as well as each `ORDER BY`,
+ * for a feed that is never read a page at a time.
  */
 export function useActivity(opportunityId: number, enabled: boolean) {
   return useQuery<ActivityEvent[]>({
     queryKey: keys.activity(opportunityId),
     enabled,
-    queryFn: () =>
-      fetchAll<ActivityEvent>(
+    queryFn: async () => {
+      const events = await fetchAll<ActivityEvent>(
         `/api/v2/opportunities/${opportunityId}/activity`,
-      ),
+      );
+      return events.reverse();
+    },
   });
 }
 

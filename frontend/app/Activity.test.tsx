@@ -94,7 +94,11 @@ async function editValue(to: string) {
 }
 
 describe("the activity log", () => {
-  it("reads the three mechanisms as one list of sentences", async () => {
+  it("reads the three mechanisms as one list of sentences, newest first", async () => {
+    // The route answers oldest-first, like the audit log; the reader gets the
+    // most recent event at the top, matching the timeline beside it
+    // (milestone 3.8). The fixture is in the route's order, so this asserts
+    // the reversal as well as the merge.
     await renderDashboard({
       opportunities: [anOpportunity()],
       entries: [anEntry()],
@@ -106,13 +110,13 @@ describe("the activity log", () => {
     const events = await within(dialog).findAllByRole("listitem");
 
     expect(events).toHaveLength(3);
-    expect(events[0]).toHaveTextContent(
-      "Alex Northwind rollout was created for Northwind.",
-    );
+    expect(events[0]).toHaveTextContent("Alex deleted a note");
     expect(events[1]).toHaveTextContent(
       "Blair changed Value on this opportunity",
     );
-    expect(events[2]).toHaveTextContent("Alex deleted a note");
+    expect(events[2]).toHaveTextContent(
+      "Alex Northwind rollout was created for Northwind.",
+    );
   });
 
   it("opens an edit onto what it changed", async () => {

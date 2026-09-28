@@ -66,8 +66,8 @@ export function ActivityButton({ opportunityId }: { opportunityId: number }) {
           onClose={() => setOpen(false)}
         >
           <p className="history-lead">
-            Everything that has happened to this opportunity, oldest first: what
-            the system recorded, what was edited, and what was deleted or
+            Everything that has happened to this opportunity, most recent first:
+            what the system recorded, what was edited, and what was deleted or
             restored. You see the events your role can read. An edit shows what
             it changed, and offers the version it replaced back.
           </p>

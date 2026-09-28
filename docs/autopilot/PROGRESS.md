@@ -4276,7 +4276,7 @@ disclosure.
 affordances, one grid track and two form layouts.
 
 
-### 3.8 The button rule, and the geometry nobody tests (D-138) — **OPEN**
+### 3.8 The button rule, and the geometry nobody tests (D-138) — **DONE**
 
 The 3.7 re-review passed all five checks and raised four items. One is the
 third report of a single defect, and the other three are small.
@@ -4324,6 +4324,81 @@ same-app href into a router `Link`, and `OpportunityPanel` already scrolls
 `[Entry #<id>, <timestamp>]` — which is precisely why the citations look like
 this: the model cites a number the screen never prints. So both halves are
 small, and one of them is a prompt line plus a card label.
+
+
+**What was done.** In this order, because the guard had to exist before the
+other three items landed on top of it.
+
+- [x] **The button rule, then the guard.** `globals.css`'s base
+      `.primary-button, .secondary-button, .danger-button` block now says
+      `white-space: nowrap` and `flex-shrink: 0`; `min-width: 0` and
+      `overflow-wrap: anywhere` are gone. Five rows that used to squeeze a
+      control wrap instead — `.inline-actions` and the four heading rows it
+      shares a rule with, `.user-block`, `.page-actions`,
+      `.calendar-toolbar` — and the text half of each heading row carries the
+      `min-width: 0` that lets it yield first. The trade is deliberate and
+      stated in the stylesheet: a label that cannot fit overflows, which is
+      visible, rather than collapsing into a column of characters, which reads
+      as broken.
+- [x] **`e2e/23-responsive.spec.ts`**: six screens at eight widths, failing on
+      any control taller than wide and on any page whose `body.scrollWidth`
+      exceeds the viewport. It collects every violation before asserting, so a
+      regression reports the whole list rather than the first screen the loop
+      reached. **Confirmed to fail against the unfixed stylesheet first** —
+      it reported `Columns (5)` at 44x175, `New opportunity` at 42x227, `Edit`
+      at 38x89, `Delete` at 44x106, and sideways scroll on four screens, which
+      is the reviewer's three reports enumerated by a machine.
+- [x] **Two overflow causes found by the guard and fixed**, neither of them the
+      one I would have guessed: `.user-block`'s own children never wrapped, so
+      the account block was 483px wide inside a 420px viewport even after the
+      bar above it had already stacked; and `.page-actions` held a four-segment
+      switcher at 64px minimums beside a button. The board's stage columns are
+      *not* a cause — they exceed the viewport inside `.stage-board`'s own
+      `overflow-x: auto`, which is what a kanban board should do, and the body
+      does not scroll with them.
+- [x] **The activity log reads newest-first** (`r37-01`), matching the timeline
+      beside it. Reversed in `useActivity` over the list `fetchAll` already
+      reads whole; the route stays oldest-first, because it is keyset-paginated
+      and because an audit log is oldest-first for the same reason a log file
+      is. `Activity.test.tsx` feeds the fixture in the route's order, so it
+      asserts the reversal as well as the merge.
+- [x] **The sidebar reads one step down** — `--text-sm` and 34px controls
+      scoped to `.sidebar-column`. The sharing panel is 586px tall before and
+      **504px** after at a 1440px viewport, and the heading 174px before,
+      166px after. 34px is the filter bar's own control height and clears WCAG
+      2.2 AA's 24px target minimum (D-002), so nothing about this is an
+      accessibility regression.
+- [x] **Timeline cards print `#<id>`** in their meta row. This is the half of
+      the reviewer's AI observation that is a label rather than a feature:
+      `ai_service.build_timeline_context` already writes every entry as
+      `[Entry #<id>, <timestamp>]`, so the model was citing a number the screen
+      never showed.
+
+**Two failures of my own, and what caught each.** The full suite found both, and
+they are worth recording because one of them is the kind of mistake that reaches
+production when only the happy path is checked.
+
+- The `.entry-number` rule was inserted **inside a selector list** — the
+  stylesheet had `.type-badge, .system-badge { ... }` and the new rule landed
+  between the two lines, so every entry type badge silently lost its background
+  and padding and took `--text-secondary` instead. Nothing about the page
+  looked broken in the places I was measuring; `e2e/01`'s axe scan failed on
+  `color-contrast` for `.stage_change.type-badge`, which is the check that
+  exists for exactly this. **A text edit to a stylesheet can land in the middle
+  of a rule, and the only reason it did not ship is that contrast is asserted
+  rather than eyeballed.**
+- `e2e/03-note-history.spec.ts` asserted the merged log's three events in the
+  order they happened, which the newest-first change reversed. A real
+  consequence of a real decision, updated rather than loosened.
+
+**Still Phase 4: live links in the AI's answers.** The shape exists already —
+D-124's `[title](/opportunities/1?entry=17)`, rendered as a router `Link`, with
+`?entry=` scrolled into view — so what is left is a prompt instruction and the
+verification that the model actually complies. That verification is the reason
+to wait: `tests/conftest.py`'s `no_live_network` fixture means no test may call
+the real API, and asserting a mocked answer contains links proves only that the
+mock does. It lands with the attachment citations, which have the same problem
+and the same answer.
 
 
 ### Acceptance
