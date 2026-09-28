@@ -4168,6 +4168,49 @@ milestone in the phase is done. The end-of-phase gate (`make check` in full)
 and the review packet are next session's work, per brief §3.3's one-unit-per-
 session rule.
 
+### 3.7 Rework from the Phase 3 gate review (D-136) — **OPEN**
+
+Five findings, four of them the same shape: the feature exists and the reviewer
+could not find it. Each verified against the running build before recording.
+
+- **The consolidated activity log is named "History", and that name defeats it.**
+  `ActivityDialog.tsx:52` labels the single destination `History`, so the
+  reviewer opened it expecting *version* history, concluded the per-item History
+  dialogs D-121 removed were still present, and failed check G1. Measured on the
+  shipped build: **one** History button on the page, and **five** rows carrying
+  `aria-expanded`. The consolidation did happen. Rename it **Activity**, and make
+  the expansion read as an affordance — "What changed" does not look clickable.
+- **Restore is unreachable in practice.** It works: verified by API against a
+  real ETH entry, where restoring version 1 appended version 4 and left the
+  intervening edit on record. But the control sits inside an expanded edit row
+  inside the History dialog — two levels deep behind an affordance nobody
+  recognises — so the reviewer reported *"the ability to restore isn't there at
+  all."* Surface it where a version is listed.
+- **The opportunity header is still above the timeline.** 3.1a and D-117 both
+  claimed to move it to the sidebar beneath the AI panel. Measured: the first
+  timeline entry's top edge is at **y=930** in a 1000px viewport, so the timeline
+  is below the fold — the same complaint the reviewer raised before 3.1a, now
+  raised twice. Establish what actually moved before changing anything further.
+- **The Share button is squashed.** In the sidebar the sharing panel was moved
+  into, `Share` renders **30px wide by 106px tall**, one letter per line.
+  Reproduced at a 1440px viewport and *not* at 700px or 520px, because the narrow
+  sidebar column only exists in the wide layout. D-117 moved the panel there
+  without checking it fits.
+- **The timeline order default is fragile, not wrong.** `domain.ts:252` is
+  `"desc"` and no saved views exist, yet the reviewer saw ascending as themselves
+  and descending as Gavin. Cause: a stale `timeline.order=asc` parameter in a tab
+  never signed out of, while Gavin signed in fresh. 2.9a resets view state on
+  sign-out, which does not help a reload. Decide whether a default any stale URL
+  can silently override is good enough.
+
+**The pattern worth naming:** four of the five are discoverability, not
+correctness. Every feature reported missing was present and working. That is the
+third time — the timeline order control in 2.2, the command palette in Phase 2,
+and now the whole activity-and-restore surface. A shipped feature nobody can find
+is indistinguishable from one never built, and no gate catches it, because the
+tests know where to look.
+
+
 ### Acceptance
 
 - A bullet list can be typed in a note (impossible today — single-line
