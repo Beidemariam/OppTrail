@@ -7,16 +7,23 @@ from .auth import get_current_user
 from .database import db_connection
 from .notification_service import create_notification
 from .pagination import Page, PageRequest, cursor_clause, page_params, split_page
-from .permissions import require_opportunity_access, require_opportunity_owner
+from .permissions import (
+    require_opportunity_access,
+    require_opportunity_exists,
+    require_opportunity_owner,
+)
 from .schemas import (
     AuditLogEntryPublic,
     OpportunityMemberPublic,
     ShareCreate,
     SharePublic,
     ShareUpdate,
+    WatcherPublic,
+    WatchStatus,
 )
 from .share_utils import upsert_share_row
 from .soft_delete import soft_delete_share
+from .time_utils import utc_now
 from .timeline_utils import create_system_timeline_entry
 
 router = APIRouter(prefix="/api/v2/opportunities", tags=["sharing"])
@@ -439,3 +446,117 @@ def list_audit_log_page(
 
     rows, next_cursor = split_page(rows, page.limit, lambda row: (row["created_at"], row["id"]))
     return Page(items=[audit_entry_from_row(row) for row in rows], next_cursor=next_cursor)
+
+
+def watcher_from_row(row: sqlite3.Row) -> WatcherPublic:
+    return WatcherPublic(
+        id=row["id"],
+        opportunity_id=row["opportunity_id"],
+        user_id=row["user_id"],
+        user_name=row["name"],
+        user_email=row["email"],
+        created_at=row["created_at"],
+    )
+
+
+@router.get("/{opportunity_id}/watch", response_model=WatchStatus)
+def get_watch_status(
+    opportunity_id: int,
+    user: sqlite3.Row = Depends(get_current_user),
+) -> WatchStatus:
+    """Whether the caller is watching (milestone 3.3a).
+
+    `require_opportunity_exists`, not `require_opportunity_access`: a person
+    with no share at all is exactly who this route has to answer, so it
+    cannot 404 them the way every access-gated read does (D-129).
+    """
+    with db_connection() as connection:
+        require_opportunity_exists(connection, opportunity_id)
+        row = connection.execute(
+            "SELECT 1 FROM watchers WHERE opportunity_id = ? AND user_id = ?",
+            (opportunity_id, user["id"]),
+        ).fetchone()
+    return WatchStatus(watching=row is not None)
+
+
+@router.post("/{opportunity_id}/watch", response_model=WatchStatus)
+def watch_opportunity(
+    opportunity_id: int,
+    user: sqlite3.Row = Depends(get_current_user),
+) -> WatchStatus:
+    """Follow this opportunity, shared or not (milestone 3.3a, D-129).
+
+    `docs/FEATURES.md` §7: "follow an opportunity you are not shared on."
+    Idempotent, like reacting: `INSERT OR IGNORE` against the
+    `(opportunity_id, user_id)` unique index, so watching twice is the first
+    watch repeated. Watching grants no read access of its own -- it only adds
+    the caller to `notify_shared_activity`'s recipients
+    (`notification_service.get_watcher_user_ids`).
+    """
+    with db_connection() as connection:
+        require_opportunity_exists(connection, opportunity_id)
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO watchers (opportunity_id, user_id, created_at)
+            VALUES (?, ?, ?)
+            """,
+            (opportunity_id, user["id"], utc_now()),
+        )
+        connection.commit()
+    return WatchStatus(watching=True)
+
+
+@router.delete("/{opportunity_id}/watch", response_model=WatchStatus)
+def unwatch_opportunity(
+    opportunity_id: int,
+    user: sqlite3.Row = Depends(get_current_user),
+) -> WatchStatus:
+    """Stop following. Returns the resulting state rather than 204, like the
+    reaction routes beside it -- a watch is toggle state, not content being
+    destroyed (milestone 3.3a, D-130).
+    """
+    with db_connection() as connection:
+        require_opportunity_exists(connection, opportunity_id)
+        connection.execute(
+            "DELETE FROM watchers WHERE opportunity_id = ? AND user_id = ?",
+            (opportunity_id, user["id"]),
+        )
+        connection.commit()
+    return WatchStatus(watching=False)
+
+
+@router.get("/{opportunity_id}/watchers", response_model=Page[WatcherPublic])
+def list_watchers_page(
+    opportunity_id: int,
+    page: PageRequest = Depends(page_params),
+    user: sqlite3.Row = Depends(get_current_user),
+) -> Page[WatcherPublic]:
+    """Who is following this deal -- owner-only, the same visibility rule as
+    `GET .../shares` (milestone 3.3a): both name people with a relationship
+    to the opportunity that is nobody else's business to read.
+    """
+    continuation, cursor_values = cursor_clause(
+        page,
+        "watchers.created_at",
+        "watchers.id",
+        descending=False,
+    )
+    params: list[object] = [opportunity_id, *cursor_values, page.limit + 1]
+
+    with db_connection() as connection:
+        require_opportunity_owner(connection, opportunity_id, int(user["id"]))
+        rows = connection.execute(
+            f"""
+            SELECT watchers.*, users.name, users.email
+            FROM watchers
+            JOIN users ON users.id = watchers.user_id
+            WHERE watchers.opportunity_id = ?
+            {f"AND {continuation}" if continuation else ""}
+            ORDER BY watchers.created_at ASC, watchers.id ASC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+
+    rows, next_cursor = split_page(rows, page.limit, lambda row: (row["created_at"], row["id"]))
+    return Page(items=[watcher_from_row(row) for row in rows], next_cursor=next_cursor)

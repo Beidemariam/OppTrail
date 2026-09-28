@@ -1266,6 +1266,28 @@ a.danger-button {
   margin: 3px 0 0;
 }
 
+/* Who is following this deal (milestone 3.3a) -- read-only, unlike the share
+   list above it: watching carries no role to change and no access to
+   revoke. */
+.watcher-list {
+  display: grid;
+  gap: 8px;
+  margin-top: var(--space-3);
+}
+
+.watcher-row {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 10px;
+}
+
+.watcher-row p {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  margin: 3px 0 0;
+}
+
 .ai-sidebar {
   background: var(--bg-app);
   border: 1px solid var(--border-strong);
@@ -1965,6 +1987,57 @@ a.danger-button {
   gap: 8px;
   margin-left: 12px;
   padding-left: 12px;
+}
+
+/* Reactions on a comment or reply (milestone 3.3a): the emoji already in use
+   as toggleable pills, plus a React trigger that reveals the fixed set
+   (progressive disclosure, same reasoning as the composer's own controls). */
+.reaction-bar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+  position: relative;
+}
+
+.reaction-pill {
+  align-items: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  color: var(--text-primary);
+  display: inline-flex;
+  font-size: var(--text-sm);
+  gap: var(--space-1);
+  line-height: 1;
+  padding: var(--space-1) var(--space-2);
+}
+
+.reaction-pill.is-mine {
+  background: var(--bg-sunken);
+  border-color: var(--fill-accent);
+}
+
+.reaction-pill:disabled {
+  cursor: default;
+}
+
+.reaction-picker-trigger {
+  position: relative;
+}
+
+.reaction-picker {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-overlay);
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  z-index: 1;
 }
 
 .search-form {

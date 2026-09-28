@@ -3200,7 +3200,7 @@ each other.
       which is the lesson 3.1b paid for. Nothing leaves Phase 3 — the other
       half is 3.3a below, and the phase cannot reach `AWAITING_REVIEW`
       without it.
-- [ ] 3.3a Reactions and watchers (**D-126**), the other half of the
+- [x] 3.3a Reactions and watchers (**D-126**), the other half of the
       roadmap's 3.3. New `reactions` and `watchers` tables. Watchers carry a
       permission question of their own: `docs/FEATURES.md` §7 says "follow an
       opportunity you are not shared on", and in this app absence of access
@@ -3781,6 +3781,121 @@ two new routes.
 
 Gate: `make check` green in the sandbox, Docker half deferred to the host per
 the split gate. Figures in `COVERAGE.md`.
+
+### 3.3a Reactions and watchers (D-126) — **DONE**
+
+The other half of the roadmap's single "threaded comments with reactions,
+resolve/unresolve, watchers" line, split off by 3.3 (**D-126**). Two new
+tables, unrelated to each other beyond both being toggle state rather than
+content — revision `20260925_0008_reactions_watchers`.
+
+- [x] **Reactions.** One row per (comment, person, emoji) against the fixed
+      seven-item GitHub-style set. `INSERT OR IGNORE` on the unique
+      `(comment_id, user_id, emoji)` index makes reacting twice a no-op, so
+      the routes are 200, not 201/409. Any role that may write the timeline
+      may react — unlike resolve, this is not the author-or-owner rule,
+      because a reaction changes nothing about what anyone wrote. Attaches to
+      a thread root or a reply alike, read back on every comment via one
+      `reactions_by_comment_id` query per page (the same shape
+      `entries_with_notes` already uses for notes and comments), so a page of
+      entries costs one more query rather than one per comment.
+- [x] **Watchers, and the one deliberate access exception** (**D-129**).
+      `docs/FEATURES.md` §7: "follow an opportunity you are not shared on." Every
+      other opportunity-scoped route resolves a role and 404s an outsider so
+      existence never leaks; watching cannot go through that gate, because
+      being reachable by someone the access model would otherwise turn away is
+      the whole point. `require_opportunity_exists` — presence only, no role —
+      is the new, narrowly-scoped exception, used by nothing else. Watching
+      grants no read access of its own: it only adds the caller to
+      `notify_shared_activity`'s recipients (`get_watcher_user_ids`, unioned
+      with the accessible set) and appears on `GET .../watchers`, which stays
+      owner-only like the share list beside it — the one-way exception does not
+      widen who may read the *result* of watching.
+- [x] **Neither table is soft-deleted** (**D-130**). A reaction or a watch is
+      "I am currently doing this," not a record worth a history — the same
+      reasoning `soft_delete.py` already applies to `sessions`. Both routes
+      write ordinary `DELETE FROM`, and `test_soft_delete.py`'s hard-delete
+      scanner is expected to leave `reactions` and `watchers` alone. Removing a
+      reaction or unwatching returns the resulting state (200 with
+      `{watching: bool}` or the comment's remaining `reactions`) rather than
+      204 — unlike `delete_comment` or removing a share, there is a remaining
+      state left to describe, and the caller needs it immediately to update
+      the toggle without a second request.
+- [x] **The frontend.** `ReactionBar` (`app/CommentThread.tsx`) shows the
+      emoji already in use as toggleable count pills, with a "React" trigger
+      that reveals the fixed set behind progressive disclosure — never all
+      seven up front. `WatchToggle` (`app/OpportunityPanel.tsx`) is reachable
+      from the "This opportunity is not available." screen itself, which is
+      the one place watching-with-no-access has anywhere to render; there is
+      no separate discovery UI, so a colleague names the id out of band.
+      `SharingPanel` gains a read-only "Watching" list, rendered only when
+      non-empty so an opportunity nobody follows shows no new noise.
+- [x] **Tests.** Backend: `tests/test_reactions.py` (7 — idempotence on both
+      directions, one person with more than one emoji, two people with the
+      same emoji both counting, viewer refused, reacting to an
+      unknown/deleted comment, an unrecognized emoji rejected) and
+      `tests/test_watchers.py` (7 — available with no share at all and
+      grants none, idempotent watch/unwatch, a deleted or unknown opportunity
+      404s every `.../watch` route, the watchers list is owner-only, a
+      watcher who is not shared still gets `shared_activity` notifications,
+      watching does not widen the member list or the mention autocomplete),
+      plus 6 new authorization-matrix entries (68 endpoints, up from 62) and
+      2 new seed-tour assertions. Frontend:
+      `app/CommentThread.test.tsx` gained 3 cases (reacting and seeing the
+      count, removing the caller's own reaction on a second click, a reply's
+      reactions rendered without an offer to react on a read-only view).
+      E2E: `e2e/21-reactions-watchers.spec.ts` — react on a real comment,
+      withdraw it, then a second signed-in user with no share follows the
+      same opportunity from its own "not available" screen, still cannot
+      read it, and the owner sees them on the watchers list; axe-clean on
+      both the reacted-to comment and the not-available screen with the
+      watch toggle on it.
+- [x] **A pre-existing frontend test-fixture bug, found and fixed while
+      verifying this milestone's own gate.** `CommentThread.test.tsx`'s
+      `threadedTimeline()` helper shallow-spread the file's module-level
+      `question` object, so every call that did not override `replies`
+      shared the exact same array reference as `question.replies`. The fake
+      API mutates a thread's `replies` in place on a reply post
+      (`test-api.ts`'s `parent.replies.push`), which permanently leaked a
+      reply from the "posts a reply..." test into every later test in the
+      file that opened a thread without its own `replies` override — inert
+      until a test happened to assert on the exact count of something the
+      leaked reply also rendered, which this milestone's `getByRole("button",
+      { name: "React" })` was the first to do. Confirmed by running the
+      failing test in isolation (passes) versus the whole file (fails
+      identically on every run) and by dumping the rendered DOM, which showed
+      a second, un-requested reply rendered under the thread. Fixed at the
+      source: `threadedTimeline` now seeds fresh `replies`/`reactions` arrays
+      unless an override supplies its own (brief §6.5 — root cause, not a
+      weakened assertion; the new reaction test's selector was correct and
+      the fixture was wrong).
+- [x] **Docs.** `CLAUDE.md` gains a new "Reactions and watchers" subsection
+      beside "Threaded comments"; `make seed` gains a tour paragraph.
+- [x] **Decisions** — **D-129** (the one access exception, and what it
+      does and does not leak), **D-130** (hard-delete over soft-delete for a
+      toggle, and returning state over 204).
+
+Gate: `make check-fast` green in the sandbox (ruff, ruff format, mypy,
+`tsc --noEmit`, eslint, prettier, backend pytest with coverage,
+frontend vitest with coverage, generated-client check). The full Playwright
+suite (67 specs, including the two new ones) was also run directly in this
+sandbox and passed — E2E does not need the Docker socket `make check-fast`
+lacks, only the Docker build and smoke test do (brief §3.4's split gate).
+Docker build + in-image test + smoke test remain deferred to the host's
+`scripts/autopilot-gate.sh 3`. Figures in `COVERAGE.md`.
+
+Work log: this milestone's backend and frontend implementation (schema,
+routes, schemas, notification union, soft-delete exclusion, frontend
+components and query hooks, and both new backend test files) already existed
+uncommitted in the working tree at the start of this session — substantially
+complete and consistent with the codebase's established conventions, but
+never run through the gate or logged. This session: read the diff in full
+against the running code rather than trusting it as-is, ran the full backend
+suite (443 passed) and `make check-fast` (green), found and fixed the
+CommentThread test-fixture bug above, wrote and verified the missing E2E
+spec, logged D-129 and D-130 (present only as inline code comments before
+this session), completed this PROGRESS.md section, and updated
+`COVERAGE.md`.
 
 ### Acceptance
 

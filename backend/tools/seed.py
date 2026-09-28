@@ -142,6 +142,20 @@ def resolve_thread(session: Session, comment_id: int) -> None:
     )
 
 
+def react(session: Session, comment_id: int, emoji: str) -> None:
+    check(
+        session.client.post(f"/api/v2/comments/{comment_id}/reactions", json={"emoji": emoji}),
+        f"reacting to comment {comment_id}",
+    )
+
+
+def watch(session: Session, opportunity_id: int) -> None:
+    check(
+        session.client.post(f"/api/v2/opportunities/{opportunity_id}/watch"),
+        f"watching opportunity {opportunity_id}",
+    )
+
+
 def share(session: Session, opportunity_id: int, email: str, role: str) -> None:
     check(
         session.client.post(
@@ -198,7 +212,10 @@ def seed() -> None:
     alex = sign_up(*USERS[0])
     blair = sign_up(*USERS[1])
     casey = sign_up(*USERS[2])
-    sign_up(*USERS[3])  # Dana has access to nothing: the negative case, by hand.
+    # Dana has access to nothing: the negative case, by hand. Milestone 3.3a
+    # gives her one exception -- watching Northwind below, which is reachable
+    # with no share at all (`docs/FEATURES.md` §7).
+    dana = sign_up(*USERS[3])
 
     # 1. The fully populated opportunity: every entry type, both share roles,
     #    an edited note, a threaded comment, and a mention notification.
@@ -267,6 +284,17 @@ def seed() -> None:
     )
     resolve_thread(alex, permissions_question)
     add_comment(blair, demo_note, "Still open: who signs off on the pilot clause?")
+
+    # Milestone 3.3a: reactions read as toggle state on a comment. Casey is a
+    # viewer here and cannot react (require_timeline_write), so it is Alex and
+    # Blair who do: both thumbs-up the same comment, and Blair also adds eyes
+    # -- one person, two emoji. Dana -- shared on nothing -- follows Northwind
+    # anyway, which is the capability `FEATURES.md` §7 names and the rest of
+    # the tour's access checks deliberately do not grant her.
+    react(alex, permissions_question, "👍")
+    react(blair, permissions_question, "👍")
+    react(blair, permissions_question, "👀")
+    watch(dana, northwind)
 
     proposal = add_entry(
         alex,
@@ -636,7 +664,23 @@ def main(argv: list[str] | None = None) -> int:
         "  purpose. Sign in as Blair and Resolve is offered on their own\n"
         "  thread but not on Alex's, which is the author-or-owner rule the\n"
         "  rest of the timeline already uses; Casey, a viewer, is offered\n"
-        "  neither Reply nor Resolve."
+        "  neither Reply nor Resolve.\n"
+        "\n"
+        "  Reactions and watchers (milestone 3.3a) are the other half of the\n"
+        "  roadmap's line 3.3 split off. Alex's resolved permissions question\n"
+        "  carries a thumbs-up from Alex and Blair, plus an eyes reaction from\n"
+        "  Blair - GET /api/v2/notes/.../comments returns them on the comment\n"
+        "  they belong to, root or reply alike, and reacting twice with the\n"
+        "  same emoji is a no-op rather than a second row. Casey, a viewer,\n"
+        "  cannot react at all - the same require_timeline_write rule that\n"
+        "  keeps them from writing anything else. Dana, shared on nothing,\n"
+        "  follows Northwind anyway - POST /api/v2/opportunities/1/watch\n"
+        "  answers 200 for her the way it does for anyone signed in, which is\n"
+        '  `FEATURES.md` §7\'s "follow an opportunity you are not shared on";\n'
+        "  she still gets 404 reading\n"
+        "  Northwind itself, since watching grants no access. Sign in as Alex\n"
+        "  and GET /api/v2/opportunities/1/watchers - owner-only, like the\n"
+        "  share list beside it - names Dana as the one watcher."
     )
     return 0
 

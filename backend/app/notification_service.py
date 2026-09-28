@@ -142,6 +142,21 @@ def notify_mentions(
         )
 
 
+def get_watcher_user_ids(
+    connection: sqlite3.Connection,
+    opportunity_id: int,
+) -> set[int]:
+    """Everyone following this opportunity (milestone 3.3a), shared on it or
+    not -- `docs/FEATURES.md` §7's "follow an opportunity you are not shared
+    on" is exactly the set `get_accessible_user_ids` cannot include.
+    """
+    rows = connection.execute(
+        "SELECT user_id FROM watchers WHERE opportunity_id = ?",
+        (opportunity_id,),
+    ).fetchall()
+    return {int(row["user_id"]) for row in rows}
+
+
 def notify_shared_activity(
     connection: sqlite3.Connection,
     opportunity_id: int,
@@ -150,7 +165,14 @@ def notify_shared_activity(
     source_id: int,
     title: str,
 ) -> None:
-    for user_id in get_accessible_user_ids(connection, opportunity_id):
+    """Every accessible user, plus every watcher (milestone 3.3a) -- the
+    union is what makes watching without a share notify at all: a watcher is
+    additive to who already gets told, never a narrower filter over them.
+    """
+    recipients = get_accessible_user_ids(connection, opportunity_id) | get_watcher_user_ids(
+        connection, opportunity_id
+    )
+    for user_id in recipients:
         if user_id == actor_id:
             continue
         create_notification(

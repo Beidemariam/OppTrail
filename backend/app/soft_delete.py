@@ -24,6 +24,11 @@ from .time_utils import utc_now
 # Tables holding user data, which is soft-deleted and never removed.
 # `sessions` is deliberately absent: a session is ephemeral authentication
 # state, not user content, and logging out really does delete the row.
+# `reactions` and `watchers` (milestone 3.3a) are absent for the same reason:
+# each row is "I am currently reacting/watching", toggle state a person sets
+# and unsets, not content whose history is worth keeping (D-130). Their
+# routes (`routes_timeline.py`, `routes_sharing.py`) do write ordinary
+# `DELETE FROM` against them.
 USER_DATA_TABLES = (
     "users",
     "opportunities",

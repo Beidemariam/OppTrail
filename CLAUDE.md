@@ -634,6 +634,48 @@ over. Revision `20260924_0007_comment_threads` adds three columns to
   reopening. Resolve is not optimistic (`useResolveThread`): what the reader
   is shown is a name the cache does not hold.
 
+### Reactions and watchers
+
+Milestone 3.3a, the other half of the roadmap's single "threaded comments
+with reactions ... watchers" line that 3.3 split off (**D-126**). Two new
+tables from revision `20260925_0008_reactions_watchers`, unrelated to each
+other beyond both being toggle state rather than content.
+
+- **A reaction** is one row per (comment, person, emoji) against a fixed
+  seven-item set, attaching to a thread root or a reply alike.
+  `INSERT OR IGNORE` on the `(comment_id, user_id, emoji)` unique index makes
+  reacting twice a no-op, so both routes answer 200. Any role that may write
+  the timeline may react — unlike resolve this is not the author-or-owner
+  rule (D-005), because a reaction changes nothing about what anyone wrote.
+- **A watcher is the one deliberate exception to "absence of access is a
+  404"** (**D-129**). `docs/FEATURES.md` §7 names "follow an opportunity you
+  are not shared on," which the ordinary role-resolving gate cannot answer —
+  it would 404 exactly the caller the feature exists for. The three
+  `.../watch` routes and nothing else use `require_opportunity_exists`
+  (`permissions.py`) — presence only, no role — so any authenticated caller
+  learns whether an id is live, and nothing more: watching grants no read
+  access, and `GET .../watchers` (who is watching) stays owner-only through
+  the ordinary `require_opportunity_owner`, the same visibility rule as the
+  share list beside it. A watcher is unioned into `notify_shared_activity`'s
+  recipients (`notification_service.get_watcher_user_ids`), additive to
+  whoever already gets told, never a narrower filter over them.
+- **Neither table is soft-deleted** (**D-130**). A reaction or a watch is "I
+  am currently doing this," toggle state a person sets and unsets, the same
+  reasoning `soft_delete.py` already applies to `sessions` — not content
+  whose history is worth keeping. Both routes write ordinary `DELETE FROM`,
+  and `tests/test_soft_delete.py`'s hard-delete scanner is expected to leave
+  `reactions` and `watchers` alone. Removing a reaction or unwatching returns
+  the resulting state (200, not 204) — unlike `delete_comment` or removing a
+  share, there is a remaining state (a count, a boolean) the caller needs
+  immediately to settle the toggle in the UI.
+- **The frontend.** `ReactionBar` (`app/CommentThread.tsx`) shows the emoji
+  already in use as count pills, with a "React" trigger revealing the fixed
+  set behind progressive disclosure. `WatchToggle` (`app/OpportunityPanel.tsx`)
+  is reachable from the "This opportunity is not available." screen itself —
+  the one place watching-with-no-access has anywhere to render, since there
+  is no separate discovery UI for a deal's id. `SharingPanel` gains a
+  read-only "Watching" list, shown only when non-empty.
+
 ### Editing where content is read
 
 `AGENTS.md` v2 scope item 12 — "content is edited where it is read, not in a

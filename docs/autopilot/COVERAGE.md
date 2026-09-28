@@ -1954,3 +1954,82 @@ Coverage floors (brief §6.2) all met. New decisions: D-126 (splitting the
 roadmap's 3.3, with reactions and watchers left as 3.3a inside this phase),
 D-127 (one level of threading, enforced in the route), D-128 (who may
 resolve, and that it is recorded on the thread rather than in the audit log).
+
+## Phase 3 — milestone 3.3a (reactions and watchers, D-126)
+
+The other half of 3.3's split. Two new tables, six new routes across two
+routers, one new permission function that is a deliberate exception to every
+other one in the module.
+
+```
+backend:  443 passed (up from 423), 97.73% (pytest-cov's `--cov-branch`
+          combined statement+branch figure) — cov-fail-under=90 comfortably
+          cleared. New tests: tests/test_reactions.py (7),
+          tests/test_watchers.py (7).
+          Modules this milestone touched: permissions.py 100% branch
+          (require_opportunity_exists's only branch, the 404, is exercised by
+          test_watch_routes_404_a_deleted_or_unknown_opportunity),
+          soft_delete.py 100% (unchanged — reactions/watchers are
+          deliberately absent from USER_DATA_TABLES, so there is no new
+          branch to cover, only the absence to assert, which
+          test_soft_delete.py's table-list scan already does), routes_sharing.py
+          95%, routes_timeline.py 96%, notification_service.py 97%,
+          schemas.py 99%.
+frontend: 522 passed (up from 519), 97.06% statements / 91.38% branch /
+          95.64% functions / 97.02% lines — all four above
+          vitest.config.ts's thresholds (96 / 90 / 95 / 96), which were not
+          touched. `app/CommentThread.tsx` (ReactionBar folded in) is 100%
+          line / 90.69% branch.
+contract: scripts/generate-api-client.sh --check               up to date
+          (regenerated: ReactionPublic, ReactionCreate, ReactionEmoji,
+          CommentPublic.reactions, WatcherPublic, WatchStatus)
+e2e:      67 passed (from 66), axe clean — e2e/21-reactions-watchers.spec.ts
+          is new: reacting and withdrawing a reaction on a real comment
+          (audited), and a second user with no share following the
+          opportunity from its own "not available" screen, still unable to
+          read it, then showing up on the owner's watchers list (audited
+          again on the not-available screen with the watch toggle live on
+          it).
+audits:   not re-run this milestone (no dependency was added — two tables and
+          six routes over the existing stack); still clean as of 3.3.
+docker:   deferred to the host half — scripts/autopilot-gate.sh 3
+          (no Docker socket in this sandbox, per sandbox/README.md)
+```
+
+Authorization-matrix endpoints: 68, up from 62 — the three `.../watch`
+routes (`authenticated_only(200)`, per D-129: any signed-in caller, not a
+scoped role), `GET .../watchers` (`scoped(viewer=403, editor=403,
+owner=200)`, owner-only like the share list), and the two reaction routes
+(`scoped(viewer=403, editor=200, owner=200)`, any role that may write the
+timeline).
+
+One note on what the backend implementation and its tests were doing before
+this session touched them: the routes, schema, migration, and both new test
+files existed uncommitted in the working tree already, apparently written in
+full but never run through the gate or logged in the state files. This
+session verified them against the running app rather than assuming they
+were correct — full backend suite, `make check-fast`, and the full Playwright
+suite were all run fresh — and found one real defect, in a test fixture
+rather than in application code:
+
+- **`app/CommentThread.test.tsx`'s `threadedTimeline()` helper shared a
+  mutable array across tests.** It shallow-spread the file's module-level
+  `question` object, so any call that did not override `replies` pointed at
+  the exact same array as `question.replies`. `test-api.ts`'s fake reply-post
+  handler mutates a thread's `replies` in place (`parent.replies.push`),
+  which silently leaked a reply from one test into every later test in the
+  file that opened a thread without its own `replies` override. It was inert
+  until a test's assertion happened to be sensitive to the exact element
+  count the leaked reply also affected — this milestone's `getByRole("button",
+  { name: "React" })` (ambiguous with two threads, one real and one leaked)
+  was the first. Confirmed by running the failing test alone (passes) against
+  the whole file (fails identically every time) and by dumping the rendered
+  DOM. Fixed at the source — `threadedTimeline` now seeds fresh
+  `replies`/`reactions` arrays unless an override supplies its own — rather
+  than adjusting the new test's selector, per brief §6.5's root-cause rule.
+
+Coverage floors (brief §6.2) all met. New decisions: D-129 (the one
+existence-only exception to the access gate, scoped to watching and nothing
+else), D-130 (reactions and watchers are hard-deleted like `sessions`, not
+soft-deleted, and both toggle routes return the resulting state rather than
+204).

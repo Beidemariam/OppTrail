@@ -29,6 +29,7 @@ import type {
   OpportunityMember,
   OpportunityShare,
   OpportunityVersion,
+  ReactionEmoji,
   SavedView,
   SavedViewEntity,
   ShareRole,
@@ -36,6 +37,7 @@ import type {
   TimelineEntryVersion,
   TimelineFilters,
   User,
+  Watcher,
 } from "./domain";
 import { localInputToUtc } from "./time";
 
@@ -45,6 +47,7 @@ type AiAskResponse = components["schemas"]["AiAskResponse"];
 type SavedViewPage = components["schemas"]["Page_SavedViewPublic_"];
 type SavedViewCreate = components["schemas"]["SavedViewCreate"];
 type SavedViewUpdate = components["schemas"]["SavedViewUpdate"];
+type WatchStatus = components["schemas"]["WatchStatus"];
 
 const NOTIFICATION_PAGE_SIZE = 50;
 const SAVED_VIEW_PAGE_SIZE = 100;
@@ -143,6 +146,12 @@ export const keys = {
   aiConversation: (opportunityId: number) =>
     ["ai-conversation", opportunityId] as const,
   savedViews: (entity: SavedViewEntity) => ["saved-views", entity] as const,
+  /** Whether the caller is watching one opportunity (milestone 3.3a) --
+   * separate from `shares` because it needs no access to read: watching is
+   * available with no share at all (D-129). */
+  watch: (opportunityId: number) => ["watch", opportunityId] as const,
+  /** Who is watching, owner-only (milestone 3.3a). */
+  watchers: (opportunityId: number) => ["watchers", opportunityId] as const,
 };
 
 export function timelinePath(
@@ -205,6 +214,55 @@ export function useShares(opportunityId: number, enabled: boolean) {
     queryFn: () =>
       fetchAll<OpportunityShare>(
         `/api/v2/opportunities/${opportunityId}/shares`,
+      ),
+  });
+}
+
+/**
+ * Whether the caller is watching this opportunity (milestone 3.3a).
+ *
+ * Reads `require_opportunity_exists` rather than `require_opportunity_access`
+ * on the server (D-129), so it succeeds even where `useShares` above would
+ * 404 -- which is what lets `OpportunityPanel` offer a Watch toggle on the
+ * "not available" screen for a deal the reader has no share on at all.
+ */
+export function useWatchStatus(opportunityId: number, enabled: boolean) {
+  return useQuery<WatchStatus>({
+    queryKey: keys.watch(opportunityId),
+    enabled,
+    queryFn: () =>
+      apiRequest<WatchStatus>(`/api/v2/opportunities/${opportunityId}/watch`),
+  });
+}
+
+/** Who is following this opportunity, owner-only (milestone 3.3a) -- the
+ * same visibility rule as `useShares`. */
+export function useWatchers(opportunityId: number, enabled: boolean) {
+  return useQuery<Watcher[]>({
+    queryKey: keys.watchers(opportunityId),
+    enabled,
+    queryFn: () =>
+      fetchAll<Watcher>(`/api/v2/opportunities/${opportunityId}/watchers`),
+  });
+}
+
+/**
+ * Follow or unfollow (milestone 3.3a). One mutation with a `watching` flag,
+ * like `useSetReaction` above -- both directions are idempotent on the
+ * server, and the response is the resulting state.
+ */
+export function useSetWatch(opportunityId: number) {
+  const client = useQueryClient();
+  return useMutation<WatchStatus, Error, boolean>({
+    mutationFn: (watching) =>
+      apiRequest(`/api/v2/opportunities/${opportunityId}/watch`, {
+        method: watching ? "POST" : "DELETE",
+      }),
+    onSuccess: () =>
+      invalidate(
+        client,
+        keys.watch(opportunityId),
+        keys.watchers(opportunityId),
       ),
   });
 }
@@ -927,6 +985,35 @@ export function useResolveThread() {
       apiRequest(
         `/api/v2/comments/${commentId}/${resolved ? "resolve" : "unresolve"}`,
         { method: "POST" },
+      ),
+  );
+}
+
+/**
+ * React to a comment or reply, or withdraw the caller's own reaction
+ * (milestone 3.3a). Idempotent on the server either way, so this is one
+ * mutation with a `reacted` flag rather than two -- a toggle, like
+ * `useResolveThread` beside it. Not optimistic: the response carries the
+ * comment's full reaction list, which is what a like-count control has to
+ * show correctly the moment it settles.
+ */
+export function useSetReaction() {
+  return useTimelineWrite(
+    ({
+      commentId,
+      emoji,
+      reacted,
+    }: {
+      commentId: number;
+      emoji: ReactionEmoji;
+      reacted: boolean;
+    }) =>
+      apiRequest(
+        `/api/v2/comments/${commentId}/reactions${reacted ? "" : `/${encodeURIComponent(emoji)}`}`,
+        {
+          method: reacted ? "POST" : "DELETE",
+          body: reacted ? JSON.stringify({ emoji }) : undefined,
+        },
       ),
   );
 }

@@ -2,10 +2,112 @@
 
 import { useState } from "react";
 
-import type { Access, CommentThread as Thread } from "../lib/domain";
-import { useAddComment, useResolveThread } from "../lib/queries";
+import {
+  reactionEmoji,
+  type Access,
+  type Comment,
+  type CommentThread as Thread,
+} from "../lib/domain";
+import {
+  useAddComment,
+  useResolveThread,
+  useSession,
+  useSetReaction,
+} from "../lib/queries";
 import { MarkdownText } from "./MarkdownText";
 import { Composer } from "./RichTextEditor";
+
+/**
+ * The reactions on one comment or reply (milestone 3.3a): the emoji already
+ * used, as toggleable pills, plus -- progressive disclosure, like the
+ * composer's own controls -- a React trigger that reveals the fixed seven-item
+ * set (`lib/domain.ts`'s `reactionEmoji`) rather than showing all seven on
+ * every comment.
+ */
+function ReactionBar({
+  commentId,
+  reactions,
+  canReact,
+}: {
+  commentId: number;
+  reactions: Comment["reactions"];
+  canReact: boolean;
+}) {
+  const session = useSession();
+  const setReaction = useSetReaction();
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const userId = session.data?.id;
+
+  const used = reactionEmoji
+    .map((emoji) => ({
+      emoji,
+      count: reactions.filter((reaction) => reaction.emoji === emoji).length,
+      mine: reactions.some(
+        (reaction) => reaction.emoji === emoji && reaction.user_id === userId,
+      ),
+    }))
+    .filter((entry) => entry.count > 0);
+
+  if (!canReact && used.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="reaction-bar">
+      {used.map(({ emoji, count, mine }) => (
+        <button
+          key={emoji}
+          type="button"
+          className={`reaction-pill${mine ? " is-mine" : ""}`}
+          aria-pressed={mine}
+          aria-label={
+            mine ? `Remove your ${emoji} reaction` : `React with ${emoji}`
+          }
+          disabled={!canReact}
+          onClick={() =>
+            setReaction.mutate({ commentId, emoji, reacted: !mine })
+          }
+        >
+          {emoji} {count}
+        </button>
+      ))}
+      {canReact && (
+        <div className="reaction-picker-trigger">
+          <button
+            type="button"
+            className="secondary-button compact"
+            aria-expanded={pickerOpen}
+            onClick={() => setPickerOpen((open) => !open)}
+          >
+            React
+          </button>
+          {pickerOpen && (
+            <div
+              className="reaction-picker"
+              role="group"
+              aria-label="Choose a reaction"
+            >
+              {reactionEmoji.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  className="reaction-pill"
+                  aria-label={`React with ${emoji}`}
+                  onClick={() => {
+                    setReaction.mutate({ commentId, emoji, reacted: true });
+                    setPickerOpen(false);
+                  }}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
  * One discussion on a note: the comment that opened it, the answers under it,
@@ -83,6 +185,11 @@ export function CommentThread({
         <div>
           <strong>{thread.author_name}</strong>
           <MarkdownText content={thread.body} />
+          <ReactionBar
+            commentId={thread.id}
+            reactions={thread.reactions}
+            canReact={access.canWriteTimeline}
+          />
         </div>
         <div className="inline-actions">
           {canManageThread && (
@@ -118,6 +225,11 @@ export function CommentThread({
               <div>
                 <strong>{reply.author_name}</strong>
                 <MarkdownText content={reply.body} />
+                <ReactionBar
+                  commentId={reply.id}
+                  reactions={reply.reactions}
+                  canReact={access.canWriteTimeline}
+                />
               </div>
               {access.canChangeItem(reply.created_by) && (
                 <button

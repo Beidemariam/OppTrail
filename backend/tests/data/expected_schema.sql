@@ -138,6 +138,18 @@ CREATE TABLE opportunity_versions (
     UNIQUE (opportunity_id, version_number)
 );
 
+-- Milestone 3.3a (revision 0008): neither table is in
+-- `app.soft_delete.USER_DATA_TABLES` -- a reaction and a watcher are toggle
+-- state, hard-deleted like `sessions`, not soft-deleted content (D-130).
+CREATE TABLE reactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    comment_id INTEGER NOT NULL REFERENCES comments(id),
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    emoji TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    UNIQUE (comment_id, user_id, emoji)
+);
+
 CREATE TABLE saved_views (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     created_by INTEGER NOT NULL REFERENCES users(id),
@@ -191,6 +203,14 @@ CREATE TABLE timeline_entry_versions (
     edited_by INTEGER NOT NULL REFERENCES users(id),
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     UNIQUE (entry_id, version_number)
+);
+
+CREATE TABLE watchers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    opportunity_id INTEGER NOT NULL REFERENCES opportunities(id),
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    UNIQUE (opportunity_id, user_id)
 );
 
 CREATE TABLE users (

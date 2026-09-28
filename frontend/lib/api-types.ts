@@ -401,6 +401,69 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/opportunities/{opportunity_id}/watch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Watch Status
+         * @description Whether the caller is watching (milestone 3.3a).
+         *
+         *     `require_opportunity_exists`, not `require_opportunity_access`: a person
+         *     with no share at all is exactly who this route has to answer, so it
+         *     cannot 404 them the way every access-gated read does (D-129).
+         */
+        get: operations["get_watch_status_api_v2_opportunities__opportunity_id__watch_get"];
+        put?: never;
+        /**
+         * Watch Opportunity
+         * @description Follow this opportunity, shared or not (milestone 3.3a, D-129).
+         *
+         *     `docs/FEATURES.md` §7: "follow an opportunity you are not shared on."
+         *     Idempotent, like reacting: `INSERT OR IGNORE` against the
+         *     `(opportunity_id, user_id)` unique index, so watching twice is the first
+         *     watch repeated. Watching grants no read access of its own -- it only adds
+         *     the caller to `notify_shared_activity`'s recipients
+         *     (`notification_service.get_watcher_user_ids`).
+         */
+        post: operations["watch_opportunity_api_v2_opportunities__opportunity_id__watch_post"];
+        /**
+         * Unwatch Opportunity
+         * @description Stop following. Returns the resulting state rather than 204, like the
+         *     reaction routes beside it -- a watch is toggle state, not content being
+         *     destroyed (milestone 3.3a, D-130).
+         */
+        delete: operations["unwatch_opportunity_api_v2_opportunities__opportunity_id__watch_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/opportunities/{opportunity_id}/watchers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Watchers Page
+         * @description Who is following this deal -- owner-only, the same visibility rule as
+         *     `GET .../shares` (milestone 3.3a): both name people with a relationship
+         *     to the opportunity that is nobody else's business to read.
+         */
+        get: operations["list_watchers_page_api_v2_opportunities__opportunity_id__watchers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/opportunities/{opportunity_id}/timeline": {
         parameters: {
             query?: never;
@@ -744,6 +807,61 @@ export interface paths {
         /** Unresolve Comment */
         post: operations["unresolve_comment_api_v2_comments__comment_id__unresolve_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/comments/{comment_id}/reactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Reaction
+         * @description React to a comment or reply, thread root or answer alike (milestone
+         *     3.3a, D-130).
+         *
+         *     Idempotent by construction: `INSERT OR IGNORE` against the
+         *     `(comment_id, user_id, emoji)` unique index means reacting twice with the
+         *     same emoji is the same request repeated, not a second reaction beside the
+         *     first -- which is also why this is 200, not 201 (nothing is guaranteed to
+         *     have been created). Any role that may write the timeline may react; unlike
+         *     editing or deleting, a reaction changes nothing about what anyone wrote,
+         *     so it is not the author-or-owner rule those are.
+         */
+        post: operations["add_reaction_api_v2_comments__comment_id__reactions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/comments/{comment_id}/reactions/{emoji}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Reaction
+         * @description Withdraw the caller's own reaction. Idempotent, like resolve: removing
+         *     a reaction that is not there is not an error (milestone 3.3a).
+         *
+         *     Returns the comment with its remaining reactions rather than 204, unlike
+         *     `delete_comment` beside it -- one person's reaction is toggle state on the
+         *     comment, not content being destroyed, and the reader wants the resulting
+         *     count without a second request.
+         */
+        delete: operations["remove_reaction_api_v2_comments__comment_id__reactions__emoji__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1307,6 +1425,7 @@ export interface components {
          *     `parent_id` is NULL for a thread root (milestone 3.3). Threading is one
          *     level deep by rule rather than by column (D-127), so this is also the
          *     shape of every reply and a reply never carries replies of its own.
+         *     `reactions` (milestone 3.3a) is on every comment, roots and replies alike.
          */
         CommentPublic: {
             /** Id */
@@ -1323,6 +1442,8 @@ export interface components {
             author_name: string;
             /** Created At */
             created_at: string;
+            /** Reactions */
+            reactions: components["schemas"]["ReactionPublic"][];
         };
         /**
          * CommentThread
@@ -1349,6 +1470,8 @@ export interface components {
             author_name: string;
             /** Created At */
             created_at: string;
+            /** Reactions */
+            reactions: components["schemas"]["ReactionPublic"][];
             /** Resolved At */
             resolved_at: string | null;
             /** Resolved By */
@@ -1816,6 +1939,13 @@ export interface components {
             /** Next Cursor */
             next_cursor?: string | null;
         };
+        /** Page[WatcherPublic] */
+        Page_WatcherPublic_: {
+            /** Items */
+            items: components["schemas"]["WatcherPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
         /** Page[str] */
         Page_str_: {
             /** Items */
@@ -1829,6 +1959,38 @@ export interface components {
             current_password: string;
             /** New Password */
             new_password: string;
+        };
+        /** ReactionCreate */
+        ReactionCreate: {
+            /**
+             * Emoji
+             * @enum {string}
+             */
+            emoji: "👍" | "👎" | "😄" | "🎉" | "❤️" | "🚀" | "👀";
+        };
+        /**
+         * ReactionPublic
+         * @description One person's reaction to one comment or reply (milestone 3.3a).
+         *
+         *     Individual rows rather than a server-aggregated `{emoji, count}` shape --
+         *     the same choice `versioning.py` and `activity.py` make, reading raw data
+         *     back and letting the client interpret it (`lib/activity.ts`,
+         *     `VersionChanges.tsx`) rather than baking one reader's view into the
+         *     response.
+         */
+        ReactionPublic: {
+            /** Id */
+            id: number;
+            /** Comment Id */
+            comment_id: number;
+            /** Emoji */
+            emoji: string;
+            /** User Id */
+            user_id: number;
+            /** User Name */
+            user_name: string;
+            /** Created At */
+            created_at: string;
         };
         /** SavedViewCreate */
         SavedViewCreate: {
@@ -2134,6 +2296,40 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /**
+         * WatchStatus
+         * @description Whether the caller is currently watching -- the read and both writes
+         *     share this one shape, so toggling costs no second request to learn the
+         *     result (milestone 3.3a).
+         */
+        WatchStatus: {
+            /** Watching */
+            watching: boolean;
+        };
+        /**
+         * WatcherPublic
+         * @description One person following this opportunity (milestone 3.3a).
+         *
+         *     Owner-only to read, like `SharePublic` beside it -- but unlike a share,
+         *     watching carries no role and grants no access of its own: `FEATURES.md`
+         *     §7 names watching an opportunity you are *not* shared on as the point of
+         *     the feature (D-129), so this list can and does include people
+         *     `OpportunityMemberPublic` would never return.
+         */
+        WatcherPublic: {
+            /** Id */
+            id: number;
+            /** Opportunity Id */
+            opportunity_id: number;
+            /** User Id */
+            user_id: number;
+            /** User Name */
+            user_name: string;
+            /** User Email */
+            user_email: string;
+            /** Created At */
+            created_at: string;
         };
     };
     responses: never;
@@ -2901,6 +3097,141 @@ export interface operations {
             };
         };
     };
+    get_watch_status_api_v2_opportunities__opportunity_id__watch_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    watch_opportunity_api_v2_opportunities__opportunity_id__watch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unwatch_opportunity_api_v2_opportunities__opportunity_id__watch_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_watchers_page_api_v2_opportunities__opportunity_id__watchers_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_WatcherPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_timeline_page_api_v2_opportunities__opportunity_id__timeline_get: {
         parameters: {
             query?: {
@@ -3543,6 +3874,77 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CommentThread"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_reaction_api_v2_comments__comment_id__reactions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                comment_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReactionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommentPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_reaction_api_v2_comments__comment_id__reactions__emoji__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                comment_id: number;
+                emoji: "👍" | "👎" | "😄" | "🎉" | "❤️" | "🚀" | "👀";
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommentPublic"];
                 };
             };
             /** @description Validation Error */

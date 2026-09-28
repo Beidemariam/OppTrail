@@ -229,6 +229,33 @@ MATRIX: dict[Endpoint, Case] = {
         url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/audit-log",
         notes="Owner-only forensics (CLAUDE.md, Auditability).",
     ),
+    # --- Watchers (milestone 3.3a, D-129) ---------------------------------
+    # `docs/FEATURES.md` §7: "follow an opportunity you are not shared on."
+    # The three `.../watch` routes check only that the opportunity exists
+    # (`require_opportunity_exists`), not who may read it -- so an unrelated,
+    # signed-in user gets the same 200/204 a viewer or an owner does, which is
+    # `authenticated_only` rather than `scoped`. `tests/test_watchers.py`
+    # holds the case this table cannot: the same caller still gets 404 from
+    # every other opportunity-scoped route.
+    Endpoint("GET", "/api/v2/opportunities/{opportunity_id}/watch"): Case(
+        expected=authenticated_only(200),
+        url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/watch",
+    ),
+    Endpoint("POST", "/api/v2/opportunities/{opportunity_id}/watch"): Case(
+        expected=authenticated_only(200),
+        url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/watch",
+        body=lambda world, actor: None,
+    ),
+    Endpoint("DELETE", "/api/v2/opportunities/{opportunity_id}/watch"): Case(
+        expected=authenticated_only(200),
+        url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/watch",
+    ),
+    # Who is watching stays owner-only, the same visibility rule as the share
+    # list above it.
+    Endpoint("GET", "/api/v2/opportunities/{opportunity_id}/watchers"): Case(
+        expected=scoped(viewer=403, editor=403, owner=200),
+        url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/watchers",
+    ),
     # --- Timeline ---------------------------------------------------------
     Endpoint("GET", "/api/v2/opportunities/{opportunity_id}/timeline"): Case(
         expected=scoped(viewer=200, editor=200, owner=200),
@@ -291,6 +318,23 @@ MATRIX: dict[Endpoint, Case] = {
         expected=scoped(viewer=403, editor=403, owner=200),
         url=lambda world: f"/api/v2/comments/{world.comment_id}/unresolve",
         body=lambda world, actor: None,
+    ),
+    # Reactions (milestone 3.3a, D-130): any role that may write the timeline
+    # may react -- unlike resolve, this is not the author-or-owner rule, since
+    # a reaction changes nothing about what anyone wrote. Both routes are
+    # idempotent, which is what lets the matrix call them in any order.
+    Endpoint("POST", "/api/v2/comments/{comment_id}/reactions"): Case(
+        expected=scoped(viewer=403, editor=200, owner=200),
+        url=lambda world: f"/api/v2/comments/{world.comment_id}/reactions",
+        body=lambda world, actor: {"emoji": "👍"},
+    ),
+    Endpoint("DELETE", "/api/v2/comments/{comment_id}/reactions/{emoji}"): Case(
+        expected=scoped(viewer=403, editor=200, owner=200),
+        url=lambda world: f"/api/v2/comments/{world.comment_id}/reactions/%F0%9F%91%8D",
+        notes=(
+            "URL-encoded 👍. Idempotent, so a role that may write the timeline "
+            "gets 200 even though this world's comment carries no reaction yet."
+        ),
     ),
     # --- AI agent ---------------------------------------------------------
     Endpoint("POST", "/api/v2/opportunities/{opportunity_id}/ai/ask"): Case(

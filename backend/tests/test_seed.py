@@ -52,6 +52,8 @@ def test_seed_populates_every_shipped_feature(tmp_path) -> None:
                 "notifications",
                 "audit_log_entries",
                 "saved_views",
+                "reactions",
+                "watchers",
             )
         }
         entry_types = {
@@ -97,6 +99,8 @@ def test_seed_populates_every_shipped_feature(tmp_path) -> None:
         "timeline_entry_versions",
         "audit_log_entries",
         "saved_views",
+        "reactions",
+        "watchers",
     ):
         assert counts[table] > 0, f"{table} is empty after seeding"
 
@@ -167,6 +171,37 @@ def test_seeded_permissions_match_the_printed_tour(tmp_path) -> None:
         )
         assert dana.get(f"/api/v2/opportunities/{northwind}").status_code == 404
         assert dana.get("/api/v2/opportunities").json()["items"] == []
+
+        # The reactions/watchers tour line (milestone 3.3a): Alex and Blair's
+        # thumbs-up plus Blair's eyes are on the resolved permissions
+        # question, Casey (a viewer) cannot react at all, and Dana -- shared
+        # on nothing -- follows Northwind anyway without gaining any read
+        # access to it.
+        demo_note = next(
+            entry["notes"][0]
+            for entry in alex.get(f"/api/v2/opportunities/{northwind}/timeline").json()["items"]
+            if entry["title"] == "Product demo for the operations team"
+        )
+        permissions_question = next(
+            thread for thread in demo_note["comments"] if thread["resolved_at"] is not None
+        )
+        assert sorted(r["emoji"] for r in permissions_question["reactions"]) == [
+            "👀",
+            "👍",
+            "👍",
+        ]
+        assert (
+            casey.post(
+                f"/api/v2/comments/{permissions_question['id']}/reactions",
+                json={"emoji": "🎉"},
+            ).status_code
+            == 403
+        )
+        assert dana.post(f"/api/v2/opportunities/{northwind}/watch").status_code == 200
+        assert dana.get(f"/api/v2/opportunities/{northwind}").status_code == 404
+        watchers = alex.get(f"/api/v2/opportunities/{northwind}/watchers").json()["items"]
+        assert {item["user_email"] for item in watchers} == {DANA}
+        assert casey.get(f"/api/v2/opportunities/{northwind}/watchers").status_code == 403
 
         # The composer's `@` list (milestone 3.2): the tour says Dana is on
         # nobody's, and that the read is offered to whoever can already read

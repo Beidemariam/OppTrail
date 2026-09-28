@@ -8,6 +8,7 @@ import {
   useRemoveShare,
   useShares,
   useUpdateShareRole,
+  useWatchers,
 } from "../lib/queries";
 import { useConfirm } from "./ConfirmDialog";
 
@@ -28,6 +29,7 @@ export function SharingPanel({ opportunityId }: { opportunityId: number }) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<ShareRole>("viewer");
   const shares = useShares(opportunityId, true);
+  const watchers = useWatchers(opportunityId, true);
   const addShare = useAddShare(opportunityId);
   const updateRole = useUpdateShareRole(opportunityId);
   const removeShare = useRemoveShare(opportunityId);
@@ -121,6 +123,25 @@ export function SharingPanel({ opportunityId }: { opportunityId: number }) {
               >
                 Remove
               </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Watchers (milestone 3.3a): who is following this deal without
+          necessarily being shared on it at all (D-129) -- rendered only when
+          there is one, since an empty "no watchers" line would be noise on
+          every opportunity that has never used the feature. */}
+      {watchers.data && watchers.data.length > 0 && (
+        <div className="watcher-list">
+          <div className="section-heading">
+            <h3>Watching</h3>
+            <span>{watchers.data.length}</span>
+          </div>
+          {watchers.data.map((watcher) => (
+            <div className="watcher-row" key={watcher.id}>
+              <strong>{watcher.user_name}</strong>
+              <p>{watcher.user_email}</p>
             </div>
           ))}
         </div>

@@ -32,7 +32,13 @@ afterEach(() => {
 const question = aComment({ body: "What is their budget?" });
 
 function threadedTimeline(overrides: Parameters<typeof aComment>[0] = {}) {
-  const thread = { ...question, ...overrides };
+  // `question` is a module-level singleton reused by every test in this
+  // file, so a shallow spread alone would leave `replies`/`reactions`
+  // pointing at its actual arrays. The fake API mutates a thread's `replies`
+  // in place on a reply post (`test-api.ts`'s `parent.replies.push`), which
+  // would otherwise leak one test's reply into every later test that does
+  // not override `replies` itself.
+  const thread = { ...question, replies: [], reactions: [], ...overrides };
   return [anEntry({ notes: [aNote({ comments: [thread] })] })];
 }
 
@@ -200,6 +206,86 @@ it("offers Resolve on a colleague's thread only to the owner", async () => {
   expect(screen.getByRole("button", { name: "Reply" })).toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "Resolve" }),
+  ).not.toBeInTheDocument();
+});
+
+it("reacts to a comment and shows the count", async () => {
+  const api = await openThreadedTimeline();
+
+  await userEvent.click(screen.getByRole("button", { name: "React" }));
+  await userEvent.click(screen.getByRole("button", { name: "React with 👍" }));
+
+  await waitFor(() =>
+    expect(api.callsTo("POST", "/api/v2/comments/300/reactions")).toHaveLength(
+      1,
+    ),
+  );
+  expect(api.callsTo("POST", "/api/v2/comments/300/reactions")[0].body).toEqual(
+    { emoji: "👍" },
+  );
+  expect(
+    await screen.findByRole("button", { name: "Remove your 👍 reaction" }),
+  ).toHaveTextContent("👍 1");
+});
+
+it("removes the caller's own reaction on a second click", async () => {
+  const api = await openThreadedTimeline({
+    reactions: [
+      {
+        id: 900,
+        comment_id: 300,
+        emoji: "👍",
+        user_id: 1,
+        user_name: "Alex",
+        created_at: "2026-09-02T15:30:00Z",
+      },
+    ],
+  });
+
+  const pill = await screen.findByRole("button", {
+    name: "Remove your 👍 reaction",
+  });
+  await userEvent.click(pill);
+
+  await waitFor(() =>
+    expect(
+      api.callsTo("DELETE", "/api/v2/comments/300/reactions/%F0%9F%91%8D"),
+    ).toHaveLength(1),
+  );
+  expect(
+    screen.queryByRole("button", { name: "Remove your 👍 reaction" }),
+  ).not.toBeInTheDocument();
+});
+
+it("shows a reply's own reactions without offering to react on a viewer's read", async () => {
+  await renderDashboard({
+    opportunities: [anOpportunity({ current_user_role: "viewer" })],
+    entries: threadedTimeline({
+      replies: [
+        aReply(question, {
+          body: "Around 25k",
+          reactions: [
+            {
+              id: 901,
+              comment_id: 301,
+              emoji: "🎉",
+              user_id: 2,
+              user_name: "Blair",
+              created_at: "2026-09-02T15:30:00Z",
+            },
+          ],
+        }),
+      ],
+    }),
+  });
+  await openTimeline("Northwind rollout");
+  await screen.findByText("Around 25k");
+
+  const pill = screen.getByRole("button", { name: "React with 🎉" });
+  expect(pill).toHaveTextContent("🎉 1");
+  expect(pill).toBeDisabled();
+  expect(
+    screen.queryByRole("button", { name: "React" }),
   ).not.toBeInTheDocument();
 });
 

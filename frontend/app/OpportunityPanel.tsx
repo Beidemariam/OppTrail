@@ -20,7 +20,9 @@ import {
   useMembers,
   useOpportunities,
   useSession,
+  useSetWatch,
   useTimeline,
+  useWatchStatus,
 } from "../lib/queries";
 import type { SuggestionSources } from "../lib/suggestions";
 import { paramsWithState, stateFromParams } from "../lib/viewState";
@@ -134,7 +136,15 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
         {opportunities.isPending ? (
           <p className="status">Loading timeline...</p>
         ) : (
-          <h2>This opportunity is not available.</h2>
+          <>
+            <h2>This opportunity is not available.</h2>
+            {/* Watching an opportunity you are not shared on (milestone
+                3.3a, D-129) has no discovery UI of its own -- a colleague
+                names the id out of band -- so this is the one place it is
+                reachable: the same URL a share would open, offering the one
+                thing available with no access at all. */}
+            <WatchToggle opportunityId={opportunityId} />
+          </>
         )}
       </section>
     );
@@ -319,6 +329,36 @@ function ExportControl({ opportunityId }: { opportunityId: number }) {
         Export {format.toUpperCase()}
       </a>
     </>
+  );
+}
+
+/**
+ * Follow or unfollow an opportunity with no access to it at all (milestone
+ * 3.3a, D-129) -- `useWatchStatus` succeeds here precisely because it checks
+ * only that the id is live, not who may read it, which is what makes this
+ * renderable on the "not available" screen in the first place. Renders
+ * nothing while the read is pending or fails (a genuinely unknown id), so the
+ * empty panel says nothing more than it already does until watching is
+ * actually offerable.
+ */
+function WatchToggle({ opportunityId }: { opportunityId: number }) {
+  const status = useWatchStatus(opportunityId, true);
+  const setWatch = useSetWatch(opportunityId);
+
+  if (!status.isSuccess) {
+    return null;
+  }
+
+  const watching = status.data.watching;
+  return (
+    <button
+      type="button"
+      className="secondary-button"
+      disabled={setWatch.isPending}
+      onClick={() => setWatch.mutate(!watching)}
+    >
+      {watching ? "Following - stop" : "Follow this opportunity"}
+    </button>
   );
 }
 

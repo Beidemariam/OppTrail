@@ -26,6 +26,10 @@ export interface FakeApiOptions {
   entries?: TimelineEntry[];
   notifications?: Notification[];
   shares?: Share[];
+  /** Who is watching, for the owner-only list (milestone 3.3a). Watching
+   * itself (POST/DELETE `.../watch`) is tracked separately, per the current
+   * `user`, since it needs no share at all (D-129). */
+  watchers?: Watcher[];
   activity?: ActivityEvent[];
   searchResults?: SearchResult[];
   savedViews?: SavedView[];
@@ -61,6 +65,16 @@ interface Opportunity {
   current_user_role: "owner" | "editor" | "viewer";
 }
 
+/** One person's reaction to a comment or reply (milestone 3.3a). */
+interface Reaction {
+  id: number;
+  comment_id: number;
+  emoji: string;
+  user_id: number;
+  user_name: string;
+  created_at: string;
+}
+
 interface Comment {
   id: number;
   note_id: number;
@@ -69,6 +83,7 @@ interface Comment {
   created_by: number;
   author_name: string;
   created_at: string;
+  reactions: Reaction[];
 }
 
 /** A thread root as the timeline read returns it (milestone 3.3): its
@@ -128,6 +143,16 @@ interface Share {
   role: "viewer" | "editor";
   invited_by: number;
   invited_by_name: string;
+  created_at: string;
+}
+
+/** Who is following an opportunity (milestone 3.3a), owner-only to read. */
+interface Watcher {
+  id: number;
+  opportunity_id: number;
+  user_id: number;
+  user_name: string;
+  user_email: string;
   created_at: string;
 }
 
@@ -221,6 +246,7 @@ export function aComment(
     resolved_by: null,
     resolved_by_name: null,
     replies: [],
+    reactions: [],
     ...overrides,
   };
 }
@@ -238,6 +264,7 @@ export function aReply(
     created_by: BLAIR.id,
     author_name: BLAIR.name,
     created_at: "2026-09-02T14:12:00Z",
+    reactions: [],
     ...overrides,
   };
 }
@@ -303,10 +330,15 @@ export class FakeApi {
   entries: TimelineEntry[];
   notifications: Notification[];
   shares: Share[];
+  watchers: Watcher[];
   activity: ActivityEvent[];
   searchResults: SearchResult[];
   savedViews: SavedView[];
   failures: Record<string, [number, string]>;
+  // The current `user`'s own watch set (milestone 3.3a), separate from
+  // `watchers` above: watching needs no share at all (D-129), so it is not
+  // derived from anything else this fake tracks.
+  private watching = new Set<number>();
   private pending: Set<string>;
   private pageSize: number | undefined;
   private held = new Map<
@@ -342,6 +374,7 @@ export class FakeApi {
     this.entries = options.entries ?? [];
     this.notifications = options.notifications ?? [];
     this.shares = options.shares ?? [];
+    this.watchers = options.watchers ?? [];
     this.activity = options.activity ?? [];
     this.searchResults = options.searchResults ?? [];
     this.savedViews = options.savedViews ?? [];
@@ -702,6 +735,22 @@ export class FakeApi {
       this.shares = this.shares.filter((item) => item.user_id !== userId);
       return new Response(null, { status: 204 });
     }
+    // Watch/unwatch (milestone 3.3a, D-129): unlike every other opportunity-
+    // scoped route in this fake, existence of `segments[1]` in
+    // `this.opportunities` is never checked -- the real endpoint's whole
+    // point is answering someone with no share on it at all.
+    if (segments[2] === "watch") {
+      const opportunityId = Number(segments[1]);
+      if (method === "POST") {
+        this.watching.add(opportunityId);
+      } else if (method === "DELETE") {
+        this.watching.delete(opportunityId);
+      }
+      return this.json({ watching: this.watching.has(opportunityId) });
+    }
+    if (segments[2] === "watchers") {
+      return this.page(this.watchers, path);
+    }
     if (segments[2] === "ai") {
       return this.json({
         answer: `Answer to: ${body.question}`,
@@ -870,6 +919,61 @@ export class FakeApi {
           { error: { code: "not_found", message: "Comment not found" } },
           404,
         );
+      }
+      if (segments[2] === "reactions") {
+        // A reaction can be on a root or a reply alike (milestone 3.3a), so
+        // this looks one level deeper than resolve/unresolve does.
+        let target: Comment | undefined;
+        for (const entry of this.entries) {
+          for (const note of entry.notes) {
+            for (const thread of note.comments) {
+              if (thread.id === commentId) {
+                target = thread;
+              }
+              const reply = thread.replies.find(
+                (item) => item.id === commentId,
+              );
+              if (reply) {
+                target = reply;
+              }
+            }
+          }
+        }
+        if (!target) {
+          return this.json(
+            { error: { code: "not_found", message: "Comment not found" } },
+            404,
+          );
+        }
+        const userId = this.user?.id ?? ALEX.id;
+        const userName = this.user?.name ?? ALEX.name;
+        const emoji: string =
+          segments[3] !== undefined
+            ? decodeURIComponent(segments[3])
+            : (body as { emoji: string }).emoji;
+        if (method === "POST") {
+          if (
+            !target.reactions.some(
+              (reaction) =>
+                reaction.emoji === emoji && reaction.user_id === userId,
+            )
+          ) {
+            target.reactions.push({
+              id: this.nextId++,
+              comment_id: commentId,
+              emoji,
+              user_id: userId,
+              user_name: userName,
+              created_at: "2026-09-02T15:30:00Z",
+            });
+          }
+        } else {
+          target.reactions = target.reactions.filter(
+            (reaction) =>
+              !(reaction.emoji === emoji && reaction.user_id === userId),
+          );
+        }
+        return this.json(target);
       }
       for (const entry of this.entries) {
         for (const note of entry.notes) {

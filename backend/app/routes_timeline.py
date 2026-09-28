@@ -29,6 +29,9 @@ from .schemas import (
     NotePublic,
     NoteUpdate,
     NoteVersionPublic,
+    ReactionCreate,
+    ReactionEmoji,
+    ReactionPublic,
     TimelineEntryCreate,
     TimelineEntryPublic,
     TimelineEntryUpdate,
@@ -56,7 +59,10 @@ from .versioning import (
 router = APIRouter(prefix="/api/v2", tags=["timeline"])
 
 
-def comment_from_row(row: sqlite3.Row) -> CommentPublic:
+def comment_from_row(
+    row: sqlite3.Row,
+    reactions: list[ReactionPublic] | None = None,
+) -> CommentPublic:
     return CommentPublic(
         id=row["id"],
         note_id=row["note_id"],
@@ -65,10 +71,15 @@ def comment_from_row(row: sqlite3.Row) -> CommentPublic:
         created_by=row["created_by"],
         author_name=row["author_name"],
         created_at=row["created_at"],
+        reactions=reactions if reactions is not None else [],
     )
 
 
-def thread_from_row(row: sqlite3.Row, replies: list[CommentPublic]) -> CommentThread:
+def thread_from_row(
+    row: sqlite3.Row,
+    replies: list[CommentPublic],
+    reactions: list[ReactionPublic] | None = None,
+) -> CommentThread:
     """A thread root, its replies, and who called it finished (milestone 3.3).
 
     `resolved_by_name` is carried beside the id for the same reason
@@ -88,24 +99,74 @@ def thread_from_row(row: sqlite3.Row, replies: list[CommentPublic]) -> CommentTh
         resolved_by=row["resolved_by"],
         resolved_by_name=row["resolved_by_name"],
         replies=replies,
+        reactions=reactions if reactions is not None else [],
     )
 
 
-def threads_from_rows(rows: list[sqlite3.Row]) -> list[CommentThread]:
+def reaction_from_row(row: sqlite3.Row) -> ReactionPublic:
+    return ReactionPublic(
+        id=row["id"],
+        comment_id=row["comment_id"],
+        emoji=row["emoji"],
+        user_id=row["user_id"],
+        user_name=row["user_name"],
+        created_at=row["created_at"],
+    )
+
+
+def reactions_by_comment_id(
+    connection: sqlite3.Connection,
+    comment_ids: list[int],
+) -> dict[int, list[ReactionPublic]]:
+    """Every reaction on the given comments, one query for the whole set
+    (milestone 3.3a) -- the same shape `entries_with_notes` already uses for
+    notes and comments, so attaching reactions to a page of entries costs one
+    more query rather than one per comment.
+    """
+    if not comment_ids:
+        return {}
+    placeholders = ",".join("?" for _ in comment_ids)
+    rows = connection.execute(
+        f"""
+        SELECT reactions.*, users.name AS user_name
+        FROM reactions
+        JOIN users ON users.id = reactions.user_id
+        WHERE reactions.comment_id IN ({placeholders})
+        ORDER BY reactions.created_at ASC, reactions.id ASC
+        """,
+        comment_ids,
+    ).fetchall()
+    grouped: dict[int, list[ReactionPublic]] = {}
+    for row in rows:
+        grouped.setdefault(row["comment_id"], []).append(reaction_from_row(row))
+    return grouped
+
+
+def threads_from_rows(
+    rows: list[sqlite3.Row],
+    reactions: dict[int, list[ReactionPublic]] | None = None,
+) -> list[CommentThread]:
     """Group one note's comments into threads, roots in the order read.
 
     The rows arrive flat and chronological, and a reply always exists after
     the root it answers (its parent had to be there to be named), so one pass
-    in that order fills every thread before it is used.
+    in that order fills every thread before it is used. `reactions` is looked
+    up by the caller rather than here, so a page of many notes still costs one
+    reactions query rather than one per note.
     """
+    reactions = reactions or {}
     threads: dict[int, list[CommentPublic]] = {
         row["id"]: [] for row in rows if row["parent_id"] is None
     }
     for row in rows:
         parent_id = row["parent_id"]
         if parent_id is not None and parent_id in threads:
-            threads[parent_id].append(comment_from_row(row))
-    return [thread_from_row(row, threads[row["id"]]) for row in rows if row["parent_id"] is None]
+            threads[parent_id].append(comment_from_row(row, reactions.get(row["id"])))
+    return [
+        thread_from_row(row, threads[row["id"]], reactions.get(row["id"]))
+        for row in rows
+        if row["parent_id"] is None
+    ]
 
 
 # Every read of a comment carries the two names it is displayed with: its
@@ -368,9 +429,10 @@ def entries_with_notes(
     connection: sqlite3.Connection,
     entries: list[sqlite3.Row],
 ) -> list[TimelineEntryPublic]:
-    """Attach every entry's notes and each note's comments.
+    """Attach every entry's notes, each note's comments, and each comment's
+    reactions (milestone 3.3a).
 
-    Three queries for the whole set rather than two per entry, so a page of
+    Four queries for the whole set rather than two per entry, so a page of
     entries costs the same number of round trips as one.
     """
     entry_ids = [entry["id"] for entry in entries]
@@ -403,11 +465,12 @@ def entries_with_notes(
             """,
             note_ids,
         ).fetchall()
+        reactions = reactions_by_comment_id(connection, [comment["id"] for comment in comments])
         rows_by_note_id: dict[int, list[sqlite3.Row]] = {}
         for comment in comments:
             rows_by_note_id.setdefault(comment["note_id"], []).append(comment)
         comments_by_note_id = {
-            note_id: threads_from_rows(rows) for note_id, rows in rows_by_note_id.items()
+            note_id: threads_from_rows(rows, reactions) for note_id, rows in rows_by_note_id.items()
         }
 
     notes_by_entry_id: dict[int, list[NotePublic]] = {}
@@ -1488,8 +1551,9 @@ def set_thread_resolved(
             """,
             (comment_id, comment_id),
         ).fetchall()
+        reactions = reactions_by_comment_id(connection, [row["id"] for row in rows])
 
-    return threads_from_rows(rows)[0]
+    return threads_from_rows(rows, reactions)[0]
 
 
 @router.post("/comments/{comment_id}/resolve", response_model=CommentThread)
@@ -1506,3 +1570,88 @@ def unresolve_comment(
     user: sqlite3.Row = Depends(get_current_user),
 ) -> CommentThread:
     return set_thread_resolved(comment_id, user, resolved=False)
+
+
+@router.post(
+    "/comments/{comment_id}/reactions",
+    response_model=CommentPublic,
+    status_code=status.HTTP_200_OK,
+)
+def add_reaction(
+    comment_id: int,
+    payload: ReactionCreate,
+    user: sqlite3.Row = Depends(get_current_user),
+) -> CommentPublic:
+    """React to a comment or reply, thread root or answer alike (milestone
+    3.3a, D-130).
+
+    Idempotent by construction: `INSERT OR IGNORE` against the
+    `(comment_id, user_id, emoji)` unique index means reacting twice with the
+    same emoji is the same request repeated, not a second reaction beside the
+    first -- which is also why this is 200, not 201 (nothing is guaranteed to
+    have been created). Any role that may write the timeline may react; unlike
+    editing or deleting, a reaction changes nothing about what anyone wrote,
+    so it is not the author-or-owner rule those are.
+    """
+    with db_connection() as connection:
+        comment = fetch_comment_context(connection, comment_id)
+        if not comment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Comment not found",
+            )
+        require_timeline_write(connection, comment["opportunity_id"], int(user["id"]))
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO reactions (comment_id, user_id, emoji, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (comment_id, user["id"], payload.emoji, utc_now()),
+        )
+        connection.commit()
+        row = connection.execute(
+            f"{COMMENT_ROWS_SQL} WHERE comments.id = ?",
+            (comment_id,),
+        ).fetchone()
+        reactions = reactions_by_comment_id(connection, [comment_id]).get(comment_id, [])
+
+    return comment_from_row(row, reactions)
+
+
+@router.delete(
+    "/comments/{comment_id}/reactions/{emoji}",
+    response_model=CommentPublic,
+)
+def remove_reaction(
+    comment_id: int,
+    emoji: ReactionEmoji,
+    user: sqlite3.Row = Depends(get_current_user),
+) -> CommentPublic:
+    """Withdraw the caller's own reaction. Idempotent, like resolve: removing
+    a reaction that is not there is not an error (milestone 3.3a).
+
+    Returns the comment with its remaining reactions rather than 204, unlike
+    `delete_comment` beside it -- one person's reaction is toggle state on the
+    comment, not content being destroyed, and the reader wants the resulting
+    count without a second request.
+    """
+    with db_connection() as connection:
+        comment = fetch_comment_context(connection, comment_id)
+        if not comment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Comment not found",
+            )
+        require_timeline_write(connection, comment["opportunity_id"], int(user["id"]))
+        connection.execute(
+            "DELETE FROM reactions WHERE comment_id = ? AND user_id = ? AND emoji = ?",
+            (comment_id, user["id"], emoji),
+        )
+        connection.commit()
+        row = connection.execute(
+            f"{COMMENT_ROWS_SQL} WHERE comments.id = ?",
+            (comment_id,),
+        ).fetchone()
+        reactions = reactions_by_comment_id(connection, [comment_id]).get(comment_id, [])
+
+    return comment_from_row(row, reactions)

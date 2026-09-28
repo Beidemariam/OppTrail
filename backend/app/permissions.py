@@ -125,6 +125,36 @@ def require_delete_permission(
     return require_author_or_owner(connection, opportunity_id, user_id, author_id, detail)
 
 
+def require_opportunity_exists(
+    connection: sqlite3.Connection,
+    opportunity_id: int,
+) -> None:
+    """Presence only -- no role, and the one deliberate exception to every
+    other function in this module (milestone 3.3a, **D-129**).
+
+    Watching is available to someone with no share on the opportunity at all
+    (`docs/FEATURES.md` §7: "follow an opportunity you are not shared on"),
+    so `require_opportunity_access`'s role resolution cannot gate it -- that
+    would 404 exactly the caller this exists for. The cost, named and
+    accepted in D-129, is that the three `.../watch` routes answer
+    differently (200/204 vs 404) depending only on whether the id names a
+    live opportunity, for *any* authenticated caller -- the one place in the
+    app where existence is knowingly not hidden behind access. Nothing this
+    function guards leaks the opportunity's content, only whether the id is
+    live, and the caller learns nothing they could not already infer by
+    trying every id in sequence.
+    """
+    row = connection.execute(
+        "SELECT 1 FROM opportunities WHERE id = ? AND deleted_at IS NULL",
+        (opportunity_id,),
+    ).fetchone()
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+
 def require_opportunity_owner(
     connection: sqlite3.Connection,
     opportunity_id: int,

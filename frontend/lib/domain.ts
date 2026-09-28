@@ -84,6 +84,25 @@ export type TimelineNote = components["schemas"]["NotePublic"];
  * it, and whether anyone has called it finished (milestone 3.3). */
 export type CommentThread = components["schemas"]["CommentThread"];
 export type Comment = components["schemas"]["CommentPublic"];
+/** One reaction to a comment or reply (milestone 3.3a). Individual rows, read
+ * raw and aggregated by emoji in the client -- see `app/CommentThread.tsx`. */
+export type Reaction = components["schemas"]["ReactionPublic"];
+export type ReactionEmoji = components["schemas"]["ReactionCreate"]["emoji"];
+/** The fixed reaction set (milestone 3.3a, D-130) -- the same seven emoji
+ * the backend's `ReactionEmoji` literal validates, declared once here so the
+ * toolbar and the generated type cannot drift apart. */
+export const reactionEmoji: ReactionEmoji[] = [
+  "👍",
+  "👎",
+  "😄",
+  "🎉",
+  "❤️",
+  "🚀",
+  "👀",
+];
+/** Who is following an opportunity (milestone 3.3a) -- owner-only, like
+ * `OpportunityShare`. */
+export type Watcher = components["schemas"]["WatcherPublic"];
 /** One entry with a follow-up date, read across every opportunity (milestone
  * 3.0b, D-088) — the calendar's second layer. */
 export type FollowUp = components["schemas"]["FollowUpPublic"];

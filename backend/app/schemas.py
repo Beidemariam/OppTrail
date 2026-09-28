@@ -308,12 +308,41 @@ class TimelineEntryUpdate(BaseModel):
         return canonical_date(value) if value else None
 
 
+# The classic GitHub issue/PR reaction set (milestone 3.3a) -- familiar rather
+# than invented, which is what keeps this a fixed seven-item control instead of
+# a picker `docs/DESIGN-SYSTEM.md`'s restraint would rule out.
+ReactionEmoji = Literal["👍", "👎", "😄", "🎉", "❤️", "🚀", "👀"]
+
+
+class ReactionPublic(BaseModel):
+    """One person's reaction to one comment or reply (milestone 3.3a).
+
+    Individual rows rather than a server-aggregated `{emoji, count}` shape --
+    the same choice `versioning.py` and `activity.py` make, reading raw data
+    back and letting the client interpret it (`lib/activity.ts`,
+    `VersionChanges.tsx`) rather than baking one reader's view into the
+    response.
+    """
+
+    id: int
+    comment_id: int
+    emoji: str
+    user_id: int
+    user_name: str
+    created_at: str
+
+
+class ReactionCreate(BaseModel):
+    emoji: ReactionEmoji
+
+
 class CommentPublic(BaseModel):
     """One comment, whether it opened a thread or replied to one.
 
     `parent_id` is NULL for a thread root (milestone 3.3). Threading is one
     level deep by rule rather than by column (D-127), so this is also the
     shape of every reply and a reply never carries replies of its own.
+    `reactions` (milestone 3.3a) is on every comment, roots and replies alike.
     """
 
     id: int
@@ -323,6 +352,7 @@ class CommentPublic(BaseModel):
     created_by: int
     author_name: str
     created_at: str
+    reactions: list[ReactionPublic]
 
 
 class CommentThread(CommentPublic):
@@ -509,6 +539,33 @@ class OpportunityMemberPublic(BaseModel):
     email: str
     name: str
     role: CurrentUserRole
+
+
+class WatcherPublic(BaseModel):
+    """One person following this opportunity (milestone 3.3a).
+
+    Owner-only to read, like `SharePublic` beside it -- but unlike a share,
+    watching carries no role and grants no access of its own: `FEATURES.md`
+    §7 names watching an opportunity you are *not* shared on as the point of
+    the feature (D-129), so this list can and does include people
+    `OpportunityMemberPublic` would never return.
+    """
+
+    id: int
+    opportunity_id: int
+    user_id: int
+    user_name: str
+    user_email: str
+    created_at: str
+
+
+class WatchStatus(BaseModel):
+    """Whether the caller is currently watching -- the read and both writes
+    share this one shape, so toggling costs no second request to learn the
+    result (milestone 3.3a).
+    """
+
+    watching: bool
 
 
 AuditAction = Literal[
