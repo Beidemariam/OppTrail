@@ -910,10 +910,16 @@ SQLite itself raises on any write from that path, and it is a pragma rather than
 chronological timeline as text (`ai_service.build_timeline_context`), sends it with
 the question via `client.responses.create(..., store=False)`, and returns a string.
 No tool surface is exposed to the model, and none should be added. The context
-names every entry as `[Entry #<id>, <timestamp>]`, which is why a timeline card
-prints `#<id>` in its meta row since milestone 3.8: the model cited a number
-the screen did not show, so an answer referred to something the reader could
-not find. Making the model emit `?entry=` links instead (D-124's shape, which
+names every entry as `[Entry #<number>, <timestamp>]`, which is why a timeline
+card prints `#<number>` in its meta row since milestone 3.8: the model cited a
+number the screen did not show, so an answer referred to something the reader
+could not find. That number is a **per-deal sequence** (3.9, **D-139**) — #1 is
+the oldest thing that happened on the deal — and both sides read one
+expression, `timeline_utils.ENTRY_SEQUENCE_SQL`, rather than each counting for
+itself. `tests/test_ai.py::test_the_context_cites_the_numbers_the_timeline_prints`
+is what fails if they drift. It is a reading aid and not an identity: a
+backdated insert renumbers what follows, and the row id is what `?entry=`
+links carry. Making the model emit `?entry=` links instead (D-124's shape, which
 `app/MarkdownText.tsx` already renders as a router `Link`) is Phase 4 work,
 with the attachment citations. Both halves are
 pinned by `test_invariant_*` tests. Viewers may ask

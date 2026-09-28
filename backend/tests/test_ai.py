@@ -432,3 +432,48 @@ def test_ai_treats_hostile_note_content_as_inert_data(
             (opportunity["id"],),
         ).fetchone()["count"]
     assert shares == 0
+
+
+def test_the_context_cites_the_numbers_the_timeline_prints(client: TestClient) -> None:
+    """The guard behind milestone 3.9 (**D-139**).
+
+    The model is told to cite entries as `[Entry #number, date]` and the
+    timeline prints `#number` on each card. Those are two readers of one SQL
+    expression (`timeline_utils.ENTRY_SEQUENCE_SQL`), and this is what fails if
+    they ever stop being: an answer that cites a number the reader cannot find
+    is the exact defect 3.8's card label was added to fix, and citing the row
+    id -- which is what the context did before -- is how it looked.
+    """
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    # Deliberately out of chronological order, and backdated behind the system
+    # entry the opportunity's creation wrote, so the numbers cannot coincide
+    # with either the row ids or the order the rows were written in.
+    for title, event_timestamp in [
+        ("Proposal sent", "2026-06-02T10:00"),
+        ("Kickoff call", "2026-05-01T10:00"),
+        ("Legal review", "2026-07-03T10:00"),
+    ]:
+        client.post(
+            f"/api/v2/opportunities/{opportunity['id']}/timeline",
+            json={
+                "type": "call",
+                "title": title,
+                "body": "Body",
+                "event_timestamp": event_timestamp,
+            },
+        )
+
+    items = client.get(f"/api/v2/opportunities/{opportunity['id']}/timeline").json()["items"]
+    printed = {entry["title"]: entry["sequence"] for entry in items}
+    # The numbers are not the ids, or this test would prove nothing.
+    assert printed != {entry["title"]: entry["id"] for entry in items}
+
+    with db_connection() as connection:
+        context, _ = ai_service.build_timeline_context(connection, opportunity["id"])
+
+    for title, number in printed.items():
+        assert f"[Entry #{number}, " in context
+        # ...and it is that entry the number is attached to, not another one.
+        cited = next(line for line in context.splitlines() if line.startswith(f"[Entry #{number},"))
+        assert cited.endswith(f"- {title}")

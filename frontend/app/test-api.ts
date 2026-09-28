@@ -119,6 +119,11 @@ interface TimelineEntry {
   author_name: string | null;
   system_generated: boolean;
   created_at: string;
+  /** This entry's number within its opportunity, which the server computes
+   * (milestone 3.9, D-139). A fixture value here rather than a count, because
+   * no component derives it -- the card prints what the API sent, which is
+   * exactly the property worth keeping. */
+  sequence: number;
   notes: Note[];
 }
 
@@ -211,6 +216,7 @@ export function anEntry(overrides: Partial<TimelineEntry> = {}): TimelineEntry {
     author_name: ALEX.name,
     system_generated: false,
     created_at: "2026-09-02T14:00:00Z",
+    sequence: 1,
     notes: [],
     ...overrides,
   };
@@ -679,6 +685,9 @@ export class FakeApi {
         ...body,
         id: this.nextId++,
         opportunity_id: Number(segments[1]),
+        // The real server numbers chronologically; a created entry is the
+        // newest here, which is the same answer for a fixture in order.
+        sequence: this.entries.length + 1,
       });
       this.entries.push(created);
       this.recordVersion(

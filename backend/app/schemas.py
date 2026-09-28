@@ -395,6 +395,13 @@ class TimelineEntryPublic(BaseModel):
     author_name: str | None
     system_generated: bool
     created_at: str
+    # This entry's number within its own opportunity (milestone 3.9,
+    # **D-139**): #1 is the oldest thing that happened on the deal. Computed,
+    # not stored -- `timeline_utils.ENTRY_SEQUENCE_SQL` is the one definition,
+    # read here and by the AI's context so a cited number and a printed one
+    # cannot disagree. It is a reading aid, not an identity: the id is what
+    # `?entry=` links carry.
+    sequence: int
     notes: list[NotePublic]
 
 

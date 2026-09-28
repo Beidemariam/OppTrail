@@ -3,11 +3,13 @@ import sqlite3
 
 from openai import OpenAI
 
+from .timeline_utils import ENTRY_SEQUENCE_SQL
+
 SYSTEM_PROMPT = """
 You are OppTrail's read-only sales opportunity analyst.
 Answer only from the supplied opportunity timeline context.
 Never claim that you changed, created, edited, deleted, shared, or notified anything.
-When using timeline evidence, cite entries using [Entry #id, date].
+When using timeline evidence, cite entries using [Entry #number, date].
 If the context is thin, say what is known and what is missing.
 Keep the answer concise and useful for a sales teammate.
 Use plain text only; do not use Markdown formatting such as bold markers.
@@ -30,14 +32,23 @@ def build_timeline_context(
     if not opportunity:
         return "Opportunity not found.", []
 
+    # `sequence` is the number the timeline prints on each card, from the one
+    # expression both sides read (milestone 3.9, **D-139**) -- so an answer
+    # citing "Entry #7" names the card the reader can see. Ordered by the same
+    # `(event_timestamp, id)` pair that numbering counts, rather than by
+    # `created_at`, so the context reads in ascending number order and two
+    # entries stamped in the same second cannot swap between the two.
     entries = connection.execute(
-        """
-        SELECT timeline_entries.*, users.name AS author_name
+        f"""
+        SELECT
+            timeline_entries.*,
+            users.name AS author_name,
+            {ENTRY_SEQUENCE_SQL} AS sequence
         FROM timeline_entries
         LEFT JOIN users ON users.id = timeline_entries.created_by
         WHERE timeline_entries.opportunity_id = ?
             AND timeline_entries.deleted_at IS NULL
-        ORDER BY timeline_entries.event_timestamp ASC, timeline_entries.created_at ASC
+        ORDER BY timeline_entries.event_timestamp ASC, timeline_entries.id ASC
         """,
         (opportunity_id,),
     ).fetchall()
@@ -59,7 +70,7 @@ def build_timeline_context(
         lines.extend(
             [
                 (
-                    f"[Entry #{entry['id']}, {entry['event_timestamp']}] "
+                    f"[Entry #{entry['sequence']}, {entry['event_timestamp']}] "
                     f"{entry['type']} - {entry['title']}"
                 ),
                 f"Author: {entry['author_name'] or 'System'}",

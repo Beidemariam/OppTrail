@@ -2,6 +2,34 @@ import sqlite3
 
 from .time_utils import utc_now
 
+# An entry's number within its own opportunity (milestone 3.9, **D-139**).
+#
+# The AI cites entries by number and the timeline prints one on every card, so
+# both have to mean the same thing -- which is why this is one SQL expression
+# read by `routes_timeline.ENTRY_ROWS_SQL` and by
+# `ai_service.build_timeline_context` rather than a rule each side implements.
+#
+# **Chronological, not creation order.** #1 is the oldest thing that happened
+# on the deal, because that is what a person counting a timeline counts.
+# Creation order was the alternative and is visibly wrong on imported data: a
+# deal whose 32 events were backdated in one batch gets its three system
+# entries numbered #1-#3 and its earliest real event #4. Ordered by
+# `(event_timestamp, id)`, the same pair the timeline list orders and pages by,
+# so the numbers ascend exactly as the oldest-first reading does and ties
+# between two entries stamped in the same second resolve the same way in both.
+#
+# The cost is stated in D-139: inserting a *backdated* entry renumbers
+# everything after it, so this number is a reading aid and never an identity.
+# The identity is the row id, which is what `?entry=` links carry (D-124).
+ENTRY_SEQUENCE_SQL = """(
+        SELECT COUNT(*)
+        FROM timeline_entries AS sequence_peers
+        WHERE sequence_peers.opportunity_id = timeline_entries.opportunity_id
+            AND sequence_peers.deleted_at IS NULL
+            AND (sequence_peers.event_timestamp, sequence_peers.id)
+                <= (timeline_entries.event_timestamp, timeline_entries.id)
+    )"""
+
 
 def create_system_timeline_entry(
     connection: sqlite3.Connection,

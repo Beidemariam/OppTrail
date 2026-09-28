@@ -48,6 +48,7 @@ from .soft_delete import (
     soft_delete_timeline_entry,
 )
 from .time_utils import utc_now
+from .timeline_utils import ENTRY_SEQUENCE_SQL
 from .versioning import (
     NOTE_VERSIONS,
     TIMELINE_ENTRY_VERSIONS,
@@ -197,6 +198,20 @@ def note_from_row(row: sqlite3.Row, comments: list[CommentThread]) -> NotePublic
     )
 
 
+# The four reads that answer with an entry (the list, and the three writes that
+# return the row they touched). Shared for the reason `SHARE_ROWS_SQL` is: the
+# `sequence` column has to be on every one of them, since a client cannot tell
+# which route produced the entry it is drawing.
+ENTRY_ROWS_SQL = f"""
+    SELECT
+        timeline_entries.*,
+        users.name AS author_name,
+        {ENTRY_SEQUENCE_SQL} AS sequence
+    FROM timeline_entries
+    LEFT JOIN users ON users.id = timeline_entries.created_by
+"""
+
+
 def entry_from_row(row: sqlite3.Row, notes: list[NotePublic]) -> TimelineEntryPublic:
     return TimelineEntryPublic(
         id=row["id"],
@@ -210,6 +225,7 @@ def entry_from_row(row: sqlite3.Row, notes: list[NotePublic]) -> TimelineEntryPu
         author_name=row["author_name"],
         system_generated=bool(row["system_generated"]),
         created_at=row["created_at"],
+        sequence=row["sequence"],
         notes=notes,
     )
 
@@ -530,9 +546,7 @@ def list_timeline_page(
         require_opportunity_access(connection, opportunity_id, int(user["id"]))
         rows = connection.execute(
             f"""
-            SELECT timeline_entries.*, users.name AS author_name
-            FROM timeline_entries
-            LEFT JOIN users ON users.id = timeline_entries.created_by
+            {ENTRY_ROWS_SQL}
             WHERE {" AND ".join(where)}
             ORDER BY timeline_entries.event_timestamp {direction}, timeline_entries.id {direction}
             LIMIT ?
@@ -690,10 +704,8 @@ def create_timeline_entry(
         )
         connection.commit()
         row = connection.execute(
-            """
-            SELECT timeline_entries.*, users.name AS author_name
-            FROM timeline_entries
-            LEFT JOIN users ON users.id = timeline_entries.created_by
+            f"""
+            {ENTRY_ROWS_SQL}
             WHERE timeline_entries.id = ?
             """,
             (entry_id,),
@@ -762,10 +774,8 @@ def update_timeline_entry(
             changed = True
 
         row = connection.execute(
-            """
-            SELECT timeline_entries.*, users.name AS author_name
-            FROM timeline_entries
-            LEFT JOIN users ON users.id = timeline_entries.created_by
+            f"""
+            {ENTRY_ROWS_SQL}
             WHERE timeline_entries.id = ?
             """,
             (entry_id,),
@@ -898,10 +908,8 @@ def restore_timeline_entry_version(
             connection.commit()
 
         row = connection.execute(
-            """
-            SELECT timeline_entries.*, users.name AS author_name
-            FROM timeline_entries
-            LEFT JOIN users ON users.id = timeline_entries.created_by
+            f"""
+            {ENTRY_ROWS_SQL}
             WHERE timeline_entries.id = ?
             """,
             (entry_id,),

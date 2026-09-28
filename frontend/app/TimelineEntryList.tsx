@@ -104,14 +104,16 @@ function TimelineEntryCard({
         <div className="timeline-entry-header">
           <div>
             <div className="meta-row">
-              {/* The entry's own number (milestone 3.8). The AI already cites
-                  entries this way -- `ai_service.build_timeline_context`
-                  writes every one as `[Entry #<id>, <timestamp>]` -- so
-                  without it on the card the model was naming something the
-                  reader had no way to find. Rendered quietly, and as the id
-                  rather than a per-opportunity sequence, because that is the
-                  number both the model and `?entry=` links use. */}
-              <span className="entry-number">#{entry.id}</span>
+              {/* The entry's number within this deal (3.8, changed to a
+                  per-deal sequence in 3.9 by **D-139**). The AI cites entries
+                  by this number, so the card has to print the same one: the
+                  server computes it once
+                  (`timeline_utils.ENTRY_SEQUENCE_SQL`) and both read it,
+                  rather than each side counting. #1 is the oldest thing that
+                  happened here, which is what a person counting a timeline
+                  counts -- the row id, which this used to show, is still what
+                  `?entry=` links carry. */}
+              <span className="entry-number">#{entry.sequence}</span>
               <EntryTypeBadge type={entry.type} />
               {entry.system_generated && (
                 <span className="system-badge">System</span>

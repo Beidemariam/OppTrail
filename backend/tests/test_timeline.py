@@ -585,3 +585,84 @@ def test_invalid_timestamps_are_rejected_and_the_dashboard_stays_up(
 
     # A rejected write must not be able to take the dashboard down for anyone.
     assert client.get("/api/v2/opportunities").status_code == 200
+
+
+def test_entries_are_numbered_chronologically_within_their_opportunity(
+    client: TestClient,
+) -> None:
+    """`sequence` is the number a reader counts (milestone 3.9, **D-139**).
+
+    #1 is the oldest thing that happened on the deal, not the first row
+    written: creating an opportunity writes a system entry stamped now, so a
+    backdated entry added afterwards is older than it and takes the lower
+    number. Creation order would have numbered the system entry #1 and the
+    thing that actually happened first #2, which is the case that ruled it out.
+    """
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    create_entry(client, opportunity["id"], title="Kickoff", event_timestamp=days_ago(10))
+    create_entry(client, opportunity["id"], title="Proposal", event_timestamp=days_ago(3))
+
+    items = client.get(f"/api/v2/opportunities/{opportunity['id']}/timeline").json()["items"]
+    numbered = {entry["title"]: entry["sequence"] for entry in items}
+
+    # Three entries: the two above and "Opportunity created", stamped now.
+    assert numbered["Kickoff"] == 1
+    assert numbered["Proposal"] == 2
+    assert numbered["Opportunity created"] == 3
+
+
+def test_a_backdated_entry_takes_its_place_in_the_numbering(client: TestClient) -> None:
+    """The cost D-139 accepts, pinned so nobody is surprised by it: a number is
+    a reading aid, so inserting an older entry renumbers what follows. The id
+    is the identity, and it does not move."""
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    later = create_entry(client, opportunity["id"], title="Proposal", event_timestamp=days_ago(3))
+
+    def sequence_of(entry_id: int) -> int:
+        items = client.get(f"/api/v2/opportunities/{opportunity['id']}/timeline").json()["items"]
+        return next(item["sequence"] for item in items if item["id"] == entry_id)
+
+    assert sequence_of(later["id"]) == 1
+
+    create_entry(client, opportunity["id"], title="Earlier call", event_timestamp=days_ago(9))
+
+    assert sequence_of(later["id"]) == 2
+
+
+def test_a_write_answers_with_the_same_number_the_list_reports(
+    client: TestClient,
+) -> None:
+    """Every read that answers with an entry carries `sequence`, which is why
+    the four of them share one SELECT (`ENTRY_ROWS_SQL`): a client cannot tell
+    which route drew the card it is holding."""
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    created = create_entry(client, opportunity["id"], title="Kickoff", event_timestamp=days_ago(10))
+    assert created["sequence"] == 1
+
+    patched = client.patch(f"/api/v2/timeline/{created['id']}", json={"title": "Kickoff call"})
+    assert patched.status_code == 200
+    assert patched.json()["sequence"] == 1
+
+
+def test_a_deleted_entry_leaves_the_numbering_to_the_entries_that_remain(
+    client: TestClient,
+) -> None:
+    """The numbering counts what is visible, so a soft delete closes the gap it
+    left. Restoring the entry puts the number back, because the count is over
+    the same `deleted_at IS NULL` set every other read filters on."""
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    first = create_entry(client, opportunity["id"], title="Kickoff", event_timestamp=days_ago(10))
+    second = create_entry(client, opportunity["id"], title="Proposal", event_timestamp=days_ago(3))
+
+    assert client.delete(f"/api/v2/timeline/{first['id']}").status_code == 204
+
+    items = client.get(f"/api/v2/opportunities/{opportunity['id']}/timeline").json()["items"]
+    assert next(item["sequence"] for item in items if item["id"] == second["id"]) == 1
+
+    assert client.post(f"/api/v2/timeline/{first['id']}/restore").status_code == 204
+    items = client.get(f"/api/v2/opportunities/{opportunity['id']}/timeline").json()["items"]
+    assert next(item["sequence"] for item in items if item["id"] == second["id"]) == 2

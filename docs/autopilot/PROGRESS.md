@@ -4368,8 +4368,10 @@ other three items landed on top of it.
       166px after. 34px is the filter bar's own control height and clears WCAG
       2.2 AA's 24px target minimum (D-002), so nothing about this is an
       accessibility regression.
-- [x] **Timeline cards print `#<id>`** in their meta row. This is the half of
-      the reviewer's AI observation that is a label rather than a feature:
+- [x] **Timeline cards print a number** in their meta row — the row id here,
+      replaced by a per-deal sequence in 3.9 once the human ruled on D-139.
+      This is the half of the reviewer's AI observation that is a label rather
+      than a feature:
       `ai_service.build_timeline_context` already writes every entry as
       `[Entry #<id>, <timestamp>]`, so the model was citing a number the screen
       never showed.
@@ -4390,6 +4392,42 @@ production when only the happy path is checked.
 - `e2e/03-note-history.spec.ts` asserted the merged log's three events in the
   order they happened, which the newest-first change reversed. A real
   consequence of a real decision, updated rather than loosened.
+
+### 3.9 A per-deal entry number (D-139) — **DONE**
+
+3.8 printed the row id on each card, and asked whether that or a per-deal
+sequence was right. The human chose the sequence, which turns the label into a
+definition: **#1 is the oldest thing that happened on the deal**, ranked by
+`(event_timestamp, id)`.
+
+- [x] **One expression, two readers.** `timeline_utils.ENTRY_SEQUENCE_SQL` is a
+      correlated count over the same `deleted_at IS NULL` set every other read
+      filters on, and it is read by the API's entry reads and by
+      `ai_service.build_timeline_context`. The AI's own query now orders by
+      `(event_timestamp, id)` rather than `created_at`, so its context ascends
+      in number order and a tie resolves the same way on both sides. The system
+      prompt cites `[Entry #number, date]`.
+- [x] **`ENTRY_ROWS_SQL`**, because four reads answer with an entry — the list
+      and the three writes that return the row they touched — and a client
+      cannot tell which one drew the card it is holding. They were four
+      identical `SELECT`s already; they are now one, for the reason
+      `SHARE_ROWS_SQL` is shared.
+- [x] **Creation order was the tempting answer and is wrong here** (D-139).
+      Creating an opportunity writes system entries stamped *now*, and the ETH
+      import is backdated to March, so creation order numbers the system
+      entries #1-#3 and the earliest real event #4 — the page would read
+      `1, 2, 3, 32, 31, ...`. Checked against the real data before choosing,
+      not reasoned about in the abstract.
+- [x] **The cost is pinned, not hidden.** A backdated insert renumbers what
+      follows it, so the number is a reading aid and the row id remains the
+      identity that `?entry=` links carry. Four tests: the numbering itself,
+      the renumbering, that a write answers with the same number the list
+      reports, and that a soft delete closes the gap while a restore reopens
+      it.
+- [x] **`test_the_context_cites_the_numbers_the_timeline_prints`** is the guard
+      that matters, and it was confirmed to fail with the AI service reverted:
+      an answer citing a number the reader cannot find is the original defect,
+      and citing the row id is how it looked.
 
 **Still Phase 4: live links in the AI's answers.** The shape exists already —
 D-124's `[title](/opportunities/1?entry=17)`, rendered as a router `Link`, with

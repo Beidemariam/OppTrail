@@ -2310,6 +2310,8 @@ export interface components {
             system_generated: boolean;
             /** Created At */
             created_at: string;
+            /** Sequence */
+            sequence: number;
             /** Notes */
             notes: components["schemas"]["NotePublic"][];
         };

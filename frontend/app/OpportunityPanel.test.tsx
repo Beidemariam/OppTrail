@@ -65,18 +65,21 @@ describe("the timeline", () => {
 
   it("numbers each entry, because the AI cites entries by that number", async () => {
     // `ai_service.build_timeline_context` writes every entry as
-    // `[Entry #<id>, <timestamp>]`, so an answer says "Entry #100" — which
-    // was unfindable on screen until milestone 3.8.
+    // `[Entry #<number>, <timestamp>]`, so an answer says "Entry #2" — which
+    // was unfindable on screen until milestone 3.8. The number is the server's
+    // per-deal sequence since 3.9 (D-139), not the row id, so this asserts the
+    // card prints what the API sent rather than anything derived here.
     await renderDashboard({
       opportunities: [anOpportunity()],
-      entries: [anEntry({ id: 100, title: "Discovery call" })],
+      entries: [anEntry({ id: 100, title: "Discovery call", sequence: 2 })],
     });
     await openTimeline("Northwind rollout");
 
     const entry = (
       await screen.findByRole("heading", { name: "Discovery call" })
     ).closest("article")!;
-    expect(within(entry).getByText("#100")).toBeInTheDocument();
+    expect(within(entry).getByText("#2")).toBeInTheDocument();
+    expect(within(entry).queryByText("#100")).toBeNull();
   });
 
   it("opens the timeline a deep link arrived with", async () => {
