@@ -2161,3 +2161,65 @@ over `python-markdown`, chosen for sharing a lineage with the editor's own
 sandbox; sanitizing the rendered HTML rather than trusting the parser alone,
 and setting `html: False` explicitly rather than relying on `commonmark`'s
 default).
+
+## Phase 3 — gate (end of phase, every milestone 3.0–3.6 done)
+
+One documentation fix this session — `backend/tools/seed.py`'s printed tour,
+which still claimed the PDF export escaped Markdown after milestone 3.5 made
+that false, and had no paragraph for 3.4 at all. No application code, no
+schema, no route. The full sandbox half of the split gate (brief §3.4) was
+run twice: once at milestone 3.6's commit `831a239` to establish the phase
+was ready, and again after that fix, so the figures below belong to the
+commit this entry is recorded on rather than being copied forward from 3.5's
+gate. Both runs were identical.
+
+```
+backend:  ruff check (all passed), ruff format --check (88 files),
+          mypy app tools (42 source files)              all clean
+          458 passed, 98.08% combined line+branch coverage
+          (--cov-fail-under=90 enforced); the ≥95%-branch modules
+          (permissions.py, audit_utils.py, auth.py, soft_delete.py,
+          routes_ai.py, versioning.py) all at 100%, and this phase's
+          new modules too -- activity.py 100%, events.py 100%,
+          routes_events.py 100%
+          pip-audit                                     no known vulnerabilities
+frontend: tsc --noEmit, eslint, prettier --check         all clean
+          (0 errors, 3 warnings -- the two carried from Phase 2 plus
+          MarkdownText.tsx:71's unused `_node`, new in 3.1; all three
+          named in phase-3-summary.md §4 rather than left to be found)
+          530 passed (34 files), 97.13% statements / 91.35% branch /
+          95.71% functions / 97.09% line (thresholds 96/96/95/90 all met)
+          npm audit                                      0 vulnerabilities
+contract: scripts/generate-api-client.sh --check          up to date
+e2e:      69 passed (22 specs), axe clean on every screen in both light
+          and dark; DEFERRED_AXE_RULES still empty
+docker:   deferred to the host half -- scripts/autopilot-gate.sh 3
+          (no Docker socket in this sandbox, per sandbox/README.md).
+          Load-bearing this phase: 3.5 changed the PDF renderer and the
+          one test that renders a real PDF is the one test that cannot
+          run here.
+```
+
+Coverage floors (brief §6.2) all met with room: backend ≥ 90% line / ≥ 80%
+branch (98.08% combined); frontend ≥ 80% line (97.09%, against the project's
+own 96/96/95/90 thresholds); the auth, permissions, soft-delete, audit and
+AI-agent modules ≥ 95% branch (all at 100%).
+
+Authorization-matrix endpoints: 52 (Phase 2 gate) → 69 (the activity log, the
+members read, the follow-ups read, the two multi-record export routes and the
+bulk export action, three version-restore routes, resolve/unresolve,
+reactions, the three watch routes, the watchers read, and the event stream).
+One new invariant test: `test_invariant_resolving_a_thread_writes_no_body`.
+
+Coverage across the phases so far:
+
+| | Phase 1 gate | Phase 2 gate | Phase 3 gate |
+|---|---|---|---|
+| Backend tests | 258 | 338 | 458 |
+| Backend coverage | 97.28% | 97.27% | 98.08% |
+| Frontend tests | 102 | 429 | 530 |
+| Frontend line coverage | 88.38% | 97.07% | 97.09% |
+| E2E tests | 18 (7 specs) | 57 (17 specs) | 69 (22 specs) |
+| Authorization-matrix endpoints | 47 | 52 | 69 |
+
+Full detail and the try-it steps: `docs/autopilot/reviews/phase-3-summary.md`.

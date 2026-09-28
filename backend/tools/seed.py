@@ -235,7 +235,7 @@ def seed() -> None:
     blair = sign_up(*USERS[1])
     casey = sign_up(*USERS[2])
     # Dana has access to nothing: the negative case, by hand. Milestone 3.3a
-    # gives her one exception -- watching Northwind below, which is reachable
+    # gives them one exception -- watching Northwind below, which is reachable
     # with no share at all (`docs/FEATURES.md` §7).
     dana = sign_up(*USERS[3])
 
@@ -665,9 +665,11 @@ def main(argv: list[str] | None = None) -> int:
         "  Markdown and always was - nothing migrated. Press Edit on it and\n"
         "  the same note opens in the composer as a list rather than as\n"
         "  asterisks; Add note and Add comment open the same editor, one\n"
-        "  control until you write in them. PDF export still renders these\n"
-        "  bodies as plain text - milestone 3.5 is the other half of\n"
-        "  requirement 17.\n"
+        "  control until you write in them. Since milestone 3.5 the PDF\n"
+        "  export renders these same bodies as markup rather than as\n"
+        "  literal asterisks - the other half of requirement 17. It is\n"
+        "  the one line of this tour that needs the container, since\n"
+        "  WeasyPrint's native libraries are absent on a macOS host.\n"
         "\n"
         "  The composer's three triggers (milestone 3.2) are typed rather than\n"
         "  clicked. In any composer on Northwind, '@bla' offers Blair by name\n"
@@ -700,12 +702,22 @@ def main(argv: list[str] | None = None) -> int:
         "  cannot react at all - the same require_timeline_write rule that\n"
         "  keeps them from writing anything else. Dana, shared on nothing,\n"
         "  follows Northwind anyway - POST /api/v2/opportunities/1/watch\n"
-        "  answers 200 for her the way it does for anyone signed in, which is\n"
-        '  `FEATURES.md` §7\'s "follow an opportunity you are not shared on";\n'
-        "  she still gets 404 reading\n"
-        "  Northwind itself, since watching grants no access. Sign in as Alex\n"
-        "  and GET /api/v2/opportunities/1/watchers - owner-only, like the\n"
-        "  share list beside it - names Dana as the one watcher."
+        "  answers 200 for them the way it does for anyone signed in, which\n"
+        "  is `FEATURES.md` §7's \"follow an opportunity you are not shared\n"
+        '  on"; they still get 404 reading Northwind itself, since watching\n'
+        "  grants no access. Sign in as Alex and GET\n"
+        "  /api/v2/opportunities/1/watchers - owner-only, like the share list\n"
+        "  beside it - names Dana as the one watcher.\n"
+        "\n"
+        "  Live updates and the note edit guard (milestone 3.4) are the one\n"
+        "  thing here that needs two windows rather than seeded rows. Open\n"
+        "  Northwind as Alex in one and as Blair in the other: an entry\n"
+        "  added in either appears in the other within a second, because\n"
+        "  GET /api/v2/opportunities/1/events pushes an invalidation and\n"
+        "  the client refetches rather than being sent the row. Then press\n"
+        "  Edit on the same note in both windows and save in one: the\n"
+        "  second save is refused with a 409, keeps the draft, and offers\n"
+        "  'Discard my edit' instead of overwriting the first silently."
     )
     return 0
 

@@ -1,4 +1,4 @@
-STATUS: IN_PROGRESS phase=3
+STATUS: AWAITING_REVIEW phase=3
 
 # Autopilot Progress
 
@@ -4177,6 +4177,107 @@ session rule.
 - Concurrent note edits produce a 409 and a reload prompt, not a silent
   clobber.
 - Exported PDF renders bold and lists rather than literal asterisks.
+
+Every line above holds, and each is checked by a test rather than asserted
+here:
+
+- [x] **A bullet list can be typed in a note** — milestone 3.1's composer.
+      `e2e/18-rich-text.spec.ts` types `- ` and three items into a note in a
+      real browser, which is the one place the Markdown input rules can be
+      driven at all (D-113: `userEvent.type` cannot drive ProseMirror under
+      jsdom).
+- [x] **@mention autocompletes and notifies** — 3.2's `@` trigger over
+      `GET .../members`. `e2e/19-suggestions.spec.ts` picks a colleague from
+      the menu; `e2e/04-mentions.spec.ts` follows the notification to the
+      recipient's bell. The two halves are separate specs because the
+      autocomplete is what 3.2 added to a notification path that already
+      worked.
+- [x] **Two browsers: an entry created in one appears in the other in
+      < 2 s** — 3.4's stream. `e2e/22-live-updates.spec.ts` runs two real
+      browser contexts and waits for the second to show the first's entry
+      with no reload.
+- [x] **Concurrent note edits produce a 409 and a reload prompt, not a
+      silent clobber** — the second spec in the same file, and
+      `tests/test_events.py` on the server side. The refused save keeps the
+      draft and renames Cancel to "Discard my edit", which is ADR 0003's
+      "offer to reload".
+- [x] **Exported PDF renders bold and lists rather than literal asterisks**
+      — 3.5. `tests/test_export.py::test_pdf_html_renders_markdown_instead_of_escaping_it`
+      asserts the rendered HTML directly (no WeasyPrint needed, so it runs
+      everywhere); the full PDF render is the one test guarded on WeasyPrint
+      being importable, so it executes in the container and in the host gate
+      and is skipped on a macOS laptop. **This is the acceptance line the
+      host half of the gate is load-bearing for.**
+
+### Phase 3 gate and review packet — **DONE**
+
+Every milestone in Phase 3's list complete (3.0, 3.0a, 3.0b, 3.1, 3.1a,
+3.1b, 3.1c, 3.2, 3.3, 3.3a, 3.4, 3.5, and 3.6 as N/A). This session ran the
+full sandbox half of the split gate (brief §3.4), fixed one documentation
+defect the gate surfaced, re-ran the full gate against the fix, and wrote the
+phase review packet.
+
+- [x] **Full `make check` green, run twice.** First against milestone 3.6's
+      commit `831a239` to establish the phase is ready, then again after the
+      seed fix below so the gate is green at the commit this entry records —
+      not copied forward from 3.5's own gate. Both runs: `ruff check`, `ruff
+      format --check` (88 files), `mypy app tools` (42 source files),
+      frontend `tsc --noEmit` / `eslint` (0 errors, 3 warnings) /
+      `prettier --check`, backend pytest (458 passed, 98.08% combined
+      line+branch, `--cov-fail-under=90`, every ≥95%-branch module at 100%),
+      frontend vitest (530 passed in 34 files, 97.13% statements / 91.35%
+      branch / 95.71% functions / 97.09% line against thresholds
+      96/96/95/90), the generated-client contract check, `pip-audit` (no
+      known vulnerabilities), `npm audit` (0 vulnerabilities), Playwright
+      E2E + axe (69 passed, 22 specs, axe clean in both light and dark on
+      every screen; `DEFERRED_AXE_RULES` still empty). The Docker build,
+      in-image suite and smoke test are named as deferred to the host, not
+      silently skipped.
+- [x] **One defect found and fixed at the gate: `make seed`'s printed tour
+      had gone stale.** It still said *"PDF export still renders these
+      bodies as plain text - milestone 3.5 is the other half of requirement
+      17"*, which 3.5 made false and did not update, and 3.4 had shipped
+      with no tour paragraph at all. Both corrected in
+      `backend/tools/seed.py`: the rich-content paragraph now says what 3.5
+      does (and that this is the one tour line needing the container), and a
+      new paragraph names the two-window check for the stream and the 409
+      guard. Root cause worth recording rather than just the fix:
+      `tests/test_seed.py` asserts the *data* behind every tour claim and
+      not the prose, so a sentence can go false while the suite stays green
+      — and the printed tour is what the review packet's "How to try it"
+      sends a reviewer to. Brief §5 requires a seed demo path per feature
+      milestone; 3.4 and 3.5 are now both covered. While in that paragraph,
+      Dana's pronouns were made consistent with the rest of the tour, which
+      refers to every other seeded persona as "they".
+- [x] **Eleven `needs human review: Y` decisions from this phase are open at
+      this gate** — D-102, D-105, D-106, D-107, D-109, D-110, D-111, D-121,
+      D-123, D-129, D-132 — each with a recommendation and its alternative
+      in the review packet §3. Phase 3 recorded D-101 through D-135 in all;
+      the other twenty-four are flagged `N` (implementation calls inside
+      milestones the human already scoped, or verified bug fixes). No ADR
+      was written this phase and none was needed: ADR 0003 already fixed
+      the real-time transport, the invalidation-not-payload rule and the
+      conflict model, and 3.4 implements it.
+- [x] **Authorization matrix: 52 endpoints at the Phase 2 gate → 69 now**,
+      every new route registered with its milestone (the matrix test fails
+      the build otherwise). One new `test_invariant_*` this phase,
+      `test_invariant_resolving_a_thread_writes_no_body`.
+- [x] `docs/autopilot/COVERAGE.md`: gate entry added under "Phase 3 — gate",
+      cross-referencing the review packet rather than duplicating it.
+- [x] `docs/autopilot/reviews/phase-3-summary.md` written per brief §3.5's
+      seven sections.
+
+Work log: single session, gate-and-packet plus the one seed-tour fix.
+Changed: `backend/tools/seed.py` (printed tour only — no seeded data, no
+schema, no route), `docs/autopilot/PROGRESS.md` (this entry, the acceptance
+checks above, status line), `docs/autopilot/COVERAGE.md` (Phase 3 gate
+entry). New: `docs/autopilot/reviews/phase-3-summary.md`. Per brief
+§3.1/§3.3: no tag, merge, or push from this session, and the next phase is
+not started. **`scripts/autopilot-gate.sh 3` against this branch's tip
+commit is required before `scripts/autopilot-accept.sh` can tag
+`phase-3-accepted`** — and it matters more this phase than last, because
+3.5 changed the PDF renderer and the test that renders a real PDF is the one
+test this sandbox cannot run.
 
 ---
 
