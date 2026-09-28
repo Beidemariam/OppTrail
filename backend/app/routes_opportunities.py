@@ -7,6 +7,7 @@ from .activity import fetch_activity_page
 from .audit_utils import create_audit_log_entry
 from .auth import get_current_user
 from .database import db_connection
+from .events import publish_opportunity_changed
 from .notification_service import create_notification
 from .pagination import Page, PageRequest, cursor_clause, page_params, split_page
 from .permissions import Role, require_opportunity_access, require_opportunity_owner
@@ -201,6 +202,13 @@ def create_opportunity(
     payload: OpportunityCreate,
     user: sqlite3.Row = Depends(get_current_user),
 ) -> OpportunityPublic:
+    """The one write on this router that announces nothing (milestone 3.4).
+
+    ADR 0003's stream is per opportunity, and this one does not exist until
+    the `INSERT` below returns its id -- so there is nobody subscribed to tell.
+    The board a colleague is looking at is a different question, and a
+    cross-opportunity stream is not what the ADR scopes.
+    """
     created_at = utc_now()
     with db_connection() as connection:
         cursor = connection.execute(
@@ -332,6 +340,7 @@ def update_opportunity(
         connection.commit()
         stalled = is_opportunity_stalled(connection, opportunity_id)
 
+    publish_opportunity_changed(opportunity_id)
     return opportunity_from_row(updated, "owner", stalled)
 
 
@@ -418,6 +427,7 @@ def restore_opportunity_version(
     writes the same `stage_change` system entry a stage change always writes,
     because the timeline must not disagree with the record.
     """
+    changed = False
     with db_connection() as connection:
         require_opportunity_owner(connection, opportunity_id, int(user["id"]))
         version = fetch_version(connection, OPPORTUNITY_VERSIONS, opportunity_id, version_number)
@@ -458,9 +468,15 @@ def restore_opportunity_version(
             )
             connection.commit()
             row = restored
+            changed = True
 
         stalled = is_opportunity_stalled(connection, opportunity_id)
 
+    # Restoring the version that is already current writes nothing (D-120), so
+    # it announces nothing: an invalidation with no write behind it would send
+    # every other reader to fetch what they already hold.
+    if changed:
+        publish_opportunity_changed(opportunity_id)
     return opportunity_from_row(row, "owner", stalled)
 
 
@@ -511,6 +527,8 @@ def delete_opportunity(
             },
         )
         connection.commit()
+
+    publish_opportunity_changed(opportunity_id)
 
 
 def bulk_delete(
@@ -696,6 +714,11 @@ def bulk_opportunity_action(
     """
     actor_id = int(user["id"])
     results: list[BulkActionResultItem] = []
+    # Which ids actually changed, for the one announcement each of them owes
+    # its readers. `add_to_view` is absent by construction: it writes to the
+    # caller's own saved view, not to the opportunity (D-106), so nobody
+    # watching the deal has gone stale.
+    touched: list[int] = []
 
     with db_connection() as connection:
         # `is not None` rather than truthiness: the validator has already
@@ -748,12 +771,17 @@ def bulk_opportunity_action(
             else:
                 pinned.append(opportunity_id)
 
+            if payload.action != "add_to_view":
+                touched.append(opportunity_id)
             results.append(BulkActionResultItem(id=opportunity_id, status="ok"))
 
         if view is not None and pinned:
             add_opportunity_ids_to_view(connection, view, pinned)
 
         connection.commit()
+
+    for opportunity_id in touched:
+        publish_opportunity_changed(opportunity_id)
 
     return BulkActionResponse(results=results)
 
@@ -796,3 +824,5 @@ def restore_opportunity_route(
             },
         )
         connection.commit()
+
+    publish_opportunity_changed(opportunity_id)

@@ -16,6 +16,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from test_timeline import edit_note
 
 from app.activity import ACTIVITY_STRIDE, SOURCE_RANKS
 
@@ -173,9 +174,7 @@ def test_entry_and_note_edits_are_reported_against_what_they_edited(
     assert (
         client.patch(f"/api/v2/timeline/{entry_id}", json={"title": "Discovery call (2)"})
     ).status_code == 200
-    assert (
-        client.patch(f"/api/v2/notes/{note_id}", json={"body": "Second draft"})
-    ).status_code == 200
+    assert (edit_note(client, note_id, "Second draft")).status_code == 200
 
     events = activity(client, opportunity["id"])
     edits = [event["detail"] for event in events if event["detail"]["source"] == "version"]
@@ -209,9 +208,7 @@ def test_an_edit_to_something_since_deleted_leaves_the_feed(client: TestClient) 
     opportunity = create_opportunity(client)
     entry_id = create_entry(client, opportunity["id"])
     note_id = add_note(client, entry_id)
-    assert (
-        client.patch(f"/api/v2/notes/{note_id}", json={"body": "Second draft"})
-    ).status_code == 200
+    assert (edit_note(client, note_id, "Second draft")).status_code == 200
 
     before = activity(client, opportunity["id"])
     assert "version" in sources(before)
@@ -346,9 +343,7 @@ def test_walking_the_cursor_yields_every_event_exactly_once(
     assert (
         client.patch(f"/api/v2/timeline/{entry_id}", json={"title": "Discovery call (2)"})
     ).status_code == 200
-    assert (
-        client.patch(f"/api/v2/notes/{note_id}", json={"body": "Second draft"})
-    ).status_code == 200
+    assert (edit_note(client, note_id, "Second draft")).status_code == 200
     assert client.delete(f"/api/v2/notes/{note_id}").status_code == 204
 
     whole = activity(client, opportunity["id"])
@@ -408,9 +403,9 @@ def test_the_id_separates_the_five_sources_it_merges(client: TestClient) -> None
     for json_body, path in (
         ({"name": "Renamed"}, f"/api/v2/opportunities/{opportunity['id']}"),
         ({"title": "Second call"}, f"/api/v2/timeline/{entry_id}"),
-        ({"body": "Second draft"}, f"/api/v2/notes/{note_id}"),
     ):
         assert client.patch(path, json=json_body).status_code == 200
+    assert edit_note(client, note_id, "Second draft").status_code == 200
     assert client.delete(f"/api/v2/comments/{comment_id}").status_code == 204
 
     events = activity(client, opportunity["id"])

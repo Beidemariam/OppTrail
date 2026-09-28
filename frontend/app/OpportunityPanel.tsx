@@ -11,6 +11,7 @@ import {
   type TimelineFilters,
 } from "../lib/domain";
 import { useKeyboardShortcuts } from "../lib/keyboard";
+import { useLiveUpdates } from "../lib/liveUpdates";
 import {
   canChangeItem,
   canManageOpportunity,
@@ -120,6 +121,14 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
       type: entry.type,
     })),
   };
+
+  // Somebody else's writes on this deal, pushed rather than polled (milestone
+  // 3.4, ADR 0003). Declared here, above the "not available" return, for the
+  // same reason the scroll effect is: a hook after a conditional return is a
+  // hook that sometimes does not run. A reader with no access gets 404 from
+  // the stream, which `EventSource` treats as a failed connection and does not
+  // retry (`lib/liveUpdates.ts`).
+  useLiveUpdates(opportunityId);
 
   // `c` means "create the thing this screen is about", so while a timeline is
   // open it composes an entry rather than an opportunity (milestone 2.4a).

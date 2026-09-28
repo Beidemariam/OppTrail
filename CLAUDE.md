@@ -92,10 +92,11 @@ Routers are split by domain and all mounted in `main.py`: `routes_auth`,
 `routes_sharing` (also owns the audit log endpoint and the member list the
 mention autocomplete reads),
 `routes_timeline` (entries, notes, comment threads, note versions), `routes_ai`,
-`routes_export`, `routes_notifications`, `routes_search`. Shared logic lives in small
+`routes_export`, `routes_notifications`, `routes_search`, `routes_events` (the
+one route that answers `text/event-stream` rather than JSON). Shared logic lives in small
 helper modules rather than a service layer: `permissions.py`, `time_utils.py`,
 `audit_utils.py`, `timeline_utils.py`, `notification_service.py`, `ai_service.py`,
-`export_service.py`, `search.py`, `versioning.py`, `activity.py`.
+`export_service.py`, `search.py`, `versioning.py`, `activity.py`, `events.py`.
 
 ### One API surface
 
@@ -237,6 +238,78 @@ mirror its v1 twin. It went with the rest of v1 in milestone 2.9;
   `POST /api/v2/notifications/mark-all-read` for everything. The frontend
   inbox panel (`app/NotificationMenu.tsx`) reads the history and marks
   through both.
+
+### Live updates
+
+`GET /api/v2/opportunities/{id}/events` (milestone 3.4) is ADR 0003's stream:
+one long-lived `text/event-stream` per open timeline, carrying
+**invalidations** and never payloads. The server says
+`{"type": "timeline.changed", "opportunity_id": 7}` and the client refetches
+through `lib/queries.ts`, so nothing about what a row looks like or who may
+read it is decided twice. `app/events.py` is the transport, `routes_events.py`
+the permission boundary, `lib/liveUpdates.ts` the client half.
+
+- **Two event types, and one is a superset of the other.**
+  `timeline.changed` covers everything hanging off the timeline — entries,
+  notes, comments, reactions, a resolved thread — and `opportunity.changed`
+  the record, its stage, its sharing, its ownership and its watchers. An
+  invalidation may be broader than the write behind it and never narrower, so
+  `opportunity.changed` also invalidates the timeline: most writes to a record
+  leave a system entry there and the event does not say whether this one did.
+- **Publish after `commit()`.** Every `publish_*` call in `routes_*.py` sits
+  below the commit, because the subscriber's only reaction is to read again
+  and an event sent from inside the transaction sends them to fetch the state
+  it is about to replace. A write that wrote nothing publishes nothing — an
+  empty `PATCH`, or a version restore of what is already current (D-120).
+  `POST /opportunities` is the one write that announces nothing at all: the id
+  does not exist until it returns, so there is nobody subscribed to tell.
+- **The queue de-duplicates, which is what bounds it.** `_Subscriber.pending`
+  refuses an event already waiting, so two writes a millisecond apart are one
+  refetch and a slow reader cannot grow the writer's memory. Sound only
+  because these are invalidations: idempotent, carrying nothing a dropped
+  duplicate would lose.
+- **A stream ends by itself** after `settings.sse_max_connection_seconds`
+  (300s), having advertised a `retry:`, and the browser's `EventSource`
+  reopens it. That is both good SSE hygiene — an intermediary never gets to
+  reap a connection this app still believes in — and what makes the route
+  testable, since Starlette's `TestClient` buffers a response whole
+  (`tests/conftest.py`'s `short_event_streams`). A reconnect is a *gap*, so
+  `useLiveUpdates` refetches on every `ready` after the first; the first needs
+  nothing, because the screen has only just read the data.
+- **Publishing crosses threads on purpose.** A `def` route handler runs in
+  FastAPI's worker threadpool while each subscriber's queue belongs to the
+  loop serving its own request, so `_Subscriber` stores that loop and
+  `publish` hands the work back with `call_soon_threadsafe`. A loop closed in
+  between raises `RuntimeError`, which is caught: one reader closing a tab
+  must not fail another person's write.
+- **`EventSource` does not retry a failed handshake.** A reader with no access
+  gets the ordinary 404, which the spec calls a failed connection and forbids
+  reestablishing, so the permission answer needs no client handling. What the
+  stream never re-checks is a role revoked mid-connection — the reader keeps
+  receiving invalidations, and the refetch each one provokes is the read that
+  answers 404. No content travels this path either way.
+
+**The note edit guard** is the other half of ADR 0003's conflict model, and
+the reason it is last-write-wins rather than CRDTs: comments are immutable and
+entries are rarely co-edited, so a note is the one body two people can be
+typing into at once. `NoteUpdate` carries a required `updated_at` — the value
+the editor was opened against — and `PATCH /api/v2/notes/{id}` answers 409 if
+the note has moved. Three things follow:
+
+- It is **required, not optional**: an optional guard is no guard, since the
+  client that omits it is exactly the one that clobbers. That makes it the
+  one API break this milestone carries (`docs/ROADMAP.md`'s table).
+- It is checked **after** the permission check, so a viewer is told they may
+  not edit rather than that their copy is stale.
+- `app/NoteBlock.tsx` captures `updated_at` **when the editor opens**, not on
+  save. The live stream refetches the note underneath an open editor, so
+  reading the prop at save time would hand back the value the *other* person's
+  write produced and the guard would pass on the one write it exists to stop.
+  The refused save keeps the draft and renames Cancel to "Discard my edit",
+  which is the "offer to reload" the ADR asks for.
+- `lib/api.ts` throws `ApiError` carrying the envelope's `code`, which is what
+  `isConflict` reads. That is the first use of a field `errors.py` has always
+  emitted for exactly this purpose.
 
 ### Migrations
 
@@ -928,9 +1001,10 @@ them refetch (D-056).
 The units worth testing directly, each in its own module:
 
 - `lib/api.ts` — `apiRequest<T>()`, the only fetch wrapper
-  (`credentials: "include"`, echoes the CSRF cookie on unsafe methods, throws on
-  non-2xx using the envelope's `error.message` — the one shape the API answers
-  with since v1 went).
+  (`credentials: "include"`, echoes the CSRF cookie on unsafe methods, throws
+  `ApiError` on non-2xx carrying the envelope's `error.message` *and* its
+  `error.code` — the one shape the API answers with since v1 went. `isConflict`
+  is the first caller to branch on the code, for the note edit guard).
 - `lib/query.ts` — `createQueryClient()`, the single TanStack Query
   configuration (no retries: `apiRequest` throws on 401 and 422 too).
 - `lib/snippet.ts` — turns a search snippet's match offsets into runs to
@@ -973,6 +1047,10 @@ The units worth testing directly, each in its own module:
 - `lib/suggestions.ts` — what `@`, `/` and `#` offer, and what choosing one
   inserts: text, a link, or a command over the block (3.2). Holds no editor
   call, so the whole list is tested without a DOM.
+- `lib/liveUpdates.ts` — which reads one pushed event makes stale, and the
+  hook that opens the stream for as long as a timeline is on screen (3.4).
+  See "Live updates". `app/test-live-updates.ts` is the fake `EventSource`
+  the component tests drive it with; jsdom implements none.
 - `app/InlineEdit.tsx` — `useInlineEditor` and `InlineEdit`, the two shapes
   of "edit this where it is read" (2.11). See "Editing where content is read".
 - `app/RichTextEditor.tsx` — `RichTextEditor` and `Composer`, the two shapes

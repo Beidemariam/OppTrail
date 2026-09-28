@@ -114,7 +114,15 @@ export interface paths {
          */
         get: operations["list_opportunities_page_api_v2_opportunities_get"];
         put?: never;
-        /** Create Opportunity */
+        /**
+         * Create Opportunity
+         * @description The one write on this router that announces nothing (milestone 3.4).
+         *
+         *     ADR 0003's stream is per opportunity, and this one does not exist until
+         *     the `INSERT` below returns its id -- so there is nobody subscribed to tell.
+         *     The board a colleague is looking at is a different question, and a
+         *     cross-opportunity stream is not what the ADR scopes.
+         */
         post: operations["create_opportunity_api_v2_opportunities_post"];
         delete?: never;
         options?: never;
@@ -586,7 +594,7 @@ export interface paths {
          *     `POST /timeline/{id}/restore`, which undoes a soft delete. A system entry
          *     needs no special case here: it cannot be edited, so it has exactly one
          *     version, which is always the current one -- and restoring what is already
-         *     current writes nothing (D-120).
+         *     current writes nothing (D-120) -- and so announces nothing either.
          */
         post: operations["restore_timeline_entry_version_api_v2_timeline__entry_id__versions__version_number__restore_post"];
         delete?: never;
@@ -643,7 +651,28 @@ export interface paths {
         delete: operations["delete_note_api_v2_notes__note_id__delete"];
         options?: never;
         head?: never;
-        /** Update Note */
+        /**
+         * Update Note
+         * @description Edit a note, unless somebody else edited it first (ADR 0003).
+         *
+         *     The conflict model for the whole app is last-write-wins with *this* guard,
+         *     not CRDTs or operational transforms: comments are immutable and entries
+         *     are rarely co-edited, so a note is the one body two people can be typing
+         *     into at once. `payload.updated_at` is the value the editor was opened
+         *     against; a mismatch means the note moved underneath it and the write is
+         *     refused with 409 rather than silently overwriting what arrived in between.
+         *     Nothing is lost when it does -- `note_versions` holds every recorded state
+         *     and the UI offers to reload.
+         *
+         *     Ordered after the permission check, so a viewer is told they may not edit
+         *     rather than that their copy is stale.
+         *
+         *     One bounded blind spot, and it is the same second-resolution limit D-067
+         *     already accepted for undo: `utc_now()` has one-second granularity, so two
+         *     edits inside one second carry the same `updated_at` and the later one is
+         *     accepted. That window is where the version history is the recovery
+         *     mechanism rather than the guard.
+         */
         patch: operations["update_note_api_v2_notes__note_id__patch"];
         trace?: never;
     };
@@ -1045,6 +1074,43 @@ export interface paths {
          *     and the date window is over the item's own timestamp.
          */
         get: operations["search_everything_api_v2_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/opportunities/{opportunity_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Opportunity Events
+         * @description Any role may listen -- this is `require_opportunity_access`, the same
+         *     gate as reading the timeline, because that is exactly what an event tells
+         *     the client to do again.
+         *
+         *     The check runs here rather than inside the generator on purpose: an async
+         *     generator's body does not start until the response is already being sent,
+         *     so a 403 raised in there would arrive after a 200 status line. What the
+         *     stream never re-checks is a role that changes mid-connection -- a share
+         *     removed while someone is listening leaves them a stream of
+         *     *invalidations*, and the refetch each one provokes is the read that
+         *     answers 404. No content reaches them through this path either way.
+         *
+         *     `def` rather than `async def` because the permission check is a synchronous
+         *     SQLite read, like every other route here. That costs a threadpool slot for
+         *     the length of that one query only: the generator handed to
+         *     `StreamingResponse` is iterated on the event loop, so an open stream holds
+         *     a connection and not a worker -- a better bound than ADR 0003's
+         *     consequences assume.
+         */
+        get: operations["opportunity_events_api_v2_opportunities__opportunity_id__events_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1562,10 +1628,25 @@ export interface components {
             /** Comments */
             comments: components["schemas"]["CommentThread"][];
         };
-        /** NoteUpdate */
+        /**
+         * NoteUpdate
+         * @description A note edit, carrying the state the editor was written against.
+         *
+         *     `updated_at` is ADR 0003's edit guard: the client sends back the value it
+         *     read, and `PATCH /api/v2/notes/{id}` answers 409 if the note has moved
+         *     since. It is required rather than optional because an optional guard is no
+         *     guard -- a client that omits it is exactly the client that clobbers.
+         *
+         *     It is not validated as a timestamp here. Anything that is not the note's
+         *     current `updated_at` is a conflict, and a malformed value is one of those:
+         *     reporting it as a 422 would tell a caller their *format* was wrong when
+         *     what is wrong is that they are editing a stale note.
+         */
         NoteUpdate: {
             /** Body */
             body: string;
+            /** Updated At */
+            updated_at: string;
         };
         /** NoteVersionPublic */
         NoteVersionPublic: {
@@ -4287,6 +4368,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Page_SearchResultPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    opportunity_events_api_v2_opportunities__opportunity_id__events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description An `text/event-stream` of invalidation events for this opportunity: `ready` once the stream is open, then `timeline.changed` and `opportunity.changed` as other clients write. Each `data` line is `{"type": ..., "opportunity_id": ...}`; no row content is pushed, so a reader refetches through the ordinary API. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
                 };
             };
             /** @description Validation Error */

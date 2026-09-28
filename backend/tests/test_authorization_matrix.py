@@ -63,6 +63,8 @@ class World:
     opportunity_id: int
     entry_id: int
     note_id: int
+    # The note's current `updated_at`, for the PATCH's edit guard (ADR 0003).
+    note_updated_at: str
     comment_id: int
     notification_id: int
     saved_view_id: int
@@ -290,7 +292,16 @@ MATRIX: dict[Endpoint, Case] = {
     Endpoint("PATCH", "/api/v2/notes/{note_id}"): Case(
         expected=scoped(viewer=403, editor=403, owner=200),
         url=lambda world: f"/api/v2/notes/{world.note_id}",
-        body=lambda world, actor: {"body": "Matrix note, edited"},
+        body=lambda world, actor: {
+            "body": "Matrix note, edited",
+            "updated_at": world.note_updated_at,
+        },
+        notes=(
+            "Carries ADR 0003's edit guard, so the body sends the note's real "
+            "updated_at: a stale one is 409 for everybody and would hide the "
+            "403s this row exists to check (tests/test_events.py has the "
+            "conflict cases)."
+        ),
     ),
     Endpoint("DELETE", "/api/v2/notes/{note_id}"): Case(
         expected=scoped(viewer=403, editor=403, owner=204),
@@ -446,6 +457,16 @@ MATRIX: dict[Endpoint, Case] = {
             "an old version back is a history operation, and the history is the "
             "owner's (D-096, D-120)."
         ),
+    ),
+    # Milestone 3.4: ADR 0003's live-update stream. `require_opportunity_access`
+    # — the same gate as reading the timeline, because an event says only
+    # "read it again". The stream carries no row content, so there is nothing
+    # for a role to filter; it closes itself after
+    # `settings.sse_max_connection_seconds`, which `conftest.short_event_streams`
+    # holds down to a fraction of a second so this row does not hang the suite.
+    Endpoint("GET", "/api/v2/opportunities/{opportunity_id}/events"): Case(
+        expected=scoped(viewer=200, editor=200, owner=200),
+        url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/events",
     ),
     # --- Unified activity log (milestone 3.0) -----------------------------
     Endpoint("GET", "/api/v2/opportunities/{opportunity_id}/activity"): Case(
@@ -670,9 +691,8 @@ def world(tmp_path, monkeypatch) -> World:
             "event_timestamp": "2026-09-04T10:00",
         },
     ).json()["id"]
-    note_id = owner.post(f"/api/v2/timeline/{entry_id}/notes", json={"body": "Owner note"}).json()[
-        "id"
-    ]
+    note = owner.post(f"/api/v2/timeline/{entry_id}/notes", json={"body": "Owner note"}).json()
+    note_id = note["id"]
     comment_id = owner.post(
         f"/api/v2/notes/{note_id}/comments", json={"body": "Owner comment"}
     ).json()["id"]
@@ -743,6 +763,7 @@ def world(tmp_path, monkeypatch) -> World:
         opportunity_id=opportunity_id,
         entry_id=entry_id,
         note_id=note_id,
+        note_updated_at=note["updated_at"],
         comment_id=comment_id,
         notification_id=notifications[0]["id"],
         saved_view_id=saved_view_id,

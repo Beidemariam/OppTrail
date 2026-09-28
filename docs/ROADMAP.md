@@ -309,6 +309,7 @@ guidelines.
 | `follow_up_date` → tasks | 4 | Field moves | Backfill into `tasks`; column retained one phase, dropped in 5 |
 | Entry `type` enum extension | 2 | CHECK constraint | Additive only; no existing value changes |
 | Rich text | 3 | None | Storage stays Markdown — the deliberate payoff of the original choice |
+| Note edit guard | 3 | `PATCH /api/v2/notes/{id}` requires `updated_at` | Required rather than optional: an optional guard is no guard, and the value is already on `NotePublic`, so a client echoes back what it read (ADR 0003) |
 
 ## Total
 

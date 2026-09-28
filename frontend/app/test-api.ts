@@ -346,6 +346,10 @@ export class FakeApi {
     { wait: Promise<void>; release: () => void }
   >();
   private nextId = 1000;
+  /** A monotonic clock for `updated_at`, so a second edit is distinguishable
+   * from the first. Deterministic on purpose (brief §6.5): a real timestamp
+   * would make an assertion depend on when the test ran. */
+  private clock = 0;
   // Version 1 is recorded when the fake sees the thing created, or — for the
   // rows a test hands it already made — the first time it is edited, from
   // the state it held before that edit. Either way the list opens with what
@@ -411,6 +415,11 @@ export class FakeApi {
 
   install(): void {
     vi.stubGlobal("fetch", vi.fn(this.handle.bind(this)));
+  }
+
+  private nextTimestamp(): string {
+    this.clock += 1;
+    return `2026-09-30T12:00:${String(this.clock).padStart(2, "0")}Z`;
   }
 
   private json(body: unknown, status = 200): Response {
@@ -874,6 +883,21 @@ export class FakeApi {
         return this.json(created, 201);
       }
       if (method === "PATCH") {
+        // ADR 0003's edit guard (milestone 3.4). The fake enforces it rather
+        // than accepting any PATCH, so "two people edited the same note" is a
+        // real path through the app and not a canned `failures` entry that
+        // would pass whatever the client sends.
+        if (body.updated_at !== note.updated_at) {
+          return this.json(
+            {
+              error: {
+                code: "conflict",
+                message: "This note has changed since you opened it.",
+              },
+            },
+            409,
+          );
+        }
         if (!this.versions.notes.has(noteId)) {
           this.recordVersion(
             this.versions.notes,
@@ -883,6 +907,9 @@ export class FakeApi {
         }
         note.body = body.body;
         note.edited = true;
+        // Moves on every accepted write, the way the server's does: the next
+        // edit has to echo this one back.
+        note.updated_at = this.nextTimestamp();
         this.recordVersion(
           this.versions.notes,
           noteId,

@@ -13,6 +13,7 @@ from .errors import error_body, install_error_handlers
 from .logging_utils import RequestLoggingMiddleware, configure_logging, logger
 from .routes_ai import router as ai_router
 from .routes_auth import router as auth_router
+from .routes_events import router as events_router
 from .routes_export import router as export_router
 from .routes_notifications import router as notifications_router
 from .routes_opportunities import router as opportunities_router
@@ -53,6 +54,7 @@ app.include_router(ai_router)
 app.include_router(export_router)
 app.include_router(notifications_router)
 app.include_router(search_router)
+app.include_router(events_router)
 app.include_router(saved_views_router)
 
 

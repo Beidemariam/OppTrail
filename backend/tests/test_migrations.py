@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 from conftest import CsrfClient
+from test_timeline import edit_note
 
 from app.database import (
     column_exists,
@@ -294,10 +295,7 @@ def test_writes_to_a_bridged_legacy_database_are_canonical(database_url: str) ->
         )
         assert note.status_code == 201
         note_id = note.json()["id"]
-        assert (
-            client.patch(f"/api/v2/notes/{note_id}", json={"body": "Edited body"}).status_code
-            == 200
-        )
+        assert edit_note(client, note_id, "Edited body").status_code == 200
         assert (
             client.post(f"/api/v2/notes/{note_id}/comments", json={"body": "A comment"}).status_code
             == 201

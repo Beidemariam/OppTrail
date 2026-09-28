@@ -17,6 +17,7 @@ from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
+from test_timeline import edit_note
 
 from app import routes_opportunities
 from app.pagination import encode_cursor
@@ -360,7 +361,7 @@ def test_note_version_pages_read_forwards(client: TestClient) -> None:
     note = client.post(f"/api/v2/timeline/{entry['id']}/notes", json={"body": "First"})
     note_id = note.json()["id"]
     for body in ("Second", "Third"):
-        assert client.patch(f"/api/v2/notes/{note_id}", json={"body": body}).status_code == 200
+        assert edit_note(client, note_id, body).status_code == 200
 
     items, pages = walk(client, f"/api/v2/notes/{note_id}/versions", limit=1)
 

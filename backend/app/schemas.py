@@ -426,7 +426,21 @@ class NoteCreate(BaseModel):
 
 
 class NoteUpdate(BaseModel):
+    """A note edit, carrying the state the editor was written against.
+
+    `updated_at` is ADR 0003's edit guard: the client sends back the value it
+    read, and `PATCH /api/v2/notes/{id}` answers 409 if the note has moved
+    since. It is required rather than optional because an optional guard is no
+    guard -- a client that omits it is exactly the client that clobbers.
+
+    It is not validated as a timestamp here. Anything that is not the note's
+    current `updated_at` is a conflict, and a malformed value is one of those:
+    reporting it as a 422 would tell a caller their *format* was wrong when
+    what is wrong is that they are editing a stale note.
+    """
+
     body: str = Field(min_length=1)
+    updated_at: str
 
     @field_validator("body")
     @classmethod

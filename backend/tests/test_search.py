@@ -23,6 +23,7 @@ import pytest
 from conftest import CsrfClient
 from fastapi.testclient import TestClient
 from test_migrations import build_mvp_database
+from test_timeline import edit_note
 
 from app.database import db_connection, initialize_database
 from app.permissions import ACCESSIBLE_OPPORTUNITY_IDS_SQL
@@ -164,12 +165,7 @@ def test_editing_a_note_replaces_its_indexed_text(client: TestClient) -> None:
     entry = create_entry(client, opportunity["id"], body="Nothing relevant here")
     note = create_note(client, entry["id"], "Original wording about procurement")
 
-    assert (
-        client.patch(
-            f"/api/v2/notes/{note['id']}", json={"body": "Rewritten to mention logistics"}
-        ).status_code
-        == 200
-    )
+    assert edit_note(client, note["id"], "Rewritten to mention logistics").status_code == 200
 
     assert indexed_document_ids() == []
     assert indexed_document_ids('"logistics"*') == [document_id("note", note["id"])]

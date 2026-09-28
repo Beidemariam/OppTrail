@@ -111,12 +111,34 @@ def add_entry(session: Session, opportunity_id: int, **fields: Any) -> int:
     return int(response.json()["id"])
 
 
-def add_note(session: Session, entry_id: int, body: str) -> int:
+def add_note(session: Session, entry_id: int, body: str) -> dict[str, Any]:
+    """The created note, not just its id: an edit needs the `updated_at` it is
+    written against (ADR 0003's guard on `PATCH /api/v2/notes/{id}`).
+    """
     response = check(
         session.client.post(f"/api/v2/timeline/{entry_id}/notes", json={"body": body}),
         f"adding a note to entry {entry_id}",
     )
-    return int(response.json()["id"])
+    note: dict[str, Any] = response.json()
+    return note
+
+
+def edit_note(session: Session, note: dict[str, Any], body: str) -> dict[str, Any]:
+    """Rewrite a note, echoing back the `updated_at` the caller last read.
+
+    That is the whole edit guard: the server answers 409 if the note moved in
+    between, which is what stops two people on one deal overwriting each other
+    (ADR 0003's conflict model).
+    """
+    response = check(
+        session.client.patch(
+            f"/api/v2/notes/{note['id']}",
+            json={"body": body, "updated_at": note["updated_at"]},
+        ),
+        f"editing note {note['id']}",
+    )
+    edited: dict[str, Any] = response.json()
+    return edited
 
 
 def add_comment(
@@ -274,16 +296,18 @@ def seed() -> None:
     # and closed; one is still open, so the demo shows both states rather
     # than only the tidy one.
     permissions_question = add_comment(
-        alex, demo_note, "Sent the permissions summary. They want viewer-only for finance."
+        alex,
+        demo_note["id"],
+        "Sent the permissions summary. They want viewer-only for finance.",
     )
     add_comment(
         blair,
-        demo_note,
+        demo_note["id"],
         "Confirmed with the security lead - viewer-only is enough.",
         parent_id=permissions_question,
     )
     resolve_thread(alex, permissions_question)
-    add_comment(blair, demo_note, "Still open: who signs off on the pilot clause?")
+    add_comment(blair, demo_note["id"], "Still open: who signs off on the pilot clause?")
 
     # Milestone 3.3a: reactions read as toggle state on a comment. Casey is a
     # viewer here and cannot react (require_timeline_write), so it is Alex and
@@ -305,12 +329,10 @@ def seed() -> None:
         event_timestamp=days_ago(6, hour=16),
     )
     revised = add_note(alex, proposal, "Sent the first cut with list pricing.")
-    check(
-        alex.client.patch(
-            f"/api/v2/notes/{revised}",
-            json={"body": "Sent the first cut with list pricing, then revised to a 8% discount."},
-        ),
-        "editing a note to create a second version",
+    edit_note(
+        alex,
+        revised,
+        "Sent the first cut with list pricing, then revised to a 8% discount.",
     )
 
     add_entry(
@@ -448,7 +470,10 @@ def seed() -> None:
         event_timestamp=days_ago(3, hour=8),
     )
     removed_note = add_note(alex, scratch, "Duplicate of the Contoso lead - removing.")
-    check(alex.client.delete(f"/api/v2/notes/{removed_note}"), "soft-deleting a note")
+    check(
+        alex.client.delete(f"/api/v2/notes/{removed_note['id']}"),
+        "soft-deleting a note",
+    )
 
     # And a deletion that was taken back (milestone 2.4b), so the log shows
     # both halves of an undo and the entry it took is readable again.

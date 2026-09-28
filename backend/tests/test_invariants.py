@@ -16,6 +16,7 @@ import sqlite3
 import pytest
 from fastapi.testclient import TestClient
 from route_registry import iter_endpoints
+from test_timeline import edit_note
 
 from app import schemas
 from app.database import db_connection, read_only_connection
@@ -198,7 +199,7 @@ def test_invariant_editing_a_note_marks_it_and_keeps_the_previous_version(
 
     assert note["edited"] is False
 
-    updated = client.patch(f"/api/v2/notes/{note['id']}", json={"body": "Second draft"})
+    updated = edit_note(client, note["id"], "Second draft")
     assert updated.status_code == 200, updated.text
     assert updated.json()["edited"] is True
     assert updated.json()["body"] == "Second draft"
@@ -291,7 +292,11 @@ def test_invariant_created_at_cannot_be_set_or_changed_through_any_endpoint(
     updates = (
         ("PATCH", f"/api/v2/opportunities/{opportunity['id']}", {"stage": "Qualification"}),
         ("PATCH", f"/api/v2/timeline/{entry['id']}", {"title": "Renamed"}),
-        ("PATCH", f"/api/v2/notes/{note['id']}", {"body": "Rewritten"}),
+        (
+            "PATCH",
+            f"/api/v2/notes/{note['id']}",
+            {"body": "Rewritten", "updated_at": note["updated_at"]},
+        ),
     )
     for method, url, payload in updates:
         response = client.request(method, url, json={**payload, "created_at": forged})

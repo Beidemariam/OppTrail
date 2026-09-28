@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
+import httpx
 from fastapi.testclient import TestClient
 
 from app.database import db_connection
@@ -64,6 +65,26 @@ def create_entry(
     return response.json()
 
 
+def edit_note(client: TestClient, note_id: int, body: str) -> httpx.Response:
+    """PATCH a note, echoing the `updated_at` the server currently holds.
+
+    ADR 0003's edit guard (milestone 3.4) makes `updated_at` part of every note
+    edit, and the frontend echoes the value it has on screen. A test that means
+    to exercise the *edit* reads the current one first, so it is never the
+    thing under test; `tests/test_events.py` is where a deliberately stale
+    value goes.
+    """
+    with db_connection() as connection:
+        row = connection.execute(
+            "SELECT updated_at FROM notes WHERE id = ?",
+            (note_id,),
+        ).fetchone()
+    return client.patch(
+        f"/api/v2/notes/{note_id}",
+        json={"body": body, "updated_at": row["updated_at"] if row else ""},
+    )
+
+
 def share_opportunity(opportunity_id: int, user_id: int, invited_by: int, role: str) -> None:
     with db_connection() as connection:
         connection.execute(
@@ -95,10 +116,7 @@ def test_entry_note_comment_crud_and_note_versions(client: TestClient) -> None:
     assert comment.status_code == 201
     comment_id = comment.json()["id"]
 
-    edited_note = client.patch(
-        f"/api/v2/notes/{note_id}",
-        json={"body": "Follow up with pricing and procurement details"},
-    )
+    edited_note = edit_note(client, note_id, "Follow up with pricing and procurement details")
     assert edited_note.status_code == 200
     assert edited_note.json()["edited"] is True
 
@@ -399,9 +417,7 @@ def test_editor_cannot_change_another_users_note_or_entry(client: TestClient) ->
     login(client, "editor@example.com")
     assert client.delete(f"/api/v2/notes/{note['id']}").status_code == 403
     assert client.delete(f"/api/v2/timeline/{entry['id']}").status_code == 403
-    assert (
-        client.patch(f"/api/v2/notes/{note['id']}", json={"body": "Editor edit"}).status_code == 403
-    )
+    assert edit_note(client, note["id"], "Editor edit").status_code == 403
     assert (
         client.patch(f"/api/v2/timeline/{entry['id']}", json={"title": "Editor edit"}).status_code
         == 403
@@ -417,17 +433,13 @@ def test_editor_cannot_change_another_users_note_or_entry(client: TestClient) ->
         client.patch(f"/api/v2/timeline/{own_entry['id']}", json={"title": "Edited"}).status_code
         == 200
     )
-    assert (
-        client.patch(f"/api/v2/notes/{own_note['id']}", json={"body": "Edited"}).status_code == 200
-    )
+    assert edit_note(client, own_note["id"], "Edited").status_code == 200
     assert client.delete(f"/api/v2/timeline/{own_entry['id']}").status_code == 204
     client.post("/api/v2/auth/logout")
 
     # The owner can change or remove anything on their own opportunity.
     login(client, "owner@example.com")
-    assert (
-        client.patch(f"/api/v2/notes/{note['id']}", json={"body": "Owner edit"}).status_code == 200
-    )
+    assert edit_note(client, note["id"], "Owner edit").status_code == 200
     assert (
         client.patch(f"/api/v2/timeline/{entry['id']}", json={"title": "Owner edit"}).status_code
         == 200
@@ -458,7 +470,7 @@ def test_owner_can_edit_an_editors_entry_and_note(client: TestClient) -> None:
     assert edited_entry.status_code == 200
     assert edited_entry.json()["title"] == "Owner retitled"
 
-    edited_note = client.patch(f"/api/v2/notes/{note['id']}", json={"body": "Owner rewrote this"})
+    edited_note = edit_note(client, note["id"], "Owner rewrote this")
     assert edited_note.status_code == 200
     assert edited_note.json()["body"] == "Owner rewrote this"
 

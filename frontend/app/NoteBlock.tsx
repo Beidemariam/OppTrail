@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 
+import { isConflict } from "../lib/api";
 import { type Access, type TimelineNote } from "../lib/domain";
 import { submitOnModEnter } from "../lib/keyboard";
 import { normalizeMarkdown } from "../lib/markdown";
@@ -43,6 +44,13 @@ export function NoteBlock({
   const editTriggerRef = useRef<HTMLButtonElement>(null);
   const editor = useInlineEditor(editTriggerRef);
   const [draft, setDraft] = useState("");
+  // The note as it stood when this editor was opened, which is exactly what
+  // ADR 0003's guard compares against. Captured rather than read from `note`
+  // on save, because the timeline refetches underneath an open editor as soon
+  // as the live stream says somebody else wrote (milestone 3.4): reading the
+  // prop would hand the server back the value the *other* person's write
+  // produced, and the guard would pass on the one write it exists to stop.
+  const [baseline, setBaseline] = useState(note.updated_at);
   const saveNote = useSaveNote();
   const deleteNote = useDeleteNote();
   const addComment = useAddComment();
@@ -57,6 +65,13 @@ export function NoteBlock({
   const failure = [saveNote, deleteNote, addComment, deleteComment].find(
     (mutation) => mutation.isError,
   );
+  // The one failure that is about the note rather than about the request
+  // (milestone 3.4, ADR 0003): somebody else saved while this editor was open.
+  // The reader keeps their draft and the note underneath has already been
+  // refetched — the mutation invalidates the timeline whether it succeeded or
+  // not — so Cancel is the "reload" the ADR's conflict model offers, and it is
+  // named as such rather than left to a generic error line.
+  const conflicted = saveNote.isError && isConflict(saveNote.error);
 
   function save() {
     const body = draft.trim();
@@ -72,7 +87,10 @@ export function NoteBlock({
       editor.close();
       return;
     }
-    saveNote.mutate({ noteId: note.id, body }, { onSuccess: editor.close });
+    saveNote.mutate(
+      { noteId: note.id, body, updatedAt: baseline },
+      { onSuccess: editor.close },
+    );
   }
 
   return (
@@ -92,6 +110,7 @@ export function NoteBlock({
               className="secondary-button"
               onClick={() => {
                 setDraft(note.body);
+                setBaseline(note.updated_at);
                 editor.open();
               }}
             >
@@ -127,7 +146,7 @@ export function NoteBlock({
               className="secondary-button"
               onClick={editor.close}
             >
-              Cancel
+              {conflicted ? "Discard my edit" : "Cancel"}
             </button>
           </div>
         </div>
@@ -135,7 +154,15 @@ export function NoteBlock({
         <MarkdownText content={note.body} />
       )}
 
-      {failure && <p className="error">{failure.error?.message}</p>}
+      {conflicted ? (
+        <p className="error">
+          Somebody else saved this note while you were editing it. Their version
+          is what the note says now; copy anything you want to keep, then
+          discard your edit.
+        </p>
+      ) : (
+        failure && <p className="error">{failure.error?.message}</p>
+      )}
 
       {/* Since 3.3 a note's comments are threads, not a flat list: each one
           draws its own replies, its Reply control and its resolved state

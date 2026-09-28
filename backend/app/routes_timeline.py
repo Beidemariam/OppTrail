@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from .audit_utils import create_audit_log_entry
 from .auth import get_current_user
 from .database import db_connection
+from .events import publish_timeline_changed
 from .notification_service import (
     notify_mentions,
     notify_note_comment,
@@ -698,6 +699,7 @@ def create_timeline_entry(
             (entry_id,),
         ).fetchone()
 
+    publish_timeline_changed(opportunity_id)
     return entry_from_row(row, [])
 
 
@@ -708,6 +710,7 @@ def update_timeline_entry(
     user: sqlite3.Row = Depends(get_current_user),
 ) -> TimelineEntryPublic:
     updates = payload.model_dump(exclude_unset=True)
+    changed = False
     with db_connection() as connection:
         entry = fetch_entry_context(connection, entry_id)
         if not entry:
@@ -756,6 +759,7 @@ def update_timeline_entry(
                 utc_now(),
             )
             connection.commit()
+            changed = True
 
         row = connection.execute(
             """
@@ -767,6 +771,10 @@ def update_timeline_entry(
             (entry_id,),
         ).fetchone()
 
+    # An empty PATCH wrote nothing, so there is nothing for another reader to
+    # go and see: the flag tracks the write rather than the request.
+    if changed:
+        publish_timeline_changed(entry["opportunity_id"])
     return entry_from_row(row, [])
 
 
@@ -850,8 +858,9 @@ def restore_timeline_entry_version(
     `POST /timeline/{id}/restore`, which undoes a soft delete. A system entry
     needs no special case here: it cannot be edited, so it has exactly one
     version, which is always the current one -- and restoring what is already
-    current writes nothing (D-120).
+    current writes nothing (D-120) -- and so announces nothing either.
     """
+    changed = False
     with db_connection() as connection:
         entry = fetch_entry_context(connection, entry_id)
         if not entry:
@@ -872,6 +881,7 @@ def restore_timeline_entry_version(
         ).fetchone()
 
         if not version_is_current(TIMELINE_ENTRY_VERSIONS, version, current):
+            changed = True
             apply_version(connection, TIMELINE_ENTRY_VERSIONS, entry_id, version, {})
             restored = connection.execute(
                 "SELECT * FROM timeline_entries WHERE id = ?",
@@ -897,6 +907,8 @@ def restore_timeline_entry_version(
             (entry_id,),
         ).fetchone()
 
+    if changed:
+        publish_timeline_changed(entry["opportunity_id"])
     return entry_from_row(row, [])
 
 
@@ -938,6 +950,7 @@ def delete_timeline_entry(
             },
         )
         connection.commit()
+    publish_timeline_changed(entry["opportunity_id"])
 
 
 # Restore is what makes the undo toast a real `deleted_at = NULL`
@@ -975,6 +988,7 @@ def restore_timeline_entry_route(
             },
         )
         connection.commit()
+    publish_timeline_changed(entry["opportunity_id"])
 
 
 @router.post(
@@ -1048,6 +1062,7 @@ def create_note(
             (note_id,),
         ).fetchone()
 
+    publish_timeline_changed(entry["opportunity_id"])
     return note_from_row(row, [])
 
 
@@ -1057,6 +1072,26 @@ def update_note(
     payload: NoteUpdate,
     user: sqlite3.Row = Depends(get_current_user),
 ) -> NotePublic:
+    """Edit a note, unless somebody else edited it first (ADR 0003).
+
+    The conflict model for the whole app is last-write-wins with *this* guard,
+    not CRDTs or operational transforms: comments are immutable and entries
+    are rarely co-edited, so a note is the one body two people can be typing
+    into at once. `payload.updated_at` is the value the editor was opened
+    against; a mismatch means the note moved underneath it and the write is
+    refused with 409 rather than silently overwriting what arrived in between.
+    Nothing is lost when it does -- `note_versions` holds every recorded state
+    and the UI offers to reload.
+
+    Ordered after the permission check, so a viewer is told they may not edit
+    rather than that their copy is stale.
+
+    One bounded blind spot, and it is the same second-resolution limit D-067
+    already accepted for undo: `utc_now()` has one-second granularity, so two
+    edits inside one second carry the same `updated_at` and the later one is
+    accepted. That window is where the version history is the recovery
+    mechanism rather than the guard.
+    """
     with db_connection() as connection:
         note = fetch_note_context(connection, note_id)
         if not note:
@@ -1071,6 +1106,11 @@ def update_note(
             note["created_by"],
             "Only the author or the opportunity owner can edit this note",
         )
+        if payload.updated_at != note["updated_at"]:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This note was edited by someone else. Reload it and try again.",
+            )
 
         updated_at = utc_now()
         connection.execute(
@@ -1124,6 +1164,7 @@ def update_note(
             (note_id,),
         ).fetchone()
 
+    publish_timeline_changed(note["opportunity_id"])
     return note_from_row(row, [])
 
 
@@ -1139,7 +1180,13 @@ def note_version_from_row(row: sqlite3.Row) -> NoteVersionPublic:
     )
 
 
-def require_note_history_access(connection: sqlite3.Connection, note_id: int, user_id: int) -> None:
+def require_note_history_access(
+    connection: sqlite3.Connection, note_id: int, user_id: int
+) -> sqlite3.Row:
+    """Owner-only access to a note's history, returning the note it checked --
+    the caller needs the row's `opportunity_id` and re-reading it would be a
+    second query for what this one already holds.
+    """
     note = fetch_note_context(connection, note_id)
     if not note:
         raise HTTPException(
@@ -1147,6 +1194,7 @@ def require_note_history_access(connection: sqlite3.Connection, note_id: int, us
             detail="Note not found",
         )
     require_opportunity_owner(connection, note["opportunity_id"], user_id)
+    return note
 
 
 @router.get("/notes/{note_id}/versions", response_model=Page[NoteVersionPublic])
@@ -1209,8 +1257,9 @@ def restore_note_version(
     was told when it was first written -- and announcing it a second time
     would make every restore a fresh ping (D-120).
     """
+    changed = False
     with db_connection() as connection:
-        require_note_history_access(connection, note_id, int(user["id"]))
+        note = require_note_history_access(connection, note_id, int(user["id"]))
         version = fetch_version(connection, NOTE_VERSIONS, note_id, version_number)
         if version is None:
             raise HTTPException(
@@ -1223,6 +1272,7 @@ def restore_note_version(
         ).fetchone()
 
         if not version_is_current(NOTE_VERSIONS, version, current):
+            changed = True
             updated_at = utc_now()
             apply_version(
                 connection,
@@ -1255,6 +1305,8 @@ def restore_note_version(
             (note_id,),
         ).fetchone()
 
+    if changed:
+        publish_timeline_changed(note["opportunity_id"])
     return note_from_row(row, [])
 
 
@@ -1290,6 +1342,7 @@ def delete_note(
             },
         )
         connection.commit()
+    publish_timeline_changed(note["opportunity_id"])
 
 
 @router.post("/notes/{note_id}/restore", status_code=status.HTTP_204_NO_CONTENT)
@@ -1324,6 +1377,7 @@ def restore_note_route(
             },
         )
         connection.commit()
+    publish_timeline_changed(note["opportunity_id"])
 
 
 @router.post(
@@ -1418,6 +1472,7 @@ def create_comment(
             (comment_id,),
         ).fetchone()
 
+    publish_timeline_changed(note["opportunity_id"])
     return comment_from_row(row)
 
 
@@ -1453,6 +1508,7 @@ def delete_comment(
             },
         )
         connection.commit()
+    publish_timeline_changed(comment["opportunity_id"])
 
 
 @router.post("/comments/{comment_id}/restore", status_code=status.HTTP_204_NO_CONTENT)
@@ -1487,6 +1543,7 @@ def restore_comment_route(
             },
         )
         connection.commit()
+    publish_timeline_changed(comment["opportunity_id"])
 
 
 def set_thread_resolved(
@@ -1553,6 +1610,7 @@ def set_thread_resolved(
         ).fetchall()
         reactions = reactions_by_comment_id(connection, [row["id"] for row in rows])
 
+    publish_timeline_changed(comment["opportunity_id"])
     return threads_from_rows(rows, reactions)[0]
 
 
@@ -1615,6 +1673,7 @@ def add_reaction(
         ).fetchone()
         reactions = reactions_by_comment_id(connection, [comment_id]).get(comment_id, [])
 
+    publish_timeline_changed(comment["opportunity_id"])
     return comment_from_row(row, reactions)
 
 
@@ -1654,4 +1713,5 @@ def remove_reaction(
         ).fetchone()
         reactions = reactions_by_comment_id(connection, [comment_id]).get(comment_id, [])
 
+    publish_timeline_changed(comment["opportunity_id"])
     return comment_from_row(row, reactions)

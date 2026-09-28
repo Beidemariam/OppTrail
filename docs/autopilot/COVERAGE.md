@@ -2033,3 +2033,79 @@ existence-only exception to the access gate, scoped to watching and nothing
 else), D-130 (reactions and watchers are hard-deleted like `sessions`, not
 soft-deleted, and both toggle routes return the resulting state rather than
 204).
+
+## Phase 3 — milestone 3.4 (SSE live updates and the 409 note edit guard, ADR 0003)
+
+Both halves of ADR 0003 in one milestone: the stream that tells a second
+reader something happened, and the guard that stops the second writer
+overwriting the first. No migration — nothing here adds a table or a column.
+
+```
+backend:  456 passed (up from 443), 98% (pytest-cov's `--cov-branch`
+          combined statement+branch figure) — cov-fail-under=90 comfortably
+          cleared. New test file: tests/test_events.py (12 — nine for the
+          stream, three for the guard).
+          New modules: app/events.py 100% line / 100% branch (the
+          `RuntimeError` arm is reached by
+          test_publishing_to_a_stream_whose_loop_has_gone_is_not_an_error,
+          which registers a subscriber on a loop it then closes),
+          app/routes_events.py 100%.
+          Modules this milestone touched: routes_timeline.py 96%,
+          routes_opportunities.py 99%, routes_sharing.py 95%,
+          schemas.py 99% — all unchanged from 3.3a, so the ~30 new publish
+          calls and the guard arrived covered rather than diluting anything.
+frontend: 530 passed (up from 522), 97.13% statements / 91.35% branch /
+          95.71% functions / 97.09% lines — all four above
+          vitest.config.ts's thresholds (96 / 90 / 95 / 96), which were not
+          touched. New: lib/liveUpdates.ts 100% on all four,
+          app/NoteBlock.tsx 100% on all four, lib/api.ts 100% line with the
+          new ApiError.
+contract: scripts/generate-api-client.sh --check               up to date
+          (regenerated twice: once for the new `GET .../events` operation
+          and `NoteUpdate.updated_at`, once more because a route docstring
+          is the operation's OpenAPI description and editing it makes the
+          generated client stale — worth remembering, it is not obvious)
+e2e:      69 passed (from 67), axe clean — e2e/22-live-updates.spec.ts is
+          new and is the only suite that needs two real browser contexts:
+          Blair's entry appearing on Alex's untouched page, and Blair's save
+          against a note Alex has just replaced being refused with the
+          conflict message and the "Discard my edit" way out.
+audits:   not re-run this milestone (no dependency was added — the stream is
+          Starlette's own StreamingResponse and the client is the browser's
+          EventSource); still clean as of 3.3.
+docker:   deferred to the host half — scripts/autopilot-gate.sh 3
+          (no Docker socket in this sandbox, per sandbox/README.md)
+```
+
+Authorization-matrix endpoints: 69, up from 68 — `GET
+/api/v2/opportunities/{opportunity_id}/events`, `scoped(viewer=200,
+editor=200, owner=200)`: the same gate as reading the timeline, because an
+event says only "read it again". That row is only callable at all because the
+stream closes itself (D-131) — `TestClient` buffers a response whole, so an
+endless stream would hang the matrix rather than fail it, which is the worse
+of the two failures.
+
+Two things worth recording about how the suites had to change, neither a
+weakened assertion:
+
+- **The guard is a required field, so every existing note-edit caller
+  changed.** `tools/seed.py` gained `edit_note` (and `add_note` now returns
+  the created note, since an edit needs the value it was written against),
+  and `tests/test_timeline.py` gained an `edit_note` helper that reads the
+  current `updated_at` first — nine call sites across seven test files now go
+  through it. The point is that those tests exercise the *edit*, not the
+  guard: `tests/test_events.py` is the only place a stale value is sent, and
+  it is sent on purpose.
+- **The conflict test uses a stepped clock, not real time.** `utc_now()` has
+  one-second resolution, so two edits inside one second share an `updated_at`
+  and the guard has nothing to compare (D-132's documented blind spot). The
+  end-to-end two-writer test patches `routes_timeline.utc_now` with a
+  one-second-per-call generator rather than depending on how fast the machine
+  runs (brief §6.5, deterministic time).
+
+Coverage floors (brief §6.2) all met. New decisions: D-131 (a bounded stream
+with `retry:` over an endless one), D-132 (a required `updated_at`, and
+`updated_at` over a version number — the one needing human review, as this
+milestone's single client-visible API break), D-133 (explicit publish after
+commit, and a two-word event vocabulary), D-134 (the guard sends the value
+the editor was opened with, not the one on screen at save time).

@@ -879,13 +879,17 @@ export function useSaveNote() {
   return useMutation<
     unknown,
     Error,
-    { noteId: number; body: string },
+    { noteId: number; body: string; updatedAt: string },
     Snapshot
   >({
-    mutationFn: ({ noteId, body }) =>
+    // `updatedAt` is ADR 0003's edit guard (milestone 3.4): the value the note
+    // had when the editor was opened. The server answers 409 if it has moved,
+    // which is the one failure here that is about the note rather than about
+    // the request — `app/NoteBlock.tsx` says so in its own words.
+    mutationFn: ({ noteId, body, updatedAt }) =>
       apiRequest(`/api/v2/notes/${noteId}`, {
         method: "PATCH",
-        body: JSON.stringify({ body }),
+        body: JSON.stringify({ body, updated_at: updatedAt }),
       }),
     onMutate: ({ noteId, body }) =>
       optimisticTimelines(client, (entries) =>

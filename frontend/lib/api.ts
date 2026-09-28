@@ -22,19 +22,47 @@ export function csrfToken(): string {
 }
 
 /**
+ * A failed request, carrying the envelope's named `code` as well as its
+ * sentence.
+ *
+ * `backend/app/errors.py` defines `code` precisely so a client can branch on
+ * it rather than on a status number or on the wording of a message, and
+ * milestone 3.4 gave the app its first reason to: a note edit refused as
+ * `conflict` (ADR 0003's edit guard) needs a different answer from every other
+ * failure — the reader's copy is stale, not their request wrong. Every
+ * existing caller reads `.message` and is unaffected.
+ */
+export class ApiError extends Error {
+  readonly code: string;
+
+  constructor(message: string, code: string) {
+    super(message);
+    this.name = "ApiError";
+    this.code = code;
+  }
+}
+
+export function isConflict(error: unknown): boolean {
+  return error instanceof ApiError && error.code === "conflict";
+}
+
+/**
  * The API's one error shape, `{"error": {"code", "message"}}`
- * (`backend/app/errors.py`), reduced to the sentence a caller shows. v1's
+ * (`backend/app/errors.py`), reduced to what a caller acts on. v1's
  * `{"detail": ...}` was the second shape this read until milestone 2.9
  * removed that surface.
  */
-function errorMessage(body: unknown): string {
+function apiError(body: unknown): ApiError {
   if (typeof body === "object" && body !== null) {
-    const { error } = body as { error?: { message?: unknown } };
+    const { error } = body as { error?: { message?: unknown; code?: unknown } };
     if (typeof error?.message === "string") {
-      return error.message;
+      return new ApiError(
+        error.message,
+        typeof error.code === "string" ? error.code : "unknown",
+      );
     }
   }
-  return "Request failed";
+  return new ApiError("Request failed", "unknown");
 }
 
 export async function apiRequest<T>(
@@ -53,7 +81,7 @@ export async function apiRequest<T>(
   });
 
   if (!response.ok) {
-    throw new Error(errorMessage(await response.json().catch(() => null)));
+    throw apiError(await response.json().catch(() => null));
   }
 
   if (response.status === 204) {

@@ -21,6 +21,13 @@ class Settings(BaseSettings):
     # 10 MiB. No endpoint accepts a file yet; `uploads.py` explains why the
     # limit is defined now.
     max_upload_bytes: int = 10 * 1024 * 1024
+    # ADR 0003's live-update stream. A connection is closed deliberately after
+    # `sse_max_connection_seconds` and the browser's own `EventSource`
+    # reconnects (`app/events.py`), so an intermediary never gets to reap a
+    # connection this app has forgotten about; the heartbeat is the comment
+    # line that keeps it from looking idle in the meantime.
+    sse_max_connection_seconds: float = 300.0
+    sse_heartbeat_seconds: float = 15.0
     # `None` means "next to the database file" (`backup.backup_dir()`); ADR
     # 0011's snapshots live under the same `/data` volume so they survive a
     # container recreate without a second mount.
@@ -56,11 +63,15 @@ class Settings(BaseSettings):
             raise ValueError(f"{str(info.field_name).upper()} must be greater than 0, got: {value}")
         return value
 
-    @field_validator("openai_timeout_seconds")
+    @field_validator(
+        "openai_timeout_seconds",
+        "sse_max_connection_seconds",
+        "sse_heartbeat_seconds",
+    )
     @classmethod
-    def _openai_timeout_must_be_positive(cls, value: float) -> float:
+    def _seconds_must_be_positive(cls, value: float, info: ValidationInfo) -> float:
         if value <= 0:
-            raise ValueError(f"OPENAI_TIMEOUT_SECONDS must be greater than 0, got: {value}")
+            raise ValueError(f"{str(info.field_name).upper()} must be greater than 0, got: {value}")
         return value
 
     @field_validator("openai_max_retries")

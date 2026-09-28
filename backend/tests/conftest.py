@@ -64,6 +64,23 @@ def no_live_network(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def short_event_streams(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep ADR 0003's SSE window short enough for a test to wait it out.
+
+    `GET /api/v2/opportunities/{id}/events` deliberately holds a connection
+    open for `settings.sse_max_connection_seconds` and then closes so the
+    browser reconnects (`app/events.py`). Starlette's `TestClient` buffers a
+    response whole -- it has no way to read a stream incrementally -- so every
+    request to that route waits out the whole window, including the
+    authorization matrix's three successful actors. At the shipped 300 seconds
+    that is not a suite. Tests that mean to observe a *delivery* raise it
+    themselves; this is the floor everything else runs at.
+    """
+    monkeypatch.setattr(settings, "sse_max_connection_seconds", 0.2)
+    monkeypatch.setattr(settings, "sse_heartbeat_seconds", 0.05)
+
+
+@pytest.fixture(autouse=True)
 def reset_rate_limiter() -> Iterator[None]:
     """The limiter is process-global by design (`app/rate_limit.py`), so it has
     to be cleared between tests or one test's signups would exhaust another's

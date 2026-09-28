@@ -3207,7 +3207,7 @@ each other.
       is a 404 — so either watching presupposes access (a notification
       preference), or it is a new way to reach a deal and invariant 7 has to
       say so. That decision belongs with the milestone.
-- [ ] 3.4 SSE endpoint and client invalidation (ADR 0003); 409 edit guard on
+- [x] 3.4 SSE endpoint and client invalidation (ADR 0003); 409 edit guard on
       notes.
 - [ ] 3.5 PDF export renders Markdown, closing the other half of requirement
       17 (`docs/code_review.md` finding 9's "still open" item —
@@ -3896,6 +3896,149 @@ CommentThread test-fixture bug above, wrote and verified the missing E2E
 spec, logged D-129 and D-130 (present only as inline code comments before
 this session), completed this PROGRESS.md section, and updated
 `COVERAGE.md`.
+
+### 3.4 SSE endpoint, client invalidation, and the 409 edit guard — **DONE**
+
+ADR 0003, both halves of it: the stream that tells a second reader something
+happened, and the guard that stops the second writer overwriting the first.
+No migration — nothing here adds a table or a column.
+
+- [x] **`GET /api/v2/opportunities/{id}/events`** (`app/routes_events.py`,
+      the app's only non-JSON route). `require_opportunity_access` — the same
+      gate as reading the timeline, because an event says only "read it
+      again" — resolved *before* the `StreamingResponse` is returned, since an
+      async generator's body does not start until the 200 has already been
+      sent. `def` rather than `async def`, so the one synchronous permission
+      query costs a threadpool slot and the stream itself does not: it is
+      iterated on the event loop, which is a better bound than ADR 0003's
+      "each SSE connection holds a worker slot" assumed.
+- [x] **The transport** (`app/events.py`). An in-process broker — no message
+      bus, which is the assumption ADR 0001 and ADR 0011 already make.
+      Invalidations only: `{"type": ..., "opportunity_id": ...}` and no row
+      content, so authorization and serialization are not decided a second
+      time on a push path (**D-133**). Two event types, `timeline.changed`
+      and `opportunity.changed`; the rule between them is stated once — an
+      invalidation may be broader than the write behind it, never narrower.
+      Each subscriber's queue **de-duplicates**, so two writes a millisecond
+      apart are one refetch and a slow reader cannot grow the writer's
+      memory; that is sound only because an invalidation carries nothing a
+      dropped duplicate would lose. Publishing crosses threads on purpose:
+      a `def` handler runs in the worker threadpool while each queue belongs
+      to its own request's loop, so `_Subscriber` stores that loop and
+      `publish` uses `call_soon_threadsafe`, catching the `RuntimeError` a
+      loop closed in between raises — one reader closing a tab must not fail
+      another person's write.
+- [x] **A stream ends by itself** after `settings.sse_max_connection_seconds`
+      (300s, `.env.example`), having advertised an SSE `retry:`, and the
+      browser's `EventSource` reopens it (**D-131**). Two reasons, and both
+      matter: an intermediary never gets to reap a connection this app still
+      believes in, and Starlette's `TestClient` buffers a response whole, so
+      an endless stream is one no backend test — including the authorization
+      matrix — could ever call. `tests/conftest.py`'s `short_event_streams`
+      holds the window down the way the suite already redirects
+      `database_url`; the two tests that watch a write land raise it
+      themselves. A reconnect is a **gap**, so `useLiveUpdates` refetches on
+      every `ready` after the first.
+- [x] **Publish after `commit()`, in the route, and only when something was
+      written** (**D-133**). ~30 write routes across `routes_timeline.py`,
+      `routes_opportunities.py` and `routes_sharing.py` each gained one
+      explicit line below their commit — the shape `create_audit_log_entry`
+      and `record_version` already have, rather than middleware (which cannot
+      know the opportunity behind a note or comment id without repeating the
+      handler's query) or a hook on `db_connection()` (action at a distance,
+      and still one call per route). Three writes deliberately announce
+      nothing: `POST /opportunities` (nobody can subscribe to an id that did
+      not exist yet), an empty `PATCH`, and a version restore of what is
+      already current (D-120) — all three wrote nothing, and an invalidation
+      with no write behind it sends every reader to refetch a page that has
+      not moved.
+- [x] **The client half** (`lib/liveUpdates.ts`, wired in
+      `app/OpportunityPanel.tsx`). One stream per open timeline, closed when
+      the reader leaves. `liveEventKeys` is the whole mapping from an event to
+      TanStack Query keys and is tested without a DOM; the hook is guarded on
+      `EventSource` existing, because the static export renders this tree once
+      in Node (ADR 0005) and jsdom implements none. `EventSource` does not
+      retry a failed handshake, so the 404 a reader without access gets needs
+      no client handling; what the stream never re-checks is a role revoked
+      mid-connection, and there the refetch each invalidation provokes is the
+      read that answers 404 — no content travels this path either way.
+- [x] **The 409 edit guard** (**D-132**). `NoteUpdate` gains a **required**
+      `updated_at`, and `PATCH /api/v2/notes/{id}` answers 409 when it does
+      not match — after the permission check, so a viewer is told they may not
+      edit rather than that their copy is stale. Required rather than
+      optional because an optional guard is no guard: the caller that omits it
+      is the one that clobbers. That is this milestone's one client-visible
+      API break, now a row in `docs/ROADMAP.md`'s breaking-changes table.
+      `updated_at` rather than a version number, per the ADR's own wording;
+      its one-second resolution means two edits inside one second are
+      indistinguishable, which is the same window D-067 already accepted for
+      undo and where the ADR's stated fallback — last-write-wins with full
+      version history — is the recovery mechanism. Documented on
+      `update_note` and pinned in the tests with a deterministic clock rather
+      than left to machine speed.
+- [x] **The editor sends what it was opened with** (**D-134**).
+      `app/NoteBlock.tsx` captures `updated_at` when Edit is pressed, not at
+      save time: the live stream refetches the note underneath an open editor,
+      so reading the prop on save would hand back the value the *other*
+      person's write produced and the guard would pass on the one write it
+      exists to stop. A refused save keeps the draft, says what happened in
+      plain words, and renames Cancel to "Discard my edit" — which is the
+      "offer to reload" the ADR asks for. `lib/api.ts` now throws `ApiError`
+      carrying the envelope's `code`, the first caller to use a field
+      `errors.py` has always emitted for exactly this.
+- [x] **Tests.** Backend: `tests/test_events.py` (12 — the ready frame and
+      its `retry:`, an idle stream's heartbeats and its own close, a
+      colleague's write reaching an open stream, a record change arriving as
+      the other event type, another deal's write not arriving, an empty PATCH
+      announcing nothing, an outsider's 404, queue de-duplication, publishing
+      to a closed loop, and three for the guard: a stale copy refused with
+      nothing written, the permission check answering first, and the full
+      two-writer race under a stepped clock). Delivery is synchronised on
+      `broker.subscriber_count` rather than on a sleep (brief §6.5). One new
+      authorization-matrix entry (69 endpoints, up from 68). Frontend:
+      `lib/liveUpdates.test.ts` (3) and `app/LiveUpdates.test.tsx` (5), the
+      latter driving a fake `EventSource` (`app/test-live-updates.ts`); the
+      fake API now enforces the edit guard itself, so the conflict path is a
+      real path through the app rather than a canned failure. E2E:
+      `e2e/22-live-updates.spec.ts` (2), the one suite that needs two real
+      browser contexts — Blair's entry appears on Alex's untouched page, and
+      Blair's save against a note Alex has just replaced is refused.
+- [x] **Callers updated for the guard.** `tools/seed.py` gained `edit_note`
+      (and `add_note` now returns the created note, since an edit needs the
+      value it was written against); `tests/test_timeline.py` gained an
+      `edit_note` helper that reads the current `updated_at` first, so the
+      nine existing tests that edit a note exercise the edit rather than the
+      guard — `tests/test_events.py` is where a stale value goes on purpose.
+- [x] **Docs.** `CLAUDE.md` gains a "Live updates" section (and the router,
+      helper-module and frontend-unit lists name `routes_events`, `events.py`
+      and `lib/liveUpdates.ts`); `docs/ARCHITECTURE.md` gains "Live updates"
+      under its cross-cutting standards; `docs/ROADMAP.md`'s breaking-changes
+      table gains the note edit guard; `.env.example` documents both new
+      settings.
+- [x] **Decisions** — **D-131** (a bounded stream with `retry:` over an
+      endless one), **D-132** (required `updated_at`, and `updated_at` over a
+      version number — the one needing human review, as an API break),
+      **D-133** (explicit publish after commit; two event types),
+      **D-134** (the guard sends what the editor was opened with).
+
+Gate: `make check-fast` green in the sandbox (ruff, ruff format, mypy,
+`tsc --noEmit`, eslint, prettier, backend pytest with coverage, frontend
+vitest with coverage, generated-client check). The full Playwright suite
+(69 specs, including the two new ones) was run directly in this sandbox and
+passed — E2E needs no Docker socket, only the build and smoke test do
+(brief §3.4's split gate). Docker build + in-image test + smoke test remain
+deferred to the host's `scripts/autopilot-gate.sh 3`. Figures in
+`COVERAGE.md`.
+
+Work log: one session. Backend first (`events.py`, `routes_events.py`, the
+settings pair, the publish calls, the guard), then the callers those two
+breaks touched (seed tool, nine tests), then the frontend
+(`lib/liveUpdates.ts`, `ApiError`, `NoteBlock`'s baseline capture), then
+tests at all three layers and the docs. One thing found by writing the
+frontend rather than by reading it: the stream and the guard interact —
+refetching under an open editor would have defeated the guard entirely, which
+is D-134 and is now covered end to end in both the component suite and
+Playwright.
 
 ### Acceptance
 

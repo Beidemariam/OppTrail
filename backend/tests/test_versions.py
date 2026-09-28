@@ -12,6 +12,7 @@ here is the content.
 """
 
 from fastapi.testclient import TestClient
+from test_timeline import edit_note
 
 from app.database import db_connection
 
@@ -197,9 +198,7 @@ def test_note_history_still_reads_forwards(client: TestClient) -> None:
     )
     assert note.status_code == 201
     note_id = note.json()["id"]
-    assert (
-        client.patch(f"/api/v2/notes/{note_id}", json={"body": "Second draft"}).status_code == 200
-    )
+    assert edit_note(client, note_id, "Second draft").status_code == 200
 
     history = versions(client, f"/api/v2/notes/{note_id}/versions")
 
@@ -430,9 +429,7 @@ def test_restoring_a_note_version_puts_the_text_back_and_keeps_the_marker(
     note = client.post(f"/api/v2/timeline/{entry['id']}/notes", json={"body": "First draft"})
     assert note.status_code == 201
     note_id = note.json()["id"]
-    assert (
-        client.patch(f"/api/v2/notes/{note_id}", json={"body": "Second draft"}).status_code == 200
-    )
+    assert edit_note(client, note_id, "Second draft").status_code == 200
 
     restored = client.post(f"/api/v2/notes/{note_id}/versions/1/restore")
 

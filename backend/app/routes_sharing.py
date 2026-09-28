@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from .audit_utils import create_audit_log_entry, parse_audit_detail
 from .auth import get_current_user
 from .database import db_connection
+from .events import publish_opportunity_changed
 from .notification_service import create_notification
 from .pagination import Page, PageRequest, cursor_clause, page_params, split_page
 from .permissions import (
@@ -265,6 +266,7 @@ def create_share(
             if share["user_id"] == invited_user["id"]
         )
 
+    publish_opportunity_changed(opportunity_id)
     return share_from_row(row)
 
 
@@ -339,6 +341,7 @@ def update_share(
         rows = fetch_share_rows(connection, opportunity_id)
         row = next(item for item in rows if item["user_id"] == user_id)
 
+    publish_opportunity_changed(opportunity_id)
     return share_from_row(row)
 
 
@@ -398,6 +401,8 @@ def delete_share(
             },
         )
         connection.commit()
+
+    publish_opportunity_changed(opportunity_id)
 
 
 def audit_entry_from_row(row: sqlite3.Row) -> AuditLogEntryPublic:
@@ -503,6 +508,8 @@ def watch_opportunity(
             (opportunity_id, user["id"], utc_now()),
         )
         connection.commit()
+
+    publish_opportunity_changed(opportunity_id)
     return WatchStatus(watching=True)
 
 
@@ -522,6 +529,8 @@ def unwatch_opportunity(
             (opportunity_id, user["id"]),
         )
         connection.commit()
+
+    publish_opportunity_changed(opportunity_id)
     return WatchStatus(watching=False)
 
 

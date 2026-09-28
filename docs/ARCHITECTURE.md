@@ -126,6 +126,32 @@ both (`backend/app/errors.py`). Since milestone 2.9 removed v1 this is the only
 shape the API answers with, so `is_api_path` now separates the API from the page
 routes this process also serves rather than one version from another.
 
+### Live updates
+
+One SSE stream per open opportunity, `GET /api/v2/opportunities/{id}/events`,
+carrying **invalidations** rather than payloads (ADR 0003, milestone 3.4).
+`backend/app/events.py` is an in-process broker — no message bus, which is the
+assumption ADR 0001 and ADR 0011 already make — and `frontend/lib/liveUpdates.ts`
+maps each event onto TanStack Query keys. Nothing about a row's shape or its
+visibility is decided on this path, so the push transport can never disagree
+with the read API.
+
+Four rules hold it together: an event is published only after the write's
+`commit()`; an invalidation may be broader than the write behind it and never
+narrower; each subscriber's queue de-duplicates, so a slow reader costs bounded
+memory and one refetch rather than many; and a stream closes itself after
+`SSE_MAX_CONNECTION_SECONDS` with a `retry:` advertised, so the browser
+reconnects and no intermediary is left reaping a connection the server still
+believes in. A reconnect is a gap, so the client refetches on every `ready`
+after the first.
+
+The conflict model is last-write-wins with an **edit guard** on notes, not
+CRDTs or OT: `PATCH /api/v2/notes/{id}` requires the `updated_at` the editor
+was opened against and answers 409 if it has moved. Nothing is lost when it
+does — `note_versions` holds every recorded state (invariant 8) — and comments
+are immutable while entries are rarely co-edited, so the note is the only body
+that needed one.
+
 ### Pagination
 
 Every collection endpoint is paginated from the start: `?limit&cursor`, returning
