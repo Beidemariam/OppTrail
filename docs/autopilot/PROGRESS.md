@@ -3213,7 +3213,21 @@ each other.
       17 (`docs/code_review.md` finding 9's "still open" item —
       `export_service.render_export_html` currently escapes bodies as plain
       text).
-- [ ] 3.6 If table/calendar views slipped from Phase 2, land them here.
+- [x] 3.6 If table/calendar views slipped from Phase 2, land them here —
+      **N/A, condition false.** They did not slip: `docs/ROADMAP.md`'s Phase 2
+      risk note allowed table and calendar to move to Phase 3 without blocking
+      acceptance, but milestone 2.8 (commit `268fd72`) shipped both inside
+      Phase 2 — `OpportunityTable.tsx` and `OpportunityCalendar.tsx` are wired
+      into `DashboardPage.tsx`'s view switcher alongside board and list, and
+      the Phase 2 review packet already recorded this as moot ("If
+      table/calendar views had slipped from Phase 2 they would land here —
+      moot, since 2.8 shipped both inside Phase 2",
+      `docs/autopilot/reviews/phase-2-summary.md` §7). Reconfirmed against the
+      current tree this session: both components exist, are imported, and are
+      reachable from the view switcher. No code change; no new decision
+      needed since D-070/D-088/D-090 already cover this area's open items.
+      This closes every milestone in Phase 3's list — the phase moves to its
+      end-of-phase gate and review packet next session.
 
 ### 3.0 One activity log per opportunity (D-101) — **DONE**
 
@@ -4126,6 +4140,33 @@ in the sandbox before choosing it (D-135), wrote the render function and its
 call sites, found the `html: True` default by writing the `<script>` guard
 test before the fix, wired the sanitizer underneath, added the CSS, then the
 two new tests and the docs.
+
+### 3.6 If table/calendar views slipped from Phase 2, land them here — **N/A**
+
+Condition false, so there is nothing to land. `docs/ROADMAP.md`'s Phase 2 risk
+note ("table and calendar may slip to Phase 3 without blocking anything")
+gave this milestone an escape hatch that was never used: milestone 2.8 shipped
+both views inside Phase 2 itself (commit `268fd72`,
+`docs/autopilot/reviews/phase-2-summary.md` §1's "did not slip, despite the
+roadmap's own risk note allowing it to"), and the Phase 2 review packet's own
+preview of Phase 3 (§7) already flagged this milestone as moot for the same
+reason before Phase 3 started.
+
+- [x] Reconfirmed against the current tree rather than trusting the earlier
+      note alone: `frontend/app/OpportunityTable.tsx` and
+      `frontend/app/OpportunityCalendar.tsx` both exist, both are imported by
+      `frontend/app/DashboardPage.tsx`, and both render from the same view
+      switcher as board and list (`DashboardPage.tsx:670,672`).
+- [x] No code change, no migration, no new route, no new test — there is
+      nothing here to gate. `make check-fast` was still run this session as a
+      sanity check that the tree is unchanged from 3.5's green gate.
+- [x] No new `DECISIONS.md` entry — this is a factual confirmation, not a
+      choice between options.
+
+This is the last unchecked milestone in Phase 3's list; with it closed, every
+milestone in the phase is done. The end-of-phase gate (`make check` in full)
+and the review packet are next session's work, per brief §3.3's one-unit-per-
+session rule.
 
 ### Acceptance
 
