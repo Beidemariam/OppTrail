@@ -5,12 +5,37 @@ from html import escape
 from io import StringIO
 from typing import Any
 
+from markdown_it import MarkdownIt
+
 from .permissions import ACCESSIBLE_OPPORTUNITY_IDS_SQL
+from .sanitize import sanitize_html
 
 # Excel, LibreOffice and Google Sheets evaluate a cell that opens with one of
 # these characters as a formula, so a note body is a live injection vector once
 # the export is opened.
 CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+# The same node set `lib/markdown.ts`'s composer writes and `MarkdownText.tsx`
+# renders (`table` and `strikethrough` cover content written before the
+# composer existed, or posted straight to the API). `commonmark`'s own default
+# is `html: True` -- raw HTML passed through untouched, on the assumption that
+# whatever renders the output will sanitize it -- so `html: False` is set
+# explicitly here to make a raw `<script>` in a body come out as escaped text
+# rather than a tag; `sanitize_html` beneath it is the same allowlist the
+# frontend's `rehype-sanitize` pass uses, so a hostile body is stopped twice —
+# once by the parser, once by the sanitizer — rather than trusting either
+# alone (brief §4.5, `app/sanitize.py`'s own docstring on why it existed
+# before any feature called it).
+_markdown = MarkdownIt("commonmark", {"html": False}).enable(["table", "strikethrough"])
+
+
+def render_markdown_to_safe_html(text: str) -> str:
+    """A stored Markdown body, rendered and sanitized for embedding in the
+    PDF export. This is the same content `MarkdownText.tsx` renders in the
+    browser; WeasyPrint gets no other protection against what a body
+    contains, so sanitizing here is the boundary (`app/sanitize.py`).
+    """
+    return sanitize_html(_markdown.render(text))
 
 
 def escape_csv_value(value: object) -> object:
@@ -253,7 +278,7 @@ def render_export_html(data: dict[str, Any]) -> str:
                 <li>
                   <strong>{escape(comment["author_name"])}</strong>
                   <span>{escape(comment["created_at"])}</span>
-                  <p>{escape(comment["body"])}</p>
+                  <div class="rendered">{render_markdown_to_safe_html(comment["body"])}</div>
                 </li>
                 """
                 for comment in note["comments"]
@@ -264,7 +289,7 @@ def render_export_html(data: dict[str, Any]) -> str:
                 <li>
                   <strong>{escape(note["author_name"])}</strong>
                   <span>{escape(note["created_at"])}{edited}</span>
-                  <p>{escape(note["body"])}</p>
+                  <div class="rendered">{render_markdown_to_safe_html(note["body"])}</div>
                   <ul class="comments">{comments_html}</ul>
                 </li>
                 """
@@ -275,7 +300,11 @@ def render_export_html(data: dict[str, Any]) -> str:
             if notes_html
             else '<p class="muted">No notes</p>'
         )
-        body = entry["body"] or "No details"
+        body_html = (
+            render_markdown_to_safe_html(entry["body"])
+            if entry["body"]
+            else '<p class="muted">No details</p>'
+        )
         follow_up = (
             f"<p><strong>Follow up:</strong> {escape(entry['follow_up_date'])}</p>"
             if entry["follow_up_date"]
@@ -290,7 +319,7 @@ def render_export_html(data: dict[str, Any]) -> str:
                 <span>{escape(entry["author_name"] or "System")}</span>
               </div>
               <h2>{escape(entry["title"])}</h2>
-              <p>{escape(body)}</p>
+              <div class="rendered">{body_html}</div>
               {follow_up}
               <h3>Notes</h3>
               {notes_block}
@@ -350,6 +379,31 @@ def render_export_html(data: dict[str, Any]) -> str:
           .notes li, .comments li {{ margin-bottom: 8px; }}
           .comments {{ color: #24364a; }}
           .muted {{ color: #6b7280; }}
+          .rendered p {{ margin: 0 0 6px; }}
+          .rendered p:last-child {{ margin-bottom: 0; }}
+          .rendered ul, .rendered ol {{ margin: 0 0 6px 18px; padding: 0; }}
+          .rendered blockquote {{
+            border-left: 2px solid #d1d5db;
+            color: #4b5563;
+            margin: 0 0 6px;
+            padding-left: 10px;
+          }}
+          .rendered code {{
+            background: #f3f4f6;
+            font-family: "DejaVu Sans Mono", monospace;
+            padding: 1px 4px;
+          }}
+          .rendered pre {{
+            background: #f3f4f6;
+            padding: 8px;
+            white-space: pre-wrap;
+          }}
+          .rendered pre code {{ background: none; padding: 0; }}
+          .rendered table {{ border-collapse: collapse; margin: 0 0 6px; }}
+          .rendered th, .rendered td {{
+            border: 1px solid #d1d5db;
+            padding: 3px 6px;
+          }}
         </style>
       </head>
       <body>

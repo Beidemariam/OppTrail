@@ -45,13 +45,14 @@ def create_entry(
     opportunity_id: int,
     title: str,
     event_timestamp: str,
+    body: str | None = None,
 ) -> dict:
     response = client.post(
         f"/api/v2/opportunities/{opportunity_id}/timeline",
         json={
             "type": "call",
             "title": title,
-            "body": f"{title} details",
+            "body": body if body is not None else f"{title} details",
             "event_timestamp": event_timestamp,
         },
     )
@@ -217,6 +218,77 @@ def test_pdf_html_renders_timeline_in_order_and_escapes_bodies(
     assert "<script>alert(1)</script>" not in html
     assert "&lt;script&gt;" in html
     assert "Expansion" in html and "Acme" in html
+
+
+def test_pdf_html_renders_markdown_instead_of_escaping_it(client: TestClient) -> None:
+    """The other half of `docs/code_review.md` finding 9: a note reading
+    `**Budget approved**` used to appear in the PDF with literal asterisks
+    (`export_service.py` escaped every body as plain text). Milestone 3.5
+    renders Markdown through the same node set the browser does, sanitizing
+    the result rather than trusting it (`app/sanitize.py`).
+    """
+    from app.export_service import fetch_export_data, render_export_html
+
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    entry = create_entry(
+        client,
+        opportunity["id"],
+        "Discovery call",
+        "2026-09-01T09:00:00",
+        body="**Budget confirmed**\n\n- champion identified\n- next step scheduled",
+    )
+    note = client.post(
+        f"/api/v2/timeline/{entry['id']}/notes",
+        json={"body": "Approved by [finance](javascript:alert(1))."},
+    ).json()
+    client.post(
+        f"/api/v2/notes/{note['id']}/comments",
+        json={"body": "Confirmed, ~~pending~~ done."},
+    )
+
+    with db_connection() as connection:
+        data = fetch_export_data(connection, opportunity["id"])
+    html = render_export_html(data)
+
+    # The entry body's bold and list render as markup, not literal syntax.
+    assert "<strong>Budget confirmed</strong>" in html
+    assert "**Budget confirmed**" not in html
+    assert "<li>champion identified</li>" in html
+
+    # A `javascript:` link is refused by the Markdown parser itself (the same
+    # scheme guard `lib/markdown.ts`'s composer applies): it is left as
+    # unparsed literal text rather than becoming a clickable anchor — this
+    # body was posted straight to the API, bypassing the composer entirely, so
+    # the parser and the sanitizer beneath it are the only things standing in
+    # the way. What must never appear is an `href` carrying the scheme.
+    assert 'href="javascript' not in html
+
+    # A comment's Markdown renders too.
+    assert "<s>pending</s>" in html
+
+
+def test_pdf_html_sanitizes_raw_html_even_if_the_markdown_parser_let_it_through(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`render_markdown_to_safe_html` has two layers against a hostile body:
+    the parser's own `html: False` option (pinned by the two tests above) and
+    `sanitize_html` underneath it. This test forces the first layer off — the
+    same as `commonmark`'s own default — to prove the second still holds, so a
+    future change to the parser's options cannot reopen the hole silently.
+    """
+    import app.export_service as export_service
+
+    monkeypatch.setattr(
+        export_service,
+        "_markdown",
+        export_service.MarkdownIt("commonmark", {"html": True}).enable(["table", "strikethrough"]),
+    )
+
+    html = export_service.render_markdown_to_safe_html("<script>alert(1)</script>ok")
+
+    assert "<script>" not in html
+    assert "ok" in html
 
 
 def test_pdf_export_produces_a_real_pdf(client: TestClient) -> None:

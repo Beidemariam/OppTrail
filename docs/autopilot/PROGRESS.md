@@ -3209,7 +3209,7 @@ each other.
       say so. That decision belongs with the milestone.
 - [x] 3.4 SSE endpoint and client invalidation (ADR 0003); 409 edit guard on
       notes.
-- [ ] 3.5 PDF export renders Markdown, closing the other half of requirement
+- [x] 3.5 PDF export renders Markdown, closing the other half of requirement
       17 (`docs/code_review.md` finding 9's "still open" item —
       `export_service.render_export_html` currently escapes bodies as plain
       text).
@@ -4039,6 +4039,93 @@ frontend rather than by reading it: the stream and the guard interact —
 refetching under an open editor would have defeated the guard entirely, which
 is D-134 and is now covered end to end in both the component suite and
 Playwright.
+
+### 3.5 PDF export renders Markdown — **DONE**
+
+Closes the other half of requirement 17 (`docs/code_review.md` finding 9's
+"still open" item, and `docs/ROADMAP.md`'s own wording for this milestone).
+Backend-only: no migration, no API or schema change, no frontend change — a
+PDF's content was already computed entirely inside `export_data_to_pdf` /
+`render_export_html`.
+
+- [x] **`render_markdown_to_safe_html`** (`app/export_service.py`) — a stored
+      body, rendered through `markdown-it-py`'s `commonmark` preset (with
+      `table` and `strikethrough` enabled, matching what the frontend's
+      `remark-gfm` already supports) and sanitized through `app/sanitize.py`
+      before being embedded in the PDF template. `markdown-it-py` was chosen
+      over `python-markdown` for sharing a lineage with the editor's own
+      `@tiptap/markdown` parser family (**D-135**); it was already resolvable
+      in the sandbox as a transitive dependency (via `rich`, a `pip-audit`
+      dependency) and is now a direct one in `pyproject.toml`/`uv.lock`,
+      since `uv sync --no-dev` would otherwise drop it from the production
+      image.
+- [x] **Two independent layers against a hostile body** (**D-135**) — the
+      parser's own `html` option, which `commonmark`'s preset defaults to
+      `True` (raw HTML passed through untouched, discovered while writing the
+      guard test for the existing `<script>` case), is set to `False`
+      explicitly; `sanitize_html` runs underneath regardless, so a body
+      reaching this path — including one posted straight to the API,
+      bypassing the composer's own `javascript:` link refusal entirely — is
+      stopped twice rather than once. This is `app/sanitize.py`'s first
+      caller: brief §4.5 asked for it "ready for rich text" in Phase F,
+      before any feature used it.
+- [x] **Every render call site switched from `escape()` to the new
+      function** — the entry body, each note body, and each comment body.
+      Entry bodies keep a plain-text `"No details"` fallback for an empty
+      body (`TimelineEntryCreate.body` defaults to `""`); note and comment
+      bodies have no such fallback, since both schemas require
+      `min_length=1`.
+- [x] **CSS for the rendered markup** — `.rendered` rules for paragraphs,
+      lists, blockquotes, inline code, code blocks and tables, since the
+      previous template only ever had to style a single `<p>` per body.
+- [x] **Tests** (`backend/tests/test_export.py`, +2: 11 → 13) —
+      `test_pdf_html_renders_markdown_instead_of_escaping_it` (bold and a list
+      render as markup rather than literal syntax; a `javascript:` link
+      posted straight to the API, bypassing the composer, produces no `href`
+      carrying that scheme; a comment's Markdown renders too) and
+      `test_pdf_html_sanitizes_raw_html_even_if_the_markdown_parser_let_it_through`
+      (forces the parser's `html` option back to `True` — `commonmark`'s own
+      default — and proves the sanitizer underneath still strips a raw
+      `<script>` tag, so a future change to the parser's options alone cannot
+      reopen the hole silently). The existing
+      `test_pdf_html_renders_timeline_in_order_and_escapes_bodies` is
+      unchanged and still passes — a literal `<script>` is escaped by the
+      parser itself now rather than by `html.escape`, which is the same
+      visible result from a different mechanism. Both new tests were
+      confirmed to fail against the pre-3.5 `export_service.py` first (brief
+      §6.5): one on a missing `MarkdownIt` attribute, the other on the
+      literal `**Budget confirmed**` still appearing in the output.
+- [x] **Docs.** `CLAUDE.md`'s "WeasyPrint" section gains a paragraph on the
+      Markdown render and its two-layer sanitization; the security-controls
+      paragraph's stale "ready for ... Phase 3 features that will use them"
+      line (written before either uploads or this milestone existed) is
+      corrected to say `sanitize.py`'s first caller has now landed and
+      `uploads.py` is still Phase 4's. `docs/code_review.md`'s "Still open"
+      section is updated from "still not rendered" to closed, with a citation
+      of what changed and how it is tested.
+
+Gate: `make check-fast` green in the sandbox (ruff, ruff format, mypy,
+`tsc --noEmit`, eslint, prettier, backend pytest with coverage, frontend
+vitest with coverage — unchanged, since no frontend file changed — and the
+generated-client check, also unchanged: no schema change). No new E2E
+journey: `docs/code_review.md` finding 9's own recommended fix was "a test
+that calls `render_export_html` directly — no WeasyPrint needed," which is
+what this milestone's two new backend tests are; `e2e/05-export.spec.ts`
+already exercises the real PDF route's permissions and format switch and
+needed no change. Backend 458 passed (was 456 at the 3.4 gate above — the two
+new tests here), and `tests/route_registry.py`'s authorization matrix is
+unchanged at 69 endpoints since no route was added. 98.08% combined
+line+branch coverage (`--cov-fail-under=90` enforced); `app/export_service.py`
+97% (the two uncovered branches — an empty `entry_ids` list and an empty
+`opportunity_ids` list — predate this milestone). Docker build + in-image
+test + smoke test remain deferred to the host's `scripts/autopilot-gate.sh 3`.
+Figures in `COVERAGE.md`.
+
+Work log: one session. Confirmed `markdown-it-py` was already resolvable
+in the sandbox before choosing it (D-135), wrote the render function and its
+call sites, found the `html: True` default by writing the `<script>` guard
+test before the fix, wired the sanitizer underneath, added the CSS, then the
+two new tests and the docs.
 
 ### Acceptance
 

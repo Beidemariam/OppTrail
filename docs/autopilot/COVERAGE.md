@@ -2109,3 +2109,55 @@ with `retry:` over an endless one), D-132 (a required `updated_at`, and
 milestone's single client-visible API break), D-133 (explicit publish after
 commit, and a two-word event vocabulary), D-134 (the guard sends the value
 the editor was opened with, not the one on screen at save time).
+
+---
+
+## Phase 3 — milestone 3.5 (PDF export renders Markdown)
+
+Backend-only, no migration, no API/schema change: `export_service.py`'s three
+call sites that used to `escape()` a body as plain text now render it through
+`markdown-it-py` and sanitize the result through `app/sanitize.py`.
+
+```
+backend:  458 passed (was 456), 98.08% combined line+branch coverage
+          (was 98%; --cov-fail-under=90 enforced)
+          app/export_service.py  97% (2 uncovered branches, both pre-existing
+                                 and unrelated to this milestone: an empty
+                                 entry_ids list, an empty opportunity_ids list)
+          app/sanitize.py        100% (unchanged; first caller from
+                                 application code rather than only its own
+                                 tests, per brief §4.5)
+frontend: 530 passed, 97.13% statements / 91.35% branch / 95.71% functions /
+          97.09% lines (unchanged — no frontend file touched)
+e2e:      69 passed (unchanged — no new journey; docs/code_review.md
+          finding 9's own recommended fix for this gap was a direct backend
+          test on render_export_html, not a browser journey)
+docker:   deferred to the host half — scripts/autopilot-gate.sh 3
+          (no Docker socket in this sandbox, per sandbox/README.md)
+```
+
+Two new tests, both confirmed to fail against the pre-milestone code first
+(brief §6.5): `test_pdf_html_renders_markdown_instead_of_escaping_it` (bold
+and a list render as markup, not literal syntax; a `javascript:` link posted
+straight to the API — bypassing the composer's own refusal — produces no
+`href` carrying that scheme; a comment's Markdown renders too) and
+`test_pdf_html_sanitizes_raw_html_even_if_the_markdown_parser_let_it_through`
+(forces the parser's `html` option back to `True` — `commonmark`'s own
+default, discovered while writing the first test — and proves the sanitizer
+underneath still strips a raw `<script>` tag). The pre-existing
+`test_pdf_html_renders_timeline_in_order_and_escapes_bodies` needed no
+change: a literal `<script>` is now escaped by the parser rather than by
+`html.escape`, the same visible result from a different mechanism.
+
+New dependency: `markdown-it-py>=4.2.0`, made direct in `pyproject.toml`
+(previously only a transitive dependency of `rich`, itself a `pip-audit`
+dependency, which `uv sync --no-dev` would have dropped from the production
+image). `pip-audit`: no known vulnerabilities.
+
+Coverage floors (brief §6.2) all met, unchanged from the 3.4 gate on every
+module other than `export_service.py`. New decision: **D-135** (`markdown-it-py`
+over `python-markdown`, chosen for sharing a lineage with the editor's own
+`@tiptap/markdown` parser family and for already being resolvable in the
+sandbox; sanitizing the rendered HTML rather than trusting the parser alone,
+and setting `html: False` explicitly rather than relying on `commonmark`'s
+default).

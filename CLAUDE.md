@@ -79,6 +79,16 @@ PDF rendering needs native libraries that are not present on macOS hosts. Import
 one test fewer on a laptop than in the container — that single skip is this one.
 Verify PDF changes in Docker.
 
+`export_service.render_export_html` renders every entry, note and comment
+body as Markdown (milestone 3.5, `markdown-it-py`) rather than escaping it as
+plain text — the other half of requirement 17, after milestone 3.1 gave the
+composer the same node set. `commonmark`'s own default is `html: True` (raw
+HTML passed through), so `html: False` is set explicitly, and the rendered
+HTML is still sanitized through `app/sanitize.py`'s allowlist before
+WeasyPrint sees it — two independent layers, since a body reaching this path
+may have been posted straight to the API rather than through the composer
+that already refuses a `javascript:` link.
+
 ## Architecture
 
 Single FastAPI process serves both `/api/*` and the statically exported Next.js
@@ -158,9 +168,13 @@ rejections too):
 because the app is a single process in a single container, and the one place to
 change if that stops being true. `auth.py` rotates the session on login (the
 presented session row is deleted) and `POST /api/v2/auth/password` invalidates every
-session of that user. `uploads.py` and `sanitize.py` hold the upload and HTML
-rules for the Phase 4 and Phase 3 features that will use them; each explains in
-its docstring why it exists before its feature does.
+session of that user. `uploads.py` holds the upload rules for the Phase 4
+feature that will use them, its docstring explaining why it exists before that
+feature does. `sanitize.py`'s own such docstring is now out of date in the
+same way: milestone 3.5 is its first caller ("WeasyPrint" below), rendering a
+body's Markdown to HTML for the PDF export before WeasyPrint ever sees it —
+the same allowlist `rehype-sanitize` uses in the browser, applied to the one
+render path that isn't the browser.
 
 `database.py` opens a fresh connection per operation via the `db_connection()`
 context manager, which sets `PRAGMA foreign_keys = ON`, `journal_mode = WAL`, and a

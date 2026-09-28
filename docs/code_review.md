@@ -641,8 +641,14 @@ an Arial fallback that does not exist in the image.
   be before. The rest of the eight are addressed where a phase touched them
   (polling by ADR 0003's SSE work, the author filter by the timeline filter bar,
   logging by milestone 1.6) or remain as recorded.
-- **Markdown is still not rendered in the PDF.** Note bodies export as escaped
-  plain text, so `**bold**` appears with literal asterisks. This is the other
-  half of the requirement 17 gap; the composer half closed in milestone 3.1,
-  and this half is milestone **3.5**, which needs a Markdown dependency in the
-  backend.
+- **Markdown in the PDF is closed (milestone 3.5).** `export_service.py` now
+  renders entry, note and comment bodies through `markdown-it-py`
+  (`render_markdown_to_safe_html`) instead of escaping them as plain text, so
+  `**bold**` and a `- ` list render as markup rather than literal syntax. The
+  requirement 17 gap this finding named is fully closed: the composer half in
+  milestone 3.1, this half here. The rendered HTML is sanitized through the
+  same `app/sanitize.py` allowlist the frontend's `rehype-sanitize` pass uses
+  before WeasyPrint ever sees it, and the parser's own `html: False` option is
+  set explicitly rather than trusted at its default (`commonmark`'s preset
+  default is `html: True`) — two independent layers against a hostile body,
+  both pinned by `backend/tests/test_export.py`.
