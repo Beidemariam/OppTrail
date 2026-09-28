@@ -38,6 +38,10 @@ export const shortcutGroups = [
         description: "Go to the pipeline board",
       },
       { chord: "g s", keys: "g then s", description: "Go to search" },
+      // Reserved and deliberately unbound since milestone 2.4a (**D-065**: a
+      // key documented before its feature exists is a key that does nothing),
+      // bound here because the feature now exists.
+      { chord: "g t", keys: "g then t", description: "Go to my tasks" },
       {
         chord: "mod+Enter",
         keys: "Ctrl Enter / Cmd Enter",

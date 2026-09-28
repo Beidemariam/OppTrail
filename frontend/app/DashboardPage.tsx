@@ -43,6 +43,7 @@ import { OpportunityTable } from "./OpportunityTable";
 import { SavedViewsMenu } from "./SavedViewsMenu";
 import { StageBoard } from "./StageBoard";
 import { useToasts, useUndoableDelete } from "./Toasts";
+import { TaskSummary } from "./TaskSummary";
 import { TopBar } from "./TopBar";
 import { ViewSwitcher } from "./ViewSwitcher";
 
@@ -542,6 +543,9 @@ export function DashboardPage() {
                 ? `${visibleOpportunities.length} of ${total} shown, ${filteredOut} filtered out`
                 : `${total} ${total === 1 ? "opportunity" : "opportunities"}`}
             </p>
+            {/* What is late, as a count beside the screen's own title
+                (milestone 4.1). Renders nothing when nothing is due. */}
+            <TaskSummary />
           </div>
           <div className="page-actions">
             <ViewSwitcher

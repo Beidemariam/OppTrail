@@ -33,6 +33,8 @@ export interface FakeApiOptions {
   activity?: ActivityEvent[];
   searchResults?: SearchResult[];
   savedViews?: SavedView[];
+  /** Tasks (milestone 4.1). Seeded whole, like every other collection here. */
+  tasks?: Task[];
   /** Paths that should fail, mapped to `[status, detail]`. */
   failures?: Record<string, [number, string]>;
   /**
@@ -165,6 +167,9 @@ interface Watcher {
  * Derived from the owner and the shares rather than stored, the way the
  * server derives it (`backend/app/routes_sharing.py`). */
 type Member = components["schemas"]["OpportunityMemberPublic"];
+/** Generated, like `Member`: a task has a dozen fields and the fake has no
+ * reason to restate them (milestone 4.1). */
+type Task = components["schemas"]["TaskPublic"];
 
 /** The merged activity log's row shape, straight from the generated client. */
 type ActivityEvent = components["schemas"]["ActivityEventPublic"];
@@ -218,6 +223,29 @@ export function anEntry(overrides: Partial<TimelineEntry> = {}): TimelineEntry {
     created_at: "2026-09-02T14:00:00Z",
     sequence: 1,
     notes: [],
+    ...overrides,
+  };
+}
+
+/** One task on the seeded opportunity (milestone 4.1). */
+export function aTask(overrides: Partial<Task> = {}): Task {
+  return {
+    id: 500,
+    opportunity_id: 10,
+    opportunity_name: "Northwind rollout",
+    entry_id: null,
+    entry_title: null,
+    title: "Send the revised pricing",
+    assignee_id: ALEX.id,
+    assignee_name: ALEX.name,
+    due_date: null,
+    completed_at: null,
+    completed_by: null,
+    completed_by_name: null,
+    created_by: ALEX.id,
+    author_name: ALEX.name,
+    created_at: "2026-09-02T14:00:00Z",
+    updated_at: "2026-09-02T14:00:00Z",
     ...overrides,
   };
 }
@@ -340,11 +368,15 @@ export class FakeApi {
   activity: ActivityEvent[];
   searchResults: SearchResult[];
   savedViews: SavedView[];
+  tasks: Task[];
   failures: Record<string, [number, string]>;
   // The current `user`'s own watch set (milestone 3.3a), separate from
   // `watchers` above: watching needs no share at all (D-129), so it is not
   // derived from anything else this fake tracks.
   private watching = new Set<number>();
+  /** Deleted tasks, so `POST .../restore` has something to put back
+   * (milestone 4.1) -- the same shape `deleted` uses for the other kinds. */
+  private deletedTasks = new Map<number, Task>();
   private pending: Set<string>;
   private pageSize: number | undefined;
   private held = new Map<
@@ -388,6 +420,7 @@ export class FakeApi {
     this.activity = options.activity ?? [];
     this.searchResults = options.searchResults ?? [];
     this.savedViews = options.savedViews ?? [];
+    this.tasks = options.tasks ?? [];
     this.failures = options.failures ?? {};
     this.pending = new Set(options.pending ?? []);
     this.pageSize = options.pageSize;
@@ -699,6 +732,78 @@ export class FakeApi {
     }
     if (segments[2] === "activity") {
       return this.page(this.activity, path);
+    }
+    // Tasks (milestone 4.1). One deal's list, and the writes the panel makes.
+    if (segments[0] === "opportunities" && segments[2] === "tasks") {
+      const opportunityId = Number(segments[1]);
+      if (method === "GET") {
+        return this.page(
+          this.tasks.filter((task) => task.opportunity_id === opportunityId),
+          path,
+        );
+      }
+      const opportunity = this.opportunities.find(
+        (item) => item.id === opportunityId,
+      );
+      const member = this.shares.find(
+        (share) => share.email === body.assignee_email,
+      );
+      const created: Task = aTask({
+        id: this.nextId++,
+        opportunity_id: opportunityId,
+        opportunity_name: opportunity?.name ?? "",
+        title: String(body.title),
+        due_date: body.due_date ?? null,
+        // Resolved from the email the way the route does, so a test that
+        // assigns somebody reads their name back rather than the author's.
+        assignee_id: member?.user_id ?? (body.assignee_email ? 0 : null),
+        assignee_name:
+          member?.name ?? (body.assignee_email ? body.assignee_email : null),
+        entry_id: body.entry_id ?? null,
+      });
+      this.tasks.push(created);
+      return this.json(created, 201);
+    }
+    if (segments[0] === "tasks" && segments.length === 1) {
+      // My Tasks: assigned to the signed-in reader, open unless asked
+      // otherwise -- the server's own default, which the page relies on.
+      const includeCompleted = path.includes("include_completed=true");
+      return this.page(
+        this.tasks.filter(
+          (task) =>
+            task.assignee_id === this.user?.id &&
+            (includeCompleted || !task.completed_at),
+        ),
+        path,
+      );
+    }
+    if (segments[0] === "tasks" && segments.length >= 2) {
+      const id = Number(segments[1]);
+      const task = this.tasks.find((item) => item.id === id);
+      if (!task) {
+        return this.json(
+          { error: { code: "not_found", message: "Task not found" } },
+          404,
+        );
+      }
+      if (segments[2] === "complete" || segments[2] === "reopen") {
+        const done = segments[2] === "complete";
+        Object.assign(task, {
+          completed_at: done ? "2026-09-28T12:00:00Z" : null,
+          completed_by: done ? (this.user?.id ?? null) : null,
+          completed_by_name: done ? (this.user?.name ?? null) : null,
+        });
+        return this.json(task);
+      }
+      if (method === "PATCH") {
+        Object.assign(task, body);
+        return this.json(task);
+      }
+      if (method === "DELETE") {
+        this.tasks = this.tasks.filter((item) => item.id !== id);
+        this.deletedTasks.set(id, task);
+        return new Response(null, { status: 204 });
+      }
     }
     // `GET .../audit-log` has no branch here on purpose: the app stopped
     // reading it in 3.1c (D-121), and a fake that answers a route nothing
@@ -1162,6 +1267,13 @@ export class FakeApi {
     if (kind === "opportunities" && opportunity) {
       put(this.opportunities, opportunity.index, opportunity.item);
       this.deleted.opportunities.delete(id);
+      return new Response(null, { status: 204 });
+    }
+
+    const task = this.deletedTasks.get(id);
+    if (kind === "tasks" && task) {
+      this.tasks.push(task);
+      this.deletedTasks.delete(id);
       return new Response(null, { status: 204 });
     }
 

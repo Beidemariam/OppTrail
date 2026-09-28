@@ -4,5337 +4,5141 @@
  */
 
 export interface paths {
-  "/api/v2/auth/signup": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/auth/signup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Signup */
+        post: operations["signup_api_v2_auth_signup_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /** Signup */
-    post: operations["signup_api_v2_auth_signup_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/auth/login": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Login */
+        post: operations["login_api_v2_auth_login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /** Login */
-    post: operations["login_api_v2_auth_login_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/auth/password": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/auth/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change Password
+         * @description Changing the password invalidates every existing session, including the
+         *     caller's, and issues a fresh one — so a stolen cookie stops working the
+         *     moment the theft is responded to (brief §4.5).
+         */
+        post: operations["change_password_api_v2_auth_password_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /**
-     * Change Password
-     * @description Changing the password invalidates every existing session, including the
-     *     caller's, and issues a fresh one — so a stolen cookie stops working the
-     *     moment the theft is responded to (brief §4.5).
-     */
-    post: operations["change_password_api_v2_auth_password_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/auth/logout": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Logout */
+        post: operations["logout_api_v2_auth_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /** Logout */
-    post: operations["logout_api_v2_auth_logout_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/auth/me": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Me */
+        get: operations["me_api_v2_auth_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /** Me */
-    get: operations["me_api_v2_auth_me_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/opportunities": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/opportunities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Opportunities Page
+         * @description Every opportunity the caller can read, newest activity first.
+         *
+         *     `stages` used to ride along on this response; it is a fixed list rather
+         *     than a property of this page, so it has its own endpoint below.
+         *
+         *     The access predicate was a module-level constant while v1 served the same
+         *     rows from a second query and the two could drift (D-033). With v1 removed
+         *     this is its only reader, so it is written where it runs.
+         */
+        get: operations["list_opportunities_page_api_v2_opportunities_get"];
+        put?: never;
+        /**
+         * Create Opportunity
+         * @description The one write on this router that announces nothing (milestone 3.4).
+         *
+         *     ADR 0003's stream is per opportunity, and this one does not exist until
+         *     the `INSERT` below returns its id -- so there is nobody subscribed to tell.
+         *     The board a colleague is looking at is a different question, and a
+         *     cross-opportunity stream is not what the ADR scopes.
+         */
+        post: operations["create_opportunity_api_v2_opportunities_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List Opportunities Page
-     * @description Every opportunity the caller can read, newest activity first.
-     *
-     *     `stages` used to ride along on this response; it is a fixed list rather
-     *     than a property of this page, so it has its own endpoint below.
-     *
-     *     The access predicate was a module-level constant while v1 served the same
-     *     rows from a second query and the two could drift (D-033). With v1 removed
-     *     this is its only reader, so it is written where it runs.
-     */
-    get: operations["list_opportunities_page_api_v2_opportunities_get"];
-    put?: never;
-    /**
-     * Create Opportunity
-     * @description The one write on this router that announces nothing (milestone 3.4).
-     *
-     *     ADR 0003's stream is per opportunity, and this one does not exist until
-     *     the `INSERT` below returns its id -- so there is nobody subscribed to tell.
-     *     The board a colleague is looking at is a different question, and a
-     *     cross-opportunity stream is not what the ADR scopes.
-     */
-    post: operations["create_opportunity_api_v2_opportunities_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/stages": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/stages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Stages
+         * @description The fixed stage list, which v1 delivered as a field on the opportunity
+         *     list response and the v2 envelope has no room for.
+         *
+         *     Paginating seven values that a migration cannot add to (invariant 6: the
+         *     stage list is fixed and non-renamable) would be theatre, so `next_cursor`
+         *     is always null — but the shape stays the envelope, because a v2 client
+         *     should not have to learn a second one.
+         */
+        get: operations["list_stages_api_v2_stages_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List Stages
-     * @description The fixed stage list, which v1 delivered as a field on the opportunity
-     *     list response and the v2 envelope has no room for.
-     *
-     *     Paginating seven values that a migration cannot add to (invariant 6: the
-     *     stage list is fixed and non-renamable) would be theatre, so `next_cursor`
-     *     is always null — but the shape stays the envelope, because a v2 client
-     *     should not have to learn a second one.
-     */
-    get: operations["list_stages_api_v2_stages_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/opportunities/{opportunity_id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/opportunities/{opportunity_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Opportunity */
+        get: operations["get_opportunity_api_v2_opportunities__opportunity_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Opportunity */
+        delete: operations["delete_opportunity_api_v2_opportunities__opportunity_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Opportunity */
+        patch: operations["update_opportunity_api_v2_opportunities__opportunity_id__patch"];
+        trace?: never;
     };
-    /** Get Opportunity */
-    get: operations["get_opportunity_api_v2_opportunities__opportunity_id__get"];
-    put?: never;
-    post?: never;
-    /** Delete Opportunity */
-    delete: operations["delete_opportunity_api_v2_opportunities__opportunity_id__delete"];
-    options?: never;
-    head?: never;
-    /** Update Opportunity */
-    patch: operations["update_opportunity_api_v2_opportunities__opportunity_id__patch"];
-    trace?: never;
-  };
-  "/api/v2/opportunities/{opportunity_id}/versions": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/opportunities/{opportunity_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Opportunity Versions Page
+         * @description Oldest version first: history reads forwards, like the audit log and
+         *     like `GET /api/v2/notes/{id}/versions`.
+         *
+         *     Owner-only, the audit log's rule (D-096). What an edit history answers is
+         *     "who changed this and what did it say before", which is the question the
+         *     audit log exists for -- and there is no admin role here, so `AGENTS.md`'s
+         *     "owner or admin" resolves to the opportunity owner (`permissions.py`).
+         */
+        get: operations["list_opportunity_versions_page_api_v2_opportunities__opportunity_id__versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List Opportunity Versions Page
-     * @description Oldest version first: history reads forwards, like the audit log and
-     *     like `GET /api/v2/notes/{id}/versions`.
-     *
-     *     Owner-only, the audit log's rule (D-096). What an edit history answers is
-     *     "who changed this and what did it say before", which is the question the
-     *     audit log exists for -- and there is no admin role here, so `AGENTS.md`'s
-     *     "owner or admin" resolves to the opportunity owner (`permissions.py`).
-     */
-    get: operations["list_opportunity_versions_page_api_v2_opportunities__opportunity_id__versions_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/opportunities/{opportunity_id}/versions/{version_number}/restore": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/opportunities/{opportunity_id}/versions/{version_number}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Opportunity Version
+         * @description Put a recorded version back as the current one (milestone 3.1c, D-116).
+         *
+         *     Owner-only, the rule the history read already has (D-096), and not to be
+         *     confused with `POST /opportunities/{id}/restore`, which undoes a soft
+         *     delete: this one undoes an *edit*, by writing an old snapshot back over
+         *     the live row.
+         *
+         *     Restoring is itself an edit, so it appends a version rather than
+         *     truncating the history -- restoring is never destructive and can itself be
+         *     undone by restoring again (D-120). A stage that moves in the process
+         *     writes the same `stage_change` system entry a stage change always writes,
+         *     because the timeline must not disagree with the record.
+         */
+        post: operations["restore_opportunity_version_api_v2_opportunities__opportunity_id__versions__version_number__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /**
-     * Restore Opportunity Version
-     * @description Put a recorded version back as the current one (milestone 3.1c, D-116).
-     *
-     *     Owner-only, the rule the history read already has (D-096), and not to be
-     *     confused with `POST /opportunities/{id}/restore`, which undoes a soft
-     *     delete: this one undoes an *edit*, by writing an old snapshot back over
-     *     the live row.
-     *
-     *     Restoring is itself an edit, so it appends a version rather than
-     *     truncating the history -- restoring is never destructive and can itself be
-     *     undone by restoring again (D-120). A stage that moves in the process
-     *     writes the same `stage_change` system entry a stage change always writes,
-     *     because the timeline must not disagree with the record.
-     */
-    post: operations["restore_opportunity_version_api_v2_opportunities__opportunity_id__versions__version_number__restore_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/opportunities/{opportunity_id}/activity": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/opportunities/{opportunity_id}/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Activity Page
+         * @description Who did what when, in one chronological list (milestone 3.0, D-101).
+         *
+         *     Open to every role, and the *rows* are what the role decides: system
+         *     entries for anyone with access, plus the audit and version halves for the
+         *     owner, each keeping the rule it already had (`app/activity.py`). That is
+         *     why this is not `require_opportunity_owner` — an editor asking what
+         *     happened gets the events they may read rather than a 403.
+         */
+        get: operations["list_activity_page_api_v2_opportunities__opportunity_id__activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List Activity Page
-     * @description Who did what when, in one chronological list (milestone 3.0, D-101).
-     *
-     *     Open to every role, and the *rows* are what the role decides: system
-     *     entries for anyone with access, plus the audit and version halves for the
-     *     owner, each keeping the rule it already had (`app/activity.py`). That is
-     *     why this is not `require_opportunity_owner` — an editor asking what
-     *     happened gets the events they may read rather than a 403.
-     */
-    get: operations["list_activity_page_api_v2_opportunities__opportunity_id__activity_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/opportunities/bulk": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/opportunities/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk Opportunity Action
+         * @description One request over many opportunities, checked and applied one id at a
+         *     time rather than all-or-nothing (`docs/UX.md`: "report per-item failures
+         *     rather than failing wholesale"). Every id gets a result even when another
+         *     one in the same batch fails, so a caller's mixed selection of owned and
+         *     merely-shared records only loses the ones it cannot touch.
+         *
+         *     Four of `docs/UX.md`'s five action-bar actions are here, and each reuses a
+         *     rule that already exists rather than adding one: `delete` and `set_stage`
+         *     are owner-only through `require_opportunity_owner`, like the single-item
+         *     routes they repeat; `assign_owner` is owner-only for the same reason --
+         *     only the holder of a record may hand it on (D-105); and `add_to_view`
+         *     asks only for *read* access per id, because it writes to the caller's own
+         *     saved view rather than to the opportunity (D-106). The fifth, export, is
+         *     not an action here at all: it answers with a file rather than a list of
+         *     per-item outcomes (D-107, `routes_export.py`).
+         *
+         *     Two failures are about the request rather than about one id -- an unknown
+         *     email and a view that is not the caller's -- and both are raised before
+         *     the loop, so a selection is never half-applied against a target that does
+         *     not exist.
+         */
+        post: operations["bulk_opportunity_action_api_v2_opportunities_bulk_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /**
-     * Bulk Opportunity Action
-     * @description One request over many opportunities, checked and applied one id at a
-     *     time rather than all-or-nothing (`docs/UX.md`: "report per-item failures
-     *     rather than failing wholesale"). Every id gets a result even when another
-     *     one in the same batch fails, so a caller's mixed selection of owned and
-     *     merely-shared records only loses the ones it cannot touch.
-     *
-     *     Four of `docs/UX.md`'s five action-bar actions are here, and each reuses a
-     *     rule that already exists rather than adding one: `delete` and `set_stage`
-     *     are owner-only through `require_opportunity_owner`, like the single-item
-     *     routes they repeat; `assign_owner` is owner-only for the same reason --
-     *     only the holder of a record may hand it on (D-105); and `add_to_view`
-     *     asks only for *read* access per id, because it writes to the caller's own
-     *     saved view rather than to the opportunity (D-106). The fifth, export, is
-     *     not an action here at all: it answers with a file rather than a list of
-     *     per-item outcomes (D-107, `routes_export.py`).
-     *
-     *     Two failures are about the request rather than about one id -- an unknown
-     *     email and a view that is not the caller's -- and both are raised before
-     *     the loop, so a selection is never half-applied against a target that does
-     *     not exist.
-     */
-    post: operations["bulk_opportunity_action_api_v2_opportunities_bulk_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/opportunities/{opportunity_id}/restore": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/opportunities/{opportunity_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore Opportunity Route */
+        post: operations["restore_opportunity_route_api_v2_opportunities__opportunity_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /** Restore Opportunity Route */
-    post: operations["restore_opportunity_route_api_v2_opportunities__opportunity_id__restore_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/opportunities/{opportunity_id}/members": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/opportunities/{opportunity_id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Members Page
+         * @description Everyone who can read this opportunity, for the mention autocomplete
+         *     (milestone 3.2, **D-123**).
+         *
+         *     Open to every role, unlike the share list beside it: a mention is only
+         *     delivered to someone who already has access, so a composer that cannot see
+         *     that set can only offer to notify nobody -- which is requirement 13's
+         *     discoverability problem restated. What it answers with is the same three
+         *     facts the timeline already prints beside every entry plus the address a
+         *     mention is written with; the grant itself -- who invited whom, and when --
+         *     stays in `GET .../shares`, owner-only.
+         *
+         *     The owner is a row here, which is why this is a `UNION ALL` over the
+         *     two places access comes from rather than a read of `opportunity_shares`:
+         *     ownership is implicit in `opportunities.owner_id` and has no share row
+         *     (`permissions.py`).
+         */
+        get: operations["list_members_page_api_v2_opportunities__opportunity_id__members_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List Members Page
-     * @description Everyone who can read this opportunity, for the mention autocomplete
-     *     (milestone 3.2, **D-123**).
-     *
-     *     Open to every role, unlike the share list beside it: a mention is only
-     *     delivered to someone who already has access, so a composer that cannot see
-     *     that set can only offer to notify nobody -- which is requirement 13's
-     *     discoverability problem restated. What it answers with is the same three
-     *     facts the timeline already prints beside every entry plus the address a
-     *     mention is written with; the grant itself -- who invited whom, and when --
-     *     stays in `GET .../shares`, owner-only.
-     *
-     *     The owner is a row here, which is why this is a `UNION ALL` over the
-     *     two places access comes from rather than a read of `opportunity_shares`:
-     *     ownership is implicit in `opportunities.owner_id` and has no share row
-     *     (`permissions.py`).
-     */
-    get: operations["list_members_page_api_v2_opportunities__opportunity_id__members_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/opportunities/{opportunity_id}/shares": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/opportunities/{opportunity_id}/shares": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Shares Page
+         * @description Ordered by name, tie-broken on `user_id` rather than on email: a
+         *     cursor needs a column that is unique within the ordering.
+         */
+        get: operations["list_shares_page_api_v2_opportunities__opportunity_id__shares_get"];
+        put?: never;
+        /** Create Share */
+        post: operations["create_share_api_v2_opportunities__opportunity_id__shares_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List Shares Page
-     * @description Ordered by name, tie-broken on `user_id` rather than on email: a
-     *     cursor needs a column that is unique within the ordering.
-     */
-    get: operations["list_shares_page_api_v2_opportunities__opportunity_id__shares_get"];
-    put?: never;
-    /** Create Share */
-    post: operations["create_share_api_v2_opportunities__opportunity_id__shares_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/opportunities/{opportunity_id}/shares/{user_id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/opportunities/{opportunity_id}/shares/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Share */
+        delete: operations["delete_share_api_v2_opportunities__opportunity_id__shares__user_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Share */
+        patch: operations["update_share_api_v2_opportunities__opportunity_id__shares__user_id__patch"];
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    post?: never;
-    /** Delete Share */
-    delete: operations["delete_share_api_v2_opportunities__opportunity_id__shares__user_id__delete"];
-    options?: never;
-    head?: never;
-    /** Update Share */
-    patch: operations["update_share_api_v2_opportunities__opportunity_id__shares__user_id__patch"];
-    trace?: never;
-  };
-  "/api/v2/opportunities/{opportunity_id}/audit-log": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/opportunities/{opportunity_id}/audit-log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Audit Log Page
+         * @description Oldest first: the audit log is read as a narrative of what happened to
+         *     the opportunity, so the page boundary walks forward in time.
+         */
+        get: operations["list_audit_log_page_api_v2_opportunities__opportunity_id__audit_log_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List Audit Log Page
-     * @description Oldest first: the audit log is read as a narrative of what happened to
-     *     the opportunity, so the page boundary walks forward in time.
-     */
-    get: operations["list_audit_log_page_api_v2_opportunities__opportunity_id__audit_log_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/opportunities/{opportunity_id}/watch": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/opportunities/{opportunity_id}/watch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Watch Status
+         * @description Whether the caller is watching (milestone 3.3a).
+         *
+         *     `require_opportunity_exists`, not `require_opportunity_access`: a person
+         *     with no share at all is exactly who this route has to answer, so it
+         *     cannot 404 them the way every access-gated read does (D-129).
+         */
+        get: operations["get_watch_status_api_v2_opportunities__opportunity_id__watch_get"];
+        put?: never;
+        /**
+         * Watch Opportunity
+         * @description Follow this opportunity, shared or not (milestone 3.3a, D-129).
+         *
+         *     `docs/FEATURES.md` §7: "follow an opportunity you are not shared on."
+         *     Idempotent, like reacting: `INSERT OR IGNORE` against the
+         *     `(opportunity_id, user_id)` unique index, so watching twice is the first
+         *     watch repeated. Watching grants no read access of its own -- it only adds
+         *     the caller to `notify_shared_activity`'s recipients
+         *     (`notification_service.get_watcher_user_ids`).
+         */
+        post: operations["watch_opportunity_api_v2_opportunities__opportunity_id__watch_post"];
+        /**
+         * Unwatch Opportunity
+         * @description Stop following. Returns the resulting state rather than 204, like the
+         *     reaction routes beside it -- a watch is toggle state, not content being
+         *     destroyed (milestone 3.3a, D-130).
+         */
+        delete: operations["unwatch_opportunity_api_v2_opportunities__opportunity_id__watch_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Get Watch Status
-     * @description Whether the caller is watching (milestone 3.3a).
-     *
-     *     `require_opportunity_exists`, not `require_opportunity_access`: a person
-     *     with no share at all is exactly who this route has to answer, so it
-     *     cannot 404 them the way every access-gated read does (D-129).
-     */
-    get: operations["get_watch_status_api_v2_opportunities__opportunity_id__watch_get"];
-    put?: never;
-    /**
-     * Watch Opportunity
-     * @description Follow this opportunity, shared or not (milestone 3.3a, D-129).
-     *
-     *     `docs/FEATURES.md` §7: "follow an opportunity you are not shared on."
-     *     Idempotent, like reacting: `INSERT OR IGNORE` against the
-     *     `(opportunity_id, user_id)` unique index, so watching twice is the first
-     *     watch repeated. Watching grants no read access of its own -- it only adds
-     *     the caller to `notify_shared_activity`'s recipients
-     *     (`notification_service.get_watcher_user_ids`).
-     */
-    post: operations["watch_opportunity_api_v2_opportunities__opportunity_id__watch_post"];
-    /**
-     * Unwatch Opportunity
-     * @description Stop following. Returns the resulting state rather than 204, like the
-     *     reaction routes beside it -- a watch is toggle state, not content being
-     *     destroyed (milestone 3.3a, D-130).
-     */
-    delete: operations["unwatch_opportunity_api_v2_opportunities__opportunity_id__watch_delete"];
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/opportunities/{opportunity_id}/watchers": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/opportunities/{opportunity_id}/watchers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Watchers Page
+         * @description Who is following this deal -- owner-only, the same visibility rule as
+         *     `GET .../shares` (milestone 3.3a): both name people with a relationship
+         *     to the opportunity that is nobody else's business to read.
+         */
+        get: operations["list_watchers_page_api_v2_opportunities__opportunity_id__watchers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List Watchers Page
-     * @description Who is following this deal -- owner-only, the same visibility rule as
-     *     `GET .../shares` (milestone 3.3a): both name people with a relationship
-     *     to the opportunity that is nobody else's business to read.
-     */
-    get: operations["list_watchers_page_api_v2_opportunities__opportunity_id__watchers_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/opportunities/{opportunity_id}/timeline": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/opportunities/{opportunity_id}/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Timeline Page
+         * @description The page unit is the entry. Its notes and comments come with it whole —
+         *     an entry split across two pages would be a worse shape than a long one,
+         *     and `docs/ROADMAP.md` puts threaded comments in Phase 3, which is where a
+         *     nested page would belong if one is ever needed.
+         *
+         *     Equal `event_timestamp`s tie-break on the entry id rather than on
+         *     `created_at`: a cursor needs a column that is unique within the ordering,
+         *     and for rows created in sequence the two order identically.
+         *
+         *     `order` (D-051) reverses both the `ORDER BY` and the cursor's comparison
+         *     direction (`cursor_clause`'s `descending`) — reversing only the `ORDER BY`
+         *     would keep walking the cursor forward through what is now a descending
+         *     list and either repeat or skip rows at the page boundary.
+         */
+        get: operations["list_timeline_page_api_v2_opportunities__opportunity_id__timeline_get"];
+        put?: never;
+        /** Create Timeline Entry */
+        post: operations["create_timeline_entry_api_v2_opportunities__opportunity_id__timeline_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List Timeline Page
-     * @description The page unit is the entry. Its notes and comments come with it whole —
-     *     an entry split across two pages would be a worse shape than a long one,
-     *     and `docs/ROADMAP.md` puts threaded comments in Phase 3, which is where a
-     *     nested page would belong if one is ever needed.
-     *
-     *     Equal `event_timestamp`s tie-break on the entry id rather than on
-     *     `created_at`: a cursor needs a column that is unique within the ordering,
-     *     and for rows created in sequence the two order identically.
-     *
-     *     `order` (D-051) reverses both the `ORDER BY` and the cursor's comparison
-     *     direction (`cursor_clause`'s `descending`) — reversing only the `ORDER BY`
-     *     would keep walking the cursor forward through what is now a descending
-     *     list and either repeat or skip rows at the page boundary.
-     */
-    get: operations["list_timeline_page_api_v2_opportunities__opportunity_id__timeline_get"];
-    put?: never;
-    /** Create Timeline Entry */
-    post: operations["create_timeline_entry_api_v2_opportunities__opportunity_id__timeline_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/timeline/follow-ups": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/timeline/follow-ups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Follow Ups Page
+         * @description Entries with a follow-up date, across every opportunity the caller may
+         *     read (milestone 3.0b, **D-088**) -- the calendar's second layer.
+         *
+         *     Cross-opportunity like `GET /api/v2/search`, so the permission filter is
+         *     inside the query (`ACCESSIBLE_OPPORTUNITY_IDS_SQL`) rather than a role
+         *     resolved first: there is no single opportunity here to resolve one from.
+         *     `from`/`to` bound the read to the month on screen, the same names the
+         *     timeline's own filter uses for `event_timestamp`, but filtering here is
+         *     on `follow_up_date`.
+         */
+        get: operations["list_follow_ups_page_api_v2_timeline_follow_ups_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List Follow Ups Page
-     * @description Entries with a follow-up date, across every opportunity the caller may
-     *     read (milestone 3.0b, **D-088**) -- the calendar's second layer.
-     *
-     *     Cross-opportunity like `GET /api/v2/search`, so the permission filter is
-     *     inside the query (`ACCESSIBLE_OPPORTUNITY_IDS_SQL`) rather than a role
-     *     resolved first: there is no single opportunity here to resolve one from.
-     *     `from`/`to` bound the read to the month on screen, the same names the
-     *     timeline's own filter uses for `event_timestamp`, but filtering here is
-     *     on `follow_up_date`.
-     */
-    get: operations["list_follow_ups_page_api_v2_timeline_follow_ups_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/timeline/{entry_id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/timeline/{entry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Timeline Entry */
+        delete: operations["delete_timeline_entry_api_v2_timeline__entry_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Timeline Entry */
+        patch: operations["update_timeline_entry_api_v2_timeline__entry_id__patch"];
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    post?: never;
-    /** Delete Timeline Entry */
-    delete: operations["delete_timeline_entry_api_v2_timeline__entry_id__delete"];
-    options?: never;
-    head?: never;
-    /** Update Timeline Entry */
-    patch: operations["update_timeline_entry_api_v2_timeline__entry_id__patch"];
-    trace?: never;
-  };
-  "/api/v2/timeline/{entry_id}/versions": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/timeline/{entry_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Timeline Entry Versions Page
+         * @description Oldest version first, owner-only: the three histories answer the same
+         *     question under the same rule (D-096).
+         *
+         *     A system-generated entry cannot be edited, so its history is empty rather
+         *     than absent -- the route does not special-case it, because "nothing has
+         *     ever changed here" is the truthful answer and the same one an unedited
+         *     entry gives.
+         */
+        get: operations["list_timeline_entry_versions_page_api_v2_timeline__entry_id__versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List Timeline Entry Versions Page
-     * @description Oldest version first, owner-only: the three histories answer the same
-     *     question under the same rule (D-096).
-     *
-     *     A system-generated entry cannot be edited, so its history is empty rather
-     *     than absent -- the route does not special-case it, because "nothing has
-     *     ever changed here" is the truthful answer and the same one an unedited
-     *     entry gives.
-     */
-    get: operations["list_timeline_entry_versions_page_api_v2_timeline__entry_id__versions_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/timeline/{entry_id}/versions/{version_number}/restore": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/timeline/{entry_id}/versions/{version_number}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Timeline Entry Version
+         * @description Put a recorded version of an entry back as the current one (3.1c).
+         *
+         *     Owner-only, like the history it restores from (D-096), and distinct from
+         *     `POST /timeline/{id}/restore`, which undoes a soft delete. A system entry
+         *     needs no special case here: it cannot be edited, so it has exactly one
+         *     version, which is always the current one -- and restoring what is already
+         *     current writes nothing (D-120) -- and so announces nothing either.
+         */
+        post: operations["restore_timeline_entry_version_api_v2_timeline__entry_id__versions__version_number__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /**
-     * Restore Timeline Entry Version
-     * @description Put a recorded version of an entry back as the current one (3.1c).
-     *
-     *     Owner-only, like the history it restores from (D-096), and distinct from
-     *     `POST /timeline/{id}/restore`, which undoes a soft delete. A system entry
-     *     needs no special case here: it cannot be edited, so it has exactly one
-     *     version, which is always the current one -- and restoring what is already
-     *     current writes nothing (D-120) -- and so announces nothing either.
-     */
-    post: operations["restore_timeline_entry_version_api_v2_timeline__entry_id__versions__version_number__restore_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/timeline/{entry_id}/restore": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/timeline/{entry_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore Timeline Entry Route */
+        post: operations["restore_timeline_entry_route_api_v2_timeline__entry_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /** Restore Timeline Entry Route */
-    post: operations["restore_timeline_entry_route_api_v2_timeline__entry_id__restore_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/timeline/{entry_id}/notes": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/timeline/{entry_id}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Note */
+        post: operations["create_note_api_v2_timeline__entry_id__notes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /** Create Note */
-    post: operations["create_note_api_v2_timeline__entry_id__notes_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/notes/{note_id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/notes/{note_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Note */
+        delete: operations["delete_note_api_v2_notes__note_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Note
+         * @description Edit a note, unless somebody else edited it first (ADR 0003).
+         *
+         *     The conflict model for the whole app is last-write-wins with *this* guard,
+         *     not CRDTs or operational transforms: comments are immutable and entries
+         *     are rarely co-edited, so a note is the one body two people can be typing
+         *     into at once. `payload.updated_at` is the value the editor was opened
+         *     against; a mismatch means the note moved underneath it and the write is
+         *     refused with 409 rather than silently overwriting what arrived in between.
+         *     Nothing is lost when it does -- `note_versions` holds every recorded state
+         *     and the UI offers to reload.
+         *
+         *     Ordered after the permission check, so a viewer is told they may not edit
+         *     rather than that their copy is stale.
+         *
+         *     One bounded blind spot, and it is the same second-resolution limit D-067
+         *     already accepted for undo: `utc_now()` has one-second granularity, so two
+         *     edits inside one second carry the same `updated_at` and the later one is
+         *     accepted. That window is where the version history is the recovery
+         *     mechanism rather than the guard.
+         */
+        patch: operations["update_note_api_v2_notes__note_id__patch"];
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    post?: never;
-    /** Delete Note */
-    delete: operations["delete_note_api_v2_notes__note_id__delete"];
-    options?: never;
-    head?: never;
-    /**
-     * Update Note
-     * @description Edit a note, unless somebody else edited it first (ADR 0003).
-     *
-     *     The conflict model for the whole app is last-write-wins with *this* guard,
-     *     not CRDTs or operational transforms: comments are immutable and entries
-     *     are rarely co-edited, so a note is the one body two people can be typing
-     *     into at once. `payload.updated_at` is the value the editor was opened
-     *     against; a mismatch means the note moved underneath it and the write is
-     *     refused with 409 rather than silently overwriting what arrived in between.
-     *     Nothing is lost when it does -- `note_versions` holds every recorded state
-     *     and the UI offers to reload.
-     *
-     *     Ordered after the permission check, so a viewer is told they may not edit
-     *     rather than that their copy is stale.
-     *
-     *     One bounded blind spot, and it is the same second-resolution limit D-067
-     *     already accepted for undo: `utc_now()` has one-second granularity, so two
-     *     edits inside one second carry the same `updated_at` and the later one is
-     *     accepted. That window is where the version history is the recovery
-     *     mechanism rather than the guard.
-     */
-    patch: operations["update_note_api_v2_notes__note_id__patch"];
-    trace?: never;
-  };
-  "/api/v2/notes/{note_id}/versions": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/notes/{note_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Note Versions Page
+         * @description Oldest version first: revision history reads forwards.
+         *
+         *     Owner-only since milestone 2.10 (D-096). This route shipped open to every
+         *     role while it was the only history and no screen read it; the milestone
+         *     that gives all three a screen gives them one rule, the audit log's, rather
+         *     than three answers to "who may see what this used to say".
+         */
+        get: operations["list_note_versions_page_api_v2_notes__note_id__versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List Note Versions Page
-     * @description Oldest version first: revision history reads forwards.
-     *
-     *     Owner-only since milestone 2.10 (D-096). This route shipped open to every
-     *     role while it was the only history and no screen read it; the milestone
-     *     that gives all three a screen gives them one rule, the audit log's, rather
-     *     than three answers to "who may see what this used to say".
-     */
-    get: operations["list_note_versions_page_api_v2_notes__note_id__versions_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/notes/{note_id}/versions/{version_number}/restore": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/notes/{note_id}/versions/{version_number}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Note Version
+         * @description Put a recorded version of a note back as the current body (3.1c).
+         *
+         *     Owner-only through the same check the history read uses, and the same
+         *     write `PATCH /notes/{id}` performs: the body changes, `edited` stays set
+         *     because the note *was* edited, and a version is appended so the text this
+         *     restore replaced is itself recoverable (D-120).
+         *
+         *     No mention notification is sent. The body is not new -- whoever it names
+         *     was told when it was first written -- and announcing it a second time
+         *     would make every restore a fresh ping (D-120).
+         */
+        post: operations["restore_note_version_api_v2_notes__note_id__versions__version_number__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /**
-     * Restore Note Version
-     * @description Put a recorded version of a note back as the current body (3.1c).
-     *
-     *     Owner-only through the same check the history read uses, and the same
-     *     write `PATCH /notes/{id}` performs: the body changes, `edited` stays set
-     *     because the note *was* edited, and a version is appended so the text this
-     *     restore replaced is itself recoverable (D-120).
-     *
-     *     No mention notification is sent. The body is not new -- whoever it names
-     *     was told when it was first written -- and announcing it a second time
-     *     would make every restore a fresh ping (D-120).
-     */
-    post: operations["restore_note_version_api_v2_notes__note_id__versions__version_number__restore_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/notes/{note_id}/restore": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/notes/{note_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore Note Route */
+        post: operations["restore_note_route_api_v2_notes__note_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /** Restore Note Route */
-    post: operations["restore_note_route_api_v2_notes__note_id__restore_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/notes/{note_id}/comments": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/notes/{note_id}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Comment
+         * @description Open a thread on this note, or reply to one (milestone 3.3).
+         *
+         *     `parent_id` must name a live comment on *this* note that is itself a
+         *     thread root. A reply to a reply is refused rather than flattened, because
+         *     silently reparenting it would put an answer under the wrong question
+         *     (D-127); naming a comment on another note is the same request written
+         *     wrong.
+         */
+        post: operations["create_comment_api_v2_notes__note_id__comments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /**
-     * Create Comment
-     * @description Open a thread on this note, or reply to one (milestone 3.3).
-     *
-     *     `parent_id` must name a live comment on *this* note that is itself a
-     *     thread root. A reply to a reply is refused rather than flattened, because
-     *     silently reparenting it would put an answer under the wrong question
-     *     (D-127); naming a comment on another note is the same request written
-     *     wrong.
-     */
-    post: operations["create_comment_api_v2_notes__note_id__comments_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/comments/{comment_id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/comments/{comment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Comment */
+        delete: operations["delete_comment_api_v2_comments__comment_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    post?: never;
-    /** Delete Comment */
-    delete: operations["delete_comment_api_v2_comments__comment_id__delete"];
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/comments/{comment_id}/restore": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/comments/{comment_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore Comment Route */
+        post: operations["restore_comment_route_api_v2_comments__comment_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /** Restore Comment Route */
-    post: operations["restore_comment_route_api_v2_comments__comment_id__restore_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/comments/{comment_id}/resolve": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/comments/{comment_id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolve Comment */
+        post: operations["resolve_comment_api_v2_comments__comment_id__resolve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /** Resolve Comment */
-    post: operations["resolve_comment_api_v2_comments__comment_id__resolve_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/comments/{comment_id}/unresolve": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/comments/{comment_id}/unresolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Unresolve Comment */
+        post: operations["unresolve_comment_api_v2_comments__comment_id__unresolve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /** Unresolve Comment */
-    post: operations["unresolve_comment_api_v2_comments__comment_id__unresolve_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/comments/{comment_id}/reactions": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/comments/{comment_id}/reactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Reaction
+         * @description React to a comment or reply, thread root or answer alike (milestone
+         *     3.3a, D-130).
+         *
+         *     Idempotent by construction: `INSERT OR IGNORE` against the
+         *     `(comment_id, user_id, emoji)` unique index means reacting twice with the
+         *     same emoji is the same request repeated, not a second reaction beside the
+         *     first -- which is also why this is 200, not 201 (nothing is guaranteed to
+         *     have been created). Any role that may write the timeline may react; unlike
+         *     editing or deleting, a reaction changes nothing about what anyone wrote,
+         *     so it is not the author-or-owner rule those are.
+         */
+        post: operations["add_reaction_api_v2_comments__comment_id__reactions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /**
-     * Add Reaction
-     * @description React to a comment or reply, thread root or answer alike (milestone
-     *     3.3a, D-130).
-     *
-     *     Idempotent by construction: `INSERT OR IGNORE` against the
-     *     `(comment_id, user_id, emoji)` unique index means reacting twice with the
-     *     same emoji is the same request repeated, not a second reaction beside the
-     *     first -- which is also why this is 200, not 201 (nothing is guaranteed to
-     *     have been created). Any role that may write the timeline may react; unlike
-     *     editing or deleting, a reaction changes nothing about what anyone wrote,
-     *     so it is not the author-or-owner rule those are.
-     */
-    post: operations["add_reaction_api_v2_comments__comment_id__reactions_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/comments/{comment_id}/reactions/{emoji}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/comments/{comment_id}/reactions/{emoji}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Reaction
+         * @description Withdraw the caller's own reaction. Idempotent, like resolve: removing
+         *     a reaction that is not there is not an error (milestone 3.3a).
+         *
+         *     Returns the comment with its remaining reactions rather than 204, unlike
+         *     `delete_comment` beside it -- one person's reaction is toggle state on the
+         *     comment, not content being destroyed, and the reader wants the resulting
+         *     count without a second request.
+         */
+        delete: operations["remove_reaction_api_v2_comments__comment_id__reactions__emoji__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    post?: never;
-    /**
-     * Remove Reaction
-     * @description Withdraw the caller's own reaction. Idempotent, like resolve: removing
-     *     a reaction that is not there is not an error (milestone 3.3a).
-     *
-     *     Returns the comment with its remaining reactions rather than 204, unlike
-     *     `delete_comment` beside it -- one person's reaction is toggle state on the
-     *     comment, not content being destroyed, and the reader wants the resulting
-     *     count without a second request.
-     */
-    delete: operations["remove_reaction_api_v2_comments__comment_id__reactions__emoji__delete"];
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/opportunities/{opportunity_id}/ai/ask": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/opportunities/{opportunity_id}/ai/ask": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ask Ai Agent */
+        post: operations["ask_ai_agent_api_v2_opportunities__opportunity_id__ai_ask_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /** Ask Ai Agent */
-    post: operations["ask_ai_agent_api_v2_opportunities__opportunity_id__ai_ask_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/opportunities/export/json": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/opportunities/export/json": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Selection Json */
+        get: operations["export_selection_json_api_v2_opportunities_export_json_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /** Export Selection Json */
-    get: operations["export_selection_json_api_v2_opportunities_export_json_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/opportunities/export/csv": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/opportunities/export/csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Selection Csv */
+        get: operations["export_selection_csv_api_v2_opportunities_export_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /** Export Selection Csv */
-    get: operations["export_selection_csv_api_v2_opportunities_export_csv_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/opportunities/{opportunity_id}/export/json": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/opportunities/{opportunity_id}/export/json": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Json */
+        get: operations["export_json_api_v2_opportunities__opportunity_id__export_json_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /** Export Json */
-    get: operations["export_json_api_v2_opportunities__opportunity_id__export_json_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/opportunities/{opportunity_id}/export/csv": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/opportunities/{opportunity_id}/export/csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Csv */
+        get: operations["export_csv_api_v2_opportunities__opportunity_id__export_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /** Export Csv */
-    get: operations["export_csv_api_v2_opportunities__opportunity_id__export_csv_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/opportunities/{opportunity_id}/export/pdf": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/opportunities/{opportunity_id}/export/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Pdf */
+        get: operations["export_pdf_api_v2_opportunities__opportunity_id__export_pdf_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /** Export Pdf */
-    get: operations["export_pdf_api_v2_opportunities__opportunity_id__export_pdf_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/notifications": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Notifications Page
+         * @description The inbox (milestone 1.7): full history, not unread-only, with an
+         *     optional filter by notification type.
+         *
+         *     v1 answered a narrower question here -- unread only, which meant marking
+         *     one read made it disappear. That surface is gone with the rest of v1;
+         *     `read_at IS NULL` is the same set, and a reader keeps what they have read.
+         */
+        get: operations["list_notifications_page_api_v2_notifications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List Notifications Page
-     * @description The inbox (milestone 1.7): full history, not unread-only, with an
-     *     optional filter by notification type.
-     *
-     *     v1 answered a narrower question here -- unread only, which meant marking
-     *     one read made it disappear. That surface is gone with the rest of v1;
-     *     `read_at IS NULL` is the same set, and a reader keeps what they have read.
-     */
-    get: operations["list_notifications_page_api_v2_notifications_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/notifications/mark-all-read": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/notifications/mark-all-read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark All Notifications Read Route */
+        post: operations["mark_all_notifications_read_route_api_v2_notifications_mark_all_read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /** Mark All Notifications Read Route */
-    post: operations["mark_all_notifications_read_route_api_v2_notifications_mark_all_read_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/notifications/{notification_id}/read": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/notifications/{notification_id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Mark Notification Read Route */
+        patch: operations["mark_notification_read_route_api_v2_notifications__notification_id__read_patch"];
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    /** Mark Notification Read Route */
-    patch: operations["mark_notification_read_route_api_v2_notifications__notification_id__read_patch"];
-    trace?: never;
-  };
-  "/api/v2/search": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Everything
+         * @description Ranked, snippeted matches in entries, notes and comments, across every
+         *     opportunity this user can read and no others (`FEATURES.md` §13).
+         *
+         *     The filters are the timeline's, by the same names: `type` is the type of
+         *     the entry a match sits under, `author_id` is who wrote the matched item,
+         *     and the date window is over the item's own timestamp.
+         */
+        get: operations["search_everything_api_v2_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Search Everything
-     * @description Ranked, snippeted matches in entries, notes and comments, across every
-     *     opportunity this user can read and no others (`FEATURES.md` §13).
-     *
-     *     The filters are the timeline's, by the same names: `type` is the type of
-     *     the entry a match sits under, `author_id` is who wrote the matched item,
-     *     and the date window is over the item's own timestamp.
-     */
-    get: operations["search_everything_api_v2_search_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/opportunities/{opportunity_id}/events": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/opportunities/{opportunity_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Opportunity Events
+         * @description Any role may listen -- this is `require_opportunity_access`, the same
+         *     gate as reading the timeline, because that is exactly what an event tells
+         *     the client to do again.
+         *
+         *     The check runs here rather than inside the generator on purpose: an async
+         *     generator's body does not start until the response is already being sent,
+         *     so a 403 raised in there would arrive after a 200 status line. What the
+         *     stream never re-checks is a role that changes mid-connection -- a share
+         *     removed while someone is listening leaves them a stream of
+         *     *invalidations*, and the refetch each one provokes is the read that
+         *     answers 404. No content reaches them through this path either way.
+         *
+         *     `def` rather than `async def` because the permission check is a synchronous
+         *     SQLite read, like every other route here. That costs a threadpool slot for
+         *     the length of that one query only: the generator handed to
+         *     `StreamingResponse` is iterated on the event loop, so an open stream holds
+         *     a connection and not a worker -- a better bound than ADR 0003's
+         *     consequences assume.
+         */
+        get: operations["opportunity_events_api_v2_opportunities__opportunity_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Opportunity Events
-     * @description Any role may listen -- this is `require_opportunity_access`, the same
-     *     gate as reading the timeline, because that is exactly what an event tells
-     *     the client to do again.
-     *
-     *     The check runs here rather than inside the generator on purpose: an async
-     *     generator's body does not start until the response is already being sent,
-     *     so a 403 raised in there would arrive after a 200 status line. What the
-     *     stream never re-checks is a role that changes mid-connection -- a share
-     *     removed while someone is listening leaves them a stream of
-     *     *invalidations*, and the refetch each one provokes is the read that
-     *     answers 404. No content reaches them through this path either way.
-     *
-     *     `def` rather than `async def` because the permission check is a synchronous
-     *     SQLite read, like every other route here. That costs a threadpool slot for
-     *     the length of that one query only: the generator handed to
-     *     `StreamingResponse` is iterated on the event loop, so an open stream holds
-     *     a connection and not a worker -- a better bound than ADR 0003's
-     *     consequences assume.
-     */
-    get: operations["opportunity_events_api_v2_opportunities__opportunity_id__events_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/saved-views": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/saved-views": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Saved Views
+         * @description Every view the caller may apply: their own, plus anyone's shared ones.
+         */
+        get: operations["list_saved_views_api_v2_saved_views_get"];
+        put?: never;
+        /** Create Saved View */
+        post: operations["create_saved_view_api_v2_saved_views_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List Saved Views
-     * @description Every view the caller may apply: their own, plus anyone's shared ones.
-     */
-    get: operations["list_saved_views_api_v2_saved_views_get"];
-    put?: never;
-    /** Create Saved View */
-    post: operations["create_saved_view_api_v2_saved_views_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/saved-views/{view_id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/saved-views/{view_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Saved View */
+        delete: operations["delete_saved_view_api_v2_saved_views__view_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Saved View */
+        patch: operations["update_saved_view_api_v2_saved_views__view_id__patch"];
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    post?: never;
-    /** Delete Saved View */
-    delete: operations["delete_saved_view_api_v2_saved_views__view_id__delete"];
-    options?: never;
-    head?: never;
-    /** Update Saved View */
-    patch: operations["update_saved_view_api_v2_saved_views__view_id__patch"];
-    trace?: never;
-  };
-  "/api/v2/opportunities/{opportunity_id}/tasks": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/opportunities/{opportunity_id}/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tasks
+         * @description One deal's tasks, soonest first.
+         *
+         *     `due_date` is nullable and SQLite sorts `NULL` before every value, so a task
+         *     with no date would otherwise lead the list. `due_date IS NULL` as the first
+         *     sort key puts the undated ones last, where a reader expects them -- and the
+         *     cursor carries the same expression, since a keyset cursor over a different
+         *     order than the one displayed skips rows.
+         */
+        get: operations["list_tasks_api_v2_opportunities__opportunity_id__tasks_get"];
+        put?: never;
+        /**
+         * Create Task
+         * @description Writing a task down. Editors may, viewers may not -- the same gate as
+         *     adding an entry or a note, because this is adding something rather than
+         *     changing somebody else's.
+         */
+        post: operations["create_task_api_v2_opportunities__opportunity_id__tasks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List Tasks
-     * @description One deal's tasks, soonest first.
-     *
-     *     `due_date` is nullable and SQLite sorts `NULL` before every value, so a task
-     *     with no date would otherwise lead the list. `due_date IS NULL` as the first
-     *     sort key puts the undated ones last, where a reader expects them -- and the
-     *     cursor carries the same expression, since a keyset cursor over a different
-     *     order than the one displayed skips rows.
-     */
-    get: operations["list_tasks_api_v2_opportunities__opportunity_id__tasks_get"];
-    put?: never;
-    /**
-     * Create Task
-     * @description Writing a task down. Editors may, viewers may not -- the same gate as
-     *     adding an entry or a note, because this is adding something rather than
-     *     changing somebody else's.
-     */
-    post: operations["create_task_api_v2_opportunities__opportunity_id__tasks_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/tasks": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List My Tasks
+         * @description My Tasks: everything assigned to the caller, across every opportunity
+         *     they can still see.
+         *
+         *     The one read here that spans opportunities, so the permission filter is
+         *     inside the query rather than a role resolved first -- `search.py`'s pattern.
+         *     A page of 50 is 50 tasks on deals this reader may read, which matters
+         *     because a task can be assigned to somebody before they are shared on the
+         *     deal: the share going away takes the task off their list rather than leaking
+         *     the deal's name through it.
+         *
+         *     Open by default, because a list of everything you have ever finished is not
+         *     a to-do list. `due_before` is what the dashboard's overdue surface asks for.
+         */
+        get: operations["list_my_tasks_api_v2_tasks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * List My Tasks
-     * @description My Tasks: everything assigned to the caller, across every opportunity
-     *     they can still see.
-     *
-     *     The one read here that spans opportunities, so the permission filter is
-     *     inside the query rather than a role resolved first -- `search.py`'s pattern.
-     *     A page of 50 is 50 tasks on deals this reader may read, which matters
-     *     because a task can be assigned to somebody before they are shared on the
-     *     deal: the share going away takes the task off their list rather than leaking
-     *     the deal's name through it.
-     *
-     *     Open by default, because a list of everything you have ever finished is not
-     *     a to-do list. `due_before` is what the dashboard's overdue surface asks for.
-     */
-    get: operations["list_my_tasks_api_v2_tasks_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/tasks/{task_id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/tasks/{task_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Task
+         * @description Author or opportunity owner, like every other delete (D-005), and a soft
+         *     delete with an audit row so the log stays the sequence of what happened
+         *     (invariant 7).
+         */
+        delete: operations["delete_task_api_v2_tasks__task_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Task
+         * @description A partial edit of what somebody typed: author or opportunity owner
+         *     (D-005). Not the assignee -- they may close a task, not rewrite it, which is
+         *     the line **D-142** draws.
+         *
+         *     `model_fields_set` decides what is written, so `null` clears a field and an
+         *     absent key leaves it alone. An empty `PATCH` writes nothing and publishes
+         *     nothing, the rule 3.4 applies to every write.
+         */
+        patch: operations["update_task_api_v2_tasks__task_id__patch"];
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    post?: never;
-    /**
-     * Delete Task
-     * @description Author or opportunity owner, like every other delete (D-005), and a soft
-     *     delete with an audit row so the log stays the sequence of what happened
-     *     (invariant 7).
-     */
-    delete: operations["delete_task_api_v2_tasks__task_id__delete"];
-    options?: never;
-    head?: never;
-    /**
-     * Update Task
-     * @description A partial edit of what somebody typed: author or opportunity owner
-     *     (D-005). Not the assignee -- they may close a task, not rewrite it, which is
-     *     the line **D-142** draws.
-     *
-     *     `model_fields_set` decides what is written, so `null` clears a field and an
-     *     absent key leaves it alone. An empty `PATCH` writes nothing and publishes
-     *     nothing, the rule 3.4 applies to every write.
-     */
-    patch: operations["update_task_api_v2_tasks__task_id__patch"];
-    trace?: never;
-  };
-  "/api/v2/tasks/{task_id}/complete": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/tasks/{task_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete Task
+         * @description Tick it off. The assignee may, as well as the author and the owner
+         *     (**D-142**).
+         *
+         *     Idempotent through `COALESCE`, so the first person to complete it is the one
+         *     recorded and a second click changes nothing -- the shape resolving a thread
+         *     already uses (3.3).
+         */
+        post: operations["complete_task_api_v2_tasks__task_id__complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /**
-     * Complete Task
-     * @description Tick it off. The assignee may, as well as the author and the owner
-     *     (**D-142**).
-     *
-     *     Idempotent through `COALESCE`, so the first person to complete it is the one
-     *     recorded and a second click changes nothing -- the shape resolving a thread
-     *     already uses (3.3).
-     */
-    post: operations["complete_task_api_v2_tasks__task_id__complete_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/tasks/{task_id}/reopen": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/tasks/{task_id}/reopen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reopen Task
+         * @description Put it back on the list. Same rule as completing, and idempotent in the
+         *     same way: reopening an open task is a no-op rather than an error, so a
+         *     client that lost track of the state cannot get stuck.
+         */
+        post: operations["reopen_task_api_v2_tasks__task_id__reopen_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /**
-     * Reopen Task
-     * @description Put it back on the list. Same rule as completing, and idempotent in the
-     *     same way: reopening an open task is a no-op rather than an error, so a
-     *     client that lost track of the state cannot get stuck.
-     */
-    post: operations["reopen_task_api_v2_tasks__task_id__reopen_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v2/tasks/{task_id}/restore": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v2/tasks/{task_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Deleted Task
+         * @description Undo the delete (milestone 2.4b's shape).
+         *
+         *     Reads the deleted row directly rather than through `fetch_task`, which only
+         *     answers with live ones, and refuses a task whose opportunity is deleted --
+         *     a child cannot come back while its parent is gone, the rule every other
+         *     restore follows. Restoring something that is not deleted is a 404, the same
+         *     answer as one that never existed.
+         */
+        post: operations["restore_deleted_task_api_v2_tasks__task_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    get?: never;
-    put?: never;
-    /**
-     * Restore Deleted Task
-     * @description Undo the delete (milestone 2.4b's shape).
-     *
-     *     Reads the deleted row directly rather than through `fetch_task`, which only
-     *     answers with live ones, and refuses a task whose opportunity is deleted --
-     *     a child cannot come back while its parent is gone, the rule every other
-     *     restore follows. Restoring something that is not deleted is a 404, the same
-     *     answer as one that never existed.
-     */
-    post: operations["restore_deleted_task_api_v2_tasks__task_id__restore_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/health": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Health Check */
+        get: operations["health_check_api_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /** Health Check */
-    get: operations["health_check_api_health_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
-  schemas: {
-    /**
-     * ActivityAuditEvent
-     * @description An audit log row — a deletion or a restore. Owner-only, like the log.
-     */
-    ActivityAuditEvent: {
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      source: "audit_log";
-      /**
-       * Action
-       * @enum {string}
-       */
-      action:
-        | "opportunity_deleted"
-        | "opportunity_restored"
-        | "share_added"
-        | "share_role_changed"
-        | "share_removed"
-        | "owner_changed"
-        | "timeline_entry_deleted"
-        | "timeline_entry_restored"
-        | "note_deleted"
-        | "note_restored"
-        | "comment_deleted"
-        | "comment_restored"
-        | "task_deleted"
-        | "task_restored";
-      /** Detail */
-      detail:
-        | components["schemas"]["AuditDetailOpportunityDeleted"]
-        | components["schemas"]["AuditDetailOpportunityRestored"]
-        | components["schemas"]["AuditDetailShareAdded"]
-        | components["schemas"]["AuditDetailShareRoleChanged"]
-        | components["schemas"]["AuditDetailShareRemoved"]
-        | components["schemas"]["AuditDetailOwnerChanged"]
-        | components["schemas"]["AuditDetailTimelineEntryDeleted"]
-        | components["schemas"]["AuditDetailTimelineEntryRestored"]
-        | components["schemas"]["AuditDetailNoteDeleted"]
-        | components["schemas"]["AuditDetailNoteRestored"]
-        | components["schemas"]["AuditDetailCommentDeleted"]
-        | components["schemas"]["AuditDetailCommentRestored"]
-        | components["schemas"]["AuditDetailTaskDeleted"]
-        | components["schemas"]["AuditDetailTaskRestored"];
-    };
-    /**
-     * ActivityEditEvent
-     * @description A version row, read as the edit that produced it.
-     *
-     *     `changed_fields` names the columns this version moved against the one
-     *     before it, in the order `app/versioning.py` declares them. The values
-     *     themselves are not here: what they said is the history screen's answer
-     *     (`GET .../versions`), and this row is the occurrence.
-     */
-    ActivityEditEvent: {
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      source: "version";
-      /**
-       * Target
-       * @enum {string}
-       */
-      target: "opportunity" | "timeline_entry" | "note";
-      /** Target Id */
-      target_id: number;
-      /** Version Number */
-      version_number: number;
-      /** Changed Fields */
-      changed_fields: string[];
-    };
-    /** ActivityEventPublic */
-    ActivityEventPublic: {
-      /** Id */
-      id: number;
-      /** Opportunity Id */
-      opportunity_id: number;
-      /** Occurred At */
-      occurred_at: string;
-      /** Actor Id */
-      actor_id: number | null;
-      /** Actor Name */
-      actor_name: string | null;
-      /** Detail */
-      detail:
-        | components["schemas"]["ActivitySystemEvent"]
-        | components["schemas"]["ActivityAuditEvent"]
-        | components["schemas"]["ActivityEditEvent"];
-    };
-    /**
-     * ActivitySystemEvent
-     * @description A system timeline entry — created, stage changed, sharing changed.
-     *
-     *     Carries the sentence the timeline already shows, so the feed and the
-     *     timeline say the same thing about the same event.
-     */
-    ActivitySystemEvent: {
-      /**
-       * @description discriminator enum property added by openapi-typescript
-       * @enum {string}
-       */
-      source: "system_entry";
-      /** Entry Id */
-      entry_id: number;
-      /** Title */
-      title: string;
-      /** Body */
-      body: string;
-    };
-    /** AiAskRequest */
-    AiAskRequest: {
-      /** Question */
-      question: string;
-    };
-    /** AiAskResponse */
-    AiAskResponse: {
-      /** Answer */
-      answer: string;
-      /** Referenced Entry Numbers */
-      referenced_entry_numbers: number[];
-    };
-    /** AuditDetailCommentDeleted */
-    AuditDetailCommentDeleted: {
-      /** Comment Id */
-      comment_id: number;
-      /** Note Id */
-      note_id: number;
-      /** Author Id */
-      author_id: number;
-    };
-    /** AuditDetailCommentRestored */
-    AuditDetailCommentRestored: {
-      /** Comment Id */
-      comment_id: number;
-      /** Note Id */
-      note_id: number;
-      /** Author Id */
-      author_id: number;
-    };
-    /** AuditDetailNoteDeleted */
-    AuditDetailNoteDeleted: {
-      /** Note Id */
-      note_id: number;
-      /** Entry Id */
-      entry_id: number;
-      /** Author Id */
-      author_id: number;
-    };
-    /** AuditDetailNoteRestored */
-    AuditDetailNoteRestored: {
-      /** Note Id */
-      note_id: number;
-      /** Entry Id */
-      entry_id: number;
-      /** Author Id */
-      author_id: number;
-    };
-    /** AuditDetailOpportunityDeleted */
-    AuditDetailOpportunityDeleted: {
-      /** Name */
-      name: string;
-      /** Account Name */
-      account_name: string | null;
-      /** Stage */
-      stage: string;
-    };
-    /** AuditDetailOpportunityRestored */
-    AuditDetailOpportunityRestored: {
-      /** Name */
-      name: string;
-      /** Account Name */
-      account_name: string | null;
-      /** Stage */
-      stage: string;
-    };
-    /** AuditDetailOwnerChanged */
-    AuditDetailOwnerChanged: {
-      /** From User Id */
-      from_user_id: number;
-      /** To User Id */
-      to_user_id: number;
-      /** To Email */
-      to_email: string;
-    };
-    /** AuditDetailShareAdded */
-    AuditDetailShareAdded: {
-      /** User Id */
-      user_id: number;
-      /** Email */
-      email: string;
-      /**
-       * Role
-       * @enum {string}
-       */
-      role: "viewer" | "editor";
-    };
-    /** AuditDetailShareRemoved */
-    AuditDetailShareRemoved: {
-      /** User Id */
-      user_id: number;
-      /** Email */
-      email: string;
-      /**
-       * Role
-       * @enum {string}
-       */
-      role: "viewer" | "editor";
-    };
-    /** AuditDetailShareRoleChanged */
-    AuditDetailShareRoleChanged: {
-      /** User Id */
-      user_id: number;
-      /** Email */
-      email: string;
-      /**
-       * From Role
-       * @enum {string}
-       */
-      from_role: "viewer" | "editor";
-      /**
-       * To Role
-       * @enum {string}
-       */
-      to_role: "viewer" | "editor";
-    };
-    /** AuditDetailTaskDeleted */
-    AuditDetailTaskDeleted: {
-      /** Task Id */
-      task_id: number;
-      /** Title */
-      title: string;
-      /** Assignee Id */
-      assignee_id: number | null;
-      /** Author Id */
-      author_id: number;
-    };
-    /** AuditDetailTaskRestored */
-    AuditDetailTaskRestored: {
-      /** Task Id */
-      task_id: number;
-      /** Title */
-      title: string;
-      /** Assignee Id */
-      assignee_id: number | null;
-      /** Author Id */
-      author_id: number;
-    };
-    /** AuditDetailTimelineEntryDeleted */
-    AuditDetailTimelineEntryDeleted: {
-      /** Entry Id */
-      entry_id: number;
-      /**
-       * Type
-       * @enum {string}
-       */
-      type:
-        | "call"
-        | "email"
-        | "meeting"
-        | "demo"
-        | "proposal"
-        | "contract"
-        | "stage_change"
-        | "other"
-        | "site_visit"
-        | "objection"
-        | "competitor_intel";
-      /** Title */
-      title: string;
-      /** Author Id */
-      author_id: number;
-    };
-    /** AuditDetailTimelineEntryRestored */
-    AuditDetailTimelineEntryRestored: {
-      /** Entry Id */
-      entry_id: number;
-      /**
-       * Type
-       * @enum {string}
-       */
-      type:
-        | "call"
-        | "email"
-        | "meeting"
-        | "demo"
-        | "proposal"
-        | "contract"
-        | "stage_change"
-        | "other"
-        | "site_visit"
-        | "objection"
-        | "competitor_intel";
-      /** Title */
-      title: string;
-      /** Author Id */
-      author_id: number;
-    };
-    /** AuditLogEntryPublic */
-    AuditLogEntryPublic: {
-      /** Id */
-      id: number;
-      /** Opportunity Id */
-      opportunity_id: number;
-      /** Actor Id */
-      actor_id: number | null;
-      /** Actor Name */
-      actor_name: string | null;
-      /**
-       * Action
-       * @enum {string}
-       */
-      action:
-        | "opportunity_deleted"
-        | "opportunity_restored"
-        | "share_added"
-        | "share_role_changed"
-        | "share_removed"
-        | "owner_changed"
-        | "timeline_entry_deleted"
-        | "timeline_entry_restored"
-        | "note_deleted"
-        | "note_restored"
-        | "comment_deleted"
-        | "comment_restored"
-        | "task_deleted"
-        | "task_restored";
-      /** Detail */
-      detail:
-        | components["schemas"]["AuditDetailOpportunityDeleted"]
-        | components["schemas"]["AuditDetailOpportunityRestored"]
-        | components["schemas"]["AuditDetailShareAdded"]
-        | components["schemas"]["AuditDetailShareRoleChanged"]
-        | components["schemas"]["AuditDetailShareRemoved"]
-        | components["schemas"]["AuditDetailOwnerChanged"]
-        | components["schemas"]["AuditDetailTimelineEntryDeleted"]
-        | components["schemas"]["AuditDetailTimelineEntryRestored"]
-        | components["schemas"]["AuditDetailNoteDeleted"]
-        | components["schemas"]["AuditDetailNoteRestored"]
-        | components["schemas"]["AuditDetailCommentDeleted"]
-        | components["schemas"]["AuditDetailCommentRestored"]
-        | components["schemas"]["AuditDetailTaskDeleted"]
-        | components["schemas"]["AuditDetailTaskRestored"];
-      /** Created At */
-      created_at: string;
-    };
-    /** AuthResponse */
-    AuthResponse: {
-      user: components["schemas"]["UserPublic"];
-    };
-    /** BulkActionResponse */
-    BulkActionResponse: {
-      /** Results */
-      results: components["schemas"]["BulkActionResultItem"][];
-    };
-    /**
-     * BulkActionResultItem
-     * @description One id's outcome. `error` is the same message the single-item route
-     *     would have raised, so a client already reading `detail`-style permission
-     *     errors does not learn a second vocabulary.
-     */
-    BulkActionResultItem: {
-      /** Id */
-      id: number;
-      /**
-       * Status
-       * @enum {string}
-       */
-      status: "ok" | "error";
-      /** Error */
-      error?: string | null;
-    };
-    /**
-     * BulkOpportunityAction
-     * @description One request over many opportunities (`docs/UX.md`'s action bar).
-     *
-     *     All four of the action bar's non-export actions live here. Each reuses a
-     *     rule that exists elsewhere rather than inventing one: `delete` and
-     *     `set_stage` are `delete_opportunity`/`update_opportunity` done per id
-     *     (owner-only), `assign_owner` is owner-only for the same reason every
-     *     other opportunity write is, and `add_to_view` writes to the caller's own
-     *     saved view, so its rule is that view's creator-only write plus read
-     *     access to each opportunity (D-105, D-106). Export is the fifth and is not
-     *     here: it answers with a file rather than a per-item result (D-107).
-     */
-    BulkOpportunityAction: {
-      /** Ids */
-      ids: number[];
-      /**
-       * Action
-       * @enum {string}
-       */
-      action: "delete" | "set_stage" | "assign_owner" | "add_to_view";
-      /** Stage */
-      stage?:
-        | (
-            | "Prospecting"
-            | "Qualification"
-            | "Needs Analysis"
-            | "Proposal"
-            | "Negotiation"
-            | "Closed Won"
-            | "Closed Lost"
-          )
-        | null;
-      /** New Owner Email */
-      new_owner_email?: string | null;
-      /** View Id */
-      view_id?: number | null;
-    };
-    /** CommentCreate */
-    CommentCreate: {
-      /** Body */
-      body: string;
-      /** Parent Id */
-      parent_id?: number | null;
-    };
-    /**
-     * CommentPublic
-     * @description One comment, whether it opened a thread or replied to one.
-     *
-     *     `parent_id` is NULL for a thread root (milestone 3.3). Threading is one
-     *     level deep by rule rather than by column (D-127), so this is also the
-     *     shape of every reply and a reply never carries replies of its own.
-     *     `reactions` (milestone 3.3a) is on every comment, roots and replies alike.
-     */
-    CommentPublic: {
-      /** Id */
-      id: number;
-      /** Note Id */
-      note_id: number;
-      /** Parent Id */
-      parent_id: number | null;
-      /** Body */
-      body: string;
-      /** Created By */
-      created_by: number;
-      /** Author Name */
-      author_name: string;
-      /** Created At */
-      created_at: string;
-      /** Reactions */
-      reactions: components["schemas"]["ReactionPublic"][];
-    };
-    /**
-     * CommentThread
-     * @description A thread root read with its replies and its resolved state.
-     *
-     *     Resolving belongs to the thread, so these three fields live on the root
-     *     and only the root — a reply's own row carries NULL in all of them
-     *     (`routes_timeline.resolve_comment` refuses a reply). Reading a thread is
-     *     what a note's comments are; writing one still answers with the single
-     *     `CommentPublic` that was written.
-     */
-    CommentThread: {
-      /** Id */
-      id: number;
-      /** Note Id */
-      note_id: number;
-      /** Parent Id */
-      parent_id: number | null;
-      /** Body */
-      body: string;
-      /** Created By */
-      created_by: number;
-      /** Author Name */
-      author_name: string;
-      /** Created At */
-      created_at: string;
-      /** Reactions */
-      reactions: components["schemas"]["ReactionPublic"][];
-      /** Resolved At */
-      resolved_at: string | null;
-      /** Resolved By */
-      resolved_by: number | null;
-      /** Resolved By Name */
-      resolved_by_name: string | null;
-      /** Replies */
-      replies: components["schemas"]["CommentPublic"][];
-    };
-    /**
-     * FollowUpPublic
-     * @description One entry with a follow-up date, read across every opportunity the
-     *     caller may see (milestone 3.0b, **D-088**) -- the calendar's second layer,
-     *     over the same permission-filtered cross-opportunity read `search.py` and
-     *     `export_service.py` already use. `follow_up_date` is never null on a row
-     *     this model describes; the query that produces it filters that.
-     */
-    FollowUpPublic: {
-      /** Id */
-      id: number;
-      /** Opportunity Id */
-      opportunity_id: number;
-      /** Opportunity Name */
-      opportunity_name: string;
-      /**
-       * Type
-       * @enum {string}
-       */
-      type:
-        | "call"
-        | "email"
-        | "meeting"
-        | "demo"
-        | "proposal"
-        | "contract"
-        | "stage_change"
-        | "other"
-        | "site_visit"
-        | "objection"
-        | "competitor_intel";
-      /** Title */
-      title: string;
-      /** Follow Up Date */
-      follow_up_date: string;
-      /** Created By */
-      created_by: number | null;
-      /** Author Name */
-      author_name: string | null;
-    };
-    /** HTTPValidationError */
-    HTTPValidationError: {
-      /** Detail */
-      detail?: components["schemas"]["ValidationError"][];
-    };
-    /** HealthStatus */
-    HealthStatus: {
-      /**
-       * Status
-       * @constant
-       */
-      status: "ok";
-      /** Schema Version */
-      schema_version: string;
-      /** Database Writable */
-      database_writable: boolean;
-      /** Last Backup At */
-      last_backup_at: string | null;
-    };
-    /** LoginRequest */
-    LoginRequest: {
-      /** Email */
-      email: string;
-      /** Password */
-      password: string;
-    };
-    /** NoteCreate */
-    NoteCreate: {
-      /** Body */
-      body: string;
-    };
-    /** NotePublic */
-    NotePublic: {
-      /** Id */
-      id: number;
-      /** Entry Id */
-      entry_id: number;
-      /** Body */
-      body: string;
-      /** Created By */
-      created_by: number;
-      /** Author Name */
-      author_name: string;
-      /** Created At */
-      created_at: string;
-      /** Updated At */
-      updated_at: string;
-      /** Edited */
-      edited: boolean;
-      /** Comments */
-      comments: components["schemas"]["CommentThread"][];
-    };
-    /**
-     * NoteUpdate
-     * @description A note edit, carrying the state the editor was written against.
-     *
-     *     `updated_at` is ADR 0003's edit guard: the client sends back the value it
-     *     read, and `PATCH /api/v2/notes/{id}` answers 409 if the note has moved
-     *     since. It is required rather than optional because an optional guard is no
-     *     guard -- a client that omits it is exactly the client that clobbers.
-     *
-     *     It is not validated as a timestamp here. Anything that is not the note's
-     *     current `updated_at` is a conflict, and a malformed value is one of those:
-     *     reporting it as a 422 would tell a caller their *format* was wrong when
-     *     what is wrong is that they are editing a stale note.
-     */
-    NoteUpdate: {
-      /** Body */
-      body: string;
-      /** Updated At */
-      updated_at: string;
-    };
-    /** NoteVersionPublic */
-    NoteVersionPublic: {
-      /** Id */
-      id: number;
-      /** Note Id */
-      note_id: number;
-      /** Version Number */
-      version_number: number;
-      /** Body */
-      body: string;
-      /** Edited By */
-      edited_by: number;
-      /** Editor Name */
-      editor_name: string;
-      /** Created At */
-      created_at: string;
-    };
-    /** NotificationMarkAllReadResponse */
-    NotificationMarkAllReadResponse: {
-      /** Marked */
-      marked: number;
-    };
-    /** NotificationPayloadComment */
-    NotificationPayloadComment: {
-      /** Opportunity Id */
-      opportunity_id: number;
-      /**
-       * Source Type
-       * @enum {string}
-       */
-      source_type: "entry" | "note" | "comment";
-      /** Source Id */
-      source_id: number;
-      /** Actor Id */
-      actor_id: number;
-    };
-    /** NotificationPayloadMention */
-    NotificationPayloadMention: {
-      /** Opportunity Id */
-      opportunity_id: number;
-      /**
-       * Source Type
-       * @enum {string}
-       */
-      source_type: "entry" | "note" | "comment";
-      /** Source Id */
-      source_id: number;
-      /** Actor Id */
-      actor_id: number;
-      /** Email */
-      email: string;
-    };
-    /**
-     * NotificationPayloadOwnerChanged
-     * @description Being handed a deal is the one access change nobody asked for, so it
-     *     is told the same way a share is (milestone 3.0a). The previous owner is
-     *     the actor, so they are not notified of their own action.
-     */
-    NotificationPayloadOwnerChanged: {
-      /** Opportunity Id */
-      opportunity_id: number;
-      /** Actor Id */
-      actor_id: number;
-    };
-    /** NotificationPayloadShareAdded */
-    NotificationPayloadShareAdded: {
-      /** Opportunity Id */
-      opportunity_id: number;
-      /** Actor Id */
-      actor_id: number;
-      /**
-       * Role
-       * @enum {string}
-       */
-      role: "viewer" | "editor";
-    };
-    /** NotificationPayloadShareRemoved */
-    NotificationPayloadShareRemoved: {
-      /** Opportunity Id */
-      opportunity_id: number;
-      /** Actor Id */
-      actor_id: number;
-      /**
-       * Role
-       * @enum {string}
-       */
-      role: "viewer" | "editor";
-    };
-    /** NotificationPayloadShareRoleChanged */
-    NotificationPayloadShareRoleChanged: {
-      /** Opportunity Id */
-      opportunity_id: number;
-      /** Actor Id */
-      actor_id: number;
-      /**
-       * From Role
-       * @enum {string}
-       */
-      from_role: "viewer" | "editor";
-      /**
-       * To Role
-       * @enum {string}
-       */
-      to_role: "viewer" | "editor";
-    };
-    /** NotificationPayloadSharedActivity */
-    NotificationPayloadSharedActivity: {
-      /** Opportunity Id */
-      opportunity_id: number;
-      /**
-       * Source Type
-       * @enum {string}
-       */
-      source_type: "entry" | "note" | "comment";
-      /** Source Id */
-      source_id: number;
-      /** Actor Id */
-      actor_id: number;
-      /** Title */
-      title: string;
-    };
-    /**
-     * NotificationPayloadTaskAssigned
-     * @description Being handed a task, told the way being handed a deal is (3.0a's
-     *     `owner_changed`): somebody else decided you now owe something. The task's
-     *     title rides along because the inbox sentence names it, and a notification
-     *     that says only "you were assigned a task" makes the reader open the deal to
-     *     find out which one. The assigner is the actor, so assigning something to
-     *     yourself notifies nobody.
-     */
-    NotificationPayloadTaskAssigned: {
-      /** Opportunity Id */
-      opportunity_id: number;
-      /** Actor Id */
-      actor_id: number;
-      /** Task Id */
-      task_id: number;
-      /** Title */
-      title: string;
-      /** Due Date */
-      due_date: string | null;
-    };
-    /**
-     * NotificationPublic
-     * @description `read_at` is the source of truth (milestone 1.7), so a client can tell
-     *     not just whether a notification was read but order a history by it. The
-     *     older boolean `read` was v1's and went with it, though the column stays —
-     *     see `CLAUDE.md`'s "Notifications". `grouped_key` rides along now,
-     *     unpopulated, ahead of v3's digest batching (D-141) -- see the migration's
-     *     docstring for why it is added before it is used.
-     */
-    NotificationPublic: {
-      /** Id */
-      id: number;
-      /**
-       * Type
-       * @enum {string}
-       */
-      type:
-        | "share_added"
-        | "share_role_changed"
-        | "share_removed"
-        | "owner_changed"
-        | "mention"
-        | "shared_activity"
-        | "comment"
-        | "task_assigned";
-      /** Payload */
-      payload:
-        | components["schemas"]["NotificationPayloadShareAdded"]
-        | components["schemas"]["NotificationPayloadShareRoleChanged"]
-        | components["schemas"]["NotificationPayloadShareRemoved"]
-        | components["schemas"]["NotificationPayloadOwnerChanged"]
-        | components["schemas"]["NotificationPayloadMention"]
-        | components["schemas"]["NotificationPayloadTaskAssigned"]
-        | components["schemas"]["NotificationPayloadSharedActivity"]
-        | components["schemas"]["NotificationPayloadComment"];
-      /** Read At */
-      read_at: string | null;
-      /** Grouped Key */
-      grouped_key: string | null;
-      /** Created At */
-      created_at: string;
-    };
-    /** OpportunityCreate */
-    OpportunityCreate: {
-      /** Name */
-      name: string;
-      /** Account Name */
-      account_name: string;
-      /**
-       * Value
-       * @default 0
-       */
-      value: number | string;
-      /**
-       * Currency
-       * @default USD
-       */
-      currency: string;
-      /**
-       * Stage
-       * @default Prospecting
-       * @enum {string}
-       */
-      stage:
-        | "Prospecting"
-        | "Qualification"
-        | "Needs Analysis"
-        | "Proposal"
-        | "Negotiation"
-        | "Closed Won"
-        | "Closed Lost";
-      /** Expected Close Date */
-      expected_close_date?: string | null;
-    };
-    /**
-     * OpportunityMemberPublic
-     * @description One person who can read this opportunity (milestone 3.2, **D-123**).
-     *
-     *     The mention autocomplete's source, and the reason this is not
-     *     `SharePublic`: a mention only notifies someone who already has access
-     *     (`notification_service.notify_mentions`), so the list a composer offers has
-     *     to be the owner *and* the shares, while a share row describes a grant and
-     *     has no row for the owner at all. It carries no `invited_by` and no
-     *     `created_at` -- who invited whom is the sharing panel's business, and that
-     *     stays owner-only.
-     */
-    OpportunityMemberPublic: {
-      /** User Id */
-      user_id: number;
-      /** Email */
-      email: string;
-      /** Name */
-      name: string;
-      /**
-       * Role
-       * @enum {string}
-       */
-      role: "owner" | "viewer" | "editor";
-    };
-    /** OpportunityPublic */
-    OpportunityPublic: {
-      /** Id */
-      id: number;
-      /** Name */
-      name: string;
-      /** Account Name */
-      account_name: string;
-      /** Value */
-      value: string;
-      /** Currency */
-      currency: string;
-      /**
-       * Stage
-       * @enum {string}
-       */
-      stage:
-        | "Prospecting"
-        | "Qualification"
-        | "Needs Analysis"
-        | "Proposal"
-        | "Negotiation"
-        | "Closed Won"
-        | "Closed Lost";
-      /** Owner Id */
-      owner_id: number;
-      /** Owner Name */
-      owner_name: string;
-      /** Expected Close Date */
-      expected_close_date: string | null;
-      /** Created At */
-      created_at: string;
-      /** Updated At */
-      updated_at: string;
-      /**
-       * Stalled
-       * @default false
-       */
-      stalled: boolean;
-      /**
-       * Current User Role
-       * @default owner
-       * @enum {string}
-       */
-      current_user_role: "owner" | "viewer" | "editor";
-    };
-    /** OpportunityUpdate */
-    OpportunityUpdate: {
-      /** Name */
-      name?: string | null;
-      /** Account Name */
-      account_name?: string | null;
-      /** Value */
-      value?: number | string | null;
-      /** Currency */
-      currency?: string | null;
-      /** Stage */
-      stage?:
-        | (
-            | "Prospecting"
-            | "Qualification"
-            | "Needs Analysis"
-            | "Proposal"
-            | "Negotiation"
-            | "Closed Won"
-            | "Closed Lost"
-          )
-        | null;
-      /** Expected Close Date */
-      expected_close_date?: string | null;
-    };
-    /** OpportunityVersionPublic */
-    OpportunityVersionPublic: {
-      /** Id */
-      id: number;
-      /** Opportunity Id */
-      opportunity_id: number;
-      /** Version Number */
-      version_number: number;
-      /** Name */
-      name: string;
-      /** Account Name */
-      account_name: string;
-      /** Value */
-      value: string;
-      /** Currency */
-      currency: string;
-      /**
-       * Stage
-       * @enum {string}
-       */
-      stage:
-        | "Prospecting"
-        | "Qualification"
-        | "Needs Analysis"
-        | "Proposal"
-        | "Negotiation"
-        | "Closed Won"
-        | "Closed Lost";
-      /** Expected Close Date */
-      expected_close_date: string | null;
-      /** Edited By */
-      edited_by: number;
-      /** Editor Name */
-      editor_name: string;
-      /** Created At */
-      created_at: string;
-    };
-    /** Page[ActivityEventPublic] */
-    Page_ActivityEventPublic_: {
-      /** Items */
-      items: components["schemas"]["ActivityEventPublic"][];
-      /** Next Cursor */
-      next_cursor?: string | null;
-    };
-    /** Page[AuditLogEntryPublic] */
-    Page_AuditLogEntryPublic_: {
-      /** Items */
-      items: components["schemas"]["AuditLogEntryPublic"][];
-      /** Next Cursor */
-      next_cursor?: string | null;
-    };
-    /** Page[FollowUpPublic] */
-    Page_FollowUpPublic_: {
-      /** Items */
-      items: components["schemas"]["FollowUpPublic"][];
-      /** Next Cursor */
-      next_cursor?: string | null;
-    };
-    /** Page[NoteVersionPublic] */
-    Page_NoteVersionPublic_: {
-      /** Items */
-      items: components["schemas"]["NoteVersionPublic"][];
-      /** Next Cursor */
-      next_cursor?: string | null;
-    };
-    /** Page[NotificationPublic] */
-    Page_NotificationPublic_: {
-      /** Items */
-      items: components["schemas"]["NotificationPublic"][];
-      /** Next Cursor */
-      next_cursor?: string | null;
-    };
-    /** Page[OpportunityMemberPublic] */
-    Page_OpportunityMemberPublic_: {
-      /** Items */
-      items: components["schemas"]["OpportunityMemberPublic"][];
-      /** Next Cursor */
-      next_cursor?: string | null;
-    };
-    /** Page[OpportunityPublic] */
-    Page_OpportunityPublic_: {
-      /** Items */
-      items: components["schemas"]["OpportunityPublic"][];
-      /** Next Cursor */
-      next_cursor?: string | null;
-    };
-    /** Page[OpportunityVersionPublic] */
-    Page_OpportunityVersionPublic_: {
-      /** Items */
-      items: components["schemas"]["OpportunityVersionPublic"][];
-      /** Next Cursor */
-      next_cursor?: string | null;
-    };
-    /** Page[SavedViewPublic] */
-    Page_SavedViewPublic_: {
-      /** Items */
-      items: components["schemas"]["SavedViewPublic"][];
-      /** Next Cursor */
-      next_cursor?: string | null;
-    };
-    /** Page[SearchResultPublic] */
-    Page_SearchResultPublic_: {
-      /** Items */
-      items: components["schemas"]["SearchResultPublic"][];
-      /** Next Cursor */
-      next_cursor?: string | null;
-    };
-    /** Page[SharePublic] */
-    Page_SharePublic_: {
-      /** Items */
-      items: components["schemas"]["SharePublic"][];
-      /** Next Cursor */
-      next_cursor?: string | null;
-    };
-    /** Page[TaskPublic] */
-    Page_TaskPublic_: {
-      /** Items */
-      items: components["schemas"]["TaskPublic"][];
-      /** Next Cursor */
-      next_cursor?: string | null;
-    };
-    /** Page[TimelineEntryPublic] */
-    Page_TimelineEntryPublic_: {
-      /** Items */
-      items: components["schemas"]["TimelineEntryPublic"][];
-      /** Next Cursor */
-      next_cursor?: string | null;
-    };
-    /** Page[TimelineEntryVersionPublic] */
-    Page_TimelineEntryVersionPublic_: {
-      /** Items */
-      items: components["schemas"]["TimelineEntryVersionPublic"][];
-      /** Next Cursor */
-      next_cursor?: string | null;
-    };
-    /** Page[WatcherPublic] */
-    Page_WatcherPublic_: {
-      /** Items */
-      items: components["schemas"]["WatcherPublic"][];
-      /** Next Cursor */
-      next_cursor?: string | null;
-    };
-    /** Page[str] */
-    Page_str_: {
-      /** Items */
-      items: string[];
-      /** Next Cursor */
-      next_cursor?: string | null;
-    };
-    /** PasswordChangeRequest */
-    PasswordChangeRequest: {
-      /** Current Password */
-      current_password: string;
-      /** New Password */
-      new_password: string;
-    };
-    /** ReactionCreate */
-    ReactionCreate: {
-      /**
-       * Emoji
-       * @enum {string}
-       */
-      emoji: "👍" | "👎" | "😄" | "🎉" | "❤️" | "🚀" | "👀";
-    };
-    /**
-     * ReactionPublic
-     * @description One person's reaction to one comment or reply (milestone 3.3a).
-     *
-     *     Individual rows rather than a server-aggregated `{emoji, count}` shape --
-     *     the same choice `versioning.py` and `activity.py` make, reading raw data
-     *     back and letting the client interpret it (`lib/activity.ts`,
-     *     `VersionChanges.tsx`) rather than baking one reader's view into the
-     *     response.
-     */
-    ReactionPublic: {
-      /** Id */
-      id: number;
-      /** Comment Id */
-      comment_id: number;
-      /** Emoji */
-      emoji: string;
-      /** User Id */
-      user_id: number;
-      /** User Name */
-      user_name: string;
-      /** Created At */
-      created_at: string;
-    };
-    /** SavedViewCreate */
-    SavedViewCreate: {
-      /** Name */
-      name: string;
-      /**
-       * Entity
-       * @enum {string}
-       */
-      entity: "opportunities" | "timeline";
-      /** Filters */
-      filters?: {
-        [key: string]: string;
-      };
-      /** Sort */
-      sort?: {
-        [key: string]: string;
-      };
-      /** Group By */
-      group_by?: string | null;
-      /**
-       * Is Shared
-       * @default false
-       */
-      is_shared: boolean;
-      /**
-       * Is Default
-       * @default false
-       */
-      is_default: boolean;
-    };
-    /** SavedViewPublic */
-    SavedViewPublic: {
-      /** Id */
-      id: number;
-      /** Created By */
-      created_by: number;
-      /** Creator Name */
-      creator_name: string;
-      /** Name */
-      name: string;
-      /**
-       * Entity
-       * @enum {string}
-       */
-      entity: "opportunities" | "timeline";
-      /** Filters */
-      filters: {
-        [key: string]: string;
-      };
-      /** Sort */
-      sort: {
-        [key: string]: string;
-      };
-      /** Group By */
-      group_by: string | null;
-      /** Is Shared */
-      is_shared: boolean;
-      /** Is Default */
-      is_default: boolean;
-      /** Created At */
-      created_at: string;
-      /** Updated At */
-      updated_at: string;
-    };
-    /**
-     * SavedViewUpdate
-     * @description Every field optional: a rename does not have to resend the filters.
-     */
-    SavedViewUpdate: {
-      /** Name */
-      name?: string | null;
-      /** Filters */
-      filters?: {
-        [key: string]: string;
-      } | null;
-      /** Sort */
-      sort?: {
-        [key: string]: string;
-      } | null;
-      /** Group By */
-      group_by?: string | null;
-      /** Is Shared */
-      is_shared?: boolean | null;
-      /** Is Default */
-      is_default?: boolean | null;
-    };
-    /**
-     * SearchResultPublic
-     * @description One match, with enough context to link to it and to group by deal.
-     *
-     *     `entry_id` is the timeline entry the match sits under -- for a note or a
-     *     comment that is its ancestor entry, and for an entry it is the entry
-     *     itself -- so every result addresses one place in one timeline.
-     */
-    SearchResultPublic: {
-      /**
-       * Kind
-       * @enum {string}
-       */
-      kind: "entry" | "note" | "comment";
-      /** Id */
-      id: number;
-      /** Opportunity Id */
-      opportunity_id: number;
-      /** Opportunity Name */
-      opportunity_name: string;
-      /** Entry Id */
-      entry_id: number;
-      /** Note Id */
-      note_id: number | null;
-      /** Title */
-      title: string | null;
-      snippet: components["schemas"]["SearchSnippet"];
-      /** Timestamp */
-      timestamp: string;
-      /** Author Id */
-      author_id: number | null;
-      /** Author Name */
-      author_name: string | null;
-    };
-    /**
-     * SearchSnippet
-     * @description A search result's excerpt as plain text, plus the offsets to highlight.
-     *
-     *     Offsets rather than markup: the API never emits something a client has to
-     *     remember to escape, and the excerpt stays the text it came from.
-     */
-    SearchSnippet: {
-      /** Text */
-      text: string;
-      /** Matches */
-      matches: components["schemas"]["SnippetMatch"][];
-    };
-    /** ShareCreate */
-    ShareCreate: {
-      /** Email */
-      email: string;
-      /**
-       * Role
-       * @enum {string}
-       */
-      role: "viewer" | "editor";
-    };
-    /** SharePublic */
-    SharePublic: {
-      /** User Id */
-      user_id: number;
-      /** Email */
-      email: string;
-      /** Name */
-      name: string;
-      /**
-       * Role
-       * @enum {string}
-       */
-      role: "viewer" | "editor";
-      /** Invited By */
-      invited_by: number;
-      /** Invited By Name */
-      invited_by_name: string;
-      /** Created At */
-      created_at: string;
-    };
-    /** ShareUpdate */
-    ShareUpdate: {
-      /**
-       * Role
-       * @enum {string}
-       */
-      role: "viewer" | "editor";
-    };
-    /** SignupRequest */
-    SignupRequest: {
-      /** Email */
-      email: string;
-      /** Password */
-      password: string;
-      /** Name */
-      name: string;
-    };
-    /**
-     * SnippetMatch
-     * @description Where one matched word sits inside `SearchSnippet.text`.
-     */
-    SnippetMatch: {
-      /** Start */
-      start: number;
-      /** Length */
-      length: number;
-    };
-    /**
-     * TaskCreate
-     * @description A task as written (milestone 4.1, `docs/FEATURES.md` §8).
-     *
-     *     `assignee_email` rather than an id, like `ShareCreate`: a person is named
-     *     by the address the reader typed or picked, and resolving it is the route's
-     *     job -- which is also where naming somebody nobody has heard of becomes a
-     *     422 about the request rather than a silent unassigned task.
-     */
-    TaskCreate: {
-      /** Title */
-      title: string;
-      /** Assignee Email */
-      assignee_email?: string | null;
-      /** Due Date */
-      due_date?: string | null;
-      /** Entry Id */
-      entry_id?: number | null;
-    };
-    /** TaskPublic */
-    TaskPublic: {
-      /** Id */
-      id: number;
-      /** Opportunity Id */
-      opportunity_id: number;
-      /** Opportunity Name */
-      opportunity_name: string;
-      /** Entry Id */
-      entry_id: number | null;
-      /** Entry Title */
-      entry_title: string | null;
-      /** Title */
-      title: string;
-      /** Assignee Id */
-      assignee_id: number | null;
-      /** Assignee Name */
-      assignee_name: string | null;
-      /** Due Date */
-      due_date: string | null;
-      /** Completed At */
-      completed_at: string | null;
-      /** Completed By */
-      completed_by: number | null;
-      /** Completed By Name */
-      completed_by_name: string | null;
-      /** Created By */
-      created_by: number;
-      /** Author Name */
-      author_name: string | null;
-      /** Created At */
-      created_at: string;
-      /** Updated At */
-      updated_at: string;
-    };
-    /**
-     * TaskUpdate
-     * @description A partial edit, the shape every other `PATCH` in this app takes.
-     *
-     *     `due_date` and `assignee_email` are both nullable *and* optional, which are
-     *     two different things here and the reason `model_fields_set` decides what to
-     *     write: absent means "leave it", `null` means "clear it". Completion is not
-     *     here -- it is `POST .../complete` and `.../reopen`, for the reason resolving
-     *     a thread is (D-128): it changes no field a person typed, and making it a
-     *     `PATCH` field would let one request both rename and close a task, which is
-     *     two events in the log pretending to be one.
-     */
-    TaskUpdate: {
-      /** Title */
-      title?: string | null;
-      /** Assignee Email */
-      assignee_email?: string | null;
-      /** Due Date */
-      due_date?: string | null;
-    };
-    /** TimelineEntryCreate */
-    TimelineEntryCreate: {
-      /**
-       * Type
-       * @default other
-       * @enum {string}
-       */
-      type:
-        | "call"
-        | "email"
-        | "meeting"
-        | "demo"
-        | "proposal"
-        | "contract"
-        | "stage_change"
-        | "other"
-        | "site_visit"
-        | "objection"
-        | "competitor_intel";
-      /** Title */
-      title: string;
-      /**
-       * Body
-       * @default
-       */
-      body: string;
-      /** Event Timestamp */
-      event_timestamp: string;
-      /** Follow Up Date */
-      follow_up_date?: string | null;
-    };
-    /** TimelineEntryPublic */
-    TimelineEntryPublic: {
-      /** Id */
-      id: number;
-      /** Opportunity Id */
-      opportunity_id: number;
-      /**
-       * Type
-       * @enum {string}
-       */
-      type:
-        | "call"
-        | "email"
-        | "meeting"
-        | "demo"
-        | "proposal"
-        | "contract"
-        | "stage_change"
-        | "other"
-        | "site_visit"
-        | "objection"
-        | "competitor_intel";
-      /** Title */
-      title: string;
-      /** Body */
-      body: string;
-      /** Event Timestamp */
-      event_timestamp: string;
-      /** Follow Up Date */
-      follow_up_date: string | null;
-      /** Created By */
-      created_by: number | null;
-      /** Author Name */
-      author_name: string | null;
-      /** System Generated */
-      system_generated: boolean;
-      /** Created At */
-      created_at: string;
-      /** Sequence */
-      sequence: number;
-      /** Notes */
-      notes: components["schemas"]["NotePublic"][];
-    };
-    /** TimelineEntryUpdate */
-    TimelineEntryUpdate: {
-      /** Type */
-      type?:
-        | (
-            | "call"
-            | "email"
-            | "meeting"
-            | "demo"
-            | "proposal"
-            | "contract"
-            | "stage_change"
-            | "other"
-            | "site_visit"
-            | "objection"
-            | "competitor_intel"
-          )
-        | null;
-      /** Title */
-      title?: string | null;
-      /** Body */
-      body?: string | null;
-      /** Event Timestamp */
-      event_timestamp?: string | null;
-      /** Follow Up Date */
-      follow_up_date?: string | null;
-    };
-    /** TimelineEntryVersionPublic */
-    TimelineEntryVersionPublic: {
-      /** Id */
-      id: number;
-      /** Entry Id */
-      entry_id: number;
-      /** Version Number */
-      version_number: number;
-      /**
-       * Type
-       * @enum {string}
-       */
-      type:
-        | "call"
-        | "email"
-        | "meeting"
-        | "demo"
-        | "proposal"
-        | "contract"
-        | "stage_change"
-        | "other"
-        | "site_visit"
-        | "objection"
-        | "competitor_intel";
-      /** Title */
-      title: string;
-      /** Body */
-      body: string;
-      /** Event Timestamp */
-      event_timestamp: string;
-      /** Follow Up Date */
-      follow_up_date: string | null;
-      /** Edited By */
-      edited_by: number;
-      /** Editor Name */
-      editor_name: string;
-      /** Created At */
-      created_at: string;
-    };
-    /** UserPublic */
-    UserPublic: {
-      /** Id */
-      id: number;
-      /** Email */
-      email: string;
-      /** Name */
-      name: string;
-      /** Created At */
-      created_at: string;
-    };
-    /** ValidationError */
-    ValidationError: {
-      /** Location */
-      loc: (string | number)[];
-      /** Message */
-      msg: string;
-      /** Error Type */
-      type: string;
-      /** Input */
-      input?: unknown;
-      /** Context */
-      ctx?: Record<string, never>;
-    };
-    /**
-     * WatchStatus
-     * @description Whether the caller is currently watching -- the read and both writes
-     *     share this one shape, so toggling costs no second request to learn the
-     *     result (milestone 3.3a).
-     */
-    WatchStatus: {
-      /** Watching */
-      watching: boolean;
-    };
-    /**
-     * WatcherPublic
-     * @description One person following this opportunity (milestone 3.3a).
-     *
-     *     Owner-only to read, like `SharePublic` beside it -- but unlike a share,
-     *     watching carries no role and grants no access of its own: `FEATURES.md`
-     *     §7 names watching an opportunity you are *not* shared on as the point of
-     *     the feature (D-129), so this list can and does include people
-     *     `OpportunityMemberPublic` would never return.
-     */
-    WatcherPublic: {
-      /** Id */
-      id: number;
-      /** Opportunity Id */
-      opportunity_id: number;
-      /** User Id */
-      user_id: number;
-      /** User Name */
-      user_name: string;
-      /** User Email */
-      user_email: string;
-      /** Created At */
-      created_at: string;
-    };
-  };
-  responses: never;
-  parameters: never;
-  requestBodies: never;
-  headers: never;
-  pathItems: never;
+    schemas: {
+        /**
+         * ActivityAuditEvent
+         * @description An audit log row — a deletion or a restore. Owner-only, like the log.
+         */
+        ActivityAuditEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            source: "audit_log";
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "opportunity_deleted" | "opportunity_restored" | "share_added" | "share_role_changed" | "share_removed" | "owner_changed" | "timeline_entry_deleted" | "timeline_entry_restored" | "note_deleted" | "note_restored" | "comment_deleted" | "comment_restored" | "task_deleted" | "task_restored";
+            /** Detail */
+            detail: components["schemas"]["AuditDetailOpportunityDeleted"] | components["schemas"]["AuditDetailOpportunityRestored"] | components["schemas"]["AuditDetailShareAdded"] | components["schemas"]["AuditDetailShareRoleChanged"] | components["schemas"]["AuditDetailShareRemoved"] | components["schemas"]["AuditDetailOwnerChanged"] | components["schemas"]["AuditDetailTimelineEntryDeleted"] | components["schemas"]["AuditDetailTimelineEntryRestored"] | components["schemas"]["AuditDetailNoteDeleted"] | components["schemas"]["AuditDetailNoteRestored"] | components["schemas"]["AuditDetailCommentDeleted"] | components["schemas"]["AuditDetailCommentRestored"] | components["schemas"]["AuditDetailTaskDeleted"] | components["schemas"]["AuditDetailTaskRestored"];
+        };
+        /**
+         * ActivityEditEvent
+         * @description A version row, read as the edit that produced it.
+         *
+         *     `changed_fields` names the columns this version moved against the one
+         *     before it, in the order `app/versioning.py` declares them. The values
+         *     themselves are not here: what they said is the history screen's answer
+         *     (`GET .../versions`), and this row is the occurrence.
+         */
+        ActivityEditEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            source: "version";
+            /**
+             * Target
+             * @enum {string}
+             */
+            target: "opportunity" | "timeline_entry" | "note";
+            /** Target Id */
+            target_id: number;
+            /** Version Number */
+            version_number: number;
+            /** Changed Fields */
+            changed_fields: string[];
+        };
+        /** ActivityEventPublic */
+        ActivityEventPublic: {
+            /** Id */
+            id: number;
+            /** Opportunity Id */
+            opportunity_id: number;
+            /** Occurred At */
+            occurred_at: string;
+            /** Actor Id */
+            actor_id: number | null;
+            /** Actor Name */
+            actor_name: string | null;
+            /** Detail */
+            detail: components["schemas"]["ActivitySystemEvent"] | components["schemas"]["ActivityAuditEvent"] | components["schemas"]["ActivityEditEvent"];
+        };
+        /**
+         * ActivitySystemEvent
+         * @description A system timeline entry — created, stage changed, sharing changed.
+         *
+         *     Carries the sentence the timeline already shows, so the feed and the
+         *     timeline say the same thing about the same event.
+         */
+        ActivitySystemEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            source: "system_entry";
+            /** Entry Id */
+            entry_id: number;
+            /** Title */
+            title: string;
+            /** Body */
+            body: string;
+        };
+        /** AiAskRequest */
+        AiAskRequest: {
+            /** Question */
+            question: string;
+        };
+        /** AiAskResponse */
+        AiAskResponse: {
+            /** Answer */
+            answer: string;
+            /** Referenced Entry Numbers */
+            referenced_entry_numbers: number[];
+        };
+        /** AuditDetailCommentDeleted */
+        AuditDetailCommentDeleted: {
+            /** Comment Id */
+            comment_id: number;
+            /** Note Id */
+            note_id: number;
+            /** Author Id */
+            author_id: number;
+        };
+        /** AuditDetailCommentRestored */
+        AuditDetailCommentRestored: {
+            /** Comment Id */
+            comment_id: number;
+            /** Note Id */
+            note_id: number;
+            /** Author Id */
+            author_id: number;
+        };
+        /** AuditDetailNoteDeleted */
+        AuditDetailNoteDeleted: {
+            /** Note Id */
+            note_id: number;
+            /** Entry Id */
+            entry_id: number;
+            /** Author Id */
+            author_id: number;
+        };
+        /** AuditDetailNoteRestored */
+        AuditDetailNoteRestored: {
+            /** Note Id */
+            note_id: number;
+            /** Entry Id */
+            entry_id: number;
+            /** Author Id */
+            author_id: number;
+        };
+        /** AuditDetailOpportunityDeleted */
+        AuditDetailOpportunityDeleted: {
+            /** Name */
+            name: string;
+            /** Account Name */
+            account_name: string | null;
+            /** Stage */
+            stage: string;
+        };
+        /** AuditDetailOpportunityRestored */
+        AuditDetailOpportunityRestored: {
+            /** Name */
+            name: string;
+            /** Account Name */
+            account_name: string | null;
+            /** Stage */
+            stage: string;
+        };
+        /** AuditDetailOwnerChanged */
+        AuditDetailOwnerChanged: {
+            /** From User Id */
+            from_user_id: number;
+            /** To User Id */
+            to_user_id: number;
+            /** To Email */
+            to_email: string;
+        };
+        /** AuditDetailShareAdded */
+        AuditDetailShareAdded: {
+            /** User Id */
+            user_id: number;
+            /** Email */
+            email: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "viewer" | "editor";
+        };
+        /** AuditDetailShareRemoved */
+        AuditDetailShareRemoved: {
+            /** User Id */
+            user_id: number;
+            /** Email */
+            email: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "viewer" | "editor";
+        };
+        /** AuditDetailShareRoleChanged */
+        AuditDetailShareRoleChanged: {
+            /** User Id */
+            user_id: number;
+            /** Email */
+            email: string;
+            /**
+             * From Role
+             * @enum {string}
+             */
+            from_role: "viewer" | "editor";
+            /**
+             * To Role
+             * @enum {string}
+             */
+            to_role: "viewer" | "editor";
+        };
+        /** AuditDetailTaskDeleted */
+        AuditDetailTaskDeleted: {
+            /** Task Id */
+            task_id: number;
+            /** Title */
+            title: string;
+            /** Assignee Id */
+            assignee_id: number | null;
+            /** Author Id */
+            author_id: number;
+        };
+        /** AuditDetailTaskRestored */
+        AuditDetailTaskRestored: {
+            /** Task Id */
+            task_id: number;
+            /** Title */
+            title: string;
+            /** Assignee Id */
+            assignee_id: number | null;
+            /** Author Id */
+            author_id: number;
+        };
+        /** AuditDetailTimelineEntryDeleted */
+        AuditDetailTimelineEntryDeleted: {
+            /** Entry Id */
+            entry_id: number;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "call" | "email" | "meeting" | "demo" | "proposal" | "contract" | "stage_change" | "other" | "site_visit" | "objection" | "competitor_intel";
+            /** Title */
+            title: string;
+            /** Author Id */
+            author_id: number;
+        };
+        /** AuditDetailTimelineEntryRestored */
+        AuditDetailTimelineEntryRestored: {
+            /** Entry Id */
+            entry_id: number;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "call" | "email" | "meeting" | "demo" | "proposal" | "contract" | "stage_change" | "other" | "site_visit" | "objection" | "competitor_intel";
+            /** Title */
+            title: string;
+            /** Author Id */
+            author_id: number;
+        };
+        /** AuditLogEntryPublic */
+        AuditLogEntryPublic: {
+            /** Id */
+            id: number;
+            /** Opportunity Id */
+            opportunity_id: number;
+            /** Actor Id */
+            actor_id: number | null;
+            /** Actor Name */
+            actor_name: string | null;
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "opportunity_deleted" | "opportunity_restored" | "share_added" | "share_role_changed" | "share_removed" | "owner_changed" | "timeline_entry_deleted" | "timeline_entry_restored" | "note_deleted" | "note_restored" | "comment_deleted" | "comment_restored" | "task_deleted" | "task_restored";
+            /** Detail */
+            detail: components["schemas"]["AuditDetailOpportunityDeleted"] | components["schemas"]["AuditDetailOpportunityRestored"] | components["schemas"]["AuditDetailShareAdded"] | components["schemas"]["AuditDetailShareRoleChanged"] | components["schemas"]["AuditDetailShareRemoved"] | components["schemas"]["AuditDetailOwnerChanged"] | components["schemas"]["AuditDetailTimelineEntryDeleted"] | components["schemas"]["AuditDetailTimelineEntryRestored"] | components["schemas"]["AuditDetailNoteDeleted"] | components["schemas"]["AuditDetailNoteRestored"] | components["schemas"]["AuditDetailCommentDeleted"] | components["schemas"]["AuditDetailCommentRestored"] | components["schemas"]["AuditDetailTaskDeleted"] | components["schemas"]["AuditDetailTaskRestored"];
+            /** Created At */
+            created_at: string;
+        };
+        /** AuthResponse */
+        AuthResponse: {
+            user: components["schemas"]["UserPublic"];
+        };
+        /** BulkActionResponse */
+        BulkActionResponse: {
+            /** Results */
+            results: components["schemas"]["BulkActionResultItem"][];
+        };
+        /**
+         * BulkActionResultItem
+         * @description One id's outcome. `error` is the same message the single-item route
+         *     would have raised, so a client already reading `detail`-style permission
+         *     errors does not learn a second vocabulary.
+         */
+        BulkActionResultItem: {
+            /** Id */
+            id: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "error";
+            /** Error */
+            error?: string | null;
+        };
+        /**
+         * BulkOpportunityAction
+         * @description One request over many opportunities (`docs/UX.md`'s action bar).
+         *
+         *     All four of the action bar's non-export actions live here. Each reuses a
+         *     rule that exists elsewhere rather than inventing one: `delete` and
+         *     `set_stage` are `delete_opportunity`/`update_opportunity` done per id
+         *     (owner-only), `assign_owner` is owner-only for the same reason every
+         *     other opportunity write is, and `add_to_view` writes to the caller's own
+         *     saved view, so its rule is that view's creator-only write plus read
+         *     access to each opportunity (D-105, D-106). Export is the fifth and is not
+         *     here: it answers with a file rather than a per-item result (D-107).
+         */
+        BulkOpportunityAction: {
+            /** Ids */
+            ids: number[];
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "delete" | "set_stage" | "assign_owner" | "add_to_view";
+            /** Stage */
+            stage?: ("Prospecting" | "Qualification" | "Needs Analysis" | "Proposal" | "Negotiation" | "Closed Won" | "Closed Lost") | null;
+            /** New Owner Email */
+            new_owner_email?: string | null;
+            /** View Id */
+            view_id?: number | null;
+        };
+        /** CommentCreate */
+        CommentCreate: {
+            /** Body */
+            body: string;
+            /** Parent Id */
+            parent_id?: number | null;
+        };
+        /**
+         * CommentPublic
+         * @description One comment, whether it opened a thread or replied to one.
+         *
+         *     `parent_id` is NULL for a thread root (milestone 3.3). Threading is one
+         *     level deep by rule rather than by column (D-127), so this is also the
+         *     shape of every reply and a reply never carries replies of its own.
+         *     `reactions` (milestone 3.3a) is on every comment, roots and replies alike.
+         */
+        CommentPublic: {
+            /** Id */
+            id: number;
+            /** Note Id */
+            note_id: number;
+            /** Parent Id */
+            parent_id: number | null;
+            /** Body */
+            body: string;
+            /** Created By */
+            created_by: number;
+            /** Author Name */
+            author_name: string;
+            /** Created At */
+            created_at: string;
+            /** Reactions */
+            reactions: components["schemas"]["ReactionPublic"][];
+        };
+        /**
+         * CommentThread
+         * @description A thread root read with its replies and its resolved state.
+         *
+         *     Resolving belongs to the thread, so these three fields live on the root
+         *     and only the root — a reply's own row carries NULL in all of them
+         *     (`routes_timeline.resolve_comment` refuses a reply). Reading a thread is
+         *     what a note's comments are; writing one still answers with the single
+         *     `CommentPublic` that was written.
+         */
+        CommentThread: {
+            /** Id */
+            id: number;
+            /** Note Id */
+            note_id: number;
+            /** Parent Id */
+            parent_id: number | null;
+            /** Body */
+            body: string;
+            /** Created By */
+            created_by: number;
+            /** Author Name */
+            author_name: string;
+            /** Created At */
+            created_at: string;
+            /** Reactions */
+            reactions: components["schemas"]["ReactionPublic"][];
+            /** Resolved At */
+            resolved_at: string | null;
+            /** Resolved By */
+            resolved_by: number | null;
+            /** Resolved By Name */
+            resolved_by_name: string | null;
+            /** Replies */
+            replies: components["schemas"]["CommentPublic"][];
+        };
+        /**
+         * FollowUpPublic
+         * @description One entry with a follow-up date, read across every opportunity the
+         *     caller may see (milestone 3.0b, **D-088**) -- the calendar's second layer,
+         *     over the same permission-filtered cross-opportunity read `search.py` and
+         *     `export_service.py` already use. `follow_up_date` is never null on a row
+         *     this model describes; the query that produces it filters that.
+         */
+        FollowUpPublic: {
+            /** Id */
+            id: number;
+            /** Opportunity Id */
+            opportunity_id: number;
+            /** Opportunity Name */
+            opportunity_name: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "call" | "email" | "meeting" | "demo" | "proposal" | "contract" | "stage_change" | "other" | "site_visit" | "objection" | "competitor_intel";
+            /** Title */
+            title: string;
+            /** Follow Up Date */
+            follow_up_date: string;
+            /** Created By */
+            created_by: number | null;
+            /** Author Name */
+            author_name: string | null;
+        };
+        /** HTTPValidationError */
+        HTTPValidationError: {
+            /** Detail */
+            detail?: components["schemas"]["ValidationError"][];
+        };
+        /** HealthStatus */
+        HealthStatus: {
+            /**
+             * Status
+             * @constant
+             */
+            status: "ok";
+            /** Schema Version */
+            schema_version: string;
+            /** Database Writable */
+            database_writable: boolean;
+            /** Last Backup At */
+            last_backup_at: string | null;
+        };
+        /** LoginRequest */
+        LoginRequest: {
+            /** Email */
+            email: string;
+            /** Password */
+            password: string;
+        };
+        /** NoteCreate */
+        NoteCreate: {
+            /** Body */
+            body: string;
+        };
+        /** NotePublic */
+        NotePublic: {
+            /** Id */
+            id: number;
+            /** Entry Id */
+            entry_id: number;
+            /** Body */
+            body: string;
+            /** Created By */
+            created_by: number;
+            /** Author Name */
+            author_name: string;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+            /** Edited */
+            edited: boolean;
+            /** Comments */
+            comments: components["schemas"]["CommentThread"][];
+        };
+        /**
+         * NoteUpdate
+         * @description A note edit, carrying the state the editor was written against.
+         *
+         *     `updated_at` is ADR 0003's edit guard: the client sends back the value it
+         *     read, and `PATCH /api/v2/notes/{id}` answers 409 if the note has moved
+         *     since. It is required rather than optional because an optional guard is no
+         *     guard -- a client that omits it is exactly the client that clobbers.
+         *
+         *     It is not validated as a timestamp here. Anything that is not the note's
+         *     current `updated_at` is a conflict, and a malformed value is one of those:
+         *     reporting it as a 422 would tell a caller their *format* was wrong when
+         *     what is wrong is that they are editing a stale note.
+         */
+        NoteUpdate: {
+            /** Body */
+            body: string;
+            /** Updated At */
+            updated_at: string;
+        };
+        /** NoteVersionPublic */
+        NoteVersionPublic: {
+            /** Id */
+            id: number;
+            /** Note Id */
+            note_id: number;
+            /** Version Number */
+            version_number: number;
+            /** Body */
+            body: string;
+            /** Edited By */
+            edited_by: number;
+            /** Editor Name */
+            editor_name: string;
+            /** Created At */
+            created_at: string;
+        };
+        /** NotificationMarkAllReadResponse */
+        NotificationMarkAllReadResponse: {
+            /** Marked */
+            marked: number;
+        };
+        /** NotificationPayloadComment */
+        NotificationPayloadComment: {
+            /** Opportunity Id */
+            opportunity_id: number;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "entry" | "note" | "comment";
+            /** Source Id */
+            source_id: number;
+            /** Actor Id */
+            actor_id: number;
+        };
+        /** NotificationPayloadMention */
+        NotificationPayloadMention: {
+            /** Opportunity Id */
+            opportunity_id: number;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "entry" | "note" | "comment";
+            /** Source Id */
+            source_id: number;
+            /** Actor Id */
+            actor_id: number;
+            /** Email */
+            email: string;
+        };
+        /**
+         * NotificationPayloadOwnerChanged
+         * @description Being handed a deal is the one access change nobody asked for, so it
+         *     is told the same way a share is (milestone 3.0a). The previous owner is
+         *     the actor, so they are not notified of their own action.
+         */
+        NotificationPayloadOwnerChanged: {
+            /** Opportunity Id */
+            opportunity_id: number;
+            /** Actor Id */
+            actor_id: number;
+        };
+        /** NotificationPayloadShareAdded */
+        NotificationPayloadShareAdded: {
+            /** Opportunity Id */
+            opportunity_id: number;
+            /** Actor Id */
+            actor_id: number;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "viewer" | "editor";
+        };
+        /** NotificationPayloadShareRemoved */
+        NotificationPayloadShareRemoved: {
+            /** Opportunity Id */
+            opportunity_id: number;
+            /** Actor Id */
+            actor_id: number;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "viewer" | "editor";
+        };
+        /** NotificationPayloadShareRoleChanged */
+        NotificationPayloadShareRoleChanged: {
+            /** Opportunity Id */
+            opportunity_id: number;
+            /** Actor Id */
+            actor_id: number;
+            /**
+             * From Role
+             * @enum {string}
+             */
+            from_role: "viewer" | "editor";
+            /**
+             * To Role
+             * @enum {string}
+             */
+            to_role: "viewer" | "editor";
+        };
+        /** NotificationPayloadSharedActivity */
+        NotificationPayloadSharedActivity: {
+            /** Opportunity Id */
+            opportunity_id: number;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "entry" | "note" | "comment";
+            /** Source Id */
+            source_id: number;
+            /** Actor Id */
+            actor_id: number;
+            /** Title */
+            title: string;
+        };
+        /**
+         * NotificationPayloadTaskAssigned
+         * @description Being handed a task, told the way being handed a deal is (3.0a's
+         *     `owner_changed`): somebody else decided you now owe something. The task's
+         *     title rides along because the inbox sentence names it, and a notification
+         *     that says only "you were assigned a task" makes the reader open the deal to
+         *     find out which one. The assigner is the actor, so assigning something to
+         *     yourself notifies nobody.
+         */
+        NotificationPayloadTaskAssigned: {
+            /** Opportunity Id */
+            opportunity_id: number;
+            /** Actor Id */
+            actor_id: number;
+            /** Task Id */
+            task_id: number;
+            /** Title */
+            title: string;
+            /** Due Date */
+            due_date: string | null;
+        };
+        /**
+         * NotificationPublic
+         * @description `read_at` is the source of truth (milestone 1.7), so a client can tell
+         *     not just whether a notification was read but order a history by it. The
+         *     older boolean `read` was v1's and went with it, though the column stays —
+         *     see `CLAUDE.md`'s "Notifications". `grouped_key` rides along now,
+         *     unpopulated, ahead of v3's digest batching (D-141) -- see the migration's
+         *     docstring for why it is added before it is used.
+         */
+        NotificationPublic: {
+            /** Id */
+            id: number;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "share_added" | "share_role_changed" | "share_removed" | "owner_changed" | "mention" | "shared_activity" | "comment" | "task_assigned";
+            /** Payload */
+            payload: components["schemas"]["NotificationPayloadShareAdded"] | components["schemas"]["NotificationPayloadShareRoleChanged"] | components["schemas"]["NotificationPayloadShareRemoved"] | components["schemas"]["NotificationPayloadOwnerChanged"] | components["schemas"]["NotificationPayloadMention"] | components["schemas"]["NotificationPayloadTaskAssigned"] | components["schemas"]["NotificationPayloadSharedActivity"] | components["schemas"]["NotificationPayloadComment"];
+            /** Read At */
+            read_at: string | null;
+            /** Grouped Key */
+            grouped_key: string | null;
+            /** Created At */
+            created_at: string;
+        };
+        /** OpportunityCreate */
+        OpportunityCreate: {
+            /** Name */
+            name: string;
+            /** Account Name */
+            account_name: string;
+            /**
+             * Value
+             * @default 0
+             */
+            value: number | string;
+            /**
+             * Currency
+             * @default USD
+             */
+            currency: string;
+            /**
+             * Stage
+             * @default Prospecting
+             * @enum {string}
+             */
+            stage: "Prospecting" | "Qualification" | "Needs Analysis" | "Proposal" | "Negotiation" | "Closed Won" | "Closed Lost";
+            /** Expected Close Date */
+            expected_close_date?: string | null;
+        };
+        /**
+         * OpportunityMemberPublic
+         * @description One person who can read this opportunity (milestone 3.2, **D-123**).
+         *
+         *     The mention autocomplete's source, and the reason this is not
+         *     `SharePublic`: a mention only notifies someone who already has access
+         *     (`notification_service.notify_mentions`), so the list a composer offers has
+         *     to be the owner *and* the shares, while a share row describes a grant and
+         *     has no row for the owner at all. It carries no `invited_by` and no
+         *     `created_at` -- who invited whom is the sharing panel's business, and that
+         *     stays owner-only.
+         */
+        OpportunityMemberPublic: {
+            /** User Id */
+            user_id: number;
+            /** Email */
+            email: string;
+            /** Name */
+            name: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "owner" | "viewer" | "editor";
+        };
+        /** OpportunityPublic */
+        OpportunityPublic: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Account Name */
+            account_name: string;
+            /** Value */
+            value: string;
+            /** Currency */
+            currency: string;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "Prospecting" | "Qualification" | "Needs Analysis" | "Proposal" | "Negotiation" | "Closed Won" | "Closed Lost";
+            /** Owner Id */
+            owner_id: number;
+            /** Owner Name */
+            owner_name: string;
+            /** Expected Close Date */
+            expected_close_date: string | null;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+            /**
+             * Stalled
+             * @default false
+             */
+            stalled: boolean;
+            /**
+             * Current User Role
+             * @default owner
+             * @enum {string}
+             */
+            current_user_role: "owner" | "viewer" | "editor";
+        };
+        /** OpportunityUpdate */
+        OpportunityUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Account Name */
+            account_name?: string | null;
+            /** Value */
+            value?: number | string | null;
+            /** Currency */
+            currency?: string | null;
+            /** Stage */
+            stage?: ("Prospecting" | "Qualification" | "Needs Analysis" | "Proposal" | "Negotiation" | "Closed Won" | "Closed Lost") | null;
+            /** Expected Close Date */
+            expected_close_date?: string | null;
+        };
+        /** OpportunityVersionPublic */
+        OpportunityVersionPublic: {
+            /** Id */
+            id: number;
+            /** Opportunity Id */
+            opportunity_id: number;
+            /** Version Number */
+            version_number: number;
+            /** Name */
+            name: string;
+            /** Account Name */
+            account_name: string;
+            /** Value */
+            value: string;
+            /** Currency */
+            currency: string;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "Prospecting" | "Qualification" | "Needs Analysis" | "Proposal" | "Negotiation" | "Closed Won" | "Closed Lost";
+            /** Expected Close Date */
+            expected_close_date: string | null;
+            /** Edited By */
+            edited_by: number;
+            /** Editor Name */
+            editor_name: string;
+            /** Created At */
+            created_at: string;
+        };
+        /** Page[ActivityEventPublic] */
+        Page_ActivityEventPublic_: {
+            /** Items */
+            items: components["schemas"]["ActivityEventPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[AuditLogEntryPublic] */
+        Page_AuditLogEntryPublic_: {
+            /** Items */
+            items: components["schemas"]["AuditLogEntryPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[FollowUpPublic] */
+        Page_FollowUpPublic_: {
+            /** Items */
+            items: components["schemas"]["FollowUpPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[NoteVersionPublic] */
+        Page_NoteVersionPublic_: {
+            /** Items */
+            items: components["schemas"]["NoteVersionPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[NotificationPublic] */
+        Page_NotificationPublic_: {
+            /** Items */
+            items: components["schemas"]["NotificationPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[OpportunityMemberPublic] */
+        Page_OpportunityMemberPublic_: {
+            /** Items */
+            items: components["schemas"]["OpportunityMemberPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[OpportunityPublic] */
+        Page_OpportunityPublic_: {
+            /** Items */
+            items: components["schemas"]["OpportunityPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[OpportunityVersionPublic] */
+        Page_OpportunityVersionPublic_: {
+            /** Items */
+            items: components["schemas"]["OpportunityVersionPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[SavedViewPublic] */
+        Page_SavedViewPublic_: {
+            /** Items */
+            items: components["schemas"]["SavedViewPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[SearchResultPublic] */
+        Page_SearchResultPublic_: {
+            /** Items */
+            items: components["schemas"]["SearchResultPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[SharePublic] */
+        Page_SharePublic_: {
+            /** Items */
+            items: components["schemas"]["SharePublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[TaskPublic] */
+        Page_TaskPublic_: {
+            /** Items */
+            items: components["schemas"]["TaskPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[TimelineEntryPublic] */
+        Page_TimelineEntryPublic_: {
+            /** Items */
+            items: components["schemas"]["TimelineEntryPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[TimelineEntryVersionPublic] */
+        Page_TimelineEntryVersionPublic_: {
+            /** Items */
+            items: components["schemas"]["TimelineEntryVersionPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[WatcherPublic] */
+        Page_WatcherPublic_: {
+            /** Items */
+            items: components["schemas"]["WatcherPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[str] */
+        Page_str_: {
+            /** Items */
+            items: string[];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** PasswordChangeRequest */
+        PasswordChangeRequest: {
+            /** Current Password */
+            current_password: string;
+            /** New Password */
+            new_password: string;
+        };
+        /** ReactionCreate */
+        ReactionCreate: {
+            /**
+             * Emoji
+             * @enum {string}
+             */
+            emoji: "👍" | "👎" | "😄" | "🎉" | "❤️" | "🚀" | "👀";
+        };
+        /**
+         * ReactionPublic
+         * @description One person's reaction to one comment or reply (milestone 3.3a).
+         *
+         *     Individual rows rather than a server-aggregated `{emoji, count}` shape --
+         *     the same choice `versioning.py` and `activity.py` make, reading raw data
+         *     back and letting the client interpret it (`lib/activity.ts`,
+         *     `VersionChanges.tsx`) rather than baking one reader's view into the
+         *     response.
+         */
+        ReactionPublic: {
+            /** Id */
+            id: number;
+            /** Comment Id */
+            comment_id: number;
+            /** Emoji */
+            emoji: string;
+            /** User Id */
+            user_id: number;
+            /** User Name */
+            user_name: string;
+            /** Created At */
+            created_at: string;
+        };
+        /** SavedViewCreate */
+        SavedViewCreate: {
+            /** Name */
+            name: string;
+            /**
+             * Entity
+             * @enum {string}
+             */
+            entity: "opportunities" | "timeline";
+            /** Filters */
+            filters?: {
+                [key: string]: string;
+            };
+            /** Sort */
+            sort?: {
+                [key: string]: string;
+            };
+            /** Group By */
+            group_by?: string | null;
+            /**
+             * Is Shared
+             * @default false
+             */
+            is_shared: boolean;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+        };
+        /** SavedViewPublic */
+        SavedViewPublic: {
+            /** Id */
+            id: number;
+            /** Created By */
+            created_by: number;
+            /** Creator Name */
+            creator_name: string;
+            /** Name */
+            name: string;
+            /**
+             * Entity
+             * @enum {string}
+             */
+            entity: "opportunities" | "timeline";
+            /** Filters */
+            filters: {
+                [key: string]: string;
+            };
+            /** Sort */
+            sort: {
+                [key: string]: string;
+            };
+            /** Group By */
+            group_by: string | null;
+            /** Is Shared */
+            is_shared: boolean;
+            /** Is Default */
+            is_default: boolean;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+        };
+        /**
+         * SavedViewUpdate
+         * @description Every field optional: a rename does not have to resend the filters.
+         */
+        SavedViewUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Filters */
+            filters?: {
+                [key: string]: string;
+            } | null;
+            /** Sort */
+            sort?: {
+                [key: string]: string;
+            } | null;
+            /** Group By */
+            group_by?: string | null;
+            /** Is Shared */
+            is_shared?: boolean | null;
+            /** Is Default */
+            is_default?: boolean | null;
+        };
+        /**
+         * SearchResultPublic
+         * @description One match, with enough context to link to it and to group by deal.
+         *
+         *     `entry_id` is the timeline entry the match sits under -- for a note or a
+         *     comment that is its ancestor entry, and for an entry it is the entry
+         *     itself -- so every result addresses one place in one timeline.
+         */
+        SearchResultPublic: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "entry" | "note" | "comment";
+            /** Id */
+            id: number;
+            /** Opportunity Id */
+            opportunity_id: number;
+            /** Opportunity Name */
+            opportunity_name: string;
+            /** Entry Id */
+            entry_id: number;
+            /** Note Id */
+            note_id: number | null;
+            /** Title */
+            title: string | null;
+            snippet: components["schemas"]["SearchSnippet"];
+            /** Timestamp */
+            timestamp: string;
+            /** Author Id */
+            author_id: number | null;
+            /** Author Name */
+            author_name: string | null;
+        };
+        /**
+         * SearchSnippet
+         * @description A search result's excerpt as plain text, plus the offsets to highlight.
+         *
+         *     Offsets rather than markup: the API never emits something a client has to
+         *     remember to escape, and the excerpt stays the text it came from.
+         */
+        SearchSnippet: {
+            /** Text */
+            text: string;
+            /** Matches */
+            matches: components["schemas"]["SnippetMatch"][];
+        };
+        /** ShareCreate */
+        ShareCreate: {
+            /** Email */
+            email: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "viewer" | "editor";
+        };
+        /** SharePublic */
+        SharePublic: {
+            /** User Id */
+            user_id: number;
+            /** Email */
+            email: string;
+            /** Name */
+            name: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "viewer" | "editor";
+            /** Invited By */
+            invited_by: number;
+            /** Invited By Name */
+            invited_by_name: string;
+            /** Created At */
+            created_at: string;
+        };
+        /** ShareUpdate */
+        ShareUpdate: {
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "viewer" | "editor";
+        };
+        /** SignupRequest */
+        SignupRequest: {
+            /** Email */
+            email: string;
+            /** Password */
+            password: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * SnippetMatch
+         * @description Where one matched word sits inside `SearchSnippet.text`.
+         */
+        SnippetMatch: {
+            /** Start */
+            start: number;
+            /** Length */
+            length: number;
+        };
+        /**
+         * TaskCreate
+         * @description A task as written (milestone 4.1, `docs/FEATURES.md` §8).
+         *
+         *     `assignee_email` rather than an id, like `ShareCreate`: a person is named
+         *     by the address the reader typed or picked, and resolving it is the route's
+         *     job -- which is also where naming somebody nobody has heard of becomes a
+         *     422 about the request rather than a silent unassigned task.
+         */
+        TaskCreate: {
+            /** Title */
+            title: string;
+            /** Assignee Email */
+            assignee_email?: string | null;
+            /** Due Date */
+            due_date?: string | null;
+            /** Entry Id */
+            entry_id?: number | null;
+        };
+        /** TaskPublic */
+        TaskPublic: {
+            /** Id */
+            id: number;
+            /** Opportunity Id */
+            opportunity_id: number;
+            /** Opportunity Name */
+            opportunity_name: string;
+            /** Entry Id */
+            entry_id: number | null;
+            /** Entry Title */
+            entry_title: string | null;
+            /** Title */
+            title: string;
+            /** Assignee Id */
+            assignee_id: number | null;
+            /** Assignee Name */
+            assignee_name: string | null;
+            /** Due Date */
+            due_date: string | null;
+            /** Completed At */
+            completed_at: string | null;
+            /** Completed By */
+            completed_by: number | null;
+            /** Completed By Name */
+            completed_by_name: string | null;
+            /** Created By */
+            created_by: number;
+            /** Author Name */
+            author_name: string | null;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+        };
+        /**
+         * TaskUpdate
+         * @description A partial edit, the shape every other `PATCH` in this app takes.
+         *
+         *     `due_date` and `assignee_email` are both nullable *and* optional, which are
+         *     two different things here and the reason `model_fields_set` decides what to
+         *     write: absent means "leave it", `null` means "clear it". Completion is not
+         *     here -- it is `POST .../complete` and `.../reopen`, for the reason resolving
+         *     a thread is (D-128): it changes no field a person typed, and making it a
+         *     `PATCH` field would let one request both rename and close a task, which is
+         *     two events in the log pretending to be one.
+         */
+        TaskUpdate: {
+            /** Title */
+            title?: string | null;
+            /** Assignee Email */
+            assignee_email?: string | null;
+            /** Due Date */
+            due_date?: string | null;
+        };
+        /** TimelineEntryCreate */
+        TimelineEntryCreate: {
+            /**
+             * Type
+             * @default other
+             * @enum {string}
+             */
+            type: "call" | "email" | "meeting" | "demo" | "proposal" | "contract" | "stage_change" | "other" | "site_visit" | "objection" | "competitor_intel";
+            /** Title */
+            title: string;
+            /**
+             * Body
+             * @default
+             */
+            body: string;
+            /** Event Timestamp */
+            event_timestamp: string;
+            /** Follow Up Date */
+            follow_up_date?: string | null;
+        };
+        /** TimelineEntryPublic */
+        TimelineEntryPublic: {
+            /** Id */
+            id: number;
+            /** Opportunity Id */
+            opportunity_id: number;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "call" | "email" | "meeting" | "demo" | "proposal" | "contract" | "stage_change" | "other" | "site_visit" | "objection" | "competitor_intel";
+            /** Title */
+            title: string;
+            /** Body */
+            body: string;
+            /** Event Timestamp */
+            event_timestamp: string;
+            /** Follow Up Date */
+            follow_up_date: string | null;
+            /** Created By */
+            created_by: number | null;
+            /** Author Name */
+            author_name: string | null;
+            /** System Generated */
+            system_generated: boolean;
+            /** Created At */
+            created_at: string;
+            /** Sequence */
+            sequence: number;
+            /** Notes */
+            notes: components["schemas"]["NotePublic"][];
+        };
+        /** TimelineEntryUpdate */
+        TimelineEntryUpdate: {
+            /** Type */
+            type?: ("call" | "email" | "meeting" | "demo" | "proposal" | "contract" | "stage_change" | "other" | "site_visit" | "objection" | "competitor_intel") | null;
+            /** Title */
+            title?: string | null;
+            /** Body */
+            body?: string | null;
+            /** Event Timestamp */
+            event_timestamp?: string | null;
+            /** Follow Up Date */
+            follow_up_date?: string | null;
+        };
+        /** TimelineEntryVersionPublic */
+        TimelineEntryVersionPublic: {
+            /** Id */
+            id: number;
+            /** Entry Id */
+            entry_id: number;
+            /** Version Number */
+            version_number: number;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "call" | "email" | "meeting" | "demo" | "proposal" | "contract" | "stage_change" | "other" | "site_visit" | "objection" | "competitor_intel";
+            /** Title */
+            title: string;
+            /** Body */
+            body: string;
+            /** Event Timestamp */
+            event_timestamp: string;
+            /** Follow Up Date */
+            follow_up_date: string | null;
+            /** Edited By */
+            edited_by: number;
+            /** Editor Name */
+            editor_name: string;
+            /** Created At */
+            created_at: string;
+        };
+        /** UserPublic */
+        UserPublic: {
+            /** Id */
+            id: number;
+            /** Email */
+            email: string;
+            /** Name */
+            name: string;
+            /** Created At */
+            created_at: string;
+        };
+        /** ValidationError */
+        ValidationError: {
+            /** Location */
+            loc: (string | number)[];
+            /** Message */
+            msg: string;
+            /** Error Type */
+            type: string;
+            /** Input */
+            input?: unknown;
+            /** Context */
+            ctx?: Record<string, never>;
+        };
+        /**
+         * WatchStatus
+         * @description Whether the caller is currently watching -- the read and both writes
+         *     share this one shape, so toggling costs no second request to learn the
+         *     result (milestone 3.3a).
+         */
+        WatchStatus: {
+            /** Watching */
+            watching: boolean;
+        };
+        /**
+         * WatcherPublic
+         * @description One person following this opportunity (milestone 3.3a).
+         *
+         *     Owner-only to read, like `SharePublic` beside it -- but unlike a share,
+         *     watching carries no role and grants no access of its own: `FEATURES.md`
+         *     §7 names watching an opportunity you are *not* shared on as the point of
+         *     the feature (D-129), so this list can and does include people
+         *     `OpportunityMemberPublic` would never return.
+         */
+        WatcherPublic: {
+            /** Id */
+            id: number;
+            /** Opportunity Id */
+            opportunity_id: number;
+            /** User Id */
+            user_id: number;
+            /** User Name */
+            user_name: string;
+            /** User Email */
+            user_email: string;
+            /** Created At */
+            created_at: string;
+        };
+    };
+    responses: never;
+    parameters: never;
+    requestBodies: never;
+    headers: never;
+    pathItems: never;
 }
 export type $defs = Record<string, never>;
 export interface operations {
-  signup_api_v2_auth_signup_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["SignupRequest"];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["AuthResponse"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  login_api_v2_auth_login_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["LoginRequest"];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["AuthResponse"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  change_password_api_v2_auth_password_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["PasswordChangeRequest"];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["AuthResponse"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  logout_api_v2_auth_logout_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": {
-            [key: string]: boolean;
-          };
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  me_api_v2_auth_me_get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["AuthResponse"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  list_opportunities_page_api_v2_opportunities_get: {
-    parameters: {
-      query?: {
-        limit?: number;
-        cursor?: string | null;
-      };
-      header?: never;
-      path?: never;
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Page_OpportunityPublic_"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  create_opportunity_api_v2_opportunities_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["OpportunityCreate"];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["OpportunityPublic"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  list_stages_api_v2_stages_get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Page_str_"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  get_opportunity_api_v2_opportunities__opportunity_id__get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        opportunity_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["OpportunityPublic"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  delete_opportunity_api_v2_opportunities__opportunity_id__delete: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        opportunity_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  update_opportunity_api_v2_opportunities__opportunity_id__patch: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        opportunity_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["OpportunityUpdate"];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["OpportunityPublic"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  list_opportunity_versions_page_api_v2_opportunities__opportunity_id__versions_get: {
-    parameters: {
-      query?: {
-        limit?: number;
-        cursor?: string | null;
-      };
-      header?: never;
-      path: {
-        opportunity_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Page_OpportunityVersionPublic_"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  restore_opportunity_version_api_v2_opportunities__opportunity_id__versions__version_number__restore_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        opportunity_id: number;
-        version_number: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["OpportunityPublic"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  list_activity_page_api_v2_opportunities__opportunity_id__activity_get: {
-    parameters: {
-      query?: {
-        limit?: number;
-        cursor?: string | null;
-      };
-      header?: never;
-      path: {
-        opportunity_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Page_ActivityEventPublic_"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  bulk_opportunity_action_api_v2_opportunities_bulk_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["BulkOpportunityAction"];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["BulkActionResponse"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  restore_opportunity_route_api_v2_opportunities__opportunity_id__restore_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        opportunity_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  list_members_page_api_v2_opportunities__opportunity_id__members_get: {
-    parameters: {
-      query?: {
-        limit?: number;
-        cursor?: string | null;
-      };
-      header?: never;
-      path: {
-        opportunity_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Page_OpportunityMemberPublic_"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  list_shares_page_api_v2_opportunities__opportunity_id__shares_get: {
-    parameters: {
-      query?: {
-        limit?: number;
-        cursor?: string | null;
-      };
-      header?: never;
-      path: {
-        opportunity_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Page_SharePublic_"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  create_share_api_v2_opportunities__opportunity_id__shares_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        opportunity_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["ShareCreate"];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["SharePublic"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  delete_share_api_v2_opportunities__opportunity_id__shares__user_id__delete: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        opportunity_id: number;
-        user_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  update_share_api_v2_opportunities__opportunity_id__shares__user_id__patch: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        opportunity_id: number;
-        user_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["ShareUpdate"];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["SharePublic"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  list_audit_log_page_api_v2_opportunities__opportunity_id__audit_log_get: {
-    parameters: {
-      query?: {
-        limit?: number;
-        cursor?: string | null;
-      };
-      header?: never;
-      path: {
-        opportunity_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Page_AuditLogEntryPublic_"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  get_watch_status_api_v2_opportunities__opportunity_id__watch_get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        opportunity_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["WatchStatus"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  watch_opportunity_api_v2_opportunities__opportunity_id__watch_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        opportunity_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["WatchStatus"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  unwatch_opportunity_api_v2_opportunities__opportunity_id__watch_delete: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        opportunity_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["WatchStatus"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  list_watchers_page_api_v2_opportunities__opportunity_id__watchers_get: {
-    parameters: {
-      query?: {
-        limit?: number;
-        cursor?: string | null;
-      };
-      header?: never;
-      path: {
-        opportunity_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Page_WatcherPublic_"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  list_timeline_page_api_v2_opportunities__opportunity_id__timeline_get: {
-    parameters: {
-      query?: {
-        q?: string | null;
-        type?: string | null;
-        from?: string | null;
-        to?: string | null;
-        author_id?: number | null;
-        order?: "asc" | "desc";
-        limit?: number;
-        cursor?: string | null;
-      };
-      header?: never;
-      path: {
-        opportunity_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Page_TimelineEntryPublic_"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  create_timeline_entry_api_v2_opportunities__opportunity_id__timeline_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        opportunity_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["TimelineEntryCreate"];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["TimelineEntryPublic"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  list_follow_ups_page_api_v2_timeline_follow_ups_get: {
-    parameters: {
-      query?: {
-        from?: string | null;
-        to?: string | null;
-        limit?: number;
-        cursor?: string | null;
-      };
-      header?: never;
-      path?: never;
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Page_FollowUpPublic_"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  delete_timeline_entry_api_v2_timeline__entry_id__delete: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        entry_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  update_timeline_entry_api_v2_timeline__entry_id__patch: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        entry_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["TimelineEntryUpdate"];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["TimelineEntryPublic"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  list_timeline_entry_versions_page_api_v2_timeline__entry_id__versions_get: {
-    parameters: {
-      query?: {
-        limit?: number;
-        cursor?: string | null;
-      };
-      header?: never;
-      path: {
-        entry_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Page_TimelineEntryVersionPublic_"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  restore_timeline_entry_version_api_v2_timeline__entry_id__versions__version_number__restore_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        entry_id: number;
-        version_number: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["TimelineEntryPublic"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  restore_timeline_entry_route_api_v2_timeline__entry_id__restore_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        entry_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  create_note_api_v2_timeline__entry_id__notes_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        entry_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["NoteCreate"];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["NotePublic"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  delete_note_api_v2_notes__note_id__delete: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        note_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  update_note_api_v2_notes__note_id__patch: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        note_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["NoteUpdate"];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["NotePublic"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  list_note_versions_page_api_v2_notes__note_id__versions_get: {
-    parameters: {
-      query?: {
-        limit?: number;
-        cursor?: string | null;
-      };
-      header?: never;
-      path: {
-        note_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Page_NoteVersionPublic_"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  restore_note_version_api_v2_notes__note_id__versions__version_number__restore_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        note_id: number;
-        version_number: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["NotePublic"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  restore_note_route_api_v2_notes__note_id__restore_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        note_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  create_comment_api_v2_notes__note_id__comments_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        note_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["CommentCreate"];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["CommentPublic"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  delete_comment_api_v2_comments__comment_id__delete: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        comment_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  restore_comment_route_api_v2_comments__comment_id__restore_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        comment_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  resolve_comment_api_v2_comments__comment_id__resolve_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        comment_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["CommentThread"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  unresolve_comment_api_v2_comments__comment_id__unresolve_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        comment_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["CommentThread"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  add_reaction_api_v2_comments__comment_id__reactions_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        comment_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["ReactionCreate"];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["CommentPublic"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  remove_reaction_api_v2_comments__comment_id__reactions__emoji__delete: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        comment_id: number;
-        emoji: "👍" | "👎" | "😄" | "🎉" | "❤️" | "🚀" | "👀";
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["CommentPublic"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  ask_ai_agent_api_v2_opportunities__opportunity_id__ai_ask_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        opportunity_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["AiAskRequest"];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["AiAskResponse"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  export_selection_json_api_v2_opportunities_export_json_get: {
-    parameters: {
-      query: {
-        /** @description Comma-separated opportunity ids */
-        ids: string;
-      };
-      header?: never;
-      path?: never;
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": unknown;
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  export_selection_csv_api_v2_opportunities_export_csv_get: {
-    parameters: {
-      query: {
-        /** @description Comma-separated opportunity ids */
-        ids: string;
-      };
-      header?: never;
-      path?: never;
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": unknown;
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  export_json_api_v2_opportunities__opportunity_id__export_json_get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        opportunity_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": unknown;
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  export_csv_api_v2_opportunities__opportunity_id__export_csv_get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        opportunity_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": unknown;
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  export_pdf_api_v2_opportunities__opportunity_id__export_pdf_get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        opportunity_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": unknown;
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  list_notifications_page_api_v2_notifications_get: {
-    parameters: {
-      query?: {
-        type?: string | null;
-        limit?: number;
-        cursor?: string | null;
-      };
-      header?: never;
-      path?: never;
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Page_NotificationPublic_"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  mark_all_notifications_read_route_api_v2_notifications_mark_all_read_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["NotificationMarkAllReadResponse"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  mark_notification_read_route_api_v2_notifications__notification_id__read_patch: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        notification_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["NotificationPublic"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  search_everything_api_v2_search_get: {
-    parameters: {
-      query: {
-        q: string;
-        type?: string | null;
-        from?: string | null;
-        to?: string | null;
-        author_id?: number | null;
-        limit?: number;
-        cursor?: string | null;
-      };
-      header?: never;
-      path?: never;
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Page_SearchResultPublic_"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  opportunity_events_api_v2_opportunities__opportunity_id__events_get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        opportunity_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description An `text/event-stream` of invalidation events for this opportunity: `ready` once the stream is open, then `timeline.changed` and `opportunity.changed` as other clients write. Each `data` line is `{"type": ..., "opportunity_id": ...}`; no row content is pushed, so a reader refetches through the ordinary API. */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "text/event-stream": unknown;
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  list_saved_views_api_v2_saved_views_get: {
-    parameters: {
-      query?: {
-        entity?: string | null;
-        limit?: number;
-        cursor?: string | null;
-      };
-      header?: never;
-      path?: never;
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Page_SavedViewPublic_"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  create_saved_view_api_v2_saved_views_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["SavedViewCreate"];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["SavedViewPublic"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  delete_saved_view_api_v2_saved_views__view_id__delete: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        view_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  update_saved_view_api_v2_saved_views__view_id__patch: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        view_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["SavedViewUpdate"];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["SavedViewPublic"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  list_tasks_api_v2_opportunities__opportunity_id__tasks_get: {
-    parameters: {
-      query?: {
-        include_completed?: boolean;
-        limit?: number;
-        cursor?: string | null;
-      };
-      header?: never;
-      path: {
-        opportunity_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Page_TaskPublic_"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  create_task_api_v2_opportunities__opportunity_id__tasks_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        opportunity_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["TaskCreate"];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["TaskPublic"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  list_my_tasks_api_v2_tasks_get: {
-    parameters: {
-      query?: {
-        include_completed?: boolean;
-        due_before?: string | null;
-        limit?: number;
-        cursor?: string | null;
-      };
-      header?: never;
-      path?: never;
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Page_TaskPublic_"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  delete_task_api_v2_tasks__task_id__delete: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        task_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  update_task_api_v2_tasks__task_id__patch: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        task_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["TaskUpdate"];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["TaskPublic"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  complete_task_api_v2_tasks__task_id__complete_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        task_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["TaskPublic"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  reopen_task_api_v2_tasks__task_id__reopen_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        task_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["TaskPublic"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  restore_deleted_task_api_v2_tasks__task_id__restore_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        task_id: number;
-      };
-      cookie?: {
-        opptrail_session?: string | null;
-      };
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  health_check_api_health_get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HealthStatus"];
-        };
-      };
-    };
-  };
+    signup_api_v2_auth_signup_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignupRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    login_api_v2_auth_login_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_password_api_v2_auth_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    logout_api_v2_auth_logout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    me_api_v2_auth_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_opportunities_page_api_v2_opportunities_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_OpportunityPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_opportunity_api_v2_opportunities_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpportunityCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpportunityPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_stages_api_v2_stages_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_str_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_opportunity_api_v2_opportunities__opportunity_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpportunityPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_opportunity_api_v2_opportunities__opportunity_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_opportunity_api_v2_opportunities__opportunity_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpportunityUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpportunityPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_opportunity_versions_page_api_v2_opportunities__opportunity_id__versions_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_OpportunityVersionPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_opportunity_version_api_v2_opportunities__opportunity_id__versions__version_number__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+                version_number: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpportunityPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_activity_page_api_v2_opportunities__opportunity_id__activity_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_ActivityEventPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bulk_opportunity_action_api_v2_opportunities_bulk_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkOpportunityAction"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkActionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_opportunity_route_api_v2_opportunities__opportunity_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_members_page_api_v2_opportunities__opportunity_id__members_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_OpportunityMemberPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_shares_page_api_v2_opportunities__opportunity_id__shares_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_SharePublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_share_api_v2_opportunities__opportunity_id__shares_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShareCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharePublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_share_api_v2_opportunities__opportunity_id__shares__user_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+                user_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_share_api_v2_opportunities__opportunity_id__shares__user_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+                user_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShareUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharePublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_audit_log_page_api_v2_opportunities__opportunity_id__audit_log_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_AuditLogEntryPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_watch_status_api_v2_opportunities__opportunity_id__watch_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    watch_opportunity_api_v2_opportunities__opportunity_id__watch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unwatch_opportunity_api_v2_opportunities__opportunity_id__watch_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_watchers_page_api_v2_opportunities__opportunity_id__watchers_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_WatcherPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_timeline_page_api_v2_opportunities__opportunity_id__timeline_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                type?: string | null;
+                from?: string | null;
+                to?: string | null;
+                author_id?: number | null;
+                order?: "asc" | "desc";
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_TimelineEntryPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_timeline_entry_api_v2_opportunities__opportunity_id__timeline_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimelineEntryCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelineEntryPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_follow_ups_page_api_v2_timeline_follow_ups_get: {
+        parameters: {
+            query?: {
+                from?: string | null;
+                to?: string | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_FollowUpPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_timeline_entry_api_v2_timeline__entry_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_timeline_entry_api_v2_timeline__entry_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimelineEntryUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelineEntryPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_timeline_entry_versions_page_api_v2_timeline__entry_id__versions_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                entry_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_TimelineEntryVersionPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_timeline_entry_version_api_v2_timeline__entry_id__versions__version_number__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: number;
+                version_number: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelineEntryPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_timeline_entry_route_api_v2_timeline__entry_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_note_api_v2_timeline__entry_id__notes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NoteCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotePublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_note_api_v2_notes__note_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                note_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_note_api_v2_notes__note_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                note_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NoteUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotePublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_note_versions_page_api_v2_notes__note_id__versions_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                note_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_NoteVersionPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_note_version_api_v2_notes__note_id__versions__version_number__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                note_id: number;
+                version_number: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotePublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_note_route_api_v2_notes__note_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                note_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_comment_api_v2_notes__note_id__comments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                note_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommentCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommentPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_comment_api_v2_comments__comment_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                comment_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_comment_route_api_v2_comments__comment_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                comment_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resolve_comment_api_v2_comments__comment_id__resolve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                comment_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommentThread"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unresolve_comment_api_v2_comments__comment_id__unresolve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                comment_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommentThread"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_reaction_api_v2_comments__comment_id__reactions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                comment_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReactionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommentPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_reaction_api_v2_comments__comment_id__reactions__emoji__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                comment_id: number;
+                emoji: "👍" | "👎" | "😄" | "🎉" | "❤️" | "🚀" | "👀";
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommentPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ask_ai_agent_api_v2_opportunities__opportunity_id__ai_ask_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiAskRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiAskResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_selection_json_api_v2_opportunities_export_json_get: {
+        parameters: {
+            query: {
+                /** @description Comma-separated opportunity ids */
+                ids: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_selection_csv_api_v2_opportunities_export_csv_get: {
+        parameters: {
+            query: {
+                /** @description Comma-separated opportunity ids */
+                ids: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_json_api_v2_opportunities__opportunity_id__export_json_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_csv_api_v2_opportunities__opportunity_id__export_csv_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_pdf_api_v2_opportunities__opportunity_id__export_pdf_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_notifications_page_api_v2_notifications_get: {
+        parameters: {
+            query?: {
+                type?: string | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_NotificationPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_all_notifications_read_route_api_v2_notifications_mark_all_read_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationMarkAllReadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_notification_read_route_api_v2_notifications__notification_id__read_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                notification_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_everything_api_v2_search_get: {
+        parameters: {
+            query: {
+                q: string;
+                type?: string | null;
+                from?: string | null;
+                to?: string | null;
+                author_id?: number | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_SearchResultPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    opportunity_events_api_v2_opportunities__opportunity_id__events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description An `text/event-stream` of invalidation events for this opportunity: `ready` once the stream is open, then `timeline.changed` and `opportunity.changed` as other clients write. Each `data` line is `{"type": ..., "opportunity_id": ...}`; no row content is pushed, so a reader refetches through the ordinary API. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_saved_views_api_v2_saved_views_get: {
+        parameters: {
+            query?: {
+                entity?: string | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_SavedViewPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_saved_view_api_v2_saved_views_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavedViewCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedViewPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_saved_view_api_v2_saved_views__view_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                view_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_saved_view_api_v2_saved_views__view_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                view_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavedViewUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedViewPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_tasks_api_v2_opportunities__opportunity_id__tasks_get: {
+        parameters: {
+            query?: {
+                include_completed?: boolean;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_TaskPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_task_api_v2_opportunities__opportunity_id__tasks_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_my_tasks_api_v2_tasks_get: {
+        parameters: {
+            query?: {
+                include_completed?: boolean;
+                due_before?: string | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_TaskPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_task_api_v2_tasks__task_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_task_api_v2_tasks__task_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    complete_task_api_v2_tasks__task_id__complete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reopen_task_api_v2_tasks__task_id__reopen_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_deleted_task_api_v2_tasks__task_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    health_check_api_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthStatus"];
+                };
+            };
+        };
+    };
 }

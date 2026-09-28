@@ -47,6 +47,9 @@ export function ShortcutsProvider({ children }: { children: ReactNode }) {
           // pipeline is the same screen asked for its board (milestone 2.7).
           "g p": () => navigate("/?opportunities.view=board"),
           "g s": () => navigate("/search"),
+          // Documented and unbound since 2.4a, waiting for the feature
+          // (**D-065**); bound in 4.1 now that there is a screen to go to.
+          "g t": () => navigate("/tasks"),
         }
       : {},
   );

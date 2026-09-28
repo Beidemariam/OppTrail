@@ -33,6 +33,7 @@ import type {
   SavedView,
   SavedViewEntity,
   ShareRole,
+  Task,
   TimelineEntry,
   TimelineEntryVersion,
   TimelineFilters,
@@ -152,6 +153,14 @@ export const keys = {
   watch: (opportunityId: number) => ["watch", opportunityId] as const,
   /** Who is watching, owner-only (milestone 3.3a). */
   watchers: (opportunityId: number) => ["watchers", opportunityId] as const,
+  /** One deal's tasks (milestone 4.1). */
+  tasks: (opportunityId: number) => ["tasks", opportunityId] as const,
+  /** The caller's own assignments across every deal they can see. Keyed apart
+   * from one deal's list because it is a different read with a different rule,
+   * and `allTasks` covers both when a write does not know which lists are
+   * open. */
+  myTasks: ["my-tasks"] as const,
+  allTasks: ["tasks"] as const,
 };
 
 export function timelinePath(
@@ -756,6 +765,132 @@ export function useRestoreComment() {
   return useRestore(
     (id) => `/api/v2/comments/${id}/restore`,
     keys.allTimelines,
+    keys.allActivity,
+  );
+}
+
+/* ---------------------------------------------------------------------------
+ * Tasks (milestone 4.1, `docs/FEATURES.md` §8)
+ *
+ * Reads are whole rather than windowed, like the activity log's: a deal has a
+ * handful of open action items and My Tasks is a to-do list, not an archive.
+ * Writes are **not** optimistic, which is a departure from the four deletes and
+ * the note edit (2.4b) and deliberate: every task write returns the row it
+ * changed — `completed_by_name` is a name the cache does not hold, and an
+ * assignee resolved from an email is an id the client never had — so predicting
+ * the result would mean inventing values the server is about to supply. The one
+ * exception is the delete, which has a row to put back and an Undo to offer.
+ * ------------------------------------------------------------------------- */
+
+/** One deal's tasks, soonest first, open and done alike -- the per-opportunity
+ * surface shows both and hides the done ones behind a disclosure. */
+export function useTasks(opportunityId: number, enabled: boolean) {
+  return useQuery<Task[]>({
+    queryKey: keys.tasks(opportunityId),
+    enabled,
+    queryFn: () =>
+      fetchAll<Task>(`/api/v2/opportunities/${opportunityId}/tasks`),
+  });
+}
+
+/**
+ * My Tasks: the caller's own assignments, across every deal they can see.
+ *
+ * `include_completed` is a parameter rather than a filter in the client because
+ * the server's default is open-only and that is the useful answer -- a list of
+ * everything you have ever finished is not a to-do list. It is part of the key,
+ * so switching it is a request and switching back is cached.
+ */
+export function useMyTasks(includeCompleted = false) {
+  return useQuery<Task[]>({
+    queryKey: [...keys.myTasks, includeCompleted] as const,
+    queryFn: () =>
+      fetchAll<Task>(
+        `/api/v2/tasks${includeCompleted ? "?include_completed=true" : ""}`,
+      ),
+  });
+}
+
+export interface TaskInput {
+  title: string;
+  assignee_email?: string | null;
+  due_date?: string | null;
+  entry_id?: number | null;
+}
+
+export function useCreateTask(opportunityId: number) {
+  const client = useQueryClient();
+  return useMutation<Task, Error, TaskInput>({
+    mutationFn: (input) =>
+      apiRequest(`/api/v2/opportunities/${opportunityId}/tasks`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    // `allTasks` rather than this deal's key alone: assigning a task to
+    // yourself puts it on your own My Tasks, and the notification bell gains a
+    // row when you assign it to somebody else.
+    onSuccess: () =>
+      invalidate(client, keys.allTasks, keys.myTasks, keys.notifications),
+  });
+}
+
+export function useEditTask(opportunityId: number) {
+  const client = useQueryClient();
+  return useMutation<Task, Error, { taskId: number; patch: TaskInput }>({
+    mutationFn: ({ taskId, patch }) =>
+      apiRequest(`/api/v2/tasks/${taskId}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      }),
+    onSuccess: () =>
+      invalidate(
+        client,
+        keys.tasks(opportunityId),
+        keys.myTasks,
+        keys.notifications,
+      ),
+  });
+}
+
+/**
+ * Ticking a task off, and putting it back.
+ *
+ * One hook for both directions because they are one control: `completed` is
+ * what the checkbox now reads, and the route it calls follows from that. Both
+ * are idempotent server-side, so a double click costs a request and changes
+ * nothing.
+ */
+export function useSetTaskDone(opportunityId: number) {
+  const client = useQueryClient();
+  return useMutation<Task, Error, { taskId: number; completed: boolean }>({
+    mutationFn: ({ taskId, completed }) =>
+      apiRequest(
+        `/api/v2/tasks/${taskId}/${completed ? "complete" : "reopen"}`,
+        {
+          method: "POST",
+        },
+      ),
+    onSuccess: () => invalidate(client, keys.allTasks, keys.myTasks),
+  });
+}
+
+export function useDeleteTask(opportunityId: number) {
+  const client = useQueryClient();
+  return useMutation<unknown, Error, number>({
+    mutationFn: (taskId) =>
+      apiRequest(`/api/v2/tasks/${taskId}`, { method: "DELETE" }),
+    // A delete writes an audit row, so the activity log is stale too -- the
+    // rule every other delete here follows.
+    onSuccess: () =>
+      invalidate(client, keys.allTasks, keys.myTasks, keys.allActivity),
+  });
+}
+
+export function useRestoreTask() {
+  return useRestore(
+    (id) => `/api/v2/tasks/${id}/restore`,
+    keys.allTasks,
+    keys.myTasks,
     keys.allActivity,
   );
 }

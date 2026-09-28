@@ -65,7 +65,46 @@ export const notificationTypeOptions = [
   { value: "share_added", label: "Sharing added" },
   { value: "share_role_changed", label: "Role changed" },
   { value: "share_removed", label: "Sharing removed" },
+  { value: "task_assigned", label: "Tasks" },
 ] as const;
+
+/**
+ * Where a task stands (milestone 4.1).
+ *
+ * Derived here rather than sent by the API, because "overdue" is a question
+ * about today and the server would be answering it in its own timezone at the
+ * moment of the read. Dates are compared as `YYYY-MM-DD` text, never parsed
+ * into a `Date` -- `new Date("2026-12-01")` is the previous day west of
+ * Greenwich, the trap the calendar already documents.
+ */
+export type TaskStanding =
+  | "done"
+  | "overdue"
+  | "today"
+  | "upcoming"
+  | "undated";
+
+export function taskStanding(task: Task, today: string): TaskStanding {
+  if (task.completed_at) {
+    return "done";
+  }
+  if (!task.due_date) {
+    return "undated";
+  }
+  if (task.due_date < today) {
+    return "overdue";
+  }
+  return task.due_date === today ? "today" : "upcoming";
+}
+
+/** Today as `YYYY-MM-DD` in the reader's own timezone, which is the one they
+ * mean when they say a task is overdue. */
+export function todayIsoDate(now: Date = new Date()): string {
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 export type User = components["schemas"]["UserPublic"];
 export type Opportunity = components["schemas"]["OpportunityPublic"];
@@ -79,6 +118,10 @@ export type AuditLogEntry = components["schemas"]["AuditLogEntryPublic"];
 export type AppNotification = components["schemas"]["NotificationPublic"];
 export type NotificationType = AppNotification["type"];
 export type TimelineEntry = components["schemas"]["TimelineEntryPublic"];
+/** An action item on one deal (milestone 4.1, `docs/FEATURES.md` §8). Carries
+ * its opportunity's name because My Tasks reads across deals and a bare title
+ * is not actionable. */
+export type Task = components["schemas"]["TaskPublic"];
 export type TimelineNote = components["schemas"]["NotePublic"];
 /** One discussion on a note: the comment that opened it, the replies under
  * it, and whether anyone has called it finished (milestone 3.3). */

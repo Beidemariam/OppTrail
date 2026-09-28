@@ -4640,6 +4640,51 @@ the document.
         regardless, because that read filters deleted opportunities too. It
         passed with the cascade removed. Rewritten against the row's own
         `deleted_at`, and confirmed to fail without it.
+
+      **The screens (4.1b).** Three surfaces, and the split between them is the
+      point: a task is written where the deal is read, worked through on a list
+      of its own, and *counted* where the reader already is.
+
+      - **`app/TaskPanel.tsx`** sits in the opportunity's sidebar, with the
+        record rather than the timeline — an action item is a fact about the
+        deal, not an event on it. The composer is collapsed behind "Add task"
+        through `useInlineEditor` (3.7's shape), deleting offers Undo rather
+        than a confirmation (2.4b), and done tasks collapse behind a disclosure
+        instead of disappearing. The assignee is a `select` over `useMembers`,
+        the same list the `@` trigger offers (D-123): a task is for somebody on
+        this deal, and asking a reader to remember an address is the mistake
+        requirement 13 already made once.
+      - **`app/TasksPage.tsx` at `/tasks`** is My Tasks, grouped by standing —
+        overdue, due today, coming up, no date. The grouping is a reading aid
+        over the server's ordering, not a re-sort of it. **`g t` is bound at
+        last**: documented and deliberately inert since milestone 2.4a
+        (**D-065**, "a key documented before its feature exists is a key that
+        does nothing").
+      - **`app/TaskSummary.tsx`** is one line on the dashboard: how many are
+        overdue, how many are due today, and a link. Not a second list — two
+        places showing the same rows is the mistake the three History
+        destinations made (D-121) — and it renders **nothing at all** when
+        nothing is due, because a panel announcing the absence of a problem is
+        the clutter the Design bar rules out.
+      - **`taskStanding` is derived in the client** (`lib/domain.ts`), not sent
+        by the API: "overdue" is a question about *today*, and the server would
+        be answering it in its own timezone at the moment of the read. Dates are
+        compared as `YYYY-MM-DD` text and never parsed into a `Date`, the trap
+        the calendar already documents.
+      - **Writes are not optimistic here**, unlike the four deletes and the note
+        edit (2.4b). Every task write answers with the row it changed, and that
+        row carries values the cache never had — a `completed_by_name`, an
+        assignee id resolved from an email — so predicting the result would mean
+        inventing what the server is about to say. The delete is the exception,
+        because it has a row to put back and an Undo to offer.
+
+      One thing worth recording as a near miss: the task panel first reused
+      `.sharing-panel` as its class, which broke
+      `test_offers_a_viewer_no_way_to_write` in `app/OpportunityPanel.test.tsx`
+      — a viewer's task panel matched a selector that was asserting the *sharing*
+      panel was absent. Reusing a class name made one selector mean two things;
+      the box style is now shared by a selector list instead, so
+      `.sharing-panel` still means exactly one thing.
 - [ ] 4.2 Migrate `timeline_entries.follow_up_date` into tasks, keeping the
       column until the UI has moved (per the breaking-changes table: dropped
       in Phase 6, which named Phase 5 until email moved to v3 — what matters is

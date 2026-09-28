@@ -1224,6 +1224,8 @@ a.danger-button {
   font-size: var(--text-base);
 }
 
+.sidebar-column .task-form input,
+.sidebar-column .task-form select,
 .sidebar-column .primary-button,
 .sidebar-column .secondary-button,
 .sidebar-column .danger-button,
@@ -1306,13 +1308,15 @@ a.danger-button {
 
 .filter-bar,
 .share-form,
+.task-form,
 .timeline-form,
 .stacked-form {
   display: grid;
   gap: 12px;
 }
 
-.sharing-panel {
+.sharing-panel,
+.task-panel {
   background: var(--bg-app);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
@@ -1330,6 +1334,12 @@ a.danger-button {
   color: var(--text-secondary);
   font-size: var(--text-sm);
   font-weight: 700;
+}
+
+/* The task composer stacks for the same reason the share form does: it lives in
+   the 360px sidebar (milestone 4.1). */
+.task-form {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 /* Stacked at every width since milestone 3.7: milestone 3.1a moved this
@@ -1361,6 +1371,88 @@ a.danger-button {
   color: var(--text-secondary);
   font-size: var(--text-sm);
   margin: 3px 0 0;
+}
+
+/* Tasks (milestone 4.1). The list is the same shape in the sidebar and on the
+   My Tasks screen, so the rules are written once and neither place gets a
+   variant of the other. */
+.task-list {
+  display: grid;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.task-row {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2);
+}
+
+/* Overdue is the one standing that changes the row rather than a word inside
+   it, because it is the only one a reader needs to catch without reading.
+   Carried by a border, not by colour alone -- `docs/DESIGN-SYSTEM.md` rules out
+   colour as the only signal. */
+.task-row[data-standing="overdue"] {
+  border-left: 3px solid var(--text-danger);
+}
+
+.task-row[data-standing="today"] {
+  border-left: 3px solid var(--border-accent);
+}
+
+.task-check {
+  align-items: start;
+  cursor: pointer;
+  display: flex;
+  gap: var(--space-2);
+}
+
+.task-check input {
+  margin-top: 3px;
+}
+
+.task-title {
+  font-weight: 600;
+}
+
+/* A completed task stays readable -- "we already did that" is what a shared
+   record is for -- and says so without a second badge. */
+.task-check input:checked + .task-title {
+  color: var(--text-secondary);
+  text-decoration: line-through;
+}
+
+.task-meta {
+  margin: 0;
+}
+
+.task-group {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.task-panel .task-list {
+  gap: var(--space-1);
+}
+
+/* The dashboard's one line about what is waiting (milestone 4.1). */
+.task-summary {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: var(--text-sm);
+  gap: var(--space-3);
+  margin: var(--space-1) 0 0;
+}
+
+.task-summary-overdue {
+  color: var(--text-danger);
+  font-weight: 700;
 }
 
 /* Who is following this deal (milestone 3.3a) -- read-only, unlike the share

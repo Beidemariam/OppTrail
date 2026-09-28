@@ -37,6 +37,7 @@ import {
 import { SavedViewsMenu } from "./SavedViewsMenu";
 import { SharingPanel } from "./SharingPanel";
 import { SuggestionSourceProvider } from "./Suggestions";
+import { TaskPanel } from "./TaskPanel";
 import { TimelineEntryForm } from "./TimelineEntryForm";
 import { TimelineEntryList } from "./TimelineEntryList";
 import { TimelineFilterBar } from "./TimelineFilterBar";
@@ -255,6 +256,12 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
             canManage={access.canManage}
             onRefresh={() => void timeline.refetch()}
           />
+
+          {/* Tasks sit with the deal's own record rather than in its history
+              (milestone 4.1): an action item is a fact about the opportunity,
+              not an event on its timeline. Every role sees the list; writing
+              one needs `canWriteTimeline`, which the panel checks. */}
+          <TaskPanel opportunityId={opportunityId} access={access} />
 
           {access.canManage && <SharingPanel opportunityId={opportunityId} />}
         </div>

@@ -17,6 +17,15 @@ export function notificationText(notification: AppNotification): string {
   if (notification.type === "comment") {
     return "New comment on your note.";
   }
+  if (notification.type === "task_assigned") {
+    // The title is in the payload precisely so this sentence can name the task
+    // (milestone 4.1): "you were assigned a task" makes the reader open the
+    // deal to find out which one.
+    const payload = notification.payload;
+    return "title" in payload && payload.title
+      ? `You were assigned: ${payload.title}`
+      : "You were assigned a task.";
+  }
   if (notification.type === "shared_activity") {
     const payload = notification.payload;
     return "title" in payload && payload.title

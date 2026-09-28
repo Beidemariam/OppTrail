@@ -9,6 +9,7 @@ import { DashboardPage, NoOpportunitySelected } from "./DashboardPage";
 import { DensityProvider } from "./Density";
 import { OpportunityPanel } from "./OpportunityPanel";
 import { SearchPage } from "./SearchPage";
+import { TasksPage } from "./TasksPage";
 import { ShortcutsProvider } from "./ShortcutsProvider";
 import { ThemeProvider } from "./Theme";
 import { ToastProvider } from "./Toasts";
@@ -50,6 +51,11 @@ export function AppRoutes() {
             <ShortcutsProvider>
               <Routes>
                 <Route path="/search" element={<SearchPage />} />
+                {/* My Tasks is its own screen rather than a panel on the
+                    dashboard (milestone 4.1): the question it answers is not
+                    about one deal. The dashboard carries the overdue count and
+                    links here. */}
+                <Route path="/tasks" element={<TasksPage />} />
                 <Route path="/" element={<DashboardPage />}>
                   <Route index element={<NoOpportunitySelected />} />
                   <Route

@@ -71,6 +71,13 @@ export function liveEventKeys(
     keys.shares(opportunityId),
     keys.members(opportunityId),
     keys.watchers(opportunityId),
+    // So do tasks (milestone 4.1, **D-143**): they hang off the record rather
+    // than the timeline, and reusing this event rather than adding a third type
+    // is ADR 0003's "broader, never narrower" applied. `myTasks` as well as the
+    // deal's own list, because somebody else assigning you a task is exactly
+    // the write this stream exists to tell you about.
+    keys.tasks(opportunityId),
+    keys.myTasks,
   ];
 }
 
