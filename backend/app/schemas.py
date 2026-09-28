@@ -22,6 +22,21 @@ def canonical_timestamp(value: str) -> str:
     return to_canonical(parsed)
 
 
+def stripped(value: str) -> str:
+    """A required text field, trimmed, and refused if that leaves nothing.
+
+    `Field(min_length=1)` cannot do this on its own: Pydantic checks the length
+    of what arrived and this runs afterwards, so `"   "` satisfied the
+    constraint and was then stored as `""` -- a real hole in
+    `OpportunityBase.name` and `account_name` before milestone 4.1 found it by
+    writing the same pattern next to it.
+    """
+    trimmed = value.strip()
+    if not trimmed:
+        raise ValueError("Enter a value")
+    return trimmed
+
+
 def canonical_date(value: str) -> str:
     try:
         return date.fromisoformat(value.strip()).isoformat()
@@ -110,7 +125,7 @@ class OpportunityBase(BaseModel):
     @field_validator("name", "account_name")
     @classmethod
     def strip_required_text(cls, value: str) -> str:
-        return value.strip()
+        return stripped(value)
 
     @field_validator("currency")
     @classmethod
@@ -138,7 +153,9 @@ class OpportunityUpdate(BaseModel):
     @field_validator("name", "account_name")
     @classmethod
     def strip_optional_text(cls, value: str | None) -> str | None:
-        return value.strip() if value is not None else value
+        # A partial `PATCH` may omit these; sending one blank is still a refusal
+        # rather than a silent empty name.
+        return stripped(value) if value is not None else value
 
     @field_validator("currency")
     @classmethod
@@ -272,7 +289,7 @@ class TimelineEntryCreate(BaseModel):
     @field_validator("title")
     @classmethod
     def strip_title(cls, value: str) -> str:
-        return value.strip()
+        return stripped(value)
 
     @field_validator("event_timestamp")
     @classmethod
@@ -295,7 +312,7 @@ class TimelineEntryUpdate(BaseModel):
     @field_validator("title")
     @classmethod
     def strip_optional_title(cls, value: str | None) -> str | None:
-        return value.strip() if value is not None else value
+        return stripped(value) if value is not None else value
 
     @field_validator("event_timestamp")
     @classmethod
@@ -589,6 +606,98 @@ class WatchStatus(BaseModel):
     watching: bool
 
 
+class TaskCreate(BaseModel):
+    """A task as written (milestone 4.1, `docs/FEATURES.md` §8).
+
+    `assignee_email` rather than an id, like `ShareCreate`: a person is named
+    by the address the reader typed or picked, and resolving it is the route's
+    job -- which is also where naming somebody nobody has heard of becomes a
+    422 about the request rather than a silent unassigned task.
+    """
+
+    title: str = Field(min_length=1, max_length=500)
+    assignee_email: str | None = None
+    due_date: str | None = None
+    entry_id: int | None = None
+
+    @field_validator("assignee_email")
+    @classmethod
+    def normalize_assignee_email(cls, value: str | None) -> str | None:
+        # Lowercased like `ShareCreate.email`, because signup stores it that
+        # way: an assignee typed with a capital would otherwise resolve to
+        # nobody and the task would be refused for a reason nobody could see.
+        return value.strip().lower() if value else value
+
+    @field_validator("title")
+    @classmethod
+    def strip_title(cls, value: str) -> str:
+        return stripped(value)
+
+    @field_validator("due_date")
+    @classmethod
+    def validate_due_date(cls, value: str | None) -> str | None:
+        return canonical_date(value) if value else None
+
+
+class TaskUpdate(BaseModel):
+    """A partial edit, the shape every other `PATCH` in this app takes.
+
+    `due_date` and `assignee_email` are both nullable *and* optional, which are
+    two different things here and the reason `model_fields_set` decides what to
+    write: absent means "leave it", `null` means "clear it". Completion is not
+    here -- it is `POST .../complete` and `.../reopen`, for the reason resolving
+    a thread is (D-128): it changes no field a person typed, and making it a
+    `PATCH` field would let one request both rename and close a task, which is
+    two events in the log pretending to be one.
+    """
+
+    title: str | None = Field(default=None, min_length=1)
+    assignee_email: str | None = None
+    due_date: str | None = None
+
+    @field_validator("assignee_email")
+    @classmethod
+    def normalize_assignee_email(cls, value: str | None) -> str | None:
+        return value.strip().lower() if value else value
+
+    @field_validator("title")
+    @classmethod
+    def strip_optional_title(cls, value: str | None) -> str | None:
+        return stripped(value) if value is not None else value
+
+    @field_validator("due_date")
+    @classmethod
+    def validate_due_date(cls, value: str | None) -> str | None:
+        # `None` clears the date; the route tells "clear it" from "leave it
+        # alone" by whether the key was sent at all, not by the value.
+        return canonical_date(value) if value else None
+
+
+class TaskPublic(BaseModel):
+    id: int
+    opportunity_id: int
+    # Carried on every task since My Tasks reads across opportunities and a
+    # task is meaningless without the deal it belongs to -- the same reason
+    # `FollowUpPublic` carries it (milestone 3.0b).
+    opportunity_name: str
+    entry_id: int | None
+    entry_title: str | None
+    title: str
+    assignee_id: int | None
+    assignee_name: str | None
+    due_date: str | None
+    # `NULL` means open. The pair answers "when" and "who" rather than just
+    # "whether", which a boolean could not (D-095's lesson, applied at the
+    # start this time rather than after a migration).
+    completed_at: str | None
+    completed_by: int | None
+    completed_by_name: str | None
+    created_by: int
+    author_name: str | None
+    created_at: str
+    updated_at: str
+
+
 AuditAction = Literal[
     "opportunity_deleted",
     "opportunity_restored",
@@ -602,6 +711,8 @@ AuditAction = Literal[
     "note_restored",
     "comment_deleted",
     "comment_restored",
+    "task_deleted",
+    "task_restored",
 ]
 
 
@@ -688,6 +799,23 @@ class AuditDetailCommentRestored(BaseModel):
     author_id: int
 
 
+# A task's identifying fields are its title and who it was for: an owner
+# reading the log wants to know which action item disappeared, and "the one
+# assigned to Gavin" is how a person refers to it.
+class AuditDetailTaskDeleted(BaseModel):
+    task_id: int
+    title: str
+    assignee_id: int | None
+    author_id: int
+
+
+class AuditDetailTaskRestored(BaseModel):
+    task_id: int
+    title: str
+    assignee_id: int | None
+    author_id: int
+
+
 AuditDetail = (
     AuditDetailOpportunityDeleted
     | AuditDetailOpportunityRestored
@@ -701,6 +829,8 @@ AuditDetail = (
     | AuditDetailNoteRestored
     | AuditDetailCommentDeleted
     | AuditDetailCommentRestored
+    | AuditDetailTaskDeleted
+    | AuditDetailTaskRestored
 )
 
 AUDIT_DETAIL_MODELS: dict[str, type[BaseModel]] = {
@@ -716,6 +846,8 @@ AUDIT_DETAIL_MODELS: dict[str, type[BaseModel]] = {
     "note_restored": AuditDetailNoteRestored,
     "comment_deleted": AuditDetailCommentDeleted,
     "comment_restored": AuditDetailCommentRestored,
+    "task_deleted": AuditDetailTaskDeleted,
+    "task_restored": AuditDetailTaskRestored,
 }
 
 
@@ -827,6 +959,11 @@ NotificationType = Literal[
     "mention",
     "shared_activity",
     "comment",
+    # Being handed a task is the same kind of event as being handed an
+    # opportunity (`owner_changed`, 3.0a): somebody else decided you now owe
+    # something, which is the one change nobody asks for. `notifications.type`
+    # carries no CHECK constraint, so this costs no migration.
+    "task_assigned",
 ]
 
 SourceType = Literal["entry", "note", "comment"]
@@ -883,12 +1020,28 @@ class NotificationPayloadComment(BaseModel):
     actor_id: int
 
 
+class NotificationPayloadTaskAssigned(BaseModel):
+    """Being handed a task, told the way being handed a deal is (3.0a's
+    `owner_changed`): somebody else decided you now owe something. The task's
+    title rides along because the inbox sentence names it, and a notification
+    that says only "you were assigned a task" makes the reader open the deal to
+    find out which one. The assigner is the actor, so assigning something to
+    yourself notifies nobody."""
+
+    opportunity_id: int
+    actor_id: int
+    task_id: int
+    title: str
+    due_date: str | None
+
+
 NotificationPayload = (
     NotificationPayloadShareAdded
     | NotificationPayloadShareRoleChanged
     | NotificationPayloadShareRemoved
     | NotificationPayloadOwnerChanged
     | NotificationPayloadMention
+    | NotificationPayloadTaskAssigned
     | NotificationPayloadSharedActivity
     | NotificationPayloadComment
 )
@@ -901,6 +1054,7 @@ NOTIFICATION_PAYLOAD_MODELS: dict[str, type[BaseModel]] = {
     "mention": NotificationPayloadMention,
     "shared_activity": NotificationPayloadSharedActivity,
     "comment": NotificationPayloadComment,
+    "task_assigned": NotificationPayloadTaskAssigned,
 }
 
 

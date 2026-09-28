@@ -20,6 +20,7 @@ from .routes_opportunities import router as opportunities_router
 from .routes_saved_views import router as saved_views_router
 from .routes_search import router as search_router
 from .routes_sharing import router as sharing_router
+from .routes_tasks import router as tasks_router
 from .routes_timeline import router as timeline_router
 from .schemas import HealthStatus
 from .security import CsrfMiddleware, SecurityHeadersMiddleware
@@ -56,6 +57,7 @@ app.include_router(notifications_router)
 app.include_router(search_router)
 app.include_router(events_router)
 app.include_router(saved_views_router)
+app.include_router(tasks_router)
 
 
 # Unversioned on purpose (D-094): this is an operations probe — the

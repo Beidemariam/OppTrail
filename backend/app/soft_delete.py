@@ -42,6 +42,11 @@ USER_DATA_TABLES = (
     "notifications",
     "audit_log_entries",
     "saved_views",
+    # A task is content, not toggle state (milestone 4.1): somebody wrote it
+    # down and a colleague may be relying on it, so deleting one is a soft
+    # delete with an audit row and an Undo. Completing one is not a delete at
+    # all -- `completed_at` is a field, and a done task stays readable.
+    "tasks",
 )
 
 
@@ -62,6 +67,27 @@ def soft_delete_comment(connection: sqlite3.Connection, comment_id: int) -> None
     connection.execute(
         "UPDATE comments SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
         (deleted_at, comment_id),
+    )
+
+
+def soft_delete_task(connection: sqlite3.Connection, task_id: int) -> None:
+    """Delete one task (milestone 4.1).
+
+    Nothing hangs off a task -- `FEATURES.md` §8 rules out subtasks -- so this
+    is the one delete in this module with no cascade, and the flattest evidence
+    that the shape of these helpers follows the data rather than a convention.
+    """
+    connection.execute(
+        "UPDATE tasks SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
+        (utc_now(), task_id),
+    )
+
+
+def restore_task(connection: sqlite3.Connection, task_id: int, deleted_at: str) -> None:
+    """Undo one `soft_delete_task`, scoped by the stamp like every restore here."""
+    connection.execute(
+        "UPDATE tasks SET deleted_at = NULL WHERE id = ? AND deleted_at = ?",
+        (task_id, deleted_at),
     )
 
 
@@ -152,6 +178,18 @@ def soft_delete_opportunity(connection: sqlite3.Connection, opportunity_id: int)
     connection.execute(
         """
         UPDATE opportunity_shares
+        SET deleted_at = ?
+        WHERE opportunity_id = ? AND deleted_at IS NULL
+        """,
+        (deleted_at, opportunity_id),
+    )
+    # Tasks are a level of this tree too (milestone 4.1). Missing this would
+    # leave live action items pointing at a deleted deal, and My Tasks reads
+    # across opportunities -- so they would keep appearing on somebody's list
+    # for a deal that is gone.
+    connection.execute(
+        """
+        UPDATE tasks
         SET deleted_at = ?
         WHERE opportunity_id = ? AND deleted_at IS NULL
         """,
@@ -266,6 +304,14 @@ def restore_opportunity(
     connection.execute(
         """
         UPDATE opportunity_shares
+        SET deleted_at = NULL
+        WHERE opportunity_id = ? AND deleted_at = ?
+        """,
+        (opportunity_id, deleted_at),
+    )
+    connection.execute(
+        """
+        UPDATE tasks
         SET deleted_at = NULL
         WHERE opportunity_id = ? AND deleted_at = ?
         """,

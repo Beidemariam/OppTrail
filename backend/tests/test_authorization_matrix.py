@@ -74,6 +74,11 @@ class World:
     deleted_note_id: int
     deleted_comment_id: int
     deleted_opportunity_id: int
+    # Milestone 4.1. `task_id` is the owner's own task, so the author-or-owner
+    # cases are read against a row the editor did not write -- which is the
+    # distinction D-005's rule turns on.
+    task_id: int
+    deleted_task_id: int
 
 
 @dataclass(frozen=True)
@@ -328,6 +333,54 @@ MATRIX: dict[Endpoint, Case] = {
     Endpoint("POST", "/api/v2/comments/{comment_id}/unresolve"): Case(
         expected=scoped(viewer=403, editor=403, owner=200),
         url=lambda world: f"/api/v2/comments/{world.comment_id}/unresolve",
+        body=lambda world, actor: None,
+    ),
+    # --- Tasks (milestone 4.1, `docs/FEATURES.md` §8) --------------------
+    # Writing one down is adding, so editors may and viewers may not -- the
+    # gate entries and notes use. Changing what somebody typed is
+    # author-or-owner (D-005), so the editor gets 403 on a task the owner
+    # wrote. Completing is the exception (**D-142**): this task is assigned to
+    # the editor, and an assignee may close what they did not write.
+    Endpoint("POST", "/api/v2/opportunities/{opportunity_id}/tasks"): Case(
+        expected=scoped(viewer=403, editor=201, owner=201),
+        url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/tasks",
+        body=lambda world, actor: {"title": f"Task by {actor}"},
+    ),
+    Endpoint("GET", "/api/v2/opportunities/{opportunity_id}/tasks"): Case(
+        expected=scoped(viewer=200, editor=200, owner=200),
+        url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/tasks",
+    ),
+    # My Tasks is not opportunity-scoped: it answers with the caller's own
+    # assignments, so every signed-in reader gets a 200 and an outsider gets an
+    # empty page rather than a 404 -- there is no id in the URL whose existence
+    # could leak.
+    Endpoint("GET", "/api/v2/tasks"): Case(
+        expected=authenticated_only(200),
+        url=lambda world: "/api/v2/tasks",
+    ),
+    Endpoint("PATCH", "/api/v2/tasks/{task_id}"): Case(
+        expected=scoped(viewer=403, editor=403, owner=200),
+        url=lambda world: f"/api/v2/tasks/{world.task_id}",
+        body=lambda world, actor: {"title": f"Edited by {actor}"},
+    ),
+    Endpoint("POST", "/api/v2/tasks/{task_id}/complete"): Case(
+        expected=scoped(viewer=403, editor=200, owner=200),
+        url=lambda world: f"/api/v2/tasks/{world.task_id}/complete",
+        body=lambda world, actor: None,
+        notes="The editor is this task's assignee (D-142); idempotent, so order is free.",
+    ),
+    Endpoint("POST", "/api/v2/tasks/{task_id}/reopen"): Case(
+        expected=scoped(viewer=403, editor=200, owner=200),
+        url=lambda world: f"/api/v2/tasks/{world.task_id}/reopen",
+        body=lambda world, actor: None,
+    ),
+    Endpoint("DELETE", "/api/v2/tasks/{task_id}"): Case(
+        expected=scoped(viewer=403, editor=403, owner=204),
+        url=lambda world: f"/api/v2/tasks/{world.task_id}",
+    ),
+    Endpoint("POST", "/api/v2/tasks/{task_id}/restore"): Case(
+        expected=scoped(viewer=403, editor=403, owner=204),
+        url=lambda world: f"/api/v2/tasks/{world.deleted_task_id}/restore",
         body=lambda world, actor: None,
     ),
     # Reactions (milestone 3.3a, D-130): any role that may write the timeline
@@ -756,6 +809,20 @@ def world(tmp_path, monkeypatch) -> World:
         )
     assert owner.delete(f"/api/v2/opportunities/{deleted_opportunity_id}").status_code == 204
 
+    # Tasks (milestone 4.1). The live one is assigned to the **editor**, which
+    # is what makes the completion cases meaningful: D-142 lets an assignee
+    # close a task they did not write, so an editor completing this one must
+    # succeed while editing it must not.
+    task_id = owner.post(
+        f"/api/v2/opportunities/{opportunity_id}/tasks",
+        json={"title": "Matrix task", "assignee_email": emails["editor"]},
+    ).json()["id"]
+    deleted_task_id = owner.post(
+        f"/api/v2/opportunities/{opportunity_id}/tasks",
+        json={"title": "Matrix deleted task"},
+    ).json()["id"]
+    assert owner.delete(f"/api/v2/tasks/{deleted_task_id}").status_code == 204
+
     yield World(
         clients=clients,
         user_ids=user_ids,
@@ -771,6 +838,8 @@ def world(tmp_path, monkeypatch) -> World:
         deleted_note_id=deleted_note_id,
         deleted_comment_id=deleted_comment_id,
         deleted_opportunity_id=deleted_opportunity_id,
+        task_id=task_id,
+        deleted_task_id=deleted_task_id,
     )
 
     for client in clients.values():

@@ -290,3 +290,26 @@ CREATE TRIGGER comments_search_delete AFTER DELETE ON comments BEGIN
     INSERT INTO search_index(search_index, rowid, title, body)
     SELECT 'delete', old.id * 4 + 2, '', old.body WHERE old.deleted_at IS NULL;
 END;
+
+-- Revision 0009_tasks (milestone 4.1): action items scoped to an opportunity.
+-- `completed_at`/`completed_by` rather than a boolean done flag, for the reason
+-- revision 0003 gave `notifications.read_at`; `due_date` is a date because
+-- "call them back Thursday" has no time of day.
+CREATE TABLE tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    opportunity_id INTEGER NOT NULL REFERENCES opportunities(id),
+    entry_id INTEGER REFERENCES timeline_entries(id),
+    title TEXT NOT NULL,
+    assignee_id INTEGER REFERENCES users(id),
+    due_date TEXT,
+    completed_at TEXT,
+    completed_by INTEGER REFERENCES users(id),
+    created_by INTEGER NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    deleted_at TEXT
+);
+
+CREATE INDEX idx_tasks_opportunity ON tasks (opportunity_id, due_date, id);
+
+CREATE INDEX idx_tasks_assignee ON tasks (assignee_id, completed_at, due_date, id);

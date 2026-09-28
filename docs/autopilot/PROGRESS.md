@@ -1,4 +1,4 @@
-STATUS: AWAITING_REVIEW phase=3
+STATUS: IN_PROGRESS phase=4
 
 # Autopilot Progress
 
@@ -22,6 +22,24 @@ on `main`, not the tag.
 Phase 2 was accepted: `phase-2-accepted` exists at `cc8aa21`, which is also
 where `main` and `autopilot/phase-2` sit. Base commit for `autopilot/phase-3`:
 `cc8aa21` on `main`.
+
+Phase 3 was accepted: `phase-3-accepted` exists at `0cc4be3`, which is also
+where `main` sits. **`autopilot/phase-3` then took six more commits**, and the
+base commit for `autopilot/phase-4` is the last of them, `4b589bb` — not the
+tag, and not `main`:
+
+- `aa9994a` 3.7 and `8013602` 3.8, the rework the human's gate review asked for
+  (**D-136**, **D-138**) — accepted at the re-review, all five checks passing.
+- `de5a44a` 3.9 and `dc5b752`, the per-deal entry number and the defect a real
+  model call found in it (**D-139**, **D-140**).
+- `63c6725`, the test proving each opportunity numbers its entries from 1.
+- `4b589bb`, deferring email to v3 and moving APScheduler into Phase 6
+  (**D-141**).
+
+So `main` is six commits behind this branch. Phase 4 has to build on that work —
+3.9 changed `TimelineEntryPublic` and 3.8 changed the button rule every screen
+uses — so branching from the tag was never an option. Whether `main` is
+fast-forwarded now or after Phase 4 is the human's call and blocks nothing.
 
 ---
 
@@ -4574,6 +4592,54 @@ the document.
 
 - [ ] 4.1 Task model scoped to an opportunity; My Tasks across opportunities;
       overdue/upcoming surfaces on the dashboard. Schema: `tasks`.
+      **The API half is done** (revision `0009_tasks`, `app/routes_tasks.py`,
+      `tests/test_tasks.py`); the screens are 4.1b below.
+
+      Eight routes, all eight in the authorization matrix. What is worth
+      knowing:
+
+      - **`completed_at`/`completed_by` are the done state**, not a boolean, so
+        the row answers "when" and "who" as well as "whether" — D-095's lesson
+        applied at the start this time rather than after a migration. Both
+        `POST .../complete` and `.../reopen` are idempotent through `COALESCE`,
+        so the first completer is the one recorded.
+      - **The assignee may complete a task they did not write** (**D-142**, and
+        the one entry in this phase flagged for the human): `PATCH` stays
+        author-or-owner like every other edit (D-005), and the done state
+        additionally accepts the assignee. Anything else means handing somebody
+        a task and refusing to let them close it.
+      - **`tasks` is in `USER_DATA_TABLES`** — content, not toggle state, so a
+        delete is soft, audited (`task_deleted`/`task_restored`) and undoable,
+        unlike `reactions` and `watchers` (D-130). It is also a level of the
+        opportunity cascade; missing that would leave live action items under a
+        deleted deal.
+      - **A task outlives the entry that prompted it.** `entry_id` is a link,
+        not a parent: deleting the entry leaves the task with its id and no
+        title, because the action item is not readable *through* the entry.
+      - **My Tasks filters permissions inside the query**
+        (`ACCESSIBLE_OPPORTUNITY_IDS_SQL`), the pattern search established: a
+        task can be assigned to somebody before they are shared on the deal, so
+        losing the share takes the task off their list rather than leaking the
+        deal's name through it.
+      - **Undated tasks sort last.** SQLite orders `NULL` first, so
+        `due_date IS NULL` leads the `ORDER BY` *and* the keyset cursor — a
+        cursor over a different order than the one displayed skips rows.
+      - **Task writes publish `opportunity.changed`** rather than a third event
+        type (**D-143**), which ADR 0003 permits: broader than the write, never
+        narrower.
+
+      Two things found along the way and fixed here rather than left:
+
+      - **A blank title, or a blank opportunity name, passed validation.**
+        `Field(min_length=1)` is checked before the strip validator runs, so
+        `"   "` satisfied it and was stored as `""`. Live on
+        `OpportunityBase.name`/`account_name` and `OpportunityUpdate` since the
+        MVP; `schemas.stripped` now refuses it in all four places.
+      - **The first version of the cascade test proved nothing.** It asserted
+        that a deleted opportunity's tasks vanish from My Tasks — which they do
+        regardless, because that read filters deleted opportunities too. It
+        passed with the cascade removed. Rewritten against the row's own
+        `deleted_at`, and confirmed to fail without it.
 - [ ] 4.2 Migrate `timeline_entries.follow_up_date` into tasks, keeping the
       column until the UI has moved (per the breaking-changes table: dropped
       in Phase 6, which named Phase 5 until email moved to v3 — what matters is
