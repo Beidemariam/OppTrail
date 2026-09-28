@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import {
   createOpportunity,
   entryForm,
+  openEntryForm,
   expectNoAccessibilityViolations,
   openTimeline,
   signUp,
@@ -141,6 +142,7 @@ test("the calendar's follow-up layer draws an entry's date and links back to its
   await createOpportunity(page, opportunity);
   await openTimeline(page, opportunity);
 
+  await openEntryForm(page);
   await entryForm(page).getByLabel("Type").selectOption({ label: "Call" });
   await entryForm(page).getByLabel("Title").fill("Send updated pricing");
   await entryForm(page).getByLabel("Follow up").fill("2027-08-19");

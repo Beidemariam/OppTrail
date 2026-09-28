@@ -7,6 +7,7 @@ import {
   addNote,
   entry,
   entryForm,
+  openEntryForm,
   openTimeline,
   signIn,
 } from "./helpers";
@@ -41,6 +42,7 @@ test("a colleague's entry appears without a reload", async ({
   try {
     await signIn(blair, BLAIR);
     await openTimeline(blair, NORTHWIND);
+    await openEntryForm(blair);
     await entryForm(blair).getByLabel("Title").fill(title);
     await entryForm(blair).getByRole("button", { name: "Add Entry" }).click();
     await expect(blair.getByRole("heading", { name: title })).toBeVisible();
@@ -71,6 +73,7 @@ test("a note saved against a copy somebody else moved is refused", async ({
   try {
     await signIn(blair, BLAIR);
     await openTimeline(blair, NORTHWIND);
+    await openEntryForm(blair);
     await entryForm(blair).getByLabel("Title").fill(title);
     await entryForm(blair).getByRole("button", { name: "Add Entry" }).click();
     await expect(blair.getByRole("heading", { name: title })).toBeVisible();

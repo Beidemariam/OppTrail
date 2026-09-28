@@ -103,6 +103,19 @@ export function entryForm(page: Page) {
 }
 
 /**
+ * Opens that form, which is collapsed behind a "New entry" trigger since
+ * milestone 3.7 — the same progressive disclosure a note's or a comment's
+ * composer already used, applied to the one composer that stood permanently
+ * open and pushed the timeline below the fold (D-136 finding 3).
+ */
+export async function openEntryForm(page: Page) {
+  await page.getByRole("button", { name: "New entry", exact: true }).click();
+  const form = entryForm(page).first();
+  await expect(form).toBeVisible();
+  return form;
+}
+
+/**
  * A composer, which is collapsed until it is written in (milestone 3.1,
  * `app/RichTextEditor.tsx`).
  *
@@ -187,7 +200,9 @@ export async function openTimeline(page: Page, name: string) {
 export async function openHistory(page: Page) {
   await page
     .locator(".timeline-heading")
-    .getByRole("button", { name: "History", exact: true })
+    // "Activity" since milestone 3.7: the button was called History, which is
+    // what the per-item dialogs D-121 removed were called (D-136 finding 1).
+    .getByRole("button", { name: "Activity", exact: true })
     .click();
   const dialog = page.getByRole("dialog");
   await expect(

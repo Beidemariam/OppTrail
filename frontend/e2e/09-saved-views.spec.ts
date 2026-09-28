@@ -123,10 +123,16 @@ test("the timeline can be read newest-first, and that reading is linkable", asyn
   const oldest = "Intro call with the VP of Operations";
   await expect(entries(page).last()).toContainText(oldest);
 
+  // The bar is collapsed while nothing but the default is in force (3.7), and
+  // it says which order that is where the reader can see it.
+  await expect(page.locator(".filter-summary")).toContainText("Newest first");
+  await page.getByRole("button", { name: "Filter and order" }).click();
   await page
     .getByLabel("Timeline reading order")
     .selectOption({ label: "Oldest first" });
-  await page.getByRole("button", { name: "Filter" }).click();
+  // `exact`, because the disclosure beside it is "Filter and order" and
+  // Playwright matches an accessible name by substring (milestone 3.7).
+  await page.getByRole("button", { name: "Filter", exact: true }).click();
 
   await expect(entries(page).first()).toContainText(oldest);
   await expect(page).toHaveURL(/timeline\.order=asc/);
@@ -139,6 +145,12 @@ test("the timeline can be read newest-first, and that reading is linkable", asyn
 
   await page.reload();
   await expect(entries(page).first()).toContainText(oldest);
+  // Reloaded, the bar opens itself, because the order in force is not the
+  // default -- the stale-URL case the Phase 3 reviewer met (D-136 finding 5,
+  // D-137).
+  await expect(
+    page.getByRole("button", { name: "Filter and order" }),
+  ).toHaveAttribute("aria-expanded", "true");
   await expect(page.getByLabel("Timeline reading order")).toHaveValue("asc");
   await expect(cards(page)).toHaveCount(1);
 });

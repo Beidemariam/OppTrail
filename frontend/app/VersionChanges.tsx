@@ -12,8 +12,9 @@ import { useRestoreVersion } from "../lib/queries";
 import { useToasts } from "./Toasts";
 
 /**
- * What one edit changed, and the way back to what it said before
- * (milestone 3.1c, D-116).
+ * What one edit changed (milestone 3.1c, D-116). The way back to what it said
+ * before is `RestoreVersion` below, which the activity row draws beside this
+ * one's disclosure rather than inside it (3.7).
  *
  * This is the half of the old per-item History dialog worth keeping. That
  * dialog was a third destination beside the activity log and the audit log
@@ -35,13 +36,11 @@ export interface VersionRow {
 }
 
 export function VersionDiff<VersionT extends VersionRow>({
-  target,
   targetId,
   versionNumber,
   fields,
   useVersions,
 }: {
-  target: ActivityEditTarget;
   targetId: number;
   /** The version this edit produced; the one before it is what it replaced. */
   versionNumber: number;
@@ -77,16 +76,7 @@ export function VersionDiff<VersionT extends VersionRow>({
     return null;
   }
 
-  return (
-    <>
-      <VersionFields changes={versionChanges(fields, version, previous)} />
-      <RestoreVersion
-        target={target}
-        targetId={targetId}
-        versionNumber={previous.version_number}
-      />
-    </>
-  );
+  return <VersionFields changes={versionChanges(fields, version, previous)} />;
 }
 
 /**
@@ -98,8 +88,13 @@ export function VersionDiff<VersionT extends VersionRow>({
  * state the thing was created in. Restoring is itself recorded as an edit, so
  * it can be undone by restoring again and nothing in the history is lost
  * (D-120).
+ *
+ * Rendered by the activity row rather than by the diff above it since
+ * milestone 3.7 (D-136 finding 2): which version it puts back is arithmetic
+ * on the row's own `version_number`, so waiting for the version read to land
+ * bought nothing and cost the control its visibility.
  */
-function RestoreVersion({
+export function RestoreVersion({
   target,
   targetId,
   versionNumber,
@@ -111,26 +106,25 @@ function RestoreVersion({
   const restore = useRestoreVersion(target, targetId);
   const toast = useToasts();
 
+  // The bare button: its caller is the activity row's action line, which owns
+  // the layout around both controls.
   return (
-    <p className="version-restore">
-      <button
-        type="button"
-        className="secondary-button"
-        disabled={restore.isPending}
-        onClick={() =>
-          restore.mutate(versionNumber, {
-            onSuccess: () =>
-              toast({
-                message: `Restored version ${versionNumber}. The restore is recorded as an edit of its own.`,
-              }),
-            onError: (error) =>
-              toast({ message: error.message, tone: "error" }),
-          })
-        }
-      >
-        Restore version {versionNumber}
-      </button>
-    </p>
+    <button
+      type="button"
+      className="secondary-button"
+      disabled={restore.isPending}
+      onClick={() =>
+        restore.mutate(versionNumber, {
+          onSuccess: () =>
+            toast({
+              message: `Restored version ${versionNumber}. The restore is recorded as an edit of its own.`,
+            }),
+          onError: (error) => toast({ message: error.message, tone: "error" }),
+        })
+      }
+    >
+      Restore version {versionNumber}
+    </button>
   );
 }
 

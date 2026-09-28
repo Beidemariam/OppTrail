@@ -1167,6 +1167,13 @@ a.danger-button {
   display: grid;
   gap: 16px;
   grid-column: 2;
+  /* The implicit column is `auto`, which floors at its content's min-content
+     width -- so before milestone 3.7 the sharing panel's three-column form
+     (380px of minimums) made every child of this column 454px wide inside a
+     360px track, pushing the Share button off the right edge of the screen
+     entirely (D-136 finding 4). `minmax(0, 1fr)` is what lets the track
+     govern instead, and the forms below stack so they have somewhere to go. */
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .empty-panel {
@@ -1240,8 +1247,13 @@ a.danger-button {
   font-weight: 700;
 }
 
+/* Stacked at every width since milestone 3.7: milestone 3.1a moved this
+   panel into the 360px sidebar column, where three side-by-side fields do not
+   fit and the submit button was squeezed to 30px (D-136 finding 4). The
+   narrow-viewport override that used to say this is gone with it -- there is
+   no longer a width at which the form is anything else. */
 .share-form {
-  grid-template-columns: minmax(220px, 1fr) 150px auto;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .share-list {
@@ -1256,7 +1268,7 @@ a.danger-button {
   border-radius: var(--radius-md);
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(180px, 1fr) 150px auto;
+  grid-template-columns: minmax(0, 1fr);
   padding: 10px;
 }
 
@@ -2284,11 +2296,53 @@ kbd {
   margin: 0;
 }
 
-/* An edit row, opened (milestone 3.1c). The disclosure is a control drawn as
-   text, so it reads as part of the sentence above it rather than as a fourth
-   button competing with the dialog's own. */
+/* An edit row, opened (milestone 3.1c). The disclosure used to be underlined
+   text, which read as part of the sentence above it -- and so went unclicked
+   by the one person who reviewed it (milestone 3.7, D-136 finding 1). Both
+   controls now sit on their own line, drawn as controls. */
 .activity-changes {
-  margin-top: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.activity-actions,
+.filter-summary {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+/* A disclosure: a bordered control with a marker that turns, so what opens is
+   visibly openable (milestone 3.7). Quieter than `.secondary-button` -- it
+   reveals rather than does -- and still unmistakably a button. */
+.disclosure-button {
+  align-items: center;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: var(--text-sm);
+  gap: var(--space-1);
+  min-height: 34px;
+  padding: var(--space-1) var(--space-3);
+}
+
+.disclosure-button:hover {
+  background: var(--bg-app);
+}
+
+/* The collapsed filter bar's summary: what is in force, beside the control
+   that opens the bar (milestone 3.7, D-137). */
+.filter-summary .meta-row {
+  margin: 0;
+}
+
+.compose-trigger {
+  margin: 0;
 }
 
 .link-button {
@@ -2300,10 +2354,6 @@ kbd {
   font-size: var(--text-sm);
   padding: 0;
   text-decoration: underline;
-}
-
-.version-restore {
-  margin: var(--space-2) 0 0;
 }
 
 .theme-select {
@@ -2406,8 +2456,6 @@ kbd {
   }
 
   .filter-bar,
-  .share-form,
-  .share-row,
   .timeline-form-grid {
     grid-template-columns: 1fr;
   }

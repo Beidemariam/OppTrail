@@ -148,11 +148,12 @@ export function TimelineEntryForm({
         <button className="primary-button" type="submit">
           {editing ? "Save Entry" : "Add Entry"}
         </button>
-        {editing && (
-          <button className="secondary-button" type="button" onClick={onDone}>
-            Cancel
-          </button>
-        )}
+        {/* Unconditional since milestone 3.7: the compose form is collapsed
+            behind a trigger now (`app/OpportunityPanel.tsx`), so closing it
+            without posting is a thing a reader needs in both modes. */}
+        <button className="secondary-button" type="button" onClick={onDone}>
+          Cancel
+        </button>
       </div>
       {save.isPending && (
         <p className="status">

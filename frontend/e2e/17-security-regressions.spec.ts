@@ -4,6 +4,7 @@ import {
   createOpportunity,
   entry,
   entryForm,
+  openEntryForm,
   openTimeline,
   signUp,
 } from "./helpers";
@@ -68,6 +69,7 @@ test("hostile note content cannot run a script or leave a live javascript: link"
   await createOpportunity(page, opportunity, { account: "Initech" });
   await openTimeline(page, opportunity);
 
+  await openEntryForm(page);
   await entryForm(page).getByLabel("Title").fill("Follow-up");
   await entryForm(page).getByRole("button", { name: "Add Entry" }).click();
   const followUp = entry(page, "Follow-up");

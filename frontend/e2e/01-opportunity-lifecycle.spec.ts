@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
   entryForm,
+  openEntryForm,
   expectNoAccessibilityViolations,
   openTimeline,
   createOpportunity,
@@ -62,6 +63,7 @@ test("sign up, create an opportunity, add entries, change stage", async ({
     ["Call", "Discovery call", 1],
     ["Meeting", "Solution review", 2],
   ] as const) {
+    await openEntryForm(page);
     await entryForm(page).getByLabel("Type").selectOption({ label: type });
     await entryForm(page).getByLabel("Title").fill(title);
     await entryForm(page)

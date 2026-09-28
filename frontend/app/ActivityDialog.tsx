@@ -20,7 +20,7 @@ import {
 } from "../lib/queries";
 import { formatTimestamp } from "../lib/time";
 import { Modal } from "./Modal";
-import { VersionDiff } from "./VersionChanges";
+import { RestoreVersion, VersionDiff } from "./VersionChanges";
 
 /**
  * One history per opportunity (milestone 3.0, completed by 3.1c).
@@ -31,6 +31,14 @@ import { VersionDiff } from "./VersionChanges";
  * (`backend/app/activity.py`); 3.1c removed the other two destinations by
  * giving an edit row here the before/after and the way back that only the
  * History dialog used to offer (D-116, D-121).
+ *
+ * **Named "Activity", not "History"** (milestone 3.7, D-136 finding 1). It
+ * shipped as History, which is the word the *removed* per-item dialogs used —
+ * so the Phase 3 reviewer opened the one remaining button expecting version
+ * history, found a feed, and reported that the consolidation had not happened
+ * when it had. The dialog still says "Activity and history", because both
+ * words describe what is inside it; only the button that could be mistaken
+ * for the old one was renamed.
  *
  * **Offered to every role.** The rows a reader gets are the ones their role
  * may already see — system entries for anyone with access, the audit and
@@ -49,7 +57,7 @@ export function ActivityButton({ opportunityId }: { opportunityId: number }) {
         className="secondary-button"
         onClick={() => setOpen(true)}
       >
-        History
+        Activity
       </button>
       {open && (
         <Modal
@@ -60,8 +68,8 @@ export function ActivityButton({ opportunityId }: { opportunityId: number }) {
           <p className="history-lead">
             Everything that has happened to this opportunity, oldest first: what
             the system recorded, what was edited, and what was deleted or
-            restored. You see the events your role can read, and an edit opens
-            to show what it changed.
+            restored. You see the events your role can read. An edit shows what
+            it changed, and offers the version it replaced back.
           </p>
           {query.isError && <p className="error">{query.error.message}</p>}
           {query.isPending && <p className="status">Loading activity...</p>}
@@ -99,20 +107,40 @@ type EditDetail = Extract<ActivityEvent["detail"], { source: "version" }>;
  *
  * A disclosure button rather than `<details>`: the open state is also what
  * enables the read behind it, so it is React's rather than the element's.
+ *
+ * Two things changed here in milestone 3.7, both from D-136 finding 2:
+ *
+ * - **Restore sits on the row, not inside the disclosure.** It used to be the
+ *   last thing in the expanded diff — two levels deep — so the reviewer
+ *   reported that restoring a version "isn't there at all". It needs no read
+ *   to render: the version this edit replaced is `version_number - 1`, which
+ *   the feed row already carries, and the diff was never what made the
+ *   control correct.
+ * - **The disclosure looks like a control.** "What changed" as underlined
+ *   text read as part of the sentence above it, which is exactly why nobody
+ *   clicked it; it is now a bordered button with a marker that turns.
  */
 function EditDetails({ detail }: { detail: EditDetail }) {
   const [open, setOpen] = useState(false);
 
   return (
     <div className="activity-changes">
-      <button
-        type="button"
-        className="link-button"
-        aria-expanded={open}
-        onClick={() => setOpen(!open)}
-      >
-        {open ? "Hide what changed" : "What changed"}
-      </button>
+      <p className="activity-actions">
+        <button
+          type="button"
+          className="disclosure-button"
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+        >
+          <span aria-hidden="true">{open ? "-" : "+"}</span>{" "}
+          {open ? "Hide what changed" : "Show what changed"}
+        </button>
+        <RestoreVersion
+          target={detail.target}
+          targetId={detail.target_id}
+          versionNumber={detail.version_number - 1}
+        />
+      </p>
       {open && <EditDiff detail={detail} />}
     </div>
   );
@@ -127,7 +155,6 @@ function EditDiff({ detail }: { detail: EditDetail }) {
   if (detail.target === "opportunity") {
     return (
       <VersionDiff
-        target="opportunity"
         targetId={detail.target_id}
         versionNumber={detail.version_number}
         fields={opportunityVersionFields}
@@ -138,7 +165,6 @@ function EditDiff({ detail }: { detail: EditDetail }) {
   if (detail.target === "timeline_entry") {
     return (
       <VersionDiff
-        target="timeline_entry"
         targetId={detail.target_id}
         versionNumber={detail.version_number}
         fields={timelineEntryVersionFields}
@@ -148,7 +174,6 @@ function EditDiff({ detail }: { detail: EditDetail }) {
   }
   return (
     <VersionDiff
-      target="note"
       targetId={detail.target_id}
       versionNumber={detail.version_number}
       fields={noteVersionFields}

@@ -5,6 +5,7 @@ import {
   card,
   entry,
   entryForm,
+  openEntryForm,
   openTimeline,
   createOpportunity,
   signIn,
@@ -36,6 +37,7 @@ test("viewer is read-only, editor can write, comments stay immutable", async ({
   });
   await openTimeline(page, opportunity);
 
+  await openEntryForm(page);
   await entryForm(page).getByLabel("Title").fill("Kickoff");
   await entryForm(page).getByLabel("Body").fill("First conversation.");
   await entryForm(page).getByRole("button", { name: "Add Entry" }).click();

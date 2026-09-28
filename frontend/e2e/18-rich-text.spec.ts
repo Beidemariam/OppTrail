@@ -4,6 +4,7 @@ import {
   createOpportunity,
   entry,
   entryForm,
+  openEntryForm,
   expectNoAccessibilityViolations,
   openComposer,
   openTimeline,
@@ -35,6 +36,7 @@ test("type a bullet list in a note, and read it back as a list", async ({
 
   // An entry body is the same composer as a note's, so it is typed the same
   // way — including the input rule for a heading-free structure.
+  await openEntryForm(page);
   await entryForm(page).getByLabel("Title").fill("Pricing pushback");
   const body = entryForm(page).getByLabel("Body");
   await body.click();

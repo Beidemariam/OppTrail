@@ -4,6 +4,7 @@ import {
   addNote,
   createOpportunity,
   entryForm,
+  openEntryForm,
   expectNoAccessibilityViolations,
   openTimeline,
   signUp,
@@ -46,6 +47,7 @@ test("edit an entry, a note and an opportunity field without leaving the page", 
   // into without that follow-on scroll.
   const titles = Array.from({ length: 8 }, (_, index) => `Call ${index + 1}`);
   for (const title of titles) {
+    await openEntryForm(page);
     await entryForm(page).getByLabel("Title").fill(title);
     await entryForm(page)
       .getByLabel("Body")
@@ -91,12 +93,14 @@ test("edit an entry, a note and an opportunity field without leaving the page", 
       name: "Call 2, corrected",
     }),
   ).toBeVisible();
-  // The composer at the top stayed a composer throughout: before milestone
-  // 2.11 this is where the edit happened, and it offered "Save Entry".
+  // The composer at the top was never involved: before milestone 2.11 this is
+  // where the edit happened, and it offered "Save Entry". Since 3.7 it is not
+  // even open — the entry's own editor is the only form on the page while it
+  // is being edited, and there is none once it closes.
   await expect(
-    entryForm(page).first().getByRole("button", { name: "Add Entry" }),
+    page.getByRole("button", { name: "New entry", exact: true }),
   ).toBeVisible();
-  await expect(page.locator("form.timeline-form")).toHaveCount(1);
+  await expect(page.locator("form.timeline-form")).toHaveCount(0);
 
   // A note edits in its own note, and Esc-free: Save closes it and hands
   // focus back to the control that opened it.

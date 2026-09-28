@@ -3,6 +3,7 @@ import {
   addNote,
   entry,
   entryForm,
+  openEntryForm,
   openTimeline,
   createOpportunity,
   signIn,
@@ -36,6 +37,7 @@ test("mentioning a colleague notifies them", async ({ page }) => {
     page.locator(".share-row").filter({ hasText: colleagueEmail }),
   ).toBeVisible();
 
+  await openEntryForm(page);
   await entryForm(page).getByLabel("Title").fill("Security review");
   await entryForm(page).getByRole("button", { name: "Add Entry" }).click();
   await expect(
@@ -85,6 +87,7 @@ test("notification history survives being read, and mark-all-read clears the bad
     page.locator(".share-row").filter({ hasText: colleagueEmail }),
   ).toBeVisible();
 
+  await openEntryForm(page);
   await entryForm(page).getByLabel("Title").fill("Kickoff");
   await entryForm(page).getByRole("button", { name: "Add Entry" }).click();
   const kickoff = entry(page, "Kickoff");

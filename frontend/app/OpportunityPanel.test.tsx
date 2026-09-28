@@ -22,6 +22,31 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/**
+ * Opens the entry composer, which is collapsed behind a trigger since
+ * milestone 3.7 (D-136 finding 3), and answers with the form it revealed.
+ */
+async function openEntryForm() {
+  await userEvent.click(
+    await screen.findByRole("button", { name: "New entry" }),
+  );
+  return (await screen.findByRole("button", { name: "Add Entry" })).closest(
+    "form",
+  ) as HTMLElement;
+}
+
+/** The same for the timeline's filter bar, collapsed in 3.7 for the same
+ * reason — unless a filter is already applied, which opens it by itself. */
+async function openTimelineFilters() {
+  const trigger = screen.queryByRole("button", { name: "Filter and order" });
+  if (trigger && trigger.getAttribute("aria-expanded") === "false") {
+    await userEvent.click(trigger);
+  }
+  return (
+    await screen.findByLabelText("Filter the timeline by keyword")
+  ).closest("form") as HTMLElement;
+}
+
 describe("the timeline", () => {
   it("shows entries, notes and comments once an opportunity is opened", async () => {
     await renderDashboard({
@@ -63,6 +88,52 @@ describe("the timeline", () => {
     ).toBeInTheDocument();
   });
 
+  // Milestone 3.7 (D-136 finding 3): the filter bar and the composer used to
+  // stand permanently open above the timeline, 546px of controls that put the
+  // first entry 930px down a 1000px viewport. Both are disclosures now.
+  it("opens the timeline with its controls collapsed, and says what is in force", async () => {
+    await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [anEntry()],
+    });
+    await openTimeline("Northwind rollout");
+    await screen.findByRole("heading", { name: "Discovery call" });
+
+    // No editor and no filter fields until either is asked for.
+    expect(screen.queryByLabelText("Title")).toBeNull();
+    expect(
+      screen.queryByLabelText("Filter the timeline by keyword"),
+    ).toBeNull();
+    // The reading order is stated all the same, because it always applies.
+    expect(screen.getByText("Newest first")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "New entry" }));
+    expect(await screen.findByLabelText("Title")).toHaveFocus();
+
+    // Closing it puts the reader back on the control they opened it with.
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(
+      await screen.findByRole("button", { name: "New entry" }),
+    ).toHaveFocus();
+  });
+
+  it("opens the filter bar by itself when a URL arrives with a filter in it", async () => {
+    // The stale-parameter case the Phase 3 reviewer met: `order=asc` left in an
+    // old tab silently reversed the timeline, and nothing on screen said so
+    // (D-136 finding 5, D-137). The default stands; what changed is that the
+    // bar opens on the filter that is overriding it.
+    await renderDashboard(
+      { opportunities: [anOpportunity()], entries: [anEntry()] },
+      "/opportunities/10?timeline.order=asc",
+    );
+    await screen.findByRole("heading", { name: "Discovery call" });
+
+    expect(
+      screen.getByRole("button", { name: "Filter and order" }),
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByLabelText("Timeline reading order")).toHaveValue("asc");
+  });
+
   it("adds an entry, converting the local input to UTC", async () => {
     const api = await renderDashboard({
       opportunities: [anOpportunity()],
@@ -70,9 +141,7 @@ describe("the timeline", () => {
     });
     await openTimeline("Northwind rollout");
 
-    const form = (
-      await screen.findByRole("button", { name: "Add Entry" })
-    ).closest("form") as HTMLElement;
+    const form = await openEntryForm();
     await userEvent.clear(within(form).getByLabelText("Event time"));
     await userEvent.type(
       within(form).getByLabelText("Event time"),
@@ -178,9 +247,7 @@ describe("the timeline", () => {
     });
     await openTimeline("Northwind rollout");
 
-    const filters = (
-      await screen.findByLabelText("Filter the timeline by keyword")
-    ).closest("form") as HTMLElement;
+    const filters = await openTimelineFilters();
     await userEvent.type(within(filters).getByLabelText(/keyword/i), "budget");
     await userEvent.type(
       within(filters).getByLabelText("Show entries from"),
@@ -211,9 +278,7 @@ describe("the timeline", () => {
     });
     await openTimeline("Northwind rollout");
 
-    const filters = (
-      await screen.findByLabelText("Filter the timeline by keyword")
-    ).closest("form") as HTMLElement;
+    const filters = await openTimelineFilters();
     await userEvent.selectOptions(
       within(filters).getByLabelText("Timeline reading order"),
       "Newest first",
@@ -237,9 +302,10 @@ describe("the timeline", () => {
     );
     await screen.findByRole("heading", { name: "Discovery call" });
 
-    expect(await screen.findByLabelText("Timeline reading order")).toHaveValue(
-      "desc",
-    );
+    const filters = await openTimelineFilters();
+    expect(
+      within(filters).getByLabelText("Timeline reading order"),
+    ).toHaveValue("desc");
     expect(api.callsTo("GET", "order=desc")).toHaveLength(1);
   });
 });
@@ -512,11 +578,14 @@ describe("saved views", () => {
     });
     await openTimeline("Northwind rollout");
 
+    const filters = await openTimelineFilters();
     await userEvent.selectOptions(
-      await screen.findByLabelText("Timeline reading order"),
+      within(filters).getByLabelText("Timeline reading order"),
       "desc",
     );
-    await userEvent.click(screen.getByRole("button", { name: "Filter" }));
+    await userEvent.click(
+      within(filters).getByRole("button", { name: "Filter" }),
+    );
 
     await userEvent.click(
       await screen.findByRole("button", { name: "Manage timeline views" }),
@@ -869,10 +938,11 @@ describe("editing where the reader is (milestone 2.11)", () => {
     expect(
       screen.getByRole("heading", { name: "Discovery call" }),
     ).toBeInTheDocument();
-    // The composer at the top of the panel is still empty and still a
-    // composer.
+    // The composer at the top of the panel is untouched — still collapsed
+    // behind its trigger (milestone 3.7), so editing here opened no second
+    // editor.
     expect(
-      screen.getByRole("button", { name: "Add Entry" }),
+      screen.getByRole("button", { name: "New entry" }),
     ).toBeInTheDocument();
   });
 
@@ -1043,10 +1113,16 @@ describe("changing and removing what is already there", () => {
     ).closest("form") as HTMLElement;
     await userEvent.click(within(form).getByRole("button", { name: "Cancel" }));
 
+    // The entry reads as itself again, and the panel's own composer is still
+    // collapsed — with no Title field anywhere, which is the stronger form of
+    // "the composer is empty" the collapsed trigger allows (milestone 3.7).
     expect(
-      await screen.findByRole("button", { name: "Add Entry" }),
+      await screen.findByRole("heading", { name: "Discovery call" }),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("Title")).toHaveValue("");
+    expect(
+      screen.getByRole("button", { name: "New entry" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Title")).toBeNull();
     expect(api.callsTo("PATCH", "/api/v2/timeline/100")).toHaveLength(0);
   });
 
@@ -1252,9 +1328,7 @@ describe("when the API refuses", () => {
     });
     await openTimeline("Northwind rollout");
 
-    const form = (
-      await screen.findByRole("button", { name: "Add Entry" })
-    ).closest("form") as HTMLElement;
+    const form = await openEntryForm();
     await userEvent.type(within(form).getByLabelText("Title"), "Refused");
     await userEvent.click(
       within(form).getByRole("button", { name: "Add Entry" }),

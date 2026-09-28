@@ -4,6 +4,7 @@ import {
   addComment,
   entry,
   entryForm,
+  openEntryForm,
   expectNoAccessibilityViolations,
   openHistory,
   openTimeline,
@@ -34,6 +35,7 @@ test("a deleted entry comes back, with its note, and stays back", async ({
   });
   await openTimeline(page, opportunity);
 
+  await openEntryForm(page);
   await entryForm(page).getByLabel("Title").fill("Security review");
   await entryForm(page).getByRole("button", { name: "Add Entry" }).click();
   const review = entry(page, "Security review");
@@ -79,6 +81,7 @@ test("an undone deletion is both events in the owner's audit log", async ({
   await createOpportunity(page, opportunity, { account: "Initech" });
   await openTimeline(page, opportunity);
 
+  await openEntryForm(page);
   await entryForm(page).getByLabel("Title").fill("Reference call");
   await entryForm(page).getByRole("button", { name: "Add Entry" }).click();
   const call = entry(page, "Reference call");
@@ -109,6 +112,7 @@ test("deleting a note and a comment both leave an audit trail", async ({
   await createOpportunity(page, opportunity, { account: "Initech" });
   await openTimeline(page, opportunity);
 
+  await openEntryForm(page);
   await entryForm(page).getByLabel("Title").fill("Renewal call");
   await entryForm(page).getByRole("button", { name: "Add Entry" }).click();
   const call = entry(page, "Renewal call");

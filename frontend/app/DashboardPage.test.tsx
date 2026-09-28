@@ -1829,6 +1829,12 @@ describe("two view states in one URL (milestone 2.2)", () => {
       "/opportunities/10?timeline.order=desc",
     );
     await screen.findByRole("heading", { name: "Discovery call" });
+    // The timeline's bar is collapsed unless a filter is applied (milestone
+    // 3.7) and `order=desc` is the default, so it is opened here to read the
+    // control the assertion below is about.
+    await userEvent.click(
+      screen.getByRole("button", { name: "Filter and order" }),
+    );
 
     await userEvent.selectOptions(
       screen.getByLabelText("Filter by stage"),

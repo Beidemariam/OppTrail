@@ -6,6 +6,7 @@ import {
   NORTHWIND,
   entry,
   entryForm,
+  openEntryForm,
   expectNoAccessibilityViolations,
   openComposer,
   openTimeline,
@@ -29,6 +30,7 @@ test("the @ trigger completes a colleague's address instead of making it be reme
   await signIn(page, ALEX);
   await openTimeline(page, NORTHWIND);
 
+  await openEntryForm(page);
   const body = entryForm(page).getByLabel("Body");
   await body.click();
   // Three letters of a name, which is all requirement 13 was ever missing: the
@@ -65,6 +67,7 @@ test("the / trigger starts a block, including the ones no button offers", async 
   await signIn(page, ALEX);
   await openTimeline(page, NORTHWIND);
 
+  await openEntryForm(page);
   const body = entryForm(page).getByLabel("Body");
   await body.click();
   await body.pressSequentially("/quo");

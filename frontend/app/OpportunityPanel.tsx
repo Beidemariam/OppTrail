@@ -29,7 +29,11 @@ import type { SuggestionSources } from "../lib/suggestions";
 import { paramsWithState, stateFromParams } from "../lib/viewState";
 import { ActivityButton } from "./ActivityDialog";
 import { AiSidebar } from "./AiSidebar";
-import { OpportunityField, useOpportunityFieldSave } from "./InlineEdit";
+import {
+  OpportunityField,
+  useInlineEditor,
+  useOpportunityFieldSave,
+} from "./InlineEdit";
 import { SavedViewsMenu } from "./SavedViewsMenu";
 import { SharingPanel } from "./SharingPanel";
 import { SuggestionSourceProvider } from "./Suggestions";
@@ -130,10 +134,29 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
   // retry (`lib/liveUpdates.ts`).
   useLiveUpdates(opportunityId);
 
+  // The entry composer is collapsed until it is asked for (milestone 3.7,
+  // D-136 finding 3): expanded it is 400px of form between the filter bar and
+  // the first entry, which is what put the timeline below the fold. Same
+  // progressive disclosure as a note's or a comment's `Composer`
+  // (`app/RichTextEditor.tsx`, D-110), and the same open/close and focus rule
+  // as every other editor that replaces its own trigger — including putting
+  // focus back on the trigger when it closes, which is what makes Cancel
+  // leave the reader where they started rather than at the top of the page.
+  const composeRef = useRef<HTMLButtonElement>(null);
+  const composer = useInlineEditor(composeRef, entryTitleRef);
+
   // `c` means "create the thing this screen is about", so while a timeline is
   // open it composes an entry rather than an opportunity (milestone 2.4a).
   // `DashboardPage` stands its own `c` down whenever this panel is mounted.
-  useKeyboardShortcuts({ c: () => entryTitleRef.current?.focus() });
+  // With the composer collapsed it opens it and lands on the title; a second
+  // `c` while it is already open is the same focus move, since `open` on an
+  // open editor re-runs nothing.
+  useKeyboardShortcuts({
+    c: () => {
+      composer.open();
+      entryTitleRef.current?.focus();
+    },
+  });
 
   const opportunity =
     opportunities.data?.find((candidate) => candidate.id === opportunityId) ??
@@ -188,14 +211,27 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
 
           {/* The composer only, since milestone 2.11: editing an existing entry
             happens in that entry's own card, where the reader already is. */}
-          {access.canWriteTimeline && (
-            <TimelineEntryForm
-              opportunityId={opportunityId}
-              editing={null}
-              titleRef={entryTitleRef}
-              onDone={() => {}}
-            />
-          )}
+          {access.canWriteTimeline &&
+            (composer.editing ? (
+              <TimelineEntryForm
+                opportunityId={opportunityId}
+                editing={null}
+                titleRef={entryTitleRef}
+                onDone={composer.close}
+              />
+            ) : (
+              <p className="compose-trigger">
+                <button
+                  type="button"
+                  ref={composeRef}
+                  className="primary-button"
+                  aria-expanded={false}
+                  onClick={composer.open}
+                >
+                  New entry
+                </button>
+              </p>
+            ))}
 
           {timeline.isError ? (
             <p className="error">{timeline.error.message}</p>

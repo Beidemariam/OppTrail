@@ -8,7 +8,7 @@ import { createQueryClient } from "../lib/query";
 import type { OpportunityVersion } from "../lib/domain";
 import { opportunityVersionFields } from "../lib/domain";
 import { ToastProvider } from "./Toasts";
-import { VersionDiff, VersionFields } from "./VersionChanges";
+import { RestoreVersion, VersionDiff, VersionFields } from "./VersionChanges";
 
 /**
  * The states an opened edit row can be in, driven directly rather than
@@ -64,7 +64,6 @@ function renderDiff(
     <QueryClientProvider client={createQueryClient()}>
       <ToastProvider>
         <VersionDiff
-          target="opportunity"
           targetId={10}
           versionNumber={versionNumber}
           fields={opportunityVersionFields}
@@ -114,6 +113,9 @@ describe("an opened edit row", () => {
     ).toBeInTheDocument();
   });
 
+  // Restore is the activity row's own control since milestone 3.7, not the
+  // diff's, so it is driven directly here -- which is also what proves it
+  // needs no version read to work (D-136 finding 2).
   it("reports a restore the server refused", async () => {
     vi.stubGlobal(
       "fetch",
@@ -126,15 +128,16 @@ describe("an opened edit row", () => {
         ),
       ),
     );
-    renderDiff(
-      stub({
-        isPending: false,
-        isError: false,
-        data: [
-          aVersion(),
-          aVersion({ id: 2, version_number: 2, value: "250000" }),
-        ],
-      }),
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <ToastProvider>
+          <RestoreVersion
+            target="opportunity"
+            targetId={10}
+            versionNumber={1}
+          />
+        </ToastProvider>
+      </QueryClientProvider>,
     );
 
     await userEvent.click(

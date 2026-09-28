@@ -4168,7 +4168,7 @@ milestone in the phase is done. The end-of-phase gate (`make check` in full)
 and the review packet are next session's work, per brief §3.3's one-unit-per-
 session rule.
 
-### 3.7 Rework from the Phase 3 gate review (D-136) — **OPEN**
+### 3.7 Rework from the Phase 3 gate review (D-136) — **DONE**
 
 Five findings, four of them the same shape: the feature exists and the reviewer
 could not find it. Each verified against the running build before recording.
@@ -4209,6 +4209,71 @@ third time — the timeline order control in 2.2, the command palette in Phase 2
 and now the whole activity-and-restore surface. A shipped feature nobody can find
 is indistinguishable from one never built, and no gate catches it, because the
 tests know where to look.
+
+
+**What was done, and what each change measures.** Every before and after below
+was taken from the running build at a 1440x1000 viewport against the imported
+ETH PW+CCA data, not from reading the code.
+
+- [x] **The button is "Activity".** `ActivityDialog.tsx` renamed; the dialog
+      keeps the title "Activity and history", because both words describe what
+      is inside it and D-121 wanted the reviewer's three words on one screen.
+      Measured after: zero buttons named History on the page, one named
+      Activity. `e2e/helpers.ts`'s `openHistory` and `app/Activity.test.tsx`
+      follow the new name.
+- [x] **The disclosure reads as a control.** "What changed" was underlined
+      text inside the sentence; it is now "Show what changed", a bordered
+      `.disclosure-button` (160x34) with a marker that turns. The class is
+      shared with the filter bar's own trigger, so a disclosure looks like one
+      thing in this app.
+- [x] **Restore is on the row.** `RestoreVersion` moved out of
+      `app/VersionChanges.tsx`'s diff and into the activity row, which needs no
+      read to draw it: the version an edit replaced is `version_number - 1`,
+      already on the row. Measured after: four edit rows in the ETH history,
+      four Restore controls visible without expanding anything. The diff behind
+      the disclosure is unchanged and still fetched only when opened.
+- [x] **The timeline is above the fold.** The filter bar (144px) and the entry
+      composer (402px) are both disclosures now — `Filter and order` and
+      `New entry`. First timeline entry: **y=930 before, y=393 after**, in a
+      1000px viewport. The composer runs through `useInlineEditor`, so Cancel
+      returns focus to the trigger; `TimelineEntryForm` renders Cancel in both
+      modes as a result, and `c` opens the composer as well as focusing it.
+      **What was wrong in the finding as recorded:** the opportunity header had
+      moved to the sidebar in 3.1a exactly as claimed (measured at x=1039), and
+      what sat above the timeline was this stack of the reader's own controls.
+      3.1a's claim was true and the reviewer's experience was also true.
+- [x] **The Share button fits, and the sidebar stops overflowing the screen.**
+      The cause was not the button: `.sidebar-column`'s implicit grid column is
+      `auto`, which floors at its content's min-content width, so the sharing
+      panel's three-column form (220 + 150 + auto) made **every** child of that
+      column 454px wide inside a 360px track. The panel and the heading hung
+      94px past the panel's right edge and the Share button sat at x=1448 in a
+      1440px viewport — off screen, not merely narrow. Fixed by giving the
+      column `minmax(0, 1fr)` and stacking `.share-form` and `.share-row` at
+      every width, which is what the sidebar has needed since 3.1a moved the
+      panel into it; the narrow-viewport overrides that used to say this are
+      gone with them. Measured after: sidebar children 360px, Share **330x44**,
+      `document.body.scrollWidth == window.innerWidth`.
+- [x] **The order default stands, and now says so** (**D-137**). The default is
+      not the bug; a stale `?timeline.order=asc` overriding it silently was.
+      The collapsed bar states the order in the control's own words, and opens
+      itself whenever any filter is away from its default, so the stale
+      parameter announces itself. `lib/domain.ts`'s `timelineFiltersApplied` is
+      the count behind that.
+
+**Tests.** `make check-fast` green, including the backend suite and both
+coverage gates. New guards: `app/OpportunityPanel.test.tsx` covers the
+collapsed panel (no Title and no keyword field until asked, the order stated,
+focus in and back out) and the URL case in D-137; `app/Activity.test.tsx`
+reaches Restore without expanding the row, which is what proves the control
+needs no version read. `e2e/09-saved-views.spec.ts` asserts the bar auto-opens
+after a reload at `order=asc`, and `e2e/03-note-history.spec.ts` that Restore
+is visible before the diff is asked for. `e2e/helpers.ts` gained
+`openEntryForm`, which is the one place 12 specs learn that the composer is a
+disclosure.
+
+**No schema, route, permission or API change.** This milestone is naming,
+affordances, one grid track and two form layouts.
 
 
 ### Acceptance

@@ -6,6 +6,7 @@ import {
   createOpportunity,
   entry,
   entryForm,
+  openEntryForm,
   expectNoAccessibilityViolations,
   openTimeline,
   signIn,
@@ -34,6 +35,7 @@ test("reacts to a comment, and follows a deal with no share on it at all", async
   await openTimeline(page, opportunity);
   const opportunityUrl = page.url();
 
+  await openEntryForm(page);
   await entryForm(page).getByLabel("Title").fill("Kickoff");
   await entryForm(page).getByLabel("Body").fill("First conversation.");
   await entryForm(page).getByRole("button", { name: "Add Entry" }).click();

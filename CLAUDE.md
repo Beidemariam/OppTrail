@@ -495,9 +495,16 @@ Milestone 3.1c made it the *only* destination (**D-121**): the per-item
 History buttons and the sharing panel's audit disclosure are gone, and an edit
 row here opens onto the before/after they used to answer. `GET
 /api/v2/opportunities/{id}/audit-log` and the three `GET .../versions` reads
-all remain — what moved is where a person reads them. The button is labelled
-"History" and the dialog "Activity and history", so the three words the
-reviewer used all land on one screen.
+all remain — what moved is where a person reads them.
+
+**The button is labelled "Activity"** and the dialog "Activity and history".
+It shipped as "History" — which is what the buttons 3.1c *removed* were
+called, so the Phase 3 reviewer opened the one that was left, found a feed
+rather than a version history, and reported that the consolidation had never
+happened (**D-136** finding 1, fixed in milestone 3.7). The two lessons are
+worth keeping together: a consolidation that reuses the removed thing's name
+reads as the removed thing, and the only way that was ever going to surface
+is a person meeting the screen cold.
 
 - **A row keeps the visibility of the source it came from.** System entries go
   to anyone with access, because they are already on the timeline; audit rows
@@ -525,13 +532,19 @@ reviewer used all land on one screen.
   per row from `lib/activity.ts`, which is to this what `lib/notifications.ts`
   is to the inbox. `lib/domain.ts`'s `VersionField.field` is what keeps the
   sentence's field names and the expanded row's labels the same words.
-- **An edit row opens** (3.1c). The disclosure fetches that item's versions
-  when it is clicked, not when the feed is drawn, and renders version N
-  against N − 1 through `app/VersionChanges.tsx`. The Restore control offers
-  the version the edit *replaced*, which is how every recorded version except
-  the current one is reachable exactly once — including version 1, the state
-  the thing was created in. An edit row only ever reaches an owner, so the
-  control needs no second permission check of its own.
+- **An edit row opens, and offers the way back without being opened** (3.1c,
+  amended by 3.7). The disclosure fetches that item's versions when it is
+  clicked, not when the feed is drawn, and renders version N against N − 1
+  through `app/VersionChanges.tsx`. **Restore sits on the row beside that
+  disclosure**, not inside it: which version it puts back is
+  `version_number - 1`, arithmetic on a field the feed row already carries, so
+  nothing about the control needed the read — and two levels of depth were
+  enough to make the reviewer report restore as absent altogether (D-136
+  finding 2). It offers the version the edit *replaced*, which is how every
+  recorded version except the current one is reachable exactly once —
+  including version 1, the state the thing was created in. An edit row only
+  ever reaches an owner, so the control needs no second permission check of
+  its own.
 
 A comment being posted is the one event no mechanism records (comments are
 immutable, so they have no version table); its deletion is in the audit half.
@@ -610,6 +623,26 @@ already stored. It is entirely frontend; no route, schema or table changed.
   progressive disclosure): a timeline is made of composers and each open one is
   a ProseMirror view, the draft lives in the `Composer` so `Esc` and Cancel
   keep it, and posting unmounts the editor rather than clearing it.
+- **The whole timeline panel is disclosures now** (milestone 3.7). The entry
+  composer was the one writing surface that stood permanently open: 400px of
+  form, under a 144px filter bar, which put the first timeline entry 930px
+  down a 1000px viewport — so a reader opening a deal met its controls rather
+  than its history (**D-136** finding 3; measured at 393px after). Both are
+  collapsed behind a trigger: `New entry`, and `Filter and order`.
+  `OpportunityPanel` drives the composer through `useInlineEditor`, the same
+  hook and the same focus rule as every other editor that replaces its own
+  control, so Cancel puts the reader back on the trigger. Two consequences
+  worth knowing: `TimelineEntryForm` renders Cancel unconditionally now
+  (closing without posting is a thing in both modes), and `c` opens the
+  composer as well as focusing it.
+- **The filter bar says what is in force while it is shut** — the reading
+  order in the same words as the control that sets it, plus a count of
+  anything else applied (`lib/domain.ts`'s `timelineFiltersApplied`). It also
+  opens itself when a non-default filter arrives, which is the answer to
+  **D-137**: `timeline.order` is linkable view state on purpose, so a stale
+  `?timeline.order=asc` in an old tab legitimately reverses the timeline — the
+  bug was that nothing on screen said so, and two readers comparing screens
+  had no way to find out why they differed (D-136 finding 5).
 - **The toolbar carries only what needs no second question.** Bold, italic,
   strike, code, the three lists and quote; a link and a heading are typed
   (`[text](url)`, `### `) because a button for either has to open a dialog out

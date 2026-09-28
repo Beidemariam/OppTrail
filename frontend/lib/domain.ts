@@ -253,6 +253,23 @@ export const emptyTimelineFilters: TimelineFilters = {
 };
 
 /**
+ * How many of the timeline's filters are away from their default
+ * (milestone 3.7).
+ *
+ * Read by the collapsed filter bar, so a reader can see *that* something is
+ * filtering the timeline without opening the controls that do it. `order`
+ * counts, which is the point: its default is "newest first" (D-137), and a
+ * `timeline.order=asc` left in an old URL is otherwise a silent reordering —
+ * the one the Phase 3 reviewer met and reported as an inconsistent default
+ * (D-136 finding 5).
+ */
+export function timelineFiltersApplied(filters: TimelineFilters): number {
+  const keys = Object.keys(emptyTimelineFilters) as (keyof TimelineFilters)[];
+  return keys.filter((key) => filters[key] !== emptyTimelineFilters[key])
+    .length;
+}
+
+/**
  * The opportunity views' shared filter/sort model (milestone 2.2),
  * URL-serialized the same way as `TimelineFilters`. `view` is which renderer
  * draws the result (2.7): board and list read the same filtered, sorted list

@@ -5,6 +5,7 @@ import { FormEvent, useState } from "react";
 import {
   emptyTimelineFilters,
   entryTypes,
+  timelineFiltersApplied,
   type TimelineFilters,
 } from "../lib/domain";
 
@@ -22,6 +23,20 @@ import {
  * Each control carries a visible name beside its `aria-label` for the reason
  * `OpportunityFilterBar` explains (milestone 2.13, **D-082**): a row of
  * unlabelled dropdowns is a control the reader cannot identify.
+ *
+ * **Collapsed until it is asked for** (milestone 3.7). Six always-visible
+ * controls and the composer beneath them put the first timeline entry 930px
+ * down a 1000px viewport, so the thing this screen is about opened below the
+ * fold (D-136 finding 3). The disclosure is the pattern `docs/UX.md` asks for
+ * and `app/RichTextEditor.tsx`'s `Composer` already uses for notes and
+ * comments. Two things ride on it:
+ *
+ * - **The trigger says what is in force**, not just "Filters": the reading
+ *   order always applies and the rest may arrive from a URL, so a reader who
+ *   never opens this still learns why the timeline is ordered the way it is.
+ *   That is the visible half of D-137.
+ * - **It opens itself when something is applied**, so a shared or reloaded
+ *   link shows its own filters rather than hiding them behind a summary.
  */
 export function TimelineFilterBar({
   filters,
@@ -30,11 +45,19 @@ export function TimelineFilterBar({
   filters: TimelineFilters;
   onApply: (filters: TimelineFilters) => void;
 }) {
+  const applied = timelineFiltersApplied(filters);
   const [appliedFilters, setAppliedFilters] = useState(filters);
   const [draft, setDraft] = useState<TimelineFilters>(filters);
+  const [open, setOpen] = useState(applied > 0);
   if (filters !== appliedFilters) {
     setAppliedFilters(filters);
     setDraft(filters);
+    // A filter arriving from the URL, the back button or a saved view opens
+    // the bar: what is filtering the timeline has to be visible where it is
+    // changed, not only summarized.
+    if (applied > 0) {
+      setOpen(true);
+    }
   }
 
   function apply(event: FormEvent<HTMLFormElement>) {
@@ -47,8 +70,34 @@ export function TimelineFilterBar({
     onApply(emptyTimelineFilters);
   }
 
+  if (!open) {
+    return (
+      <p className="filter-summary">
+        <button
+          type="button"
+          className="disclosure-button"
+          aria-expanded={false}
+          onClick={() => setOpen(true)}
+        >
+          <span aria-hidden="true">+</span> Filter and order
+        </button>
+        <span className="meta-row">{summary(filters, applied)}</span>
+      </p>
+    );
+  }
+
   return (
     <form className="filter-bar" onSubmit={apply}>
+      <p className="filter-note">
+        <button
+          type="button"
+          className="disclosure-button"
+          aria-expanded={true}
+          onClick={() => setOpen(false)}
+        >
+          <span aria-hidden="true">-</span> Filter and order
+        </button>
+      </p>
       <label className="filter-field grow">
         Keyword
         <input
@@ -128,4 +177,17 @@ export function TimelineFilterBar({
       </button>
     </form>
   );
+}
+
+/** What the collapsed bar says is in force. The order is named in the same
+ * words as the control that sets it, so opening the bar confirms rather than
+ * translates. */
+function summary(filters: TimelineFilters, applied: number): string {
+  const order = filters.order === "asc" ? "Oldest first" : "Newest first";
+  const others =
+    filters.order === emptyTimelineFilters.order ? applied : applied - 1;
+  if (others === 0) {
+    return order;
+  }
+  return `${order}, ${others} filter${others === 1 ? "" : "s"} applied`;
 }

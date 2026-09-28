@@ -68,7 +68,9 @@ const DELETE_EVENT = {
 };
 
 async function openHistory() {
-  await userEvent.click(screen.getByRole("button", { name: "History" }));
+  // "Activity" since milestone 3.7: the button was called History, which is
+  // the word the removed per-item dialogs used (D-136 finding 1).
+  await userEvent.click(screen.getByRole("button", { name: "Activity" }));
   const dialog = await screen.findByRole("dialog");
   expect(
     within(dialog).getByRole("heading", { name: "Activity and history" }),
@@ -128,7 +130,7 @@ describe("the activity log", () => {
     expect(within(dialog).queryByText("Value")).toBeNull();
 
     await userEvent.click(
-      within(dialog).getByRole("button", { name: "What changed" }),
+      within(dialog).getByRole("button", { name: "Show what changed" }),
     );
 
     // Read through the field declarations the history screen always used, so
@@ -147,12 +149,11 @@ describe("the activity log", () => {
     await editValue("250000");
 
     const dialog = await openHistory();
-    await userEvent.click(
-      within(dialog).getByRole("button", { name: "What changed" }),
-    );
     // Version 1 — the state the deal was created in — is reached as the
     // "before" of the first edit, which is how every recorded version except
-    // the current one is reachable (D-120).
+    // the current one is reachable (D-120). Offered on the row itself since
+    // 3.7, without expanding it: which version it puts back is arithmetic on
+    // the row, not something the diff had to load (D-136 finding 2).
     await userEvent.click(
       await within(dialog).findByRole("button", { name: "Restore version 1" }),
     );
@@ -203,7 +204,7 @@ describe("the activity log", () => {
 
     const dialog = await openHistory();
     await userEvent.click(
-      within(dialog).getByRole("button", { name: "What changed" }),
+      within(dialog).getByRole("button", { name: "Show what changed" }),
     );
 
     expect(await within(dialog).findByText("Title")).toBeInTheDocument();
@@ -245,7 +246,7 @@ describe("the activity log", () => {
 
     const dialog = await openHistory();
     await userEvent.click(
-      within(dialog).getByRole("button", { name: "What changed" }),
+      within(dialog).getByRole("button", { name: "Show what changed" }),
     );
 
     expect(await within(dialog).findByText("Body")).toBeInTheDocument();
@@ -286,7 +287,7 @@ describe("the activity log", () => {
     const dialog = await openHistory();
     expect(await within(dialog).findAllByRole("listitem")).toHaveLength(1);
     expect(
-      within(dialog).queryByRole("button", { name: "What changed" }),
+      within(dialog).queryByRole("button", { name: "Show what changed" }),
     ).toBeNull();
   });
 

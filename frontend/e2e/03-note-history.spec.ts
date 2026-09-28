@@ -3,6 +3,7 @@ import {
   addNote,
   entry,
   entryForm,
+  openEntryForm,
   openHistory,
   openTimeline,
   createOpportunity,
@@ -35,6 +36,7 @@ test("editing a note marks it as edited and keeps the previous version", async (
   });
   await openTimeline(page, opportunity);
 
+  await openEntryForm(page);
   await entryForm(page).getByLabel("Title").fill("Pricing conversation");
   await entryForm(page).getByRole("button", { name: "Add Entry" }).click();
   await expect(
@@ -67,7 +69,7 @@ test("editing a note marks it as edited and keeps the previous version", async (
 
   // Nothing about what changed is fetched until the row is opened.
   await expect(dialog.locator(".history-fields")).toHaveCount(0);
-  await edit.getByRole("button", { name: "What changed" }).click();
+  await edit.getByRole("button", { name: "Show what changed" }).click();
   await expect(edit).toContainText(
     "First draft of the pricing summary. to Second draft, with the 8% discount.",
   );
@@ -117,7 +119,12 @@ test("an opportunity's history keeps the value an edit replaced", async ({
   const edit = dialog
     .locator("li.activity-event")
     .filter({ hasText: "changed Value on this opportunity" });
-  await edit.getByRole("button", { name: "What changed" }).click();
+  // Restore is on the row, not inside the disclosure (3.7, D-136 finding 2):
+  // it is offered before the diff is even asked for.
+  await expect(
+    edit.getByRole("button", { name: "Restore version 1" }),
+  ).toBeVisible();
+  await edit.getByRole("button", { name: "Show what changed" }).click();
   await expect(edit).toContainText("USD 485,000 to USD 250,000");
 
   await edit.getByRole("button", { name: "Restore version 1" }).click();
@@ -149,6 +156,7 @@ test("the history merges what was recorded, edited and deleted", async ({
   });
   await openTimeline(page, opportunity);
 
+  await openEntryForm(page);
   await entryForm(page).getByLabel("Title").fill("Kickoff call");
   await entryForm(page).getByRole("button", { name: "Add Entry" }).click();
   const kickoff = entry(page, "Kickoff call");
