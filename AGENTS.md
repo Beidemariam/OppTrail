@@ -62,7 +62,9 @@ Specified in `docs/FEATURES.md`, sequenced in `docs/ROADMAP.md`:
 2. **Entry model** — more types, icons, type-specific fields
 3. **Custom fields** — admin-defined, typed, on opportunities and entries
 4. **Rich content** — TipTap editor, slash commands, @mention autocomplete
-5. **Email in and out** — create entries, notes and comments by email; digests
+5. **Email in and out** — create entries, notes and comments by email; digests.
+   **Deferred to v3** (**D-141**): the numbering is kept so every reference to a
+   scope item by number stays true
 6. **Attachments** — local, content-addressed, access-controlled
 7. **Collaboration** — threaded comments, reactions, resolve, watchers, live updates
 8. **Tasks and follow-ups** — scoped to an opportunity, not a task manager
@@ -156,12 +158,16 @@ Reasoning in `docs/adr/`. Do not change these without an argued ADR.
   (ADR 0001, 0006, 0007)
 - **Alembic** for migrations; the auto-init mechanism is retired (ADR 0002)
 - **SSE** for live updates; no presence, no co-editing (ADR 0003)
-- **APScheduler** in-process with a durable outbox; no broker (ADR 0004)
+- **APScheduler** in-process; no broker (ADR 0004). Arrives with Phase 6's
+  time-triggered automations, and gives `make backup` the schedule ADR 0011 has
+  been waiting for. The durable outbox waits for v3 with the email work, since
+  nothing in v2 sends anything (**D-141**)
 - **TipTap** editor, storing **Markdown** — no content migration needed
 - **Radix UI** headless primitives, styled with the design tokens
 - **Local filesystem** for attachments, streamed through an authorized endpoint
   (ADR 0008)
-- **IMAP polling** for inbound email behind a transport interface (ADR 0009)
+- **IMAP polling** for inbound email behind a transport interface (ADR 0009) —
+  **v3**, with scope item 5
 - **OpenAI** for AI calls, via `OPENAI_API_KEY` / `OPENAI_MODEL`. Note the v2 brief
   said OpenRouter; the code and this document are authoritative (ADR 0012)
 - **WeasyPrint** for PDF, rendered in-container

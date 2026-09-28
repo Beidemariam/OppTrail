@@ -909,7 +909,7 @@ class NotificationPublic(BaseModel):
     not just whether a notification was read but order a history by it. The
     older boolean `read` was v1's and went with it, though the column stays —
     see `CLAUDE.md`'s "Notifications". `grouped_key` rides along now,
-    unpopulated, ahead of Phase 5's digest batching -- see the migration's
+    unpopulated, ahead of v3's digest batching (D-141) -- see the migration's
     docstring for why it is added before it is used.
     """
 

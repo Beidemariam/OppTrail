@@ -241,7 +241,7 @@ mirror its v1 twin. It went with the rest of v1 in milestone 2.9;
   and `mark_all_notifications_read` write both columns together — via
   `COALESCE(read_at, ...)` so a second mark-read is idempotent — so the column
   stays truthful for anyone reading the database directly.
-- `grouped_key` rides along unpopulated. It exists now so Phase 5's digest
+- `grouped_key` rides along unpopulated. It exists now so v3's digest
   batching (§9's "3 new comments on Acme Expansion, not three emails") is a
   query change, not another migration.
 - Being handed an opportunity notifies the new owner (`owner_changed`, 3.0a),
@@ -370,9 +370,12 @@ round trip, not just that a snapshot file gets created: ADR 0011 requires the
 restore to be "actually exercised," not assumed.
 
 There is no scheduler wired to `make backup` yet — ADR 0004's APScheduler
-lands in Phase 5, and standing up a second scheduling mechanism ahead of it
-would be scope this milestone doesn't own. Until then, run it by hand or from
-host cron.
+lands in **Phase 6** (milestone 6.5), and standing up a second scheduling
+mechanism ahead of it would be scope this milestone doesn't own. Until then,
+run it by hand or from host cron. It was Phase 5's until email moved to v3
+(**D-141**); the scheduler followed Phase 6's automations, which are
+time-triggered, rather than following the email work out of the build — so this
+gap closes inside v2 rather than after it.
 
 ### Timestamps
 

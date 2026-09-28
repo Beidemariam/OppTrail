@@ -214,9 +214,10 @@ it is the reason ADR 0002 is a blocker rather than a nicety.
 
 ## Observability
 
-Review H3 ("currently zero") is closed by F.2 and milestone 1.6; what remains is
-Phase 5's slice, which needs ADR 0004/0009's machinery to exist first. Minimum
-viable, no vendor:
+Review H3 ("currently zero") is closed by F.2 and milestone 1.6. What remains
+splits in two since email moved to v3 (**D-141**): the job-outcome half arrives
+with Phase 6's scheduler, and the ingestion half is v3's, with ADR 0009.
+Minimum viable, no vendor:
 
 - **Structured JSON logs to stdout** with a request ID, route, status and
   duration (`logging_utils.py`, F.2). `routes_ai.py`'s OpenAI-call exception
@@ -227,11 +228,14 @@ viable, no vendor:
   `main.py`'s `health_check`): schema version read from `alembic_version`,
   database writability (a `BEGIN IMMEDIATE` probe that rolls back), and the
   last successful `VACUUM INTO` backup's timestamp. IMAP poll status is added
-  once ADR 0009 lands.
-- **Job outcomes recorded** in the `outbox`/job table — a silently dead scheduler is
-  the most likely v2 production failure. Lands with ADR 0004 in Phase 5.
-- **Inbound email ingestion log**, including rejections. Silent drops are
-  unacceptable when a colleague believes they filed a note (ADR 0009).
+  once ADR 0009 lands, which is v3.
+- **Job outcomes recorded** in the job table — a silently dead scheduler is
+  the most likely v2 production failure, and the reason this is not deferred with
+  the email work: Phase 6 schedules automations and backups, so v2 does have a
+  scheduler to lose track of. Lands with ADR 0004 in Phase 6. The durable
+  `outbox` is v3's, with the first thing that sends.
+- **Inbound email ingestion log**, including rejections — **v3**, with ADR 0009.
+  Silent drops are unacceptable when a colleague believes they filed a note.
 
 ## Performance budgets
 

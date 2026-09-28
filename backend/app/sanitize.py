@@ -3,7 +3,7 @@
 Today every user field is stored and returned as Markdown and rendered through
 the frontend's `rehype-sanitize` pipeline. That client-side pass protects the
 browser, not the database: anything that renders the same content elsewhere —
-the PDF export, an email body in Phase 5 — sees the raw string. Sanitizing on
+the PDF export, an email body in v3 — sees the raw string. Sanitizing on
 the way in is the companion the brief asks for, and the allowlist here is
 deliberately the same one `markdownSanitizeSchema` uses in
 `frontend/app/page.tsx`, so the two boundaries cannot drift apart silently.

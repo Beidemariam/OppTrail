@@ -113,11 +113,13 @@ all.
 **Migration path:** none needed. This is the payoff for storing Markdown from day
 one.
 
-## 5. Inbound and outbound email — P1
+## 5. Inbound and outbound email — P1 (deferred to v3)
 
 > *Half of a sales conversation already happens in email, and re-typing it into a timeline is work nobody does consistently.*
 
-Confirmed in scope: **create entries, notes and comments by email** (ADR 0009).
+Confirmed in scope, and **deferred to v3** by the human at the Phase 3 gate
+(**D-141**) — this section is the specification, not the schedule, so it stands
+unchanged and `docs/ROADMAP.md` carries the plan for building it (ADR 0009).
 
 - Each opportunity, entry and note has a signed reply address. Notification emails
   set `Reply-To`, so replying to a comment notification posts a comment — the

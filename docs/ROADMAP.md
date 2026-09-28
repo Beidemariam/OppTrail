@@ -204,50 +204,6 @@ the route-guard enumeration test from ADR 0010.
 
 ---
 
-## Phase 5 — Email In and Out
-
-**Goal:** the confirmed email requirement, isolated late so it lands on a stable
-platform.
-
-**User-visible outcome:** replying to a comment notification posts the reply as a
-comment; forwarding a customer email to an opportunity address files it as an entry.
-
-**Features:** Inbound and outbound email (§5), notification digests and preferences.
-
-**Technical work:**
-- APScheduler jobs and the durable outbox (ADR 0004).
-- Outbound notification email with `Reply-To` set to the signed threaded address.
-- IMAP polling ingestion behind a transport interface so a provider webhook is a
-  later swap (ADR 0009).
-- HMAC-signed reply addresses; sender-to-user matching; **the normal write check**,
-  not a parallel authorization path; DKIM verification; `Message-ID` dedupe;
-  per-sender rate limiting.
-- Quoted-reply and signature stripping; HTML → Markdown; attachments via Phase 4.
-- `source = 'email'` provenance shown in the UI and labelled in AI context (ADR 0012).
-- Ingestion log including rejections — silent drops are unacceptable when a
-  colleague believes they filed a note.
-- Digest batching and per-user preferences.
-
-**Schema:** `email_messages` (dedupe + ingestion log); `source` on entries, notes,
-comments; `notification_preferences`.
-
-**Depends on:** Phase 4 (attachments), Phase 1 (jobs, logging).
-
-**Acceptance:**
-- Reply to a notification → comment appears, marked as email-sourced.
-- Spoofed `From:` for a non-user is rejected and logged, not posted.
-- A valid sender **without** write access to the target is rejected.
-- Replaying the same message twice creates one record.
-- An adversarial email body containing instruction-shaped text does not change the
-  AI's behaviour or make it claim it modified anything.
-
-**Effort:** 8 sessions. **Risk:** highest in the plan — the first untrusted input
-path into a shared record and into the AI context. Mitigations: transport interface,
-strict sender rules reusing existing authorization, adversarial test suite, and the
-hard read-only AI boundary confirmed in Q2.
-
----
-
 ## Phase 6 — Custom Fields, Dashboards, Automations
 
 **Goal:** the configurability and reporting layer, once the shape of the data is
@@ -269,11 +225,19 @@ filters; a pipeline dashboard; a rule that pings you when a deal goes quiet.
 - AI: streaming, date-scoped summaries, natural-language filter construction — the
   safest high-value AI feature, since its output is a query the user inspects
   before applying.
+- **APScheduler in-process (ADR 0004)**, inherited from the deferred email phase
+  (**D-141**): this phase's automations are time-triggered, so the acceptance
+  criterion below — a rule that fires after fourteen days of no activity —
+  cannot be met without a scheduler. Scope it to what the automations need; the
+  durable outbox waits for v3, since nothing here sends anything. `make backup`
+  gains its schedule from the same machinery, which is the gap ADR 0011 has
+  carried since Phase 1.
 
 **Schema:** `custom_field_definitions`; `custom_values` JSON on opportunities and
 entries; `automation_rules`, `automation_runs`.
 
-**Depends on:** Phase 2 (table view and filter model).
+**Depends on:** Phase 2 (table view and filter model). Nothing from the deferred
+email phase, which is what made deferring it possible.
 
 **Acceptance:**
 - A new select field appears as a table column, a filter, and on the entry form.
@@ -281,6 +245,8 @@ entries; `automation_rules`, `automation_runs`.
 - A no-activity-for-14-days rule fires once, creates a task, and logs a system entry
   naming the rule; it cannot trigger another rule.
 - The AI still holds read-only under an injected-instruction test.
+- A scheduled `make backup` runs unattended and its snapshot restores (ADR 0011),
+  which is the first time backups are exercised by anything but a person.
 
 **Effort:** 7 sessions. **Risk:** automations growing into a workflow engine.
 Mitigation: the single-hop, no-OR-tree constraints are acceptance criteria, not
@@ -298,6 +264,75 @@ guidelines.
 | Attachment thumbnails, virus scanning | Volume and threat model do not justify them at 20 known internal users |
 | Mobile-specific experience | Responsive degradation covers the one flow that matters (logging an entry) |
 | Workspaces, teams, guests, share links | Declined on scale and risk grounds — ADR 0010 |
+| **Email in and out** (was Phase 5) | Deferred by the human at the Phase 3 gate (**D-141**). It is the only phase whose cost is mostly outside the codebase — a domain, DNS you control, DKIM, a mailbox to poll — and the only one that opens an untrusted write path into a shared record and into the AI's context. Everything above it in the plan is usable without it; nothing below it depends on it. The full plan is kept verbatim below rather than summarized away |
+
+## v3 — Email In and Out (deferred from v2 Phase 5)
+
+Kept in full rather than reduced to a line in the table above: the phase was
+completely specified, its risk analysis is the most careful in this document,
+and none of that reasoning improves by being rewritten later from memory. Three
+things changed when it moved (**D-141**):
+
+- **APScheduler (ADR 0004) is no longer this phase's to build.** Phase 6's
+  automations are time-triggered — its own acceptance criterion is a rule that
+  fires after fourteen days of no activity — so the scheduler lands there and
+  this phase inherits it. The durable **outbox** stays here, because nothing
+  before it sends anything.
+- **Digest batching and notification preferences come with it.**
+  `notifications.grouped_key` already exists, unpopulated, so that remains a
+  query change rather than a migration whenever this is built.
+- **Nothing in v2 depends on it**, which is what made it separable: no route,
+  schema or screen shipped in Phases F through 6 reads an email, and the
+  `source` provenance column arrives with this work rather than ahead of it.
+
+**Depends on:** v2 Phase 4 (attachments), v2 Phase 6 (the scheduler), Phase 1
+(jobs, logging).
+
+### The plan as specified for v2
+
+**Goal:** the confirmed email requirement, isolated late so it lands on a stable
+platform.
+
+**User-visible outcome:** replying to a comment notification posts the reply as a
+comment; forwarding a customer email to an opportunity address files it as an entry.
+
+**Features:** Inbound and outbound email (§5), notification digests and preferences.
+
+**Technical work:**
+- The durable outbox (ADR 0004). The scheduler it runs on is Phase 6's, per the
+  amendment above.
+- Outbound notification email with `Reply-To` set to the signed threaded address.
+- IMAP polling ingestion behind a transport interface so a provider webhook is a
+  later swap (ADR 0009).
+- HMAC-signed reply addresses; sender-to-user matching; **the normal write check**,
+  not a parallel authorization path; DKIM verification; `Message-ID` dedupe;
+  per-sender rate limiting.
+- Quoted-reply and signature stripping; HTML → Markdown; attachments via Phase 4.
+- `source = 'email'` provenance shown in the UI and labelled in AI context (ADR 0012).
+- Ingestion log including rejections — silent drops are unacceptable when a
+  colleague believes they filed a note.
+- Digest batching and per-user preferences.
+
+**Schema:** `email_messages` (dedupe + ingestion log); `source` on entries, notes,
+comments; `notification_preferences`.
+
+**Depends on:** Phase 4 (attachments), Phase 1 (jobs, logging). Superseded by the
+dependency line above.
+
+**Acceptance:**
+- Reply to a notification → comment appears, marked as email-sourced.
+- Spoofed `From:` for a non-user is rejected and logged, not posted.
+- A valid sender **without** write access to the target is rejected.
+- Replaying the same message twice creates one record.
+- An adversarial email body containing instruction-shaped text does not change the
+  AI's behaviour or make it claim it modified anything.
+
+**Effort:** 8 sessions. **Risk:** highest in the plan — the first untrusted input
+path into a shared record and into the AI context. Mitigations: transport interface,
+strict sender rules reusing existing authorization, adversarial test suite, and the
+hard read-only AI boundary confirmed in Q2.
+
+---
 
 ## Breaking changes and migration paths
 
@@ -306,7 +341,7 @@ guidelines.
 | Pagination envelope + error shape | 1 | Response shapes | New surface at `/api/v2`; v1 retained until the frontend moves, then removed at the end of Phase 2 |
 | Alembic replaces auto-init | 1 | Startup behaviour | Baseline-stamp an existing database; CI applies migrations to a restored snapshot every run |
 | Notification model | 1 | Client field names | Additive columns; v1 shape preserved behind `/api/v1` |
-| `follow_up_date` → tasks | 4 | Field moves | Backfill into `tasks`; column retained one phase, dropped in 5 |
+| `follow_up_date` → tasks | 4 | Field moves | Backfill into `tasks`; column retained one phase, then dropped in 6 — it named Phase 5 until email moved to v3 (**D-141**), and the point is that a phase passes between the backfill and the drop, not which one |
 | Entry `type` enum extension | 2 | CHECK constraint | Additive only; no existing value changes |
 | Rich text | 3 | None | Storage stays Markdown — the deliberate payoff of the original choice |
 | Note edit guard | 3 | `PATCH /api/v2/notes/{id}` requires `updated_at` | Required rather than optional: an optional guard is no guard, and the value is already on `NotePublic`, so a client echoes back what it read (ADR 0003) |
@@ -314,7 +349,14 @@ guidelines.
 
 ## Total
 
-**40 sessions across six phases.** Phases 1 and 2 are the ones that matter most: they
-carry all four blockers from `REVIEW.md`, and every later phase assumes them. If the
-plan is cut short, cutting from the back (6, then 5) leaves a coherent product;
-cutting from the front does not.
+**32 sessions across five phases**, after email moved to v3 (**D-141**): 5 + 8 + 6
++ 6 + 7, the phase numbers unchanged. Phases 1 and 2 are the ones that matter
+most: they carry all four blockers from `REVIEW.md`, and every later phase
+assumes them. If the plan is cut short, cutting from the back (6) leaves a
+coherent product; cutting from the front does not.
+
+**The phase numbers are not renumbered, and Phase 5 is simply absent.** Every
+decision in `docs/autopilot/DECISIONS.md`, every milestone in `PROGRESS.md` and
+every commit message names phases by number; renaming Phase 6 to Phase 5 would
+silently redirect all of them. The same reasoning applies here as to ids
+elsewhere in this project: a number identifies a thing, so it is not reused.

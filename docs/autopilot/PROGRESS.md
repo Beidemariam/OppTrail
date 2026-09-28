@@ -4576,7 +4576,8 @@ the document.
       overdue/upcoming surfaces on the dashboard. Schema: `tasks`.
 - [ ] 4.2 Migrate `timeline_entries.follow_up_date` into tasks, keeping the
       column until the UI has moved (per the breaking-changes table: dropped
-      in Phase 5).
+      in Phase 6, which named Phase 5 until email moved to v3 — what matters is
+      that a phase passes between the backfill and the drop, not which one).
 - [ ] 4.3 Attachments: content-addressed storage, magic-byte validation,
       streamed authorized download, `Content-Disposition: attachment` and
       `nosniff` (ADR 0008). Schema: `attachments`. Wire into the upload-
@@ -4594,51 +4595,11 @@ the document.
 
 ---
 
-## Phase 5 — Email In and Out
-
-Branch: `autopilot/phase-5`. Depends on: `phase-4-accepted` tag.
-
-Goal: the confirmed email requirement, isolated late so it lands on a stable
-platform. This is the highest-risk phase in the plan (first untrusted input
-path into a shared record and into the AI context).
-
-### Milestones
-
-- [ ] 5.1 APScheduler jobs and the durable outbox (ADR 0004).
-- [ ] 5.2 Outbound notification email with `Reply-To` set to the signed
-      threaded address.
-- [ ] 5.3 IMAP polling ingestion behind a transport interface (ADR 0009), so a
-      provider webhook is a later swap.
-- [ ] 5.4 HMAC-signed reply addresses; sender-to-user matching using the
-      **normal write check**, not a parallel authorization path; DKIM
-      verification; `Message-ID` dedupe; per-sender rate limiting.
-- [ ] 5.5 Quoted-reply and signature stripping; HTML → Markdown; attachments
-      via Phase 4's pipeline.
-- [ ] 5.6 `source = 'email'` provenance shown in the UI and labelled in AI
-      context (ADR 0012 — untrusted input must be labelled everywhere per
-      `AGENTS.md` invariant 4). Schema: `source` on entries/notes/comments.
-- [ ] 5.7 Ingestion log including rejections — silent drops are unacceptable.
-      Schema: `email_messages` (dedupe + ingestion log).
-- [ ] 5.8 Digest batching and per-user preferences. Schema:
-      `notification_preferences`.
-- [ ] 5.9 Adversarial test suite: spoofed sender, valid-sender-without-access,
-      replay, and an injected-instruction email body that must not change the
-      AI's behavior or make it claim it modified anything.
-
-### Acceptance
-
-- Reply to a notification → comment appears, marked as email-sourced.
-- Spoofed `From:` for a non-user is rejected and logged, not posted.
-- A valid sender **without** write access to the target is rejected.
-- Replaying the same message twice creates one record.
-- An adversarial email body containing instruction-shaped text does not change
-  the AI's behavior or make it claim it modified anything.
-
----
-
 ## Phase 6 — Custom Fields, Dashboards, Automations
 
-Branch: `autopilot/phase-6`. Depends on: `phase-5-accepted` tag.
+Branch: `autopilot/phase-6`. Depends on: `phase-4-accepted` tag — email moved to
+v3 (**D-141**), so this phase follows Phase 4 directly. The number is unchanged
+on purpose: milestones, decisions and commits name phases by number.
 
 Goal: the configurability and reporting layer, once the shape of the data is
 settled.
@@ -4661,6 +4622,17 @@ settled.
 - [ ] 6.4 AI expansion (safe subset): streaming, date-scoped summaries,
       natural-language filter construction — output is a query the user
       inspects before applying, never an auto-applied write.
+- [ ] 6.5 APScheduler in-process (ADR 0004), inherited from the deferred email
+      phase (**D-141**). 6.3's rules are time-triggered, so the acceptance
+      criterion below — a rule that fires after fourteen days of no activity —
+      cannot be met without a scheduler, and job outcomes must be recorded
+      because a silently dead scheduler is the likeliest production failure
+      (`docs/ARCHITECTURE.md`, Observability). `make backup` takes its schedule
+      from the same machinery, closing the gap ADR 0011 has carried since
+      milestone 1.6 — the reason this is not simply deferred with the email
+      work is that v2 now *has* a scheduler, so it has one to lose track of.
+      The durable **outbox** is not built here: nothing in v2 sends anything,
+      so it waits for v3 with the first thing that does.
 
 ### Acceptance
 
@@ -4671,6 +4643,9 @@ settled.
 - A no-activity-for-14-days rule fires once, creates a task, and logs a system
   entry naming the rule; it cannot trigger another rule.
 - The AI still holds read-only under an injected-instruction test.
+- A scheduled backup runs unattended and its snapshot restores (ADR 0011) — the
+  first time backups are exercised by anything other than a person typing
+  `make backup`.
 
 ---
 
@@ -4756,7 +4731,9 @@ The Phase R review packet doubles as the release sign-off (brief §8).
 ## Definition of Done (brief §10) — tracking
 
 - [ ] `phase-F-accepted` through `phase-6-accepted` and `phase-R-accepted`
-      tags exist (0 of 8 so far)
+      tags exist — **4 of 7** so far (`F`, `1`, `2`, `3`). Seven rather than
+      eight since email moved to v3 (**D-141**); there is no
+      `phase-5-accepted` to earn
 - [ ] `make check` green on `main` from a clean clone
 - [ ] Coverage floors met; history in `COVERAGE.md`
 - [ ] Invariant tests and authorization matrix passing
@@ -4765,3 +4742,61 @@ The Phase R review packet doubles as the release sign-off (brief §8).
 - [ ] CI workflow present and valid
 - [ ] No unresolved high/critical dependency vulnerabilities
 - [ ] Documentation set and `FINAL-REPORT.md` complete
+
+---
+
+## v3 — Email In and Out (deferred from Phase 5)
+
+**Not part of this build** (**D-141**, 2026-09-28). Deferred by the human after
+the Phase 3 gate, with the milestone list kept intact rather than deleted: it is
+fully specified, nothing in v2 depends on it, and 5.1's scheduler has moved to
+milestone 6.5 because Phase 6's automations need one. Branch, when it is built:
+`autopilot/phase-v3-email`.
+
+Two amendments on the way out:
+
+- **5.1 is now two things, and only one of them is still here.** APScheduler
+  lands in 6.5; the durable **outbox** stays with this phase, because nothing
+  before it sends anything.
+- **5.8's digest batching is unaffected by the wait.**
+  `notifications.grouped_key` already exists unpopulated (milestone 1.7,
+  **D-095**), so it remains a query change rather than a migration however long
+  this sits.
+
+Goal: the confirmed email requirement, isolated late so it lands on a stable
+platform. This is the highest-risk phase in the plan (first untrusted input
+path into a shared record and into the AI context).
+
+### Milestones
+
+- [ ] 5.1 The durable outbox (ADR 0004). APScheduler itself is milestone 6.5.
+- [ ] 5.2 Outbound notification email with `Reply-To` set to the signed
+      threaded address.
+- [ ] 5.3 IMAP polling ingestion behind a transport interface (ADR 0009), so a
+      provider webhook is a later swap.
+- [ ] 5.4 HMAC-signed reply addresses; sender-to-user matching using the
+      **normal write check**, not a parallel authorization path; DKIM
+      verification; `Message-ID` dedupe; per-sender rate limiting.
+- [ ] 5.5 Quoted-reply and signature stripping; HTML → Markdown; attachments
+      via Phase 4's pipeline.
+- [ ] 5.6 `source = 'email'` provenance shown in the UI and labelled in AI
+      context (ADR 0012 — untrusted input must be labelled everywhere per
+      `AGENTS.md` invariant 4). Schema: `source` on entries/notes/comments.
+- [ ] 5.7 Ingestion log including rejections — silent drops are unacceptable.
+      Schema: `email_messages` (dedupe + ingestion log).
+- [ ] 5.8 Digest batching and per-user preferences. Schema:
+      `notification_preferences`.
+- [ ] 5.9 Adversarial test suite: spoofed sender, valid-sender-without-access,
+      replay, and an injected-instruction email body that must not change the
+      AI's behavior or make it claim it modified anything.
+
+### Acceptance
+
+- Reply to a notification → comment appears, marked as email-sourced.
+- Spoofed `From:` for a non-user is rejected and logged, not posted.
+- A valid sender **without** write access to the target is rejected.
+- Replaying the same message twice creates one record.
+- An adversarial email body containing instruction-shaped text does not change
+  the AI's behavior or make it claim it modified anything.
+
+---
