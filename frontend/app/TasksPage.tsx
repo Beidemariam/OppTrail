@@ -39,9 +39,9 @@ const groupLabels: Record<TaskStanding, string> = {
 export function TasksPage() {
   const session = useSession();
   const tasks = useMyTasks();
-  // One hook for the whole page: a task's opportunity id travels on the row, so
-  // nothing here needs a hook per deal.
-  const setDone = useSetTaskDone(0);
+  // One hook for the whole page: the route takes a task id, so nothing here
+  // needs one per deal.
+  const setDone = useSetTaskDone();
   const today = todayIsoDate();
 
   if (session.isPending) {

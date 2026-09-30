@@ -175,11 +175,19 @@ describe("the timeline", () => {
       expect(api.callsTo("POST", "/timeline")).toHaveLength(1),
     );
     // America/New_York in September is UTC-4.
-    expect(api.callsTo("POST", "/timeline")[0].body).toMatchObject({
+    const posted = api.callsTo("POST", "/timeline")[0].body as Record<
+      string,
+      unknown
+    >;
+    expect(posted).toMatchObject({
       title: "Proposal sent",
       event_timestamp: "2026-09-06T14:30:00Z",
-      follow_up_date: null,
     });
+    // No `follow_up_date` since milestone 4.2: a follow-up is a task now
+    // (D-144), and the composer no longer offers the field. Asserted as an
+    // absence, because the failure worth catching is the field quietly coming
+    // back and diverging from the task list.
+    expect(posted).not.toHaveProperty("follow_up_date");
   });
 
   it("adds a note and a comment to an entry", async () => {

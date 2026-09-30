@@ -296,3 +296,31 @@ describe("the dashboard's line about what is waiting", () => {
     expect(document.querySelector(".task-summary")).toBeNull();
   });
 });
+
+describe("the calendar's task layer (milestone 4.2)", () => {
+  it("draws a task on its due date, whatever month that is", async () => {
+    // The month is part of the URL, and a link may legitimately name one years
+    // out — the case the e2e spec exercises with 2027-08.
+    const api = await renderDashboard(
+      {
+        opportunities: [anOpportunity()],
+        tasks: [
+          aTask({
+            id: 501,
+            title: "Send updated pricing",
+            due_date: "2027-08-19",
+          }),
+        ],
+      },
+      "/?opportunities.view=calendar&opportunities.month=2027-08",
+    );
+
+    await screen.findByRole("heading", { name: "August 2027" });
+    await waitFor(() =>
+      expect(api.callsTo("GET", "assignee=any")).not.toHaveLength(0),
+    );
+    expect(
+      await screen.findByRole("link", { name: "Send updated pricing" }),
+    ).toBeInTheDocument();
+  });
+});

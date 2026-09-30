@@ -329,22 +329,30 @@ def test_seeded_permissions_match_the_printed_tour(tmp_path) -> None:
         umbrella_feed = alex.get(f"/api/v2/opportunities/{umbrella}/activity").json()["items"]
         assert "audit_log" in {event["detail"]["source"] for event in umbrella_feed}
 
-        # The calendar's follow-up tour line (milestone 3.0b): the demo entry's
-        # follow-up date is readable by everyone shared on Northwind and by
-        # nobody else - the same access split as the rest of the tour.
-        expected_follow_up = days_ago(-3)[:10]
-        alex_follow_ups = alex.get("/api/v2/timeline/follow-ups").json()["items"]
-        demo_follow_up = next(
+        # The tasks tour line (milestone 4.1, and the calendar's second layer
+        # since 4.2): the demo's follow-up is a task now, readable by everyone
+        # shared on Northwind and by nobody else - the same access split as the
+        # rest of the tour.
+        expected_due = days_ago(-3)[:10]
+        alex_due = alex.get("/api/v2/tasks?assignee=any").json()["items"]
+        demo_task = next(
             item
-            for item in alex_follow_ups
-            if item["title"] == "Product demo for the operations team"
+            for item in alex_due
+            if item["title"] == "Send the permissions model to the security lead"
         )
-        assert demo_follow_up["follow_up_date"] == expected_follow_up
-        assert demo_follow_up["opportunity_name"] == "Northwind platform rollout"
+        assert demo_task["due_date"] == expected_due
+        assert demo_task["opportunity_name"] == "Northwind platform rollout"
+        # Linked to the entry that prompted it, which is what the tour's
+        # "linking back" line describes.
+        assert demo_task["entry_title"] == "Product demo for the operations team"
 
-        casey_follow_ups = casey.get("/api/v2/timeline/follow-ups").json()["items"]
-        assert any(item["title"] == demo_follow_up["title"] for item in casey_follow_ups)
-        assert dana.get("/api/v2/timeline/follow-ups").json()["items"] == []
+        casey_due = casey.get("/api/v2/tasks?assignee=any").json()["items"]
+        assert any(item["title"] == demo_task["title"] for item in casey_due)
+        assert dana.get("/api/v2/tasks?assignee=any").json()["items"] == []
+
+        # ...and it is on Blair's own list, which is the other half of the line.
+        blair_tasks = blair.get("/api/v2/tasks").json()["items"]
+        assert [task["title"] for task in blair_tasks] == [demo_task["title"]]
 
         # The rich-content tour line (milestone 3.1): the note under the intro
         # call is Markdown with the three constructs the tour names, stored as

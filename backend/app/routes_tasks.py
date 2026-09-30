@@ -30,6 +30,7 @@ Four things about this file are decisions rather than mechanics:
 """
 
 import sqlite3
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
@@ -302,14 +303,27 @@ def list_tasks(
 
 
 @router.get("/tasks", response_model=Page[TaskPublic])
-def list_my_tasks(
+def list_tasks_across_opportunities(
     page: PageRequest = Depends(page_params),
     include_completed: bool = Query(default=False),
     due_before: str | None = Query(default=None),
+    assignee: Literal["me", "any"] = Query(default="me"),
+    from_date: str | None = Query(default=None, alias="from"),
+    to_date: str | None = Query(default=None, alias="to"),
     user: sqlite3.Row = Depends(get_current_user),
 ) -> Page[TaskPublic]:
-    """My Tasks: everything assigned to the caller, across every opportunity
-    they can still see.
+    """Tasks across every opportunity the caller can still see.
+
+    Two readers, one query. `assignee=me` is the default and is **My Tasks** --
+    what this reader owes. `assignee=any` is the calendar's follow-up layer
+    (milestone 4.2), which draws every outstanding task on a visible deal
+    whoever it belongs to, because that is what the `follow_up_date` layer it
+    replaces did (3.0b, D-088). One route with a filter rather than two routes
+    over the same rows: the permission rule, the ordering and the cursor are
+    identical, and the only difference is one `WHERE` clause.
+
+    `from`/`to` bound it to the month on screen, the same parameter names the
+    timeline's own filter uses -- here they filter `due_date`.
 
     The one read here that spans opportunities, so the permission filter is
     inside the query rather than a role resolved first -- `search.py`'s pattern.
@@ -324,10 +338,15 @@ def list_my_tasks(
     where = [
         "tasks.deleted_at IS NULL",
         "opportunities.deleted_at IS NULL",
-        "tasks.assignee_id = ?",
         f"tasks.opportunity_id IN ({ACCESSIBLE_OPPORTUNITY_IDS_SQL})",
     ]
-    params: list[object] = [int(user["id"]), int(user["id"]), int(user["id"])]
+    # Params follow the order the clauses appear in, not the order they are
+    # decided: `ACCESSIBLE_OPPORTUNITY_IDS_SQL` is the third clause and carries
+    # two of its own, so the assignee's placeholder is bound after them.
+    params: list[object] = [int(user["id"]), int(user["id"])]
+    if assignee == "me":
+        where.append("tasks.assignee_id = ?")
+        params.append(int(user["id"]))
     if not include_completed:
         where.append("tasks.completed_at IS NULL")
     if due_before:
@@ -335,6 +354,12 @@ def list_my_tasks(
         # out on its own rather than needing a second clause.
         where.append("tasks.due_date <= ?")
         params.append(due_before)
+    if from_date:
+        where.append("tasks.due_date >= ?")
+        params.append(from_date)
+    if to_date:
+        where.append("tasks.due_date <= ?")
+        params.append(to_date)
 
     continuation, cursor_values = cursor_clause(
         page,

@@ -146,9 +146,6 @@ export const reactionEmoji: ReactionEmoji[] = [
 /** Who is following an opportunity (milestone 3.3a) -- owner-only, like
  * `OpportunityShare`. */
 export type Watcher = components["schemas"]["WatcherPublic"];
-/** One entry with a follow-up date, read across every opportunity (milestone
- * 3.0b, D-088) — the calendar's second layer. */
-export type FollowUp = components["schemas"]["FollowUpPublic"];
 export type BulkActionResultItem =
   components["schemas"]["BulkActionResultItem"];
 
@@ -835,7 +832,7 @@ export function calendarWeeks(month: string): string[][] {
 /**
  * The `from`/`to` bounds of the grid `calendarWeeks` draws, including the
  * neighbouring-month days that fill out the first and last weeks — the range
- * `useFollowUps` asks the server for, so the second layer covers exactly what
+ * `useTasksDueIn` asks the server for, so the second layer covers exactly what
  * the first one draws.
  */
 export function calendarRange(month: string): { from: string; to: string } {
@@ -870,8 +867,8 @@ export function withoutCloseDate(opportunities: Opportunity[]): Opportunity[] {
  * own — it draws in the cell and links to its opportunity's timeline, the
  * same granularity every other cross-opportunity read in the app stops at.
  */
-export function followUpsOn(followUps: FollowUp[], day: string): FollowUp[] {
-  return followUps.filter((followUp) => followUp.follow_up_date === day);
+export function tasksDueOn(tasks: Task[], day: string): Task[] {
+  return tasks.filter((task) => task.due_date === day);
 }
 
 /**

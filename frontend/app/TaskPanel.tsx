@@ -2,12 +2,7 @@
 
 import { FormEvent, useRef, useState } from "react";
 
-import {
-  taskStanding,
-  todayIsoDate,
-  type Access,
-  type Task,
-} from "../lib/domain";
+import { todayIsoDate, type Access } from "../lib/domain";
 import {
   useCreateTask,
   useDeleteTask,
@@ -47,8 +42,8 @@ export function TaskPanel({
   access: Access;
 }) {
   const tasks = useTasks(opportunityId, true);
-  const setDone = useSetTaskDone(opportunityId);
-  const deleteTask = useDeleteTask(opportunityId);
+  const setDone = useSetTaskDone();
+  const deleteTask = useDeleteTask();
   const restoreTask = useRestoreTask();
   const removeWithUndo = useUndoableDelete("Task", deleteTask, restoreTask);
   const [showDone, setShowDone] = useState(false);

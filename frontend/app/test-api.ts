@@ -132,16 +132,6 @@ interface TimelineEntry {
 /** The calendar's follow-up layer (milestone 3.0b, D-088): a `TimelineEntry`
  * read cross-opportunity, so it carries the opportunity's own name rather
  * than its id alone. */
-interface FollowUp {
-  id: number;
-  opportunity_id: number;
-  opportunity_name: string;
-  type: string;
-  title: string;
-  follow_up_date: string;
-  created_by: number | null;
-  author_name: string | null;
-}
 
 interface Share {
   user_id: number;
@@ -510,9 +500,6 @@ export class FakeApi {
     if (bare === "/api/v2/search") {
       return this.searchPage(path);
     }
-    if (bare === "/api/v2/timeline/follow-ups") {
-      return this.followUpsPage(path);
-    }
     if (bare === "/api/v2/auth/me") {
       return this.user
         ? this.json({ user: this.user })
@@ -767,13 +754,23 @@ export class FakeApi {
     if (segments[0] === "tasks" && segments.length === 1) {
       // My Tasks: assigned to the signed-in reader, open unless asked
       // otherwise -- the server's own default, which the page relies on.
-      const includeCompleted = path.includes("include_completed=true");
+      const params = new URLSearchParams(path.split("?")[1] ?? "");
+      const includeCompleted = params.get("include_completed") === "true";
+      // `assignee=any` is the calendar's layer since milestone 4.2, where the
+      // follow-up read used to be; `me` is My Tasks and is the default.
+      const anyAssignee = params.get("assignee") === "any";
+      const from = params.get("from");
+      const to = params.get("to");
       return this.page(
-        this.tasks.filter(
-          (task) =>
-            task.assignee_id === this.user?.id &&
-            (includeCompleted || !task.completed_at),
-        ),
+        this.tasks
+          .filter(
+            (task) =>
+              (anyAssignee || task.assignee_id === this.user?.id) &&
+              (includeCompleted || !task.completed_at) &&
+              (!from || (task.due_date ?? "") >= from) &&
+              (!to || (task.due_date ?? "") <= to),
+          )
+          .sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? "")),
         path,
       );
     }
@@ -1425,45 +1422,6 @@ export class FakeApi {
       items,
       next_cursor: next < hits.length ? String(next) : null,
     });
-  }
-
-  /**
-   * `GET /api/v2/timeline/follow-ups`: every entry across every opportunity
-   * that has a follow-up date, windowed to `from`/`to` (milestone 3.0b).
-   * Derived from `this.entries` rather than held separately, the same way
-   * the real endpoint reads `timeline_entries` rather than a table of its
-   * own — this fake has one source of truth for an entry's fields too.
-   */
-  private followUpsPage(path: string): Response {
-    const params = new URLSearchParams(path.split("?")[1] ?? "");
-    const from = params.get("from");
-    const to = params.get("to");
-
-    const items: FollowUp[] = this.entries
-      .filter((entry): entry is TimelineEntry & { follow_up_date: string } =>
-        Boolean(entry.follow_up_date),
-      )
-      .filter(
-        (entry) =>
-          (!from || entry.follow_up_date >= from) &&
-          (!to || entry.follow_up_date <= to),
-      )
-      .sort((a, b) => a.follow_up_date.localeCompare(b.follow_up_date))
-      .map((entry) => ({
-        id: entry.id,
-        opportunity_id: entry.opportunity_id,
-        opportunity_name:
-          this.opportunities.find(
-            (opportunity) => opportunity.id === entry.opportunity_id,
-          )?.name ?? "",
-        type: entry.type,
-        title: entry.title,
-        follow_up_date: entry.follow_up_date,
-        created_by: entry.created_by,
-        author_name: entry.author_name,
-      }));
-
-    return this.page(items, path);
   }
 
   /** `GET /api/v2/notifications`: full history, optionally filtered by type. */

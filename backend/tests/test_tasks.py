@@ -449,3 +449,85 @@ def test_deleting_an_opportunity_stamps_its_tasks_too(client: TestClient) -> Non
             is None
         )
     assert len(client.get("/api/v2/tasks").json()["items"]) == 1
+
+
+def test_the_calendar_reads_every_visible_task_in_a_date_range(client: TestClient) -> None:
+    """`assignee=any` with `from`/`to` is the calendar's follow-up layer
+    (milestone 4.2), replacing the `follow_up_date` read D-088 added.
+
+    It must show a colleague's task, which is the difference from My Tasks, and
+    must still stop at the edge of what the reader may see.
+    """
+    signup(client, "gavin@example.com", "Gavin")
+    logout(client)
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    share(client, opportunity["id"], "gavin@example.com", "editor")
+    create_task(
+        client,
+        opportunity["id"],
+        title="Gavin's task",
+        assignee_email="gavin@example.com",
+        due_date=days_from_now(4),
+    )
+    create_task(
+        client,
+        opportunity["id"],
+        title="Mine, this month",
+        assignee_email="owner@example.com",
+        due_date=days_from_now(6),
+    )
+    create_task(client, opportunity["id"], title="Far future", due_date=days_from_now(90))
+    create_task(client, opportunity["id"], title="No date at all")
+
+    window = f"from={days_from_now(0)}&to={days_from_now(30)}"
+    items = client.get(f"/api/v2/tasks?assignee=any&{window}").json()["items"]
+
+    # Somebody else's task is in, an out-of-range one is out, and an undated one
+    # cannot be placed on a grid of days at all.
+    assert sorted(task["title"] for task in items) == [
+        "Gavin's task",
+        "Mine, this month",
+    ]
+
+    # ...and the default is still My Tasks, which is the other reader. Only the
+    # one actually assigned to this reader: a task written down and handed to
+    # nobody belongs to the deal, not to its author's to-do list, which is why
+    # the composer's assignee choice includes "Nobody yet".
+    mine = client.get(f"/api/v2/tasks?{window}").json()["items"]
+    assert [task["title"] for task in mine] == ["Mine, this month"]
+
+
+def test_a_task_on_a_deal_you_cannot_see_stays_invisible_to_the_calendar(
+    client: TestClient,
+) -> None:
+    signup(client, "gavin@example.com", "Gavin")
+    logout(client)
+    signup(client, "owner@example.com", "Owner")
+    private = create_opportunity(client, "Private")
+    create_task(client, private["id"], title="Secret task", due_date=days_from_now(3))
+    logout(client)
+
+    login(client, "gavin@example.com")
+    window = f"from={days_from_now(0)}&to={days_from_now(30)}"
+
+    assert client.get(f"/api/v2/tasks?assignee=any&{window}").json()["items"] == []
+
+
+def test_a_task_due_far_in_the_future_is_still_in_its_own_month(client: TestClient) -> None:
+    """The calendar asks for one month at a time, and the month it draws may be
+    years away — `?opportunities.month=2027-08` is a legitimate URL. A window
+    that only ever covers the near future would silently draw an empty grid."""
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    create_task(
+        client,
+        opportunity["id"],
+        title="Send updated pricing",
+        assignee_email="owner@example.com",
+        due_date="2027-08-19",
+    )
+
+    items = client.get("/api/v2/tasks?assignee=any&from=2027-07-26&to=2027-09-05").json()["items"]
+
+    assert [task["title"] for task in items] == ["Send updated pricing"]

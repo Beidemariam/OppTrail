@@ -22,7 +22,6 @@ import type { components } from "./api-types";
 import type {
   AiChatMessage,
   AppNotification,
-  FollowUp,
   NoteVersion,
   Opportunity,
   OpportunityFieldPatch,
@@ -140,10 +139,10 @@ export const keys = {
    * is invalidated rather than one key.
    */
   allActivity: ["activity"] as const,
-  /** One month's follow-up layer for the calendar (milestone 3.0b, D-088),
-   * keyed by the `from`/`to` range the grid draws so switching months costs a
-   * request and switching back is cached. */
-  followUps: (from: string, to: string) => ["follow-ups", from, to] as const,
+  /** One month of the calendar's task layer (milestone 3.0b as follow-ups,
+   * milestone 4.2 as tasks), keyed by the `from`/`to` range the grid draws so
+   * switching months costs a request and switching back is cached. */
+  tasksDue: (from: string, to: string) => ["tasks-due", from, to] as const,
   aiConversation: (opportunityId: number) =>
     ["ai-conversation", opportunityId] as const,
   savedViews: (entity: SavedViewEntity) => ["saved-views", entity] as const,
@@ -330,12 +329,18 @@ export function useActivity(opportunityId: number, enabled: boolean) {
  * screen — `enabled` is the calendar view being on screen, so switching to
  * the board or the table costs no request for a layer nothing is drawing.
  */
-export function useFollowUps(from: string, to: string, enabled: boolean) {
-  return useQuery<FollowUp[]>({
-    queryKey: keys.followUps(from, to),
+export function useTasksDueIn(from: string, to: string, enabled: boolean) {
+  return useQuery<Task[]>({
+    queryKey: keys.tasksDue(from, to),
     enabled,
     queryFn: () =>
-      fetchAll<FollowUp>(`/api/v2/timeline/follow-ups?from=${from}&to=${to}`),
+      fetchAll<Task>(
+        // `assignee=any`, because the layer this replaced drew every
+        // accessible entry's follow-up whoever wrote it (3.0b, D-088). Open
+        // only, which is the server's default: a calendar of things already
+        // done is a calendar nobody reads.
+        `/api/v2/tasks?assignee=any&from=${from}&to=${to}`,
+      ),
   });
 }
 
@@ -859,8 +864,14 @@ export function useEditTask(opportunityId: number) {
  * what the checkbox now reads, and the route it calls follows from that. Both
  * are idempotent server-side, so a double click costs a request and changes
  * nothing.
+ *
+ * No `opportunityId`, unlike `useCreateTask` and `useEditTask`: the route takes
+ * a task id, and `keys.allTasks` invalidates every deal's list anyway — so the
+ * parameter was a lie about what the hook needed, and `TasksPage` was passing
+ * `0` to satisfy it. The lint caught it, which is why the warning was worth
+ * reading rather than silencing.
  */
-export function useSetTaskDone(opportunityId: number) {
+export function useSetTaskDone() {
   const client = useQueryClient();
   return useMutation<Task, Error, { taskId: number; completed: boolean }>({
     mutationFn: ({ taskId, completed }) =>
@@ -874,7 +885,7 @@ export function useSetTaskDone(opportunityId: number) {
   });
 }
 
-export function useDeleteTask(opportunityId: number) {
+export function useDeleteTask() {
   const client = useQueryClient();
   return useMutation<unknown, Error, number>({
     mutationFn: (taskId) =>
@@ -940,7 +951,10 @@ export interface TimelineEntryPayload {
   title: string;
   body: string;
   event_timestamp: string;
-  follow_up_date: string | null;
+  // No `follow_up_date` since milestone 4.2 (**D-144**): a follow-up is a task
+  // now. The API still accepts the field for the legacy column, and omitting it
+  // from a `PATCH` is what leaves an already-migrated entry's copy of the date
+  // untouched rather than clearing it.
 }
 
 export function useSaveTimelineEntry(opportunityId: number) {

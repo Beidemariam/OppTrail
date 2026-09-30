@@ -4685,10 +4685,53 @@ the document.
       panel was absent. Reusing a class name made one selector mean two things;
       the box style is now shared by a selector list instead, so
       `.sharing-panel` still means exactly one thing.
-- [ ] 4.2 Migrate `timeline_entries.follow_up_date` into tasks, keeping the
+- [x] 4.2 Migrate `timeline_entries.follow_up_date` into tasks, keeping the
       column until the UI has moved (per the breaking-changes table: dropped
       in Phase 6, which named Phase 5 until email moved to v3 — what matters is
       that a phase passes between the backfill and the drop, not which one).
+
+      Revision `0010_follow_ups_to_tasks` is the backfill. Every field of the
+      new task is a decision rather than a copy, and each is recorded in the
+      revision's docstring: the title is prefixed `Follow up:` (an entry says
+      what *happened*, a task says what to *do*), the entry's author becomes
+      both `created_by` and `assignee_id` (they are the only evidence in the row
+      of whose follow-up it is, and an unassigned task would appear on nobody's
+      list), and the timestamps are the **entry's** rather than the migration's
+      clock — stamping them now would claim somebody decided something at
+      upgrade time. Two guards live in the SQL because a revision cannot import
+      application code: `deleted_at IS NULL` on the entry *and* its opportunity,
+      and `NOT EXISTS` against `tasks`, which is what makes the revision safe to
+      re-run by hand against a partly-migrated copy.
+
+      **The composer's "Follow up" field is removed** (**D-144**), which the
+      roadmap did not settle and is the decision this milestone turns on.
+      Keeping it is what inaction produces and is the worst of the three
+      options: the column would keep accepting dates that nothing reads any
+      more, because the calendar and My Tasks both read `tasks` now — so every
+      new follow-up would be invisible and the two would diverge for as long as
+      both existed. The column itself stays and keeps its values.
+
+      **The calendar's second layer moved with it**, exactly as
+      `app/OpportunityCalendar.tsx`'s own comment anticipated in 3.0b ("this
+      layer moves with it then, not before"). `GET /api/v2/timeline/follow-ups`
+      and `FollowUpPublic` are gone, replaced by
+      `GET /api/v2/tasks?assignee=any&from=&to=` — one route with a filter
+      rather than two over the same rows, since the permission rule, the
+      ordering and the cursor are identical and only one `WHERE` clause differs.
+      A chip now carries `?entry=` when the task came from an entry, so a
+      migrated follow-up still reaches the conversation that produced it
+      (D-124's shape).
+
+      One thing worth recording about the verification. I first reported "one
+      follow-up in your real data" from a copy of `data/app.db` taken while the
+      container held its WAL. Asking the **running app** instead showed zero:
+      the reviewer's own R2 check had restored a version, `follow_up_date` is
+      one of the fields a version snapshots, and the restore cleared it. The
+      migration is therefore a no-op against this particular database and still
+      correct — `tests/test_migrations.py` exercises it against the MVP-era
+      schema, where the dates that need migrating actually live. **Copying a
+      SQLite file out from under a live writer is not a read of that
+      database.**
 - [ ] 4.3 Attachments: content-addressed storage, magic-byte validation,
       streamed authorized download, `Content-Disposition: attachment` and
       `nosniff` (ADR 0008). Schema: `attachments`. Wire into the upload-

@@ -111,6 +111,18 @@ def add_entry(session: Session, opportunity_id: int, **fields: Any) -> int:
     return int(response.json()["id"])
 
 
+def add_task(session: Session, opportunity_id: int, **fields: Any) -> int:
+    """One action item on a deal (milestone 4.1). The tour's follow-up line is a
+    task now: milestone 4.2 migrated `follow_up_date` into this model and removed
+    the field, so seeding a date on an entry would seed something no screen
+    reads."""
+    response = check(
+        session.client.post(f"/api/v2/opportunities/{opportunity_id}/tasks", json=fields),
+        f"adding a task to opportunity {opportunity_id}",
+    )
+    return int(response.json()["id"])
+
+
 def add_note(session: Session, entry_id: int, body: str) -> dict[str, Any]:
     """The created note, not just its id: an edit needs the `updated_at` it is
     written against (ADR 0003's guard on `PATCH /api/v2/notes/{id}`).
@@ -285,7 +297,16 @@ def seed() -> None:
         title="Product demo for the operations team",
         body="Eight attendees. Timeline view landed well; they asked about permissions twice.",
         event_timestamp=days_ago(14, hour=14),
-        follow_up_date=days_ago(-3)[:10],
+    )
+    # The follow-up the tour names, as a task (milestone 4.2): assigned to Blair,
+    # who ran the demo, and linked to the entry that prompted it.
+    add_task(
+        blair,
+        northwind,
+        title="Send the permissions model to the security lead",
+        assignee_email=BLAIR,
+        due_date=days_ago(-3)[:10],
+        entry_id=demo,
     )
     demo_note = add_note(
         blair,
@@ -651,11 +672,18 @@ def main(argv: list[str] | None = None) -> int:
         "  stays on the deal as an editor rather than losing it, with the\n"
         "  handover on the timeline and in the owner-only audit log.\n"
         "\n"
-        "  The calendar's follow-up layer (milestone 3.0b) draws beside the\n"
-        "  close-date chips: switch the dashboard to Calendar and Northwind's\n"
-        "  demo entry shows up three days out, a reminder rather than a deal,\n"
-        "  linking back to Northwind's own timeline. GET\n"
-        "  /api/v2/timeline/follow-ups is scoped the same way search is -\n"
+        "  Tasks (milestone 4.1) are on Northwind: Blair owes the security\n"
+        "  lead a permissions model three days out, written on the deal and\n"
+        "  read back three ways. The task panel is in the deal's sidebar;\n"
+        "  Blair's own list is at /tasks or `g t`, where it sits under Coming\n"
+        "  up; and the dashboard says how many are overdue without showing the\n"
+        "  list twice.\n"
+        "\n"
+        "  The calendar's second layer (milestone 3.0b, tasks since 4.2) draws\n"
+        "  beside the close-date chips: switch the dashboard to Calendar and\n"
+        "  that task shows up three days out, a reminder rather than a deal,\n"
+        "  linking back to the entry that prompted it. GET\n"
+        "  /api/v2/tasks?assignee=any is scoped the same way search is -\n"
         "  Casey sees it because they can read Northwind, and Dana sees\n"
         "  nothing at all.\n"
         "\n"

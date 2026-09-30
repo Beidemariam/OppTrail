@@ -1,8 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
   createOpportunity,
-  entryForm,
-  openEntryForm,
   expectNoAccessibilityViolations,
   openTimeline,
   signUp,
@@ -132,7 +130,7 @@ test("the calendar places a deal on its close month and accounts for the rest", 
   ).toBeVisible();
 });
 
-test("the calendar's follow-up layer draws an entry's date and links back to its timeline (milestone 3.0b)", async ({
+test("the calendar's second layer draws a task's due date and links back to its deal (milestone 3.0b, tasks since 4.2)", async ({
   page,
 }) => {
   const suffix = Math.random().toString(36).slice(2, 8);
@@ -142,14 +140,16 @@ test("the calendar's follow-up layer draws an entry's date and links back to its
   await createOpportunity(page, opportunity);
   await openTimeline(page, opportunity);
 
-  await openEntryForm(page);
-  await entryForm(page).getByLabel("Type").selectOption({ label: "Call" });
-  await entryForm(page).getByLabel("Title").fill("Send updated pricing");
-  await entryForm(page).getByLabel("Follow up").fill("2027-08-19");
-  await entryForm(page).getByRole("button", { name: "Add Entry" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Send updated pricing" }),
-  ).toBeVisible();
+  // A task rather than an entry's `follow_up_date`: milestone 4.2 migrated the
+  // dates into tasks and removed the field, so this is the same layer reading a
+  // different source.
+  const panel = page.locator(".task-panel");
+  await panel.getByRole("button", { name: "Add task" }).click();
+  await panel.getByLabel("Task", { exact: true }).fill("Send updated pricing");
+  await panel.getByLabel("For").selectOption({ label: "Follow-up Tester" });
+  await panel.getByLabel("Due").fill("2027-08-19");
+  await panel.getByRole("button", { name: "Add Task" }).click();
+  await expect(panel.getByText("Send updated pricing")).toBeVisible();
 
   await page.goto("/?opportunities.view=calendar&opportunities.month=2027-08");
   await expect(
@@ -158,14 +158,12 @@ test("the calendar's follow-up layer draws an entry's date and links back to its
 
   const chip = page.getByRole("link", { name: /Send updated pricing/ });
   await expect(chip).toBeVisible();
-  await expect(chip).toContainText("Call:");
   await expect(page.locator(".followup-chip")).toContainText(opportunity);
 
-  await expectNoAccessibilityViolations(page, "calendar view with a follow-up");
+  await expectNoAccessibilityViolations(page, "calendar view with a task due");
 
-  // A follow-up chip links to the opportunity's own timeline, the same
-  // granularity every other cross-opportunity read in the app stops at —
-  // there is no deep link to one entry.
+  // The chip links to the deal; a task migrated from an entry carries `?entry=`
+  // as well, which is how it reaches the conversation that produced it.
   await chip.click();
   await expect(
     page.locator(".timeline-panel").getByRole("heading", { name: opportunity }),

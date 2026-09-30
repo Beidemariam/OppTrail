@@ -12,7 +12,7 @@ import {
   editableOpportunityFields,
   emptyOpportunityViewState,
   emptyTimelineFilters,
-  followUpsOn,
+  tasksDueOn,
   formatMoney,
   matchesSavedView,
   monthLabel,
@@ -24,7 +24,7 @@ import {
   shiftMonth,
   viewOrder,
   withoutCloseDate,
-  type FollowUp,
+  type Task,
   type Opportunity,
   type SavedView,
 } from "./domain";
@@ -66,16 +66,24 @@ function anOpportunity(overrides: Partial<Opportunity> = {}): Opportunity {
   };
 }
 
-function aFollowUp(overrides: Partial<FollowUp> = {}): FollowUp {
+function aTask(overrides: Partial<Task> = {}): Task {
   return {
     id: 100,
     opportunity_id: 1,
     opportunity_name: "Northwind rollout",
-    type: "demo",
+    entry_id: null,
+    entry_title: null,
     title: "Send updated pricing",
-    follow_up_date: "2026-12-02",
+    assignee_id: 1,
+    assignee_name: "Alex",
+    due_date: "2026-12-02",
+    completed_at: null,
+    completed_by: null,
+    completed_by_name: null,
     created_by: 1,
     author_name: "Alex",
+    created_at: "2026-11-01T09:00:00Z",
+    updated_at: "2026-11-01T09:00:00Z",
     ...overrides,
   };
 }
@@ -521,16 +529,18 @@ describe("the calendar's follow-up layer (milestone 3.0b, D-088)", () => {
     });
   });
 
-  it("finds the follow-ups due on one day and ignores the rest", () => {
-    const followUps = [
-      aFollowUp({ id: 1, follow_up_date: "2026-12-02" }),
-      aFollowUp({ id: 2, follow_up_date: "2026-12-03" }),
-      aFollowUp({ id: 3, follow_up_date: "2026-12-02" }),
+  it("finds the tasks due on one day and ignores the rest", () => {
+    // The calendar's second layer since milestone 4.2: tasks rather than an
+    // entry's `follow_up_date`, which the migration moved into them.
+    const tasks = [
+      aTask({ id: 1, due_date: "2026-12-02" }),
+      aTask({ id: 2, due_date: "2026-12-03" }),
+      aTask({ id: 3, due_date: "2026-12-02" }),
     ];
 
-    expect(followUpsOn(followUps, "2026-12-02").map((item) => item.id)).toEqual(
-      [1, 3],
-    );
-    expect(followUpsOn(followUps, "2026-12-25")).toEqual([]);
+    expect(tasksDueOn(tasks, "2026-12-02").map((item) => item.id)).toEqual([
+      1, 3,
+    ]);
+    expect(tasksDueOn(tasks, "2026-12-25")).toEqual([]);
   });
 });

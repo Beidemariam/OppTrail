@@ -649,13 +649,6 @@ MATRIX: dict[Endpoint, Case] = {
             "(tests/test_search.py has the leakage cases)."
         ),
     ),
-    # Milestone 3.0b (D-088): the calendar's follow-up layer, cross-opportunity
-    # like search and the bulk export routes above -- everyone signed in gets
-    # 200, and tests/test_follow_ups.py holds the leakage case.
-    Endpoint("GET", "/api/v2/timeline/follow-ups"): Case(
-        expected=authenticated_only(200),
-        url=lambda world: "/api/v2/timeline/follow-ups",
-    ),
     # --- Identity-independent surfaces ------------------------------------
     Endpoint("GET", "/api/health"): public(
         lambda world: "/api/health",

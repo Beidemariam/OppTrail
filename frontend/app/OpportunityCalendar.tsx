@@ -5,14 +5,13 @@ import { Link } from "react-router";
 import {
   calendarWeeks,
   closingOn,
-  entryTypeLabel,
-  followUpsOn,
+  tasksDueOn,
   formatMoney,
   monthLabel,
   shiftMonth,
   weekdayLabels,
   withoutCloseDate,
-  type FollowUp,
+  type Task,
   type Opportunity,
 } from "../lib/domain";
 import type { OpportunityViewProps } from "./StageBoard";
@@ -25,10 +24,12 @@ import { useOpportunityItem } from "./useOpportunityItem";
  * `docs/FEATURES.md` §1 describes it as "expected close dates and follow-up
  * dates" — milestone 3.0b (**D-088**) added the second layer, drawn from
  * `GET /api/v2/timeline/follow-ups`, the cross-opportunity read that did not
- * exist when 2.8 shipped close dates alone. Phase 4's "My Tasks across
- * opportunities" (4.1) supersedes this endpoint when `follow_up_date` moves
- * off the entry and onto a task (4.2); this layer moves with it then, not
- * before.
+ * exist when 2.8 shipped close dates alone. **That layer is tasks since
+ * milestone 4.2** (`GET /api/v2/tasks?assignee=any&from=&to=`): a follow-up
+ * *is* a task now, the old dates were migrated into tasks by revision
+ * `0010_follow_ups_to_tasks`, and the route it used to read is gone. The move
+ * was anticipated here, which is why the layer needed no reshaping — only a
+ * different source.
  *
  * Not virtualized, and deliberately: a month is at most six week rows, and
  * what varies is how many deals sit in one day's cell. `VirtualList` windows
@@ -45,7 +46,7 @@ export function OpportunityCalendar({
   checkedIds,
   month,
   today,
-  followUps,
+  tasksDue,
   onFocus,
   onToggleChecked,
   onRangeSelect,
@@ -68,7 +69,7 @@ export function OpportunityCalendar({
   today: string;
   /** The follow-ups due within the drawn grid (milestone 3.0b), already
    * fetched for exactly this range by the dashboard. */
-  followUps: FollowUp[];
+  tasksDue: Task[];
   onMonthChange: (month: string) => void;
 }) {
   const weeks = calendarWeeks(month);
@@ -114,7 +115,7 @@ export function OpportunityCalendar({
           <div className="calendar-week" key={week[0]}>
             {week.map((day) => {
               const closing = closingOn(opportunities, day);
-              const due = followUpsOn(followUps, day);
+              const due = tasksDueOn(tasksDue, day);
               return (
                 <div
                   className={[
@@ -142,8 +143,8 @@ export function OpportunityCalendar({
                       onRangeSelect={onRangeSelect}
                     />
                   ))}
-                  {due.map((followUp) => (
-                    <FollowUpChip key={followUp.id} followUp={followUp} />
+                  {due.map((task) => (
+                    <TaskChip key={task.id} task={task} />
                   ))}
                 </div>
               );
@@ -233,13 +234,27 @@ function CalendarChip({
  * The link goes to that opportunity's own timeline, not to the entry itself
  * — nothing else in the app deep-links to one entry either.
  */
-function FollowUpChip({ followUp }: { followUp: FollowUp }) {
+/** A task due on this day (milestone 4.2), where a follow-up date used to be.
+ *
+ * The link carries `?entry=` when the task came from an entry, which is how a
+ * migrated follow-up still reaches the conversation that produced it (D-124's
+ * shape); a task written by hand links to its deal. */
+function TaskChip({ task }: { task: Task }) {
   return (
     <article className="followup-chip">
-      <Link to={`/opportunities/${followUp.opportunity_id}`}>
-        {entryTypeLabel(followUp.type)}: {followUp.title}
+      <Link
+        to={
+          task.entry_id
+            ? `/opportunities/${task.opportunity_id}?entry=${task.entry_id}`
+            : `/opportunities/${task.opportunity_id}`
+        }
+      >
+        {task.title}
       </Link>
-      <span className="chip-opportunity">{followUp.opportunity_name}</span>
+      <span className="chip-opportunity">{task.opportunity_name}</span>
+      {task.assignee_name && (
+        <span className="chip-opportunity">{task.assignee_name}</span>
+      )}
     </article>
   );
 }

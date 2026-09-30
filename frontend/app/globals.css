@@ -3040,21 +3040,26 @@ kbd {
    timeline entry, drawn in the warning palette so it reads as a reminder
    rather than as another deal — `.opportunity-chip` beside it is the deal
    itself. */
+/* A task due on this day (milestone 3.0b as a follow-up, 4.2 as a task).
+   Stacked rather than a row: a calendar cell is about 180px wide, and 4.2 added
+   a third line (the assignee) to what was already a title beside a deal name.
+   In a row the title took `flex: 1` with `overflow: hidden` and collapsed to
+   zero pixels, which is how the e2e check found this -- the link rendered, was
+   0px wide, and Playwright reported it hidden. Same failure as D-138's buttons:
+   an unshrinkable row in a box too narrow for it. */
 .followup-chip {
-  align-items: center;
   background: var(--bg-warning);
   border: 1px solid var(--border-warning);
   border-radius: var(--radius-sm);
-  display: flex;
+  display: grid;
   font-size: var(--text-xs);
-  gap: var(--space-1);
+  gap: 1px;
   line-height: var(--line-xs);
   padding: var(--space-0-5) var(--space-1);
 }
 
 .followup-chip a {
   color: var(--text-warning);
-  flex: 1;
   font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3063,6 +3068,8 @@ kbd {
 
 .followup-chip .chip-opportunity {
   color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

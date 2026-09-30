@@ -31,7 +31,7 @@ CANONICAL = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 # The revision `alembic upgrade head` is expected to land on. Written down
 # rather than read from the script directory, for the same reason
 # `expected_schema.sql` is: a new revision should have to say so here.
-HEAD_REVISION = "0009_tasks"
+HEAD_REVISION = "0010_follow_ups_to_tasks"
 
 
 @pytest.fixture
@@ -101,12 +101,16 @@ def build_mvp_database(url: str) -> None:
             '2026-01-04 09:16:00', '2026-01-04 09:16:00'
         );
 
+        -- `follow_up_date` is set so revision 0010's backfill has something to
+        -- convert (milestone 4.2): an MVP database is exactly where the dates
+        -- that need migrating live.
         INSERT INTO timeline_entries (
-            id, opportunity_id, type, title, body, event_timestamp, created_by, created_at
+            id, opportunity_id, type, title, body, event_timestamp, created_by,
+            created_at, follow_up_date
         )
         VALUES (
             1, 1, 'call', 'Discovery call', 'Budget discussed',
-            '2026-01-05T14:30', 1, '2026-01-05 14:31:00'
+            '2026-01-05T14:30', 1, '2026-01-05 14:31:00', '2026-01-12'
         );
 
         INSERT INTO notes (id, entry_id, body, created_by, created_at, updated_at)
@@ -328,3 +332,59 @@ def test_writes_to_a_bridged_legacy_database_are_canonical(database_url: str) ->
             assert values, f"{table}.{column} has no rows to check"
             for value in values:
                 assert CANONICAL.match(value), f"{table}.{column} = {value!r}"
+
+
+def test_existing_follow_up_dates_become_tasks(database_url: str) -> None:
+    """Revision 0010 (milestone 4.2), the migration `docs/FEATURES.md` §8 asks
+    for: "the existing `follow_up_date` on entries migrates into this model".
+
+    Every field is checked, because each one is a decision the revision made
+    rather than a copy: the title is prefixed (an entry says what happened, a
+    task says what to do), the author becomes the assignee (they are the only
+    evidence of whose follow-up it is), and the timestamps are the *entry's*
+    rather than the migration's clock — stamping them now would claim somebody
+    decided something at upgrade time.
+    """
+    build_mvp_database(database_url)
+
+    initialize_database()
+
+    with db_connection() as connection:
+        tasks = connection.execute("SELECT * FROM tasks").fetchall()
+        entry = connection.execute("SELECT * FROM timeline_entries WHERE id = 1").fetchone()
+
+    assert len(tasks) == 1
+    task = tasks[0]
+    assert task["title"] == "Follow up: Discovery call"
+    assert task["due_date"] == "2026-01-12"
+    assert task["entry_id"] == 1
+    assert task["opportunity_id"] == 1
+    assert task["assignee_id"] == 1
+    assert task["created_by"] == 1
+    assert task["completed_at"] is None
+    assert task["created_at"] == entry["created_at"]
+    # The column is kept for a phase and dropped in 6, so the migration is not
+    # destructive: a mistake in it costs a DELETE, not a restore from backup.
+    assert entry["follow_up_date"] == "2026-01-12"
+
+
+def test_the_backfill_does_not_duplicate_a_task_somebody_already_wrote(
+    database_url: str,
+) -> None:
+    """The `NOT EXISTS` guard, which is what makes the revision safe to re-run by
+    hand against a partly-migrated copy -- the thing an operator reaching for it
+    would actually do."""
+    build_mvp_database(database_url)
+    initialize_database()
+
+    with db_connection() as connection:
+        connection.execute("DELETE FROM alembic_version")
+        connection.execute("INSERT INTO alembic_version VALUES ('0009_tasks')")
+        connection.commit()
+
+    initialize_database()
+
+    with db_connection() as connection:
+        count = connection.execute("SELECT COUNT(*) AS n FROM tasks").fetchone()["n"]
+
+    assert count == 1

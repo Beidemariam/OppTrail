@@ -17,7 +17,6 @@ interface EntryFormState {
   title: string;
   body: string;
   event_timestamp: string;
-  follow_up_date: string;
 }
 
 function formFor(entry: TimelineEntry | null): EntryFormState {
@@ -27,7 +26,6 @@ function formFor(entry: TimelineEntry | null): EntryFormState {
       title: "",
       body: "",
       event_timestamp: nowDateTimeInput(),
-      follow_up_date: "",
     };
   }
   return {
@@ -35,7 +33,6 @@ function formFor(entry: TimelineEntry | null): EntryFormState {
     title: entry.title,
     body: entry.body,
     event_timestamp: toDateTimeInput(entry.event_timestamp),
-    follow_up_date: entry.follow_up_date ?? "",
   };
 }
 
@@ -43,6 +40,15 @@ function formFor(entry: TimelineEntry | null): EntryFormState {
  * Adds a timeline entry, or saves the one the timeline handed it. The parent
  * re-keys this component on the entry being edited, so the fields reload
  * without an effect chasing props.
+ *
+ * **No "Follow up" field since milestone 4.2.** A follow-up is a task now
+ * (`app/TaskPanel.tsx`), and the existing dates were migrated into tasks by
+ * revision `0010_follow_ups_to_tasks`. Leaving the field here would have been
+ * the worst of the three states: new follow-ups would keep landing on a column
+ * the task list does not read, so the two would diverge for as long as both
+ * existed (**D-144**). `timeline_entries.follow_up_date` itself stays until
+ * Phase 6 per `docs/ROADMAP.md`'s breaking-changes table, holding the values the
+ * migration copied.
  */
 export function TimelineEntryForm({
   opportunityId,
@@ -69,7 +75,6 @@ export function TimelineEntryForm({
           // `datetime-local` is always local wall-clock time; the API stores
           // canonical UTC (`lib/time.ts`).
           event_timestamp: localInputToUtc(form.event_timestamp),
-          follow_up_date: form.follow_up_date || null,
         },
       },
       { onSuccess: () => onDone() },
@@ -109,16 +114,6 @@ export function TimelineEntryForm({
               setForm({ ...form, event_timestamp: event.target.value })
             }
             required
-          />
-        </label>
-        <label>
-          Follow up
-          <input
-            type="date"
-            value={form.follow_up_date}
-            onChange={(event) =>
-              setForm({ ...form, follow_up_date: event.target.value })
-            }
           />
         </label>
       </div>
