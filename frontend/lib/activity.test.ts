@@ -186,3 +186,17 @@ describe("activityActor", () => {
     );
   });
 });
+
+describe("a task's field labels (milestone 4.2a)", () => {
+  it("uses the declared label rather than the column name", () => {
+    // `versionFieldLabel` was a ternary chain that never reached `task`, so a
+    // reassignment read "changed Assignee id on a task". A `Record` keyed by the
+    // target cannot forget one the type union knows about, which is the whole
+    // reason for the shape.
+    expect(versionFieldLabel("task", "assignee_id")).toBe("Assigned to");
+    expect(versionFieldLabel("task", "due_date")).toBe("Due");
+    expect(versionFieldLabel("task", "title")).toBe("Task");
+    // The fallback is still there for a column with no declared label.
+    expect(versionFieldLabel("task", "made_up_column")).toBe("Made up column");
+  });
+});

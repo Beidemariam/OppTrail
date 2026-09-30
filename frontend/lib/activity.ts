@@ -2,6 +2,7 @@ import type { components } from "./api-types";
 import {
   noteVersionFields,
   opportunityVersionFields,
+  taskVersionFields,
   timelineEntryVersionFields,
   type VersionField,
 } from "./domain";
@@ -104,13 +105,17 @@ export function versionFieldLabel(
   target: ActivityEditTarget,
   field: string,
 ): string {
-  const declared: VersionField<never>[] =
-    target === "opportunity"
-      ? opportunityVersionFields
-      : target === "timeline_entry"
-        ? timelineEntryVersionFields
-        : noteVersionFields;
-  const match = declared.find((candidate) => candidate.field === field);
+  // A lookup rather than a ternary chain (milestone 4.2a): the chain silently
+  // fell through to the fallback when `task` was added, so an edit read "changed
+  // Assignee id on a task" instead of using the label `lib/domain.ts` declares.
+  // A record cannot forget a target the type union knows about.
+  const declared: Record<ActivityEditTarget, VersionField<never>[]> = {
+    opportunity: opportunityVersionFields,
+    timeline_entry: timelineEntryVersionFields,
+    note: noteVersionFields,
+    task: taskVersionFields,
+  };
+  const match = declared[target].find((candidate) => candidate.field === field);
   if (match) {
     return match.label;
   }
