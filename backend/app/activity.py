@@ -58,6 +58,7 @@ from .schemas import (
 from .versioning import (
     NOTE_VERSIONS,
     OPPORTUNITY_VERSIONS,
+    TASK_VERSIONS,
     TIMELINE_ENTRY_VERSIONS,
     VersionedTable,
 )
@@ -68,9 +69,14 @@ ActivitySource = Literal[
     "opportunity_version",
     "timeline_entry_version",
     "note_version",
+    # Milestone 4.2a: tasks are editable and therefore versioned (invariant 8),
+    # so their edits belong in the one place that answers "who did what when".
+    # The human asked for this at the Phase 4 checkpoint and the invariant
+    # already required it.
+    "task_version",
 ]
 
-# How far apart the five id spaces are held, and where each one starts. A
+# How far apart the six id spaces are held, and where each one starts. A
 # trillion is past any row count SQLite will hold here, so no source can reach
 # into the next one's range; `test_activity.py` is what says so rather than
 # this comment.
@@ -83,7 +89,12 @@ SOURCE_RANKS: dict[ActivitySource, int] = {
     "opportunity_version": 1,
     "timeline_entry_version": 2,
     "note_version": 3,
-    "audit_log": 4,
+    "task_version": 4,
+    # Stays last: the audit half records what was *removed*, which is the final
+    # thing any one action does. Its rank moved from 4 to 5 when tasks joined,
+    # and nothing persists a rank -- the id is computed per read, so no stored
+    # value changed meaning.
+    "audit_log": 5,
 }
 
 # An access change writes a system entry *and* an audit row: the three
@@ -237,7 +248,7 @@ def _edit_events(
     *,
     source: ActivitySource,
     spec: VersionedTable,
-    target: Literal["opportunity", "timeline_entry", "note"],
+    target: Literal["opportunity", "timeline_entry", "note", "task"],
     parent_sql: str,
     silent_fields: tuple[str, ...] = (),
 ) -> list[ActivityEventPublic]:
@@ -321,6 +332,14 @@ NOTE_PARENT_SQL = """
         AND timeline_entries.deleted_at IS NULL
 """
 
+# A task hangs off the opportunity directly, so this is the shortest of the four
+# joins -- no entry in between, even when the task links to one.
+TASK_PARENT_SQL = """
+    JOIN tasks ON tasks.id = version.task_id
+    WHERE tasks.opportunity_id = ?
+        AND tasks.deleted_at IS NULL
+"""
+
 
 def fetch_activity_page(
     connection: sqlite3.Connection,
@@ -364,6 +383,15 @@ def fetch_activity_page(
             spec=NOTE_VERSIONS,
             target="note",
             parent_sql=NOTE_PARENT_SQL,
+        )
+        events += _edit_events(
+            connection,
+            opportunity_id,
+            page,
+            source="task_version",
+            spec=TASK_VERSIONS,
+            target="task",
+            parent_sql=TASK_PARENT_SQL,
         )
 
     events.sort(key=lambda event: (event.occurred_at, event.id))

@@ -45,11 +45,19 @@ from .permissions import (
     require_delete_permission,
     require_edit_permission,
     require_opportunity_access,
+    require_opportunity_owner,
     require_timeline_write,
 )
-from .schemas import TaskCreate, TaskPublic, TaskUpdate
+from .schemas import TaskCreate, TaskPublic, TaskUpdate, TaskVersionPublic
 from .soft_delete import restore_task, soft_delete_task
 from .time_utils import utc_now
+from .versioning import (
+    TASK_VERSIONS,
+    apply_version,
+    fetch_version,
+    record_version,
+    version_is_current,
+)
 
 router = APIRouter(prefix="/api/v2", tags=["tasks"])
 
@@ -86,6 +94,7 @@ def task_from_row(row: sqlite3.Row) -> TaskPublic:
         # deliberate: an action item outlives the record of where it came from.
         entry_title=row["entry_title"],
         title=row["title"],
+        description=row["description"],
         assignee_id=row["assignee_id"],
         assignee_name=row["assignee_name"],
         due_date=row["due_date"],
@@ -212,15 +221,16 @@ def create_task(
         cursor = connection.execute(
             """
             INSERT INTO tasks (
-                opportunity_id, entry_id, title, assignee_id, due_date,
-                created_by, created_at, updated_at
+                opportunity_id, entry_id, title, description, assignee_id,
+                due_date, created_by, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 opportunity_id,
                 payload.entry_id,
                 payload.title,
+                payload.description,
                 assignee_id,
                 payload.due_date,
                 int(user["id"]),
@@ -245,6 +255,10 @@ def create_task(
             )
 
         row = fetch_task(connection, task_id)
+        # Version 1 at creation, so the history opens with what the task said on
+        # day one rather than with its first edit (milestone 4.2a, the rule
+        # `versioning.py` already applies to the other three).
+        record_version(connection, TASK_VERSIONS, task_id, row, int(user["id"]), now)
         connection.commit()
 
     # A task is not on the timeline, so this is `opportunity.changed`: an
@@ -420,6 +434,9 @@ def update_task(
         if "title" in sent and payload.title is not None:
             assignments.append("title = ?")
             params.append(payload.title)
+        if "description" in sent and payload.description is not None:
+            assignments.append("description = ?")
+            params.append(payload.description)
         if "due_date" in sent:
             assignments.append("due_date = ?")
             params.append(payload.due_date)
@@ -443,8 +460,9 @@ def update_task(
         if not assignments:
             return task_from_row(task)
 
+        now = utc_now()
         assignments.append("updated_at = ?")
-        params.append(utc_now())
+        params.append(now)
         params.append(task_id)
         connection.execute(
             f"UPDATE tasks SET {', '.join(assignments)} WHERE id = ?",
@@ -452,6 +470,9 @@ def update_task(
         )
 
         row = fetch_task(connection, task_id)
+        # After the write, from the row read back, stamped with this write's own
+        # time -- the rule every other versioned edit follows (milestone 2.10).
+        record_version(connection, TASK_VERSIONS, task_id, row, int(user["id"]), now)
         if notify_assignee is not None:
             create_notification(
                 connection,
@@ -624,3 +645,124 @@ def restore_deleted_task(
         connection.commit()
 
     publish_opportunity_changed(opportunity_id)
+
+
+@router.get("/tasks/{task_id}/versions", response_model=Page[TaskVersionPublic])
+def list_task_versions_page(
+    task_id: int,
+    page: PageRequest = Depends(page_params),
+    user: sqlite3.Row = Depends(get_current_user),
+) -> Page[TaskVersionPublic]:
+    """A task's edit history, oldest first, owner-only (milestone 4.2a).
+
+    The fourth history to answer this question, under the same rule as the other
+    three (**D-096**): `AGENTS.md` invariant 8 says the *opportunity owner* can
+    read it, and this app has no admin role. Milestone 4.1 shipped an editable
+    task with no history at all, which is the invariant violation the human found
+    at the Phase 4 checkpoint.
+
+    `assignee_name` is resolved here rather than stored, so a history row reads
+    "Gavin" rather than "3" while the snapshot keeps the id it was written with.
+    """
+    continuation, cursor_values = cursor_clause(
+        page,
+        "task_versions.version_number",
+        "task_versions.id",
+        descending=False,
+    )
+    params: list[object] = [task_id, *cursor_values, page.limit + 1]
+
+    with db_connection() as connection:
+        task = fetch_task(connection, task_id)
+        require_opportunity_owner(connection, int(task["opportunity_id"]), int(user["id"]))
+        rows = connection.execute(
+            f"""
+            SELECT
+                task_versions.*,
+                editors.name AS editor_name,
+                assignees.name AS assignee_name
+            FROM task_versions
+            JOIN users AS editors ON editors.id = task_versions.edited_by
+            LEFT JOIN users AS assignees ON assignees.id = task_versions.assignee_id
+            WHERE task_versions.task_id = ?
+            {f"AND {continuation}" if continuation else ""}
+            ORDER BY task_versions.version_number ASC, task_versions.id ASC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+
+    rows, next_cursor = split_page(rows, page.limit, lambda row: (row["version_number"], row["id"]))
+    return Page(
+        items=[
+            TaskVersionPublic(
+                id=row["id"],
+                task_id=row["task_id"],
+                version_number=row["version_number"],
+                title=row["title"],
+                description=row["description"],
+                assignee_id=row["assignee_id"],
+                assignee_name=row["assignee_name"],
+                due_date=row["due_date"],
+                edited_by=row["edited_by"],
+                editor_name=row["editor_name"],
+                created_at=row["created_at"],
+            )
+            for row in rows
+        ],
+        next_cursor=next_cursor,
+    )
+
+
+@router.post("/tasks/{task_id}/versions/{version_number}/restore", response_model=TaskPublic)
+def restore_task_version(
+    task_id: int,
+    version_number: int,
+    user: sqlite3.Row = Depends(get_current_user),
+) -> TaskPublic:
+    """Put a recorded version of a task back as the current one (milestone 4.2a).
+
+    The fourth thing in this app whose edits can be undone, under the rules the
+    other three already follow (**D-116**, **D-120**): owner-only like the
+    history read beside it, the restore is itself recorded as a version so it can
+    be undone in turn, and restoring what is already current writes nothing --
+    which also makes a retry idempotent.
+
+    **The assignee is restored with everything else, and notifies nobody.** The
+    same reasoning a restored note sends no second mention (D-120): whoever this
+    task was assigned to was told when it happened, and a restore announcing it
+    again would make every undo a fresh ping. A task handed to somebody *new* by
+    a restore is the one case that arguably deserves one; it is not sent, because
+    "you were assigned" for a task that has existed for a week is more confusing
+    than silence, and the change is on the deal's activity log either way.
+    """
+    changed = False
+    with db_connection() as connection:
+        task = fetch_task(connection, task_id)
+        opportunity_id = int(task["opportunity_id"])
+        require_opportunity_owner(connection, opportunity_id, int(user["id"]))
+
+        version = fetch_version(connection, TASK_VERSIONS, task_id, version_number)
+        if version is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Task version not found",
+            )
+        current = connection.execute(
+            "SELECT * FROM tasks WHERE id = ?",
+            (task_id,),
+        ).fetchone()
+
+        if not version_is_current(TASK_VERSIONS, version, current):
+            changed = True
+            now = utc_now()
+            apply_version(connection, TASK_VERSIONS, task_id, version, {"updated_at": now})
+            row = fetch_task(connection, task_id)
+            record_version(connection, TASK_VERSIONS, task_id, row, int(user["id"]), now)
+            connection.commit()
+
+        row = fetch_task(connection, task_id)
+
+    if changed:
+        publish_opportunity_changed(opportunity_id)
+    return task_from_row(row)

@@ -85,7 +85,10 @@ function editTargetName(target: ActivityEditTarget): string {
   if (target === "opportunity") {
     return "this opportunity";
   }
-  return target === "timeline_entry" ? "a timeline entry" : "a note";
+  if (target === "timeline_entry") {
+    return "a timeline entry";
+  }
+  return target === "task" ? "a task" : "a note";
 }
 
 /**

@@ -34,11 +34,16 @@ export function csrfToken(): string {
  */
 export class ApiError extends Error {
   readonly code: string;
+  /** The HTTP status, for the one caller that acts on the number rather than
+   * the code: a 401 means the session is gone, whatever the message says
+   * (milestone 4.2a, **D-145**). */
+  readonly status: number;
 
-  constructor(message: string, code: string) {
+  constructor(message: string, code: string, status: number) {
     super(message);
     this.name = "ApiError";
     this.code = code;
+    this.status = status;
   }
 }
 
@@ -47,22 +52,37 @@ export function isConflict(error: unknown): boolean {
 }
 
 /**
+ * Whether a failure means the session has gone.
+ *
+ * Read in exactly one place -- `lib/query.ts`'s cache-level error handler --
+ * because the answer has to be the same for every read and every write in the
+ * app. Before milestone 4.2a nothing asked: a dead session left every request
+ * failing with "Authentication required" while the screen carried on showing a
+ * signed-in page, so the reader was told their *action* was refused rather than
+ * that they were signed out (**D-145**).
+ */
+export function isUnauthenticated(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401;
+}
+
+/**
  * The API's one error shape, `{"error": {"code", "message"}}`
  * (`backend/app/errors.py`), reduced to what a caller acts on. v1's
  * `{"detail": ...}` was the second shape this read until milestone 2.9
  * removed that surface.
  */
-function apiError(body: unknown): ApiError {
+function apiError(body: unknown, status: number): ApiError {
   if (typeof body === "object" && body !== null) {
     const { error } = body as { error?: { message?: unknown; code?: unknown } };
     if (typeof error?.message === "string") {
       return new ApiError(
         error.message,
         typeof error.code === "string" ? error.code : "unknown",
+        status,
       );
     }
   }
-  return new ApiError("Request failed", "unknown");
+  return new ApiError("Request failed", "unknown", status);
 }
 
 export async function apiRequest<T>(
@@ -81,7 +101,7 @@ export async function apiRequest<T>(
   });
 
   if (!response.ok) {
-    throw apiError(await response.json().catch(() => null));
+    throw apiError(await response.json().catch(() => null), response.status);
   }
 
   if (response.status === 204) {

@@ -598,6 +598,11 @@ class TaskCreate(BaseModel):
     """
 
     title: str = Field(min_length=1, max_length=500)
+    # Markdown, like every other body in this app, so the composer and
+    # `MarkdownText` already handle it (milestone 4.2a). Optional and empty by
+    # default: "call them back Thursday" needs no elaboration, and requiring one
+    # would put a second field in front of the common case.
+    description: str = ""
     assignee_email: str | None = None
     due_date: str | None = None
     entry_id: int | None = None
@@ -634,6 +639,7 @@ class TaskUpdate(BaseModel):
     """
 
     title: str | None = Field(default=None, min_length=1)
+    description: str | None = None
     assignee_email: str | None = None
     due_date: str | None = None
 
@@ -667,6 +673,7 @@ class TaskPublic(BaseModel):
     entry_id: int | None
     entry_title: str | None
     title: str
+    description: str
     assignee_id: int | None
     assignee_name: str | None
     due_date: str | None
@@ -680,6 +687,27 @@ class TaskPublic(BaseModel):
     author_name: str | None
     created_at: str
     updated_at: str
+
+
+class TaskVersionPublic(BaseModel):
+    """One recorded state of a task (milestone 4.2a, `AGENTS.md` invariant 8).
+
+    The fourth history of the shape the other three already have. `assignee_id`
+    rather than a name is the stored snapshot; `assignee_name` is resolved on
+    read so the history reads as "assigned to Gavin" rather than "assignee 3".
+    """
+
+    id: int
+    task_id: int
+    version_number: int
+    title: str
+    description: str
+    assignee_id: int | None
+    assignee_name: str | None
+    due_date: str | None
+    edited_by: int
+    editor_name: str | None
+    created_at: str
 
 
 AuditAction = Literal[
@@ -885,7 +913,7 @@ class ActivityEditEvent(BaseModel):
     """
 
     source: Literal["version"] = "version"
-    target: Literal["opportunity", "timeline_entry", "note"]
+    target: Literal["opportunity", "timeline_entry", "note", "task"]
     target_id: int
     version_number: int
     changed_fields: list[str]

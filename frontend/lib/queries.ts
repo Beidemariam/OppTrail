@@ -33,6 +33,7 @@ import type {
   SavedViewEntity,
   ShareRole,
   Task,
+  TaskVersion,
   TimelineEntry,
   TimelineEntryVersion,
   TimelineFilters,
@@ -114,7 +115,7 @@ export const keys = {
    * One item's edit history (milestone 2.10), keyed by what kind of thing it
    * hangs off as well as by id: the three id spaces are separate tables.
    */
-  versions: (kind: "opportunity" | "entry" | "note", id: number) =>
+  versions: (kind: "opportunity" | "entry" | "note" | "task", id: number) =>
     ["versions", kind, id] as const,
   /**
    * Every history, for a write to invalidate. An edit appends a version to
@@ -381,6 +382,15 @@ export function useNoteVersions(noteId: number, enabled: boolean) {
   });
 }
 
+/** A task's edit history (milestone 4.2a), the fourth of the same shape. */
+export function useTaskVersions(taskId: number, enabled: boolean) {
+  return useQuery<TaskVersion[]>({
+    queryKey: keys.versions("task", taskId),
+    enabled,
+    queryFn: () => fetchAll<TaskVersion>(`/api/v2/tasks/${taskId}/versions`),
+  });
+}
+
 /**
  * Put a recorded version back as the current one (milestone 3.1c, D-116).
  *
@@ -407,6 +417,12 @@ export function useRestoreVersion(
         keys.allTimelines,
         keys.allVersions,
         keys.allActivity,
+        // A restored task changes both task reads; the other three targets are
+        // unaffected by these keys, and an extra invalidation is cheaper than a
+        // per-target branch (ADR 0003's "broader, never narrower" applied to the
+        // cache rather than to an event).
+        keys.allTasks,
+        keys.myTasks,
       ),
   });
 }
@@ -415,8 +431,13 @@ function versionPath(target: ActivityEditTarget, targetId: number): string {
   if (target === "opportunity") {
     return `/api/v2/opportunities/${targetId}/versions`;
   }
-  return target === "timeline_entry"
-    ? `/api/v2/timeline/${targetId}/versions`
+  if (target === "timeline_entry") {
+    return `/api/v2/timeline/${targetId}/versions`;
+  }
+  // Tasks since milestone 4.2a, which is the fourth of these and the reason the
+  // chain is an `if` ladder rather than a ternary pair.
+  return target === "task"
+    ? `/api/v2/tasks/${targetId}/versions`
     : `/api/v2/notes/${targetId}/versions`;
 }
 

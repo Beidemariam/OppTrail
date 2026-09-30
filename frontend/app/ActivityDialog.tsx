@@ -10,12 +10,14 @@ import {
 import {
   noteVersionFields,
   opportunityVersionFields,
+  taskVersionFields,
   timelineEntryVersionFields,
 } from "../lib/domain";
 import {
   useActivity,
   useNoteVersions,
   useOpportunityVersions,
+  useTaskVersions,
   useTimelineEntryVersions,
 } from "../lib/queries";
 import { formatTimestamp } from "../lib/time";
@@ -147,9 +149,9 @@ function EditDetails({ detail }: { detail: EditDetail }) {
 }
 
 /**
- * Which history this edit is in. Three branches because each kind has its own
- * version shape, its own field declarations and its own read — the one thing
- * `lib/domain.ts` cannot collapse into a single table.
+ * Which history this edit is in. Four branches since milestone 4.2a, because
+ * each kind has its own version shape, its own field declarations and its own
+ * read — the one thing `lib/domain.ts` cannot collapse into a single table.
  */
 function EditDiff({ detail }: { detail: EditDetail }) {
   if (detail.target === "opportunity") {
@@ -169,6 +171,16 @@ function EditDiff({ detail }: { detail: EditDetail }) {
         versionNumber={detail.version_number}
         fields={timelineEntryVersionFields}
         useVersions={useTimelineEntryVersions}
+      />
+    );
+  }
+  if (detail.target === "task") {
+    return (
+      <VersionDiff
+        targetId={detail.target_id}
+        versionNumber={detail.version_number}
+        fields={taskVersionFields}
+        useVersions={useTaskVersions}
       />
     );
   }

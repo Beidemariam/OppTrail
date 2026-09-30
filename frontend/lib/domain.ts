@@ -122,6 +122,9 @@ export type TimelineEntry = components["schemas"]["TimelineEntryPublic"];
  * its opportunity's name because My Tasks reads across deals and a bare title
  * is not actionable. */
 export type Task = components["schemas"]["TaskPublic"];
+/** One recorded state of a task (milestone 4.2a), the fourth history of the
+ * shape `VersionField` describes. */
+export type TaskVersion = components["schemas"]["TaskVersionPublic"];
 export type TimelineNote = components["schemas"]["NotePublic"];
 /** One discussion on a note: the comment that opened it, the replies under
  * it, and whether anyone has called it finished (milestone 3.3). */
@@ -226,6 +229,30 @@ export const timelineEntryVersionFields: VersionField<TimelineEntryVersion>[] =
 
 export const noteVersionFields: VersionField<NoteVersion>[] = [
   { field: "body", label: "Body", read: (version) => version.body },
+];
+
+/** A task's editable fields (milestone 4.2a). `completed_at` is absent because
+ * ticking a task off is toggle state rather than content, so it is not
+ * versioned -- see the revision's docstring. The assignee reads as a name
+ * because that is what the snapshot means to a person; the id is what it
+ * stores. */
+export const taskVersionFields: VersionField<TaskVersion>[] = [
+  { field: "title", label: "Task", read: (version) => version.title },
+  {
+    field: "description",
+    label: "Description",
+    read: (version) => version.description || "None",
+  },
+  {
+    field: "assignee_id",
+    label: "Assigned to",
+    read: (version) => version.assignee_name ?? "Nobody",
+  },
+  {
+    field: "due_date",
+    label: "Due",
+    read: (version) => version.due_date ?? "No date",
+  },
 ];
 
 /**

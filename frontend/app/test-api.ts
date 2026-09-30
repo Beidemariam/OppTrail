@@ -226,6 +226,7 @@ export function aTask(overrides: Partial<Task> = {}): Task {
     entry_id: null,
     entry_title: null,
     title: "Send the revised pricing",
+    description: "",
     assignee_id: ALEX.id,
     assignee_name: ALEX.name,
     due_date: null,

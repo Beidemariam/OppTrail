@@ -386,15 +386,23 @@ def test_events_from_one_action_read_in_the_order_it_performed_them(
     assert sources(events) == ["system_entry", "version", "audit_log"]
 
 
-def test_the_id_separates_the_five_sources_it_merges(client: TestClient) -> None:
-    """The five tables have five independent id spaces and the feed needs one
-    that is unique and ordered across all of them. `ACTIVITY_STRIDE` is how far
-    apart they are held; this is what fails if a row id ever reaches into the
-    next source's range, which is the assumption the encoding rests on."""
+def test_the_id_separates_the_six_sources_it_merges(client: TestClient) -> None:
+    """The six tables have six independent id spaces and the feed needs one that
+    is unique and ordered across all of them. `ACTIVITY_STRIDE` is how far apart
+    they are held; this is what fails if a row id ever reaches into the next
+    source's range, which is the assumption the encoding rests on.
+
+    Six since milestone 4.2a: a task is editable, so its edits are versioned
+    (invariant 8) and belong in the one feed that answers "who did what when".
+    """
     signup(client, "owner@example.com", "Owner")
     opportunity = create_opportunity(client)
     entry_id = create_entry(client, opportunity["id"])
     note_id = add_note(client, entry_id)
+    task_id = client.post(
+        f"/api/v2/opportunities/{opportunity['id']}/tasks",
+        json={"title": "Call them back"},
+    ).json()["id"]
     # Deleted last, and a comment rather than anything versioned: a delete
     # that cascades takes its children's edits out of the feed with it, which
     # `test_an_edit_to_something_since_deleted_leaves_the_feed` covers and
@@ -406,6 +414,10 @@ def test_the_id_separates_the_five_sources_it_merges(client: TestClient) -> None
     ):
         assert client.patch(path, json=json_body).status_code == 200
     assert edit_note(client, note_id, "Second draft").status_code == 200
+    assert (
+        client.patch(f"/api/v2/tasks/{task_id}", json={"title": "Call them today"}).status_code
+        == 200
+    )
     assert client.delete(f"/api/v2/comments/{comment_id}").status_code == 204
 
     events = activity(client, opportunity["id"])

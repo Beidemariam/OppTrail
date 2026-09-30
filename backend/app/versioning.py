@@ -70,6 +70,19 @@ TIMELINE_ENTRY_VERSIONS = VersionedTable(
     ("type", "title", "body", "event_timestamp", "follow_up_date"),
 )
 
+# The fourth, added by milestone 4.2a because invariant 8 applies to a task's
+# editable fields exactly as it does to an opportunity's -- 4.1 shipped the
+# editing without the history, which is the gap the human found at the
+# checkpoint. `completed_at` is deliberately not here: ticking a task off is
+# toggle state a person sets and unsets, not content quietly rewritten, so a
+# history of every check and uncheck is a log nobody reads (D-130's reasoning).
+TASK_VERSIONS = VersionedTable(
+    "task_versions",
+    "tasks",
+    "task_id",
+    ("title", "description", "assignee_id", "due_date"),
+)
+
 
 def record_version(
     connection: sqlite3.Connection,

@@ -378,6 +378,20 @@ MATRIX: dict[Endpoint, Case] = {
         expected=scoped(viewer=403, editor=403, owner=204),
         url=lambda world: f"/api/v2/tasks/{world.task_id}",
     ),
+    # Owner-only, like the other three edit histories (D-096): invariant 8 names
+    # the opportunity owner, and this app has no admin role.
+    Endpoint("GET", "/api/v2/tasks/{task_id}/versions"): Case(
+        expected=scoped(viewer=403, editor=403, owner=200),
+        url=lambda world: f"/api/v2/tasks/{world.task_id}/versions",
+    ),
+    # Owner-only like the history it reads from, and idempotent -- restoring what
+    # is already current writes nothing (D-120), so the matrix may call it in any
+    # order.
+    Endpoint("POST", "/api/v2/tasks/{task_id}/versions/{version_number}/restore"): Case(
+        expected=scoped(viewer=403, editor=403, owner=200),
+        url=lambda world: f"/api/v2/tasks/{world.task_id}/versions/1/restore",
+        body=lambda world, actor: None,
+    ),
     Endpoint("POST", "/api/v2/tasks/{task_id}/restore"): Case(
         expected=scoped(viewer=403, editor=403, owner=204),
         url=lambda world: f"/api/v2/tasks/{world.deleted_task_id}/restore",

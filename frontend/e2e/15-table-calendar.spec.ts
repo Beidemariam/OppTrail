@@ -145,9 +145,11 @@ test("the calendar's second layer draws a task's due date and links back to its 
   // different source.
   const panel = page.locator(".task-panel");
   await panel.getByRole("button", { name: "Add task" }).click();
-  await panel.getByLabel("Task", { exact: true }).fill("Send updated pricing");
-  await panel.getByLabel("For").selectOption({ label: "Follow-up Tester" });
-  await panel.getByLabel("Due").fill("2027-08-19");
+  await panel.getByLabel("Task title").fill("Send updated pricing");
+  await panel
+    .getByLabel("Who this task is for")
+    .selectOption({ label: "Follow-up Tester" });
+  await panel.getByLabel("When this task is due").fill("2027-08-19");
   await panel.getByRole("button", { name: "Add Task" }).click();
   await expect(panel.getByText("Send updated pricing")).toBeVisible();
 

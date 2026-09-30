@@ -44,11 +44,14 @@ test("assign a task, the assignee is told, and they close it", async ({
 
   const panel = taskPanel(page);
   await panel.getByRole("button", { name: "Add task" }).click();
+  // `exact` on both: the description is the rich composer since milestone 4.2a,
+  // and its toolbar is named "Formatting" -- which a substring query for "For"
+  // matches, the same trap `CLAUDE.md` records for "Body".
+  await panel.getByLabel("Task title").fill("Send the revised pricing");
   await panel
-    .getByLabel("Task", { exact: true })
-    .fill("Send the revised pricing");
-  await panel.getByLabel("For").selectOption({ label: "Blair Osei" });
-  await panel.getByLabel("Due").fill(isoDaysFromToday(-1));
+    .getByLabel("Who this task is for")
+    .selectOption({ label: "Blair Osei" });
+  await panel.getByLabel("When this task is due").fill(isoDaysFromToday(-1));
   await panel.getByRole("button", { name: "Add Task" }).click();
 
   await expect(panel.getByText("Send the revised pricing")).toBeVisible();
@@ -143,9 +146,11 @@ test("the dashboard says what is overdue, and g then t opens the list", async ({
 
   const panel = taskPanel(page);
   await panel.getByRole("button", { name: "Add task" }).click();
-  await panel.getByLabel("Task", { exact: true }).fill("Chase the contract");
-  await panel.getByLabel("For").selectOption({ label: "Task Owner" });
-  await panel.getByLabel("Due").fill(isoDaysFromToday(-2));
+  await panel.getByLabel("Task title").fill("Chase the contract");
+  await panel
+    .getByLabel("Who this task is for")
+    .selectOption({ label: "Task Owner" });
+  await panel.getByLabel("When this task is due").fill(isoDaysFromToday(-2));
   await panel.getByRole("button", { name: "Add Task" }).click();
   await expect(panel.getByText("Chase the contract")).toBeVisible();
 

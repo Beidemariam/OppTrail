@@ -3,6 +3,7 @@
 import { Link } from "react-router";
 
 import { taskStanding, type Task } from "../lib/domain";
+import { MarkdownText } from "./MarkdownText";
 
 /**
  * One task, as a row (milestone 4.1).
@@ -46,6 +47,15 @@ export function TaskRow({
             it completes rather than by the word "done" repeated down the page. */}
         <span className="task-title">{task.title}</span>
       </label>
+
+      {/* Markdown, like every other body in this app (milestone 4.2a): the
+          composer writes it and one renderer reads it, so a list typed into a
+          task's description shows as a list rather than as dashes. */}
+      {task.description && (
+        <div className="task-description">
+          <MarkdownText content={task.description} />
+        </div>
+      )}
 
       <p className="meta-row task-meta">
         {showOpportunity && (

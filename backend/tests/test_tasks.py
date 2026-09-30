@@ -531,3 +531,105 @@ def test_a_task_due_far_in_the_future_is_still_in_its_own_month(client: TestClie
     items = client.get("/api/v2/tasks?assignee=any&from=2027-07-26&to=2027-09-05").json()["items"]
 
     assert [task["title"] for task in items] == ["Send updated pricing"]
+
+
+def test_an_edit_to_a_task_is_recoverable_and_reaches_the_activity_log(
+    client: TestClient,
+) -> None:
+    """`AGENTS.md` invariant 8 for tasks (milestone 4.2a).
+
+    Milestone 4.1 shipped an editable task with no history, which is the
+    violation the human found at the Phase 4 checkpoint -- and asked for by name:
+    "it is also good to have the history of the task captured in the activity
+    log." Both halves are here: the history itself, and the one feed that reads
+    it.
+    """
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    task = create_task(client, opportunity["id"], title="Call them back", due_date=days_from_now(4))
+
+    # Version 1 is written at creation, so the history opens with what the task
+    # said on day one rather than with its first edit (D-097's rule).
+    versions = client.get(f"/api/v2/tasks/{task['id']}/versions").json()["items"]
+    assert [v["version_number"] for v in versions] == [1]
+    assert versions[0]["title"] == "Call them back"
+
+    client.patch(
+        f"/api/v2/tasks/{task['id']}",
+        json={"title": "Call them today", "description": "They asked for pricing."},
+    )
+
+    versions = client.get(f"/api/v2/tasks/{task['id']}/versions").json()["items"]
+    assert [v["version_number"] for v in versions] == [1, 2]
+    # The whole state, every time, so no reader reconstructs one from a chain.
+    assert versions[1]["title"] == "Call them today"
+    assert versions[1]["description"] == "They asked for pricing."
+    assert versions[1]["due_date"] == days_from_now(4)
+    # The earlier value is still readable, which is what "recoverable" means.
+    assert versions[0]["title"] == "Call them back"
+    assert versions[0]["description"] == ""
+
+    # ...and the edit is in the one place that answers "who did what when".
+    feed = client.get(f"/api/v2/opportunities/{opportunity['id']}/activity").json()["items"]
+    task_edits = [event for event in feed if event["detail"].get("target") == "task"]
+    assert len(task_edits) == 1
+    assert task_edits[0]["detail"]["version_number"] == 2
+
+
+def test_ticking_a_task_off_writes_no_version(client: TestClient) -> None:
+    """`completed_at` is deliberately not a versioned field: checking a task and
+    unchecking it is toggle state a person sets and unsets, not content quietly
+    rewritten, so a history of every check is a log nobody reads (D-130's
+    reasoning applied to invariant 8's scope)."""
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    task = create_task(client, opportunity["id"])
+
+    client.post(f"/api/v2/tasks/{task['id']}/complete")
+    client.post(f"/api/v2/tasks/{task['id']}/reopen")
+
+    versions = client.get(f"/api/v2/tasks/{task['id']}/versions").json()["items"]
+    assert [v["version_number"] for v in versions] == [1]
+
+
+def test_a_task_carries_a_description(client: TestClient) -> None:
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+
+    task = create_task(
+        client,
+        opportunity["id"],
+        title="Send pricing",
+        description="They want the **2027** figures.",
+    )
+
+    assert task["description"] == "They want the **2027** figures."
+    # Empty rather than null when nobody wrote one, so every reader treats it as
+    # a string and the composer has nothing to special-case.
+    plain = create_task(client, opportunity["id"], title="No detail")
+    assert plain["description"] == ""
+
+
+def test_a_task_edit_can_be_put_back(client: TestClient) -> None:
+    """The fourth restorable history (milestone 4.2a, D-116/D-120): the restore is
+    itself recorded, so it can be undone in turn and nothing is lost."""
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    task = create_task(client, opportunity["id"], title="Call them back")
+    client.patch(f"/api/v2/tasks/{task['id']}", json={"title": "Call them today"})
+
+    restored = client.post(f"/api/v2/tasks/{task['id']}/versions/1/restore")
+
+    assert restored.status_code == 200
+    assert restored.json()["title"] == "Call them back"
+    # Version 3, not a rewind to 1: the history only grows, so the edit this
+    # restore replaced is itself recoverable.
+    versions = client.get(f"/api/v2/tasks/{task['id']}/versions").json()["items"]
+    assert [v["version_number"] for v in versions] == [1, 2, 3]
+    assert versions[2]["title"] == "Call them back"
+
+    # Restoring what is already current writes nothing, which is what makes a
+    # retry safe (the server's half of D-114).
+    assert client.post(f"/api/v2/tasks/{task['id']}/versions/3/restore").status_code == 200
+    versions = client.get(f"/api/v2/tasks/{task['id']}/versions").json()["items"]
+    assert len(versions) == 3

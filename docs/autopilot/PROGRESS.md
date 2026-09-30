@@ -4732,6 +4732,81 @@ the document.
       schema, where the dates that need migrating actually live. **Copying a
       SQLite file out from under a live writer is not a read of that
       database.**
+### 4.2a From the Phase 4 checkpoint review — **DONE**
+
+Five checks, three passed, two failed, and one of the passes carried five
+feature requests. The two failures were worth more than the passes.
+
+- [x] **T5 was a real defect, and not the one it looked like** (**D-145**).
+      *"I can't delete the task because authentication is required."* Read from
+      the container logs rather than from the report: `GET /api/v2/tasks` was
+      already 401 a minute before the refused deletes, and the session row from
+      that login is **still in the table, valid until 7 October** — so the
+      server never revoked it. The cookie had stopped matching, most likely
+      because signing in as a colleague in another window rotates the shared
+      cookie, which `auth.py` does deliberately. **The session ending is not the
+      bug; the app not noticing is.** Nothing reacted to a 401, so the screen
+      stayed signed-in while every request failed and the reader was told their
+      *action* was refused. Fixed once, at the query-cache level: a 401 on any
+      read or write invalidates `keys.session`, `useSession` refetches `null`,
+      and every view already branches on that. The machinery existed and nothing
+      was pulling the trigger.
+- [x] **T2 I could not reproduce, and said so.** The report was that the
+      notification shows the assignment but not the task's name. Checked three
+      ways: all three `task_assigned` payloads in the live database carry a
+      `title`, the shipped bundle contains the sentence that reads it, and a real
+      browser signed in as Gavin renders *"You were assigned: Gavin task"*. The
+      honest answer is that the evidence contradicts the report, and the thing to
+      do is ask rather than invent a fix — the notification does *not* name the
+      **deal**, which may be what was missing.
+- [x] **T4's instruction was incomprehensible because the feature it described
+      does not exist.** I asked the reviewer to "write a task from an entry's
+      context", and there is no way to: `tasks.entry_id` is in the schema and
+      `FEATURES.md` §8 names "optional link to the entry that prompted it", but
+      no screen offers it. Recorded rather than quietly built, because it is the
+      same class as the edit gap below: 4.1's API is ahead of its UI in two
+      places, and the review found both.
+- [x] **Changing a task was impossible** — 4.1 shipped `PATCH` with nothing
+      calling it, so the panel offered Delete and no way to alter a title, a
+      date, or the assignee the reviewer asked about. `TaskFields` is now one
+      component for writing and for editing, opened in the row through
+      `useInlineEditor` (2.11's rule), because a composer and an editor over the
+      same four values are two copies of one form.
+- [x] **Tasks had no edit history, which invariant 8 already required**
+      (**D-146**). A task's title, description, assignee and due date are
+      editable, so `AGENTS.md`'s "every user-editable field keeps its previous
+      value" applied from the moment 4.1 shipped and I did not build it. The
+      human asked for exactly this independently. Revision
+      `0011_task_description_and_versions` adds `task_versions` — the fourth
+      table of the shape `versioning.py` describes, declared there as a
+      `VersionedTable` rather than as a fourth INSERT — with version 1 backfilled
+      for every existing task (D-097's rule), a read, a restore, and a branch in
+      the activity log. `completed_at` is deliberately **not** versioned:
+      ticking a task off is toggle state, not content rewritten, so a history of
+      every check is a log nobody reads (D-130's reasoning).
+- [x] **A description**, asked for and granted: Markdown like every other body
+      here, written in the rich composer and rendered by `MarkdownText`, and
+      versioned with the other three fields.
+- [x] **Held for the human** (**D-146**): comments on a task, and multiple
+      assignees. Both were asked for; both are deferred on a reading of §8's
+      "deliberately not a task manager" rather than built. Comments mean threads,
+      replies, resolve and reactions on a second entity — the whole of 3.3 again
+      — and multiple assignees change what My Tasks, the notification and D-142's
+      "the assignee may complete it" each mean. Recorded as a decision so the
+      human can overrule the reading, as they did on D-005.
+
+Two things about my own work in this milestone, both found by tests rather than
+by reading:
+
+- **My re-run guard test for revision 0010 was unsound.** It rewound
+      `alembic_version` and re-ran, which broke the moment 0011 added a column,
+      because `ALTER TABLE ... ADD COLUMN` is not idempotent. Rewritten as a
+      staged upgrade — stop at 0009, write the task a person would have written,
+      continue — which is the state the guard exists for reached the way a
+      database actually reaches it.
+- **The authorization matrix caught both new routes** before I remembered to add
+      them, which is what it is for.
+
 - [ ] 4.3 Attachments: content-addressed storage, magic-byte validation,
       streamed authorized download, `Content-Disposition: attachment` and
       `nosniff` (ADR 0008). Schema: `attachments`. Wire into the upload-

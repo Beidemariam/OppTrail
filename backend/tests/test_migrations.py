@@ -16,7 +16,9 @@ import pytest
 from conftest import CsrfClient
 from test_timeline import edit_note
 
+from alembic import command
 from app.database import (
+    alembic_config,
     column_exists,
     db_connection,
     initialize_database,
@@ -31,7 +33,7 @@ CANONICAL = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 # The revision `alembic upgrade head` is expected to land on. Written down
 # rather than read from the script directory, for the same reason
 # `expected_schema.sql` is: a new revision should have to say so here.
-HEAD_REVISION = "0010_follow_ups_to_tasks"
+HEAD_REVISION = "0011_task_description_and_versions"
 
 
 @pytest.fixture
@@ -371,20 +373,57 @@ def test_existing_follow_up_dates_become_tasks(database_url: str) -> None:
 def test_the_backfill_does_not_duplicate_a_task_somebody_already_wrote(
     database_url: str,
 ) -> None:
-    """The `NOT EXISTS` guard, which is what makes the revision safe to re-run by
-    hand against a partly-migrated copy -- the thing an operator reaching for it
-    would actually do."""
-    build_mvp_database(database_url)
-    initialize_database()
+    """Revision 0010's `NOT EXISTS` guard: an entry that already has a task does
+    not get a second one from the backfill.
+
+    Upgraded in two stages rather than by rewinding `alembic_version` and
+    re-running, which is what the first version of this test did -- and it broke
+    the moment revision 0011 added a column, because re-running an
+    `ALTER TABLE ... ADD COLUMN` is not idempotent. Stopping at 0009, writing the
+    task a person would have written, then continuing is the honest shape: it is
+    the state the guard exists for, reached the way a database reaches it.
+    """
+    # From empty rather than from the MVP schema: a pre-Alembic database has to
+    # be bridged and stamped before a staged upgrade can run at all
+    # (`bridge_pre_alembic_database`), and the guard has nothing to do with that
+    # path.
+    config = alembic_config()
+    command.upgrade(config, "0009_tasks")
 
     with db_connection() as connection:
-        connection.execute("DELETE FROM alembic_version")
-        connection.execute("INSERT INTO alembic_version VALUES ('0009_tasks')")
+        connection.execute(
+            "INSERT INTO users (id, email, password_hash, name) VALUES (1, 'a@b.co', 'h', 'A')"
+        )
+        connection.execute(
+            """
+            INSERT INTO opportunities (id, name, account_name, stage, owner_id)
+            VALUES (1, 'Deal', 'Acme', 'Prospecting', 1)
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO timeline_entries (
+                id, opportunity_id, type, title, body, event_timestamp,
+                created_by, follow_up_date
+            )
+            VALUES (1, 1, 'call', 'Discovery', 'Body', '2026-01-05T14:30:00Z', 1, '2026-01-12')
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO tasks (opportunity_id, entry_id, title, created_by,
+                created_at, updated_at)
+            VALUES (1, 1, 'Written by hand', 1, ?, ?)
+            """,
+            ("2026-01-06T09:00:00Z", "2026-01-06T09:00:00Z"),
+        )
         connection.commit()
 
-    initialize_database()
+    command.upgrade(config, "head")
 
     with db_connection() as connection:
-        count = connection.execute("SELECT COUNT(*) AS n FROM tasks").fetchone()["n"]
+        titles = [row["title"] for row in connection.execute("SELECT title FROM tasks ORDER BY id")]
 
-    assert count == 1
+    # The hand-written one stands and the backfill added nothing, because entry 1
+    # already had a task.
+    assert titles == ["Written by hand"]

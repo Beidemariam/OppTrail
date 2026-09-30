@@ -1308,6 +1308,69 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/tasks/{task_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Task Versions Page
+         * @description A task's edit history, oldest first, owner-only (milestone 4.2a).
+         *
+         *     The fourth history to answer this question, under the same rule as the other
+         *     three (**D-096**): `AGENTS.md` invariant 8 says the *opportunity owner* can
+         *     read it, and this app has no admin role. Milestone 4.1 shipped an editable
+         *     task with no history at all, which is the invariant violation the human found
+         *     at the Phase 4 checkpoint.
+         *
+         *     `assignee_name` is resolved here rather than stored, so a history row reads
+         *     "Gavin" rather than "3" while the snapshot keeps the id it was written with.
+         */
+        get: operations["list_task_versions_page_api_v2_tasks__task_id__versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/tasks/{task_id}/versions/{version_number}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Task Version
+         * @description Put a recorded version of a task back as the current one (milestone 4.2a).
+         *
+         *     The fourth thing in this app whose edits can be undone, under the rules the
+         *     other three already follow (**D-116**, **D-120**): owner-only like the
+         *     history read beside it, the restore is itself recorded as a version so it can
+         *     be undone in turn, and restoring what is already current writes nothing --
+         *     which also makes a retry idempotent.
+         *
+         *     **The assignee is restored with everything else, and notifies nobody.** The
+         *     same reasoning a restored note sends no second mention (D-120): whoever this
+         *     task was assigned to was told when it happened, and a restore announcing it
+         *     again would make every undo a fresh ping. A task handed to somebody *new* by
+         *     a restore is the one case that arguably deserves one; it is not sent, because
+         *     "you were assigned" for a task that has existed for a week is more confusing
+         *     than silence, and the change is on the deal's activity log either way.
+         */
+        post: operations["restore_task_version_api_v2_tasks__task_id__versions__version_number__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -1366,7 +1429,7 @@ export interface components {
              * Target
              * @enum {string}
              */
-            target: "opportunity" | "timeline_entry" | "note";
+            target: "opportunity" | "timeline_entry" | "note" | "task";
             /** Target Id */
             target_id: number;
             /** Version Number */
@@ -2170,6 +2233,13 @@ export interface components {
             /** Next Cursor */
             next_cursor?: string | null;
         };
+        /** Page[TaskVersionPublic] */
+        Page_TaskVersionPublic_: {
+            /** Items */
+            items: components["schemas"]["TaskVersionPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
         /** Page[TimelineEntryPublic] */
         Page_TimelineEntryPublic_: {
             /** Items */
@@ -2439,6 +2509,11 @@ export interface components {
         TaskCreate: {
             /** Title */
             title: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
             /** Assignee Email */
             assignee_email?: string | null;
             /** Due Date */
@@ -2460,6 +2535,8 @@ export interface components {
             entry_title: string | null;
             /** Title */
             title: string;
+            /** Description */
+            description: string;
             /** Assignee Id */
             assignee_id: number | null;
             /** Assignee Name */
@@ -2496,10 +2573,44 @@ export interface components {
         TaskUpdate: {
             /** Title */
             title?: string | null;
+            /** Description */
+            description?: string | null;
             /** Assignee Email */
             assignee_email?: string | null;
             /** Due Date */
             due_date?: string | null;
+        };
+        /**
+         * TaskVersionPublic
+         * @description One recorded state of a task (milestone 4.2a, `AGENTS.md` invariant 8).
+         *
+         *     The fourth history of the shape the other three already have. `assignee_id`
+         *     rather than a name is the stored snapshot; `assignee_name` is resolved on
+         *     read so the history reads as "assigned to Gavin" rather than "assignee 3".
+         */
+        TaskVersionPublic: {
+            /** Id */
+            id: number;
+            /** Task Id */
+            task_id: number;
+            /** Version Number */
+            version_number: number;
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+            /** Assignee Id */
+            assignee_id: number | null;
+            /** Assignee Name */
+            assignee_name: string | null;
+            /** Due Date */
+            due_date: string | null;
+            /** Edited By */
+            edited_by: number;
+            /** Editor Name */
+            editor_name: string | null;
+            /** Created At */
+            created_at: string;
         };
         /** TimelineEntryCreate */
         TimelineEntryCreate: {
@@ -5022,6 +5133,76 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_task_versions_page_api_v2_tasks__task_id__versions_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                task_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_TaskVersionPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_task_version_api_v2_tasks__task_id__versions__version_number__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: number;
+                version_number: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskPublic"];
+                };
             };
             /** @description Validation Error */
             422: {

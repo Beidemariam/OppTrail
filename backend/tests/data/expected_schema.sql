@@ -295,6 +295,9 @@ END;
 -- `completed_at`/`completed_by` rather than a boolean done flag, for the reason
 -- revision 0003 gave `notifications.read_at`; `due_date` is a date because
 -- "call them back Thursday" has no time of day.
+-- `description` was added by ALTER TABLE (revision 0011), which splices the new
+-- column in before the closing paren rather than reformatting the statement --
+-- hence it landing after `deleted_at` here.
 CREATE TABLE tasks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     opportunity_id INTEGER NOT NULL REFERENCES opportunities(id),
@@ -308,6 +311,23 @@ CREATE TABLE tasks (
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     deleted_at TEXT
+, description TEXT NOT NULL DEFAULT '');
+
+-- Revision 0011 (milestone 4.2a): the fourth history table of the shape
+-- `versioning.py` describes, required by AGENTS.md invariant 8 for a task's
+-- editable fields. `completed_at` is deliberately absent -- ticking a task off
+-- is toggle state, not content rewritten.
+CREATE TABLE task_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL REFERENCES tasks(id),
+    version_number INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    assignee_id INTEGER REFERENCES users(id),
+    due_date TEXT,
+    edited_by INTEGER NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    UNIQUE (task_id, version_number)
 );
 
 CREATE INDEX idx_tasks_opportunity ON tasks (opportunity_id, due_date, id);

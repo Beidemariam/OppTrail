@@ -1,17 +1,19 @@
 "use client";
 
-import { FormEvent, useRef, useState } from "react";
+import { FormEvent, useRef, useState, type RefObject } from "react";
 
-import { todayIsoDate, type Access } from "../lib/domain";
+import { todayIsoDate, type Access, type Task } from "../lib/domain";
 import {
   useCreateTask,
   useDeleteTask,
+  useEditTask,
   useMembers,
   useRestoreTask,
   useSetTaskDone,
   useTasks,
 } from "../lib/queries";
 import { useInlineEditor } from "./InlineEdit";
+import { RichTextEditor } from "./RichTextEditor";
 import { TaskRow } from "./TaskRow";
 import { useUndoableDelete } from "./Toasts";
 
@@ -77,15 +79,11 @@ export function TaskPanel({
             }
           >
             {access.canChangeItem(task.created_by) && (
-              <div className="inline-actions">
-                <button
-                  type="button"
-                  className="danger-button"
-                  onClick={() => removeWithUndo(task.id)}
-                >
-                  Delete
-                </button>
-              </div>
+              <TaskActions
+                opportunityId={opportunityId}
+                task={task}
+                onDelete={() => removeWithUndo(task.id)}
+              />
             )}
           </TaskRow>
         ))}
@@ -127,42 +125,199 @@ export function TaskPanel({
 }
 
 /**
- * Writing a task down: a title, optionally who it is for and when it is due.
+ * Edit and Delete on one task (milestone 4.2a).
  *
- * The assignee is a `select` over `useMembers` — the people a task can actually
- * reach on this deal, which is the same list the composer's `@` trigger offers
- * (3.2, D-123) — rather than a typed email. A task is for a colleague on the
- * deal, and asking somebody to remember an address is the mistake requirement
- * 13 already made once.
+ * Milestone 4.1 shipped a `PATCH` route with nothing that called it: the panel
+ * offered Delete and no way to change a title, a date or — the one the reviewer
+ * asked for by name — who a task is assigned to. The editor replaces the row's
+ * own body through `useInlineEditor`, the rule this app applies everywhere
+ * content is edited where it is read (2.11), so a reader is not moved to a form
+ * elsewhere on the page.
+ */
+function TaskActions({
+  opportunityId,
+  task,
+  onDelete,
+}: {
+  opportunityId: number;
+  task: Task;
+  onDelete: () => void;
+}) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const titleRef = useRef<HTMLInputElement>(null);
+  const editor = useInlineEditor(triggerRef, titleRef);
+
+  if (editor.editing) {
+    return (
+      <TaskFields
+        opportunityId={opportunityId}
+        task={task}
+        titleRef={titleRef}
+        onDone={editor.close}
+      />
+    );
+  }
+
+  return (
+    <div className="inline-actions">
+      <button
+        type="button"
+        ref={triggerRef}
+        className="secondary-button"
+        onClick={editor.open}
+      >
+        Edit
+      </button>
+      <button type="button" className="danger-button" onClick={onDelete}>
+        Delete
+      </button>
+    </div>
+  );
+}
+
+/**
+ * A task's fields, for writing a new one or changing an existing one
+ * (milestone 4.2a).
+ *
+ * One component for both, because the fields are the same four and a second
+ * copy is how two forms come to disagree about what a task has. `task` is
+ * `null` when composing; everything else follows from that — which route is
+ * called, what the submit button says, and whether the fields start empty.
+ *
+ * The description is the rich composer, like every other body in this app
+ * (`app/RichTextEditor.tsx`), so `**bold**` and a list work here for the same
+ * reason they work in a note.
+ */
+function TaskFields({
+  opportunityId,
+  task,
+  titleRef,
+  onDone,
+}: {
+  opportunityId: number;
+  task: Task | null;
+  titleRef?: RefObject<HTMLInputElement | null>;
+  onDone: () => void;
+}) {
+  const create = useCreateTask(opportunityId);
+  const edit = useEditTask(opportunityId);
+  const members = useMembers(opportunityId);
+  const [title, setTitle] = useState(task?.title ?? "");
+  const [description, setDescription] = useState(task?.description ?? "");
+  const [assignee, setAssignee] = useState(() => {
+    // The stored assignee is an id; this control is keyed by email, so the
+    // current value is resolved from the member list once it arrives. Seeded
+    // empty and corrected below rather than left blank, because a saved edit
+    // that silently unassigned somebody would be the worst kind of bug here.
+    return "";
+  });
+  const [assigneeReady, setAssigneeReady] = useState(task === null);
+  const [dueDate, setDueDate] = useState(task?.due_date ?? "");
+
+  const people = members.data ?? [];
+  if (!assigneeReady && people.length > 0) {
+    setAssigneeReady(true);
+    const current = people.find(
+      (member) => member.user_id === task?.assignee_id,
+    );
+    setAssignee(current?.email ?? "");
+  }
+
+  const save = task ? edit : create;
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const fields = {
+      title,
+      description,
+      assignee_email: assignee || null,
+      due_date: dueDate || null,
+    };
+    const done = { onSuccess: () => onDone() };
+    if (task) {
+      edit.mutate({ taskId: task.id, patch: fields }, done);
+    } else {
+      create.mutate(fields, done);
+    }
+  }
+
+  return (
+    <form className="task-form" onSubmit={submit}>
+      {/* A visible caption *and* an `aria-label` on each control, the pattern
+          `OpportunityFilterBar` established (2.13, **D-082**). It matters more
+          here than as a convention: a `<label>` wrapping a `<select>` computes
+          its accessible name from the label's whole text content, which for the
+          assignee was "ForNobody yetAlex Rivera" — every option concatenated.
+          That is what a screen reader would have announced, and it is why an
+          exact-name query could not find the control at all. */}
+      <label>
+        Task
+        <input
+          ref={titleRef}
+          aria-label="Task title"
+          value={title}
+          placeholder="Call them back"
+          onChange={(event) => setTitle(event.target.value)}
+          required
+        />
+      </label>
+      <div className="field">
+        <span className="field-caption">Description</span>
+        <RichTextEditor
+          label="Task description"
+          placeholder="Anything worth saying about it"
+          value={description}
+          onChange={setDescription}
+        />
+      </div>
+      <label>
+        For
+        <select
+          aria-label="Who this task is for"
+          value={assignee}
+          onChange={(event) => setAssignee(event.target.value)}
+        >
+          <option value="">Nobody yet</option>
+          {people.map((member) => (
+            <option key={member.email} value={member.email}>
+              {member.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Due
+        <input
+          type="date"
+          aria-label="When this task is due"
+          value={dueDate}
+          onChange={(event) => setDueDate(event.target.value)}
+        />
+      </label>
+      <div className="inline-actions">
+        <button className="primary-button" type="submit">
+          {task ? "Save Task" : "Add Task"}
+        </button>
+        <button className="secondary-button" type="button" onClick={onDone}>
+          Cancel
+        </button>
+      </div>
+      {save.isError && <p className="error">{save.error.message}</p>}
+    </form>
+  );
+}
+
+/**
+ * Writing a task down, behind the trigger that reveals the fields.
+ *
+ * The fields themselves are `TaskFields` above, shared with the editor: a
+ * composer and an editor over the same four values were two copies of one form
+ * until milestone 4.2a, and two copies is how they come to disagree.
  */
 function TaskComposer({ opportunityId }: { opportunityId: number }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const composer = useInlineEditor(triggerRef, titleRef);
-  const create = useCreateTask(opportunityId);
-  const members = useMembers(opportunityId);
-  const [title, setTitle] = useState("");
-  const [assignee, setAssignee] = useState("");
-  const [dueDate, setDueDate] = useState("");
-
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    create.mutate(
-      {
-        title,
-        assignee_email: assignee || null,
-        due_date: dueDate || null,
-      },
-      {
-        onSuccess: () => {
-          setTitle("");
-          setAssignee("");
-          setDueDate("");
-          composer.close();
-        },
-      },
-    );
-  }
 
   if (!composer.editing) {
     return (
@@ -181,52 +336,11 @@ function TaskComposer({ opportunityId }: { opportunityId: number }) {
   }
 
   return (
-    <form className="task-form" onSubmit={submit}>
-      <label>
-        Task
-        <input
-          ref={titleRef}
-          value={title}
-          placeholder="Call them back"
-          onChange={(event) => setTitle(event.target.value)}
-          required
-        />
-      </label>
-      <label>
-        For
-        <select
-          value={assignee}
-          onChange={(event) => setAssignee(event.target.value)}
-        >
-          <option value="">Nobody yet</option>
-          {(members.data ?? []).map((member) => (
-            <option key={member.email} value={member.email}>
-              {member.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        Due
-        <input
-          type="date"
-          value={dueDate}
-          onChange={(event) => setDueDate(event.target.value)}
-        />
-      </label>
-      <div className="inline-actions">
-        <button className="primary-button" type="submit">
-          Add Task
-        </button>
-        <button
-          className="secondary-button"
-          type="button"
-          onClick={composer.close}
-        >
-          Cancel
-        </button>
-      </div>
-      {create.isError && <p className="error">{create.error.message}</p>}
-    </form>
+    <TaskFields
+      opportunityId={opportunityId}
+      task={null}
+      titleRef={titleRef}
+      onDone={composer.close}
+    />
   );
 }

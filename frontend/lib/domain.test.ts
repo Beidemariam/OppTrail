@@ -74,6 +74,7 @@ function aTask(overrides: Partial<Task> = {}): Task {
     entry_id: null,
     entry_title: null,
     title: "Send updated pricing",
+    description: "",
     assignee_id: 1,
     assignee_name: "Alex",
     due_date: "2026-12-02",
