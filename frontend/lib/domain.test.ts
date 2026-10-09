@@ -10,6 +10,9 @@ import {
   defaultOpportunityColumns,
   editableField,
   editableOpportunityFields,
+  isLinked,
+  linkTargetFromParams,
+  searchResultHref,
   emptyOpportunityViewState,
   emptyTimelineFilters,
   tasksDueOn,
@@ -557,5 +560,86 @@ describe("the calendar's follow-up layer (milestone 3.0b, D-088)", () => {
       1, 3,
     ]);
     expect(tasksDueOn(tasks, "2026-12-25")).toEqual([]);
+  });
+});
+
+describe("linking to one thing inside a timeline (milestone 6.0)", () => {
+  const params = (query: string) => new URLSearchParams(query);
+
+  it("reads the level a URL names", () => {
+    expect(linkTargetFromParams(params("entry=7"))).toEqual({
+      level: "entry",
+      id: 7,
+    });
+    expect(linkTargetFromParams(params("note=12"))).toEqual({
+      level: "note",
+      id: 12,
+    });
+    expect(linkTargetFromParams(params("comment=4"))).toEqual({
+      level: "comment",
+      id: 4,
+    });
+  });
+
+  it("takes the innermost level when a URL names several", () => {
+    // A link may say which entry a comment is under without the entry
+    // stealing the mark from the thing the reader actually followed.
+    expect(linkTargetFromParams(params("entry=7&note=12&comment=4"))).toEqual({
+      level: "comment",
+      id: 4,
+    });
+    expect(linkTargetFromParams(params("entry=7&note=12"))).toEqual({
+      level: "note",
+      id: 12,
+    });
+  });
+
+  it("treats an absent or unusable parameter as no target", () => {
+    // A stale hand-edited URL should land the reader on the deal rather than
+    // break, so every one of these is the same answer as no parameter at all.
+    expect(linkTargetFromParams(params(""))).toBeNull();
+    expect(linkTargetFromParams(params("entry=nonsense"))).toBeNull();
+    expect(linkTargetFromParams(params("entry=0"))).toBeNull();
+    expect(linkTargetFromParams(params("entry=-3"))).toBeNull();
+    expect(linkTargetFromParams(params("timeline.order=asc"))).toBeNull();
+  });
+
+  it("sends each kind of search result to the level it matched", () => {
+    const base = {
+      opportunity_id: 3,
+      opportunity_name: "Acme",
+      note_id: null,
+      title: null,
+      snippet: { text: "", matches: [] },
+      timestamp: "2026-01-01T00:00:00Z",
+      author_id: 1,
+      author_name: "Owner",
+    };
+    expect(
+      searchResultHref({ ...base, kind: "entry", id: 7, entry_id: 7 }),
+    ).toBe("/opportunities/3?entry=7");
+    expect(
+      searchResultHref({ ...base, kind: "note", id: 12, entry_id: 7 }),
+    ).toBe("/opportunities/3?note=12");
+    expect(
+      searchResultHref({ ...base, kind: "comment", id: 4, entry_id: 7 }),
+    ).toBe("/opportunities/3?comment=4");
+    // An attachment has no level of its own: it is rendered on the entry it
+    // hangs off, so it is addressed by that entry rather than by its own id
+    // -- four kinds, three levels.
+    expect(
+      searchResultHref({ ...base, kind: "attachment", id: 99, entry_id: 7 }),
+    ).toBe("/opportunities/3?entry=7");
+  });
+
+  it("matches a row only at its own level", () => {
+    // The id spaces are independent, so note 7 and entry 7 both exist and a
+    // link to one must not mark the other.
+    const target = { level: "note", id: 7 } as const;
+    expect(isLinked(target, "note", 7)).toBe(true);
+    expect(isLinked(target, "entry", 7)).toBe(false);
+    expect(isLinked(target, "note", 8)).toBe(false);
+    expect(isLinked(null, "note", 7)).toBe(false);
+    expect(isLinked(undefined, "note", 7)).toBe(false);
   });
 });

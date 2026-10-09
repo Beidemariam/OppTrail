@@ -9,6 +9,7 @@ import {
   type Access,
   type Opportunity,
   type TimelineFilters,
+  linkTargetFromParams,
 } from "../lib/domain";
 import { useKeyboardShortcuts } from "../lib/keyboard";
 import { useLiveUpdates } from "../lib/liveUpdates";
@@ -78,12 +79,18 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
       paramsWithState(searchParams, next, emptyTimelineFilters, "timeline"),
     );
   }
-  // An entry named in the URL is one a link pointed at (milestone 3.2,
-  // **D-124**): `lib/suggestions.ts` writes `?entry=`, and this is the other
-  // half of it — the entry is scrolled to and marked so a reader arriving from
-  // a note lands on the thing it referred to rather than at the top of a
-  // timeline.
-  const linkedEntryId = Number(searchParams.get("entry")) || null;
+  // What a link pointed at inside this timeline (milestone 3.2, **D-124**;
+  // extended to notes and comments by milestone 6.0): `lib/suggestions.ts`
+  // writes `?entry=` and search writes whichever level it matched, and this is
+  // the other half of it — the row is scrolled to and marked, so a reader
+  // arriving from a link or a search result lands on the thing it referred to
+  // rather than at the top of a timeline.
+  const linkTarget = linkTargetFromParams(searchParams);
+  // A boolean, not the object: `linkTargetFromParams` builds a fresh one every
+  // render, so depending on it below would re-run the effect on every render
+  // and scroll a reader back to the top of the panel as they read. The effect
+  // only asks whether something else has claimed the scroll.
+  const hasLinkTarget = linkTarget !== null;
 
   // The views above are a full screen of board or list, so an opportunity
   // opened from the bottom of a column would otherwise land below the fold and
@@ -97,11 +104,11 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
     // Not when a link named an entry (milestone 3.2): that entry scrolls itself
     // into view, and this would then scroll straight past it back to the top —
     // child effects run before a parent's, so the last request would win.
-    if (linkedEntryId) {
+    if (hasLinkTarget) {
       return;
     }
     panelRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
-  }, [opportunityId, linkedEntryId]);
+  }, [opportunityId, hasLinkTarget]);
   const entryTitleRef = useRef<HTMLInputElement>(null);
   const session = useSession();
   const opportunities = useOpportunities(true);
@@ -243,7 +250,7 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
               entries={timeline.data}
               opportunityId={opportunityId}
               access={access}
-              linkedEntryId={linkedEntryId}
+              linkTarget={linkTarget}
             />
           )}
         </div>

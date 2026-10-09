@@ -855,3 +855,28 @@ untraced edits, the "shared view shows different rows", the activity log
 reported as absent because the surviving button kept the removed thing's name
 (D-136), and now an AI that could never have answered. The phase gates are not
 ceremony.
+
+**D-170** | 2026-10-09 | Milestone 6.0 is the human's own report from the Phase 4 gate — *"when searching, clicking on the result should take me directly to the note comment or entry than just the opportunity."* Half the mechanism existed: `?entry=` (D-124) scrolls an entry into view and marks it, and `SearchResultPublic` already carries the matched row's own id for all four kinds. The question was what shape the other two levels take. | (a) a parameter and a prop per level — `?note=`, `?comment=`, threaded as `linkedNoteId`/`linkedCommentId` beside the existing `linkedEntryId`, (b) one `LinkTarget` of `{level, id}` parsed once and passed whole, with `isLinked` asked at each level, (c) one opaque parameter like `?at=note:12` | (b) | (a) is the obvious extension and the reason to refuse it is arithmetic: three levels is three props through three components, and the project already has a fourth searchable kind (attachments) and a fifth plausible one (v3's email). Each new level under (a) edits every component in the chain. (b) makes a level a *value*, so a new one is a case in one function and a CSS class, and it is what let the scroll-and-mark behaviour the entry card had carried inline since 3.2 move into `app/useLinkTarget.ts` with three callers instead of three copies. (c) buys nothing a reader or a test can use and makes a hand-written URL unreadable, which matters because these URLs are pasted between colleagues — the whole reason D-124 made `?entry=` a plain parameter rather than state. **Precedence rather than exclusivity**: a URL naming several levels resolves to the innermost, so a link can record the entry a comment sits under without two things on screen both claiming to be the answer. **Four kinds, three levels**: an attachment has no rendering of its own — it is read on the entry it hangs off (4.3) — so `searchResultHref` sends it to that entry. | Y — `?note=` and `?comment=` are URL surface, and the shape is what a fifth level would extend. | N — the human asked for this in their own words and scheduled it here. |
+
+**The one case that needed a decision of its own** is a comment inside a
+**resolved** thread, which collapses to a single line (3.3). A link pointing
+there would land a reader on something they cannot see — D-136's *"depth reads
+as absence"* reappearing one level below where milestone 3.7 found it. The
+thread **expands for reading and is not reopened**: reopening is a state change
+visible to everybody and author-or-owner gated (D-128), and a link followed by
+a viewer must not rewrite the discussion's status. The outcome line stays on
+screen above the expanded thread, so nothing is misrepresented.
+
+**Two existing tests asserted the old behaviour** and were changed rather than
+worked around: `app/AppRoot.test.tsx` expected an href of
+`/opportunities/10`, and `e2e/08-search.spec.ts` asserted
+`toHaveURL(/\/opportunities\/\d+$/)` — a regex whose `$` was the defect written
+down as a guarantee. Worth noticing in general: a test that pins the behaviour
+a milestone exists to change is evidence about the milestone, not an obstacle
+to it.
+
+**One observation, logged not built:** `app/NotificationMenu.tsx` renders no
+link at all, so "somebody mentioned you in a comment" leaves the reader to go
+and find it. That is a larger instance of the finding 6.0 fixes than 6.0's own
+case, and it now has the mechanism it would need — but it is not a search
+result, and this milestone's scope is search results.

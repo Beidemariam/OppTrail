@@ -2062,11 +2062,23 @@ a.danger-button {
 /* The entry a link pointed at (milestone 3.2, D-124): marked for as long as
    the URL names it, so a reader arriving from a note can see which of fifty
    cards it meant. */
-.timeline-entry.is-linked .timeline-entry-body {
+.timeline-entry.is-linked .timeline-entry-body,
+.note-block.is-linked,
+.comment-row.is-linked {
   background: var(--bg-selected);
   border-radius: var(--radius-sm);
   outline: 2px solid var(--border-strong);
   outline-offset: 4px;
+}
+
+/* A marked note or comment sits inside a card that already has padding, so
+   the outline needs room of its own not to collide with the text beside it.
+   Milestone 6.0: the entry's own mark has the card's margin to breathe into
+   and needs none of this. */
+.note-block.is-linked,
+.comment-row.is-linked {
+  outline-offset: 2px;
+  padding: var(--space-2);
 }
 
 .meta-row {

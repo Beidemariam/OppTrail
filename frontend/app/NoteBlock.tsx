@@ -3,7 +3,12 @@
 import { useRef, useState } from "react";
 
 import { isConflict } from "../lib/api";
-import { type Access, type TimelineNote } from "../lib/domain";
+import {
+  type Access,
+  type LinkTarget,
+  type TimelineNote,
+  isLinked,
+} from "../lib/domain";
 import { submitOnModEnter } from "../lib/keyboard";
 import { normalizeMarkdown } from "../lib/markdown";
 import {
@@ -15,6 +20,7 @@ import {
   useSaveNote,
 } from "../lib/queries";
 import { CommentThread } from "./CommentThread";
+import { useLinkTarget } from "./useLinkTarget";
 import { useInlineEditor } from "./InlineEdit";
 import { MarkdownText } from "./MarkdownText";
 import { Composer, RichTextEditor } from "./RichTextEditor";
@@ -29,9 +35,13 @@ import { useUndoableDelete } from "./Toasts";
 export function NoteBlock({
   note,
   access,
+  linkTarget,
 }: {
   note: TimelineNote;
   access: Access;
+  /** What a link pointed at (milestone 6.0). A note marks itself when the
+   * link named it, and hands the target on so a comment can do the same. */
+  linkTarget?: LinkTarget | null;
 }) {
   // Editing a note has always happened in the note (`docs/UX.md`), so
   // milestone 2.11 changed nothing about where; what it added is the focus
@@ -43,6 +53,12 @@ export function NoteBlock({
   // effect runs.
   const editTriggerRef = useRef<HTMLButtonElement>(null);
   const editor = useInlineEditor(editTriggerRef);
+  // A search result for a note used to open the deal and leave the reader to
+  // find it (milestone 6.0, the human's report at the Phase 4 gate). The note
+  // scrolls itself into view and stays marked for as long as the URL names it,
+  // exactly as an entry has since 3.2.
+  const linked = isLinked(linkTarget, "note", note.id);
+  const noteRef = useLinkTarget<HTMLElement>(linked);
   const [draft, setDraft] = useState("");
   // The note as it stood when this editor was opened, which is exactly what
   // ADR 0003's guard compares against. Captured rather than read from `note`
@@ -94,7 +110,10 @@ export function NoteBlock({
   }
 
   return (
-    <section className="note-block">
+    <section
+      className={`note-block${linked ? " is-linked" : ""}`}
+      ref={noteRef}
+    >
       <div className="note-header">
         <p>
           {note.author_name}
@@ -171,6 +190,7 @@ export function NoteBlock({
       <div className="comment-list">
         {note.comments.map((thread) => (
           <CommentThread
+            linkTarget={linkTarget}
             key={thread.id}
             thread={thread}
             access={access}

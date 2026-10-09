@@ -230,6 +230,23 @@ asked a narrower question (ADR 0007). Four things about it are load bearing:
   spans opportunities, so it cannot resolve a role first the way every other
   route does. A page of 50 is 50 rows the caller may read.
 
+**A result lands on the match** (milestone 6.0, **D-170**). `?entry=` was
+the only level a URL could name (D-124); a note or comment hit opened the
+deal and left the reader to find it. `lib/domain.ts`'s `LinkTarget` is a
+level and an id, `linkTargetFromParams` reads it from the URL innermost
+first, `searchResultHref` is where a search result resolves to one, and
+`isLinked` answers it at each level — so a new level is a case in one
+function rather than another prop threaded through three components. Four
+searchable kinds resolve to three levels: an attachment is rendered on the
+entry it hangs off (4.3), so it is addressed by that entry.
+`app/useLinkTarget.ts` holds the scroll the entry card had carried inline
+since 3.2, now shared by all three. Two consequences worth knowing: a URL
+naming several levels means the innermost, so only one thing on screen
+claims to be the answer; and a link into a **resolved** thread expands it
+for reading without reopening it, because reopening is a state change for
+everybody (D-128). A stale `?note=999999` marks nothing and opens the deal,
+the same answer as no parameter at all.
+
 `make reindex` (`backend/tools/reindex.py`) rebuilds the index from the source
 tables, for the two cases ADR 0007 names — corruption, and a change that
 invalidates the stored terms such as a different tokenizer or a new document

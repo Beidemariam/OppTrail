@@ -7,6 +7,7 @@ import {
   BLAIR,
   aComment,
   aNote,
+  aReply,
   anEntry,
   anOpportunity,
 } from "./test-api";
@@ -1513,3 +1514,142 @@ describe("the composer's triggers (milestone 3.2)", () => {
     );
   });
 });
+
+describe("a link lands on the match, not on the deal (milestone 6.0)", () => {
+  /** The deal the human reported this against: a timeline where the match is
+   * nowhere near the top, with a note and a discussion under one entry. */
+  const seeded = (threadOverrides = {}) => ({
+    opportunities: [anOpportunity({ id: 10, name: "Northwind rollout" })],
+    entries: [
+      anEntry({ id: 100, title: "Discovery call", sequence: 1 }),
+      anEntry({
+        id: 101,
+        title: "Security review",
+        sequence: 2,
+        notes: [
+          aNote({
+            id: 200,
+            body: "Budget holder is the COO.",
+            comments: [
+              aComment({ id: 300, body: "Agreed.", ...threadOverrides }),
+            ],
+          }),
+        ],
+      }),
+    ],
+  });
+
+  it("marks the note a link named, and nothing else", async () => {
+    await renderDashboard(seeded(), "/opportunities/10?note=200");
+
+    await waitFor(() =>
+      expect(document.querySelector(".note-block.is-linked")).toHaveTextContent(
+        "Budget holder is the COO.",
+      ),
+    );
+    // The entry it sits under is not the thing the reader followed, so it
+    // keeps no mark of its own -- otherwise two things on screen claim to be
+    // the answer.
+    expect(document.querySelector(".timeline-entry.is-linked")).toBeNull();
+    expect(document.querySelector(".comment-row.is-linked")).toBeNull();
+  });
+
+  it("marks the comment a link named", async () => {
+    await renderDashboard(seeded(), "/opportunities/10?comment=300");
+
+    await waitFor(() =>
+      expect(
+        document.querySelector(".comment-row.is-linked"),
+      ).toHaveTextContent("Agreed."),
+    );
+    expect(document.querySelector(".note-block.is-linked")).toBeNull();
+  });
+
+  it("marks a reply a link named, not the thread it answers", async () => {
+    const thread = aComment({ id: 300, body: "Agreed." });
+    await renderDashboard(
+      {
+        opportunities: [anOpportunity({ id: 10, name: "Northwind rollout" })],
+        entries: [
+          anEntry({
+            id: 101,
+            title: "Security review",
+            notes: [
+              aNote({
+                id: 200,
+                comments: [
+                  {
+                    ...thread,
+                    replies: [aReply(thread, { id: 301, body: "On it." })],
+                  },
+                ],
+              }),
+            ],
+          }),
+        ],
+      },
+      "/opportunities/10?comment=301",
+    );
+
+    await waitFor(() =>
+      expect(
+        document.querySelector(".comment-row.is-linked"),
+      ).toHaveTextContent("On it."),
+    );
+    // One mark, on the reply -- the root is a different comment id.
+    expect(document.querySelectorAll(".comment-row.is-linked")).toHaveLength(1);
+  });
+
+  it("opens a resolved thread when the link points inside it", async () => {
+    // A resolved thread collapses to one line, so without this the reader
+    // arrives at a comment they cannot see -- "depth reads as absence"
+    // (D-136) one level further down than milestone 3.7 found it.
+    await renderDashboard(
+      seeded({
+        resolved_at: "2026-09-03T09:00:00Z",
+        resolved_by: ALEX.id,
+        resolved_by_name: ALEX.name,
+      }),
+      "/opportunities/10?comment=300",
+    );
+
+    await waitFor(() =>
+      expect(
+        document.querySelector(".comment-row.is-linked"),
+      ).toHaveTextContent("Agreed."),
+    );
+    // Opened for reading, not reopened for everybody (D-128): the outcome
+    // line is still on screen and no write was sent.
+    expect(screen.getByText(/Resolved by/)).toBeInTheDocument();
+  });
+
+  it("leaves a resolved thread collapsed when the link is elsewhere", async () => {
+    await renderDashboard(
+      seeded({
+        resolved_at: "2026-09-03T09:00:00Z",
+        resolved_by: ALEX.id,
+        resolved_by_name: ALEX.name,
+      }),
+      "/opportunities/10?note=200",
+    );
+
+    await waitFor(() =>
+      expect(document.querySelector(".note-block.is-linked")).not.toBeNull(),
+    );
+    expect(screen.getByRole("button", { name: "Show" })).toBeInTheDocument();
+    expect(screen.queryByText("Agreed.")).not.toBeInTheDocument();
+  });
+
+  it("ignores a stale parameter rather than breaking the screen", async () => {
+    await renderDashboard(seeded(), "/opportunities/10?note=999999");
+
+    // The note was deleted, or the URL was hand-edited. The deal still opens.
+    await openTimelineBody();
+    expect(document.querySelector(".note-block.is-linked")).toBeNull();
+  });
+});
+
+/** The timeline is on screen once an entry from it is. */
+async function openTimelineBody() {
+  await screen.findByText("Security review");
+}

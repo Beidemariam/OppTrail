@@ -2339,3 +2339,46 @@ Coverage across the phases so far:
 | Authorization-matrix endpoints | 47 | 52 | 69 | 86 |
 
 Full detail and the try-it steps: `docs/autopilot/reviews/phase-4-summary.md`.
+
+---
+
+## Milestone 6.0 — a search result lands on the match
+
+The human's own report from the Phase 4 gate (**D-170**). Entirely frontend:
+no route, schema or table changed, because `SearchResultPublic` already
+carried the matched row's own id for every kind and `?entry=` already proved
+the behaviour at one level.
+
+```
+frontend: typecheck, lint (3 pre-existing warnings, none new),
+          prettier                                     all clean
+          593 passed (36 files), 96.96% statements /
+          90.74% branch / 96.9% lines -- branch up from
+          90.63%, because the new logic is in pure
+          functions that are cheap to cover exhaustively
+backend:  583 passed, 1 skipped, 97.52% -- unchanged, and
+          that is the point: nothing backend moved
+e2e:      79 passed, 1 skipped (25 specs); the skip is the
+          WeasyPrint PDF test, as on every Mac run
+gate:     make check-fast -> MAKE_EXIT=0
+```
+
+New tests: five in `lib/domain.test.ts` over the pure parts (level
+precedence, the four-kinds-to-three-levels mapping, and a stale parameter
+reading as no target), six in `app/OpportunityPanel.test.tsx` over the marks
+at each level, one in `app/SearchPage.test.tsx` over the hrefs, and one e2e
+for the resolved-thread case.
+
+Two things about how this was verified:
+
+- **Five of the six component tests were confirmed failing** against the
+  pre-6.0 parser before being trusted, by restricting
+  `linkTargetFromParams` to `entry` and re-running.
+- **The e2e test for the resolved thread started out skipping.** It was
+  conditional on the seed happening to hold a comment matching the query, and
+  it skipped — so it proved nothing about the one case this milestone was
+  least likely to get right. It now signs up, writes a comment containing a
+  nonsense word, resolves the thread, asserts the body really is off screen,
+  and only then searches. The project's test rules already forbid depending
+  on the wall clock; depending on the seed's wording is the same mistake with
+  a different clock.

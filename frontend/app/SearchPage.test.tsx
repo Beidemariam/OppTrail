@@ -143,6 +143,35 @@ describe("search page", () => {
     ).toBeInTheDocument();
   });
 
+  it("links to the match rather than to the deal (milestone 6.0)", async () => {
+    // The human's report at the Phase 4 gate: "clicking on the result should
+    // take me directly to the note comment or entry than just the
+    // opportunity." The link still reads as the deal's name -- that is what
+    // tells you which deal it was found in -- but it now addresses the row.
+    start(
+      {
+        searchResults: [
+          aSearchResult({ kind: "note", id: 200, entry_id: 100 }),
+          aSearchResult({ kind: "comment", id: 300, entry_id: 100 }),
+          aSearchResult({ kind: "entry", id: 101, entry_id: 101 }),
+          aSearchResult({ kind: "attachment", id: 700, entry_id: 101 }),
+        ],
+      },
+      "/search?q=finance",
+    );
+
+    const links = await screen.findAllByRole("link", {
+      name: "Northwind rollout",
+    });
+    expect(links.map((link) => link.getAttribute("href"))).toEqual([
+      "/opportunities/10?note=200",
+      "/opportunities/10?comment=300",
+      "/opportunities/10?entry=101",
+      // A file is read on the entry it hangs off, so that is where it links.
+      "/opportunities/10?entry=101",
+    ]);
+  });
+
   it("says so when nothing matches", async () => {
     start({ searchResults: [aSearchResult()] }, "/search?q=procurement");
 

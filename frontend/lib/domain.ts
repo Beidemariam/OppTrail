@@ -955,3 +955,69 @@ export function monthOrder(
 export function adjacentStage(stage: Stage, step: 1 | -1): Stage | null {
   return stages[stages.indexOf(stage) + step] ?? null;
 }
+
+// --- Linking to one thing inside a timeline (milestone 6.0) ----------------
+
+/** One match from search (milestone 1.5). `id` is always the matched row's
+ * own id -- an entry, a note, a comment or an attachment -- and `entry_id` is
+ * the timeline entry it sits under, which for an entry hit is itself. */
+export type SearchResult = components["schemas"]["SearchResultPublic"];
+
+/** What a link pointed at inside one timeline: a level, and an id at it.
+ *
+ * `?entry=` shipped with the composer's `#` trigger (milestone 3.2, D-124)
+ * and was the only level anything could name. Milestone 6.0 adds the two
+ * below it, because a search result for a note or a comment used to open the
+ * deal and leave the reader to find the match themselves -- the human's own
+ * report at the Phase 4 gate, and the fourth instance of D-136's "depth reads
+ * as absence".
+ */
+export type LinkTarget = {
+  level: "entry" | "note" | "comment";
+  id: number;
+};
+
+/** The link target named in a URL, innermost first.
+ *
+ * Precedence rather than exclusivity: a URL carrying several of these names
+ * the *most specific* one, so a link may address a comment and still say
+ * which entry it is under without the entry stealing the mark. Anything
+ * unparseable is no target at all, the same answer as an absent parameter --
+ * a stale hand-edited URL should land the reader on the deal, not break it.
+ *
+ * These are deliberately not part of `TimelineFilters` and carry no
+ * `timeline.` prefix (D-124): a link to one row is not a filter over the
+ * rows, and it does not survive into a saved view.
+ */
+export function linkTargetFromParams(
+  params: URLSearchParams,
+): LinkTarget | null {
+  for (const level of ["comment", "note", "entry"] as const) {
+    const id = Number(params.get(level));
+    if (id > 0) {
+      return { level, id };
+    }
+  }
+  return null;
+}
+
+/** Where a search result should open: the deal, and the match inside it.
+ *
+ * An attachment has no level of its own -- it is addressed by the entry it
+ * hangs off, which is also the only place it is rendered (milestone 4.3) --
+ * so four kinds resolve to three levels.
+ */
+export function searchResultHref(match: SearchResult): string {
+  const level = match.kind === "attachment" ? "entry" : match.kind;
+  const id = match.kind === "attachment" ? match.entry_id : match.id;
+  return `/opportunities/${match.opportunity_id}?${level}=${id}`;
+}
+
+/** Whether `target` names this row, for a component that renders one. */
+export function isLinked(
+  target: LinkTarget | null | undefined,
+  level: LinkTarget["level"],
+  id: number,
+): boolean {
+  return target?.level === level && target.id === id;
+}

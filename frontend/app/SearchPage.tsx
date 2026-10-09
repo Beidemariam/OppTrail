@@ -7,6 +7,7 @@ import { Link, useSearchParams } from "react-router";
 import type { components } from "../lib/api-types";
 import { apiRequest } from "../lib/api";
 import { useSession } from "../lib/queries";
+import { searchResultHref } from "../lib/domain";
 import { snippetSegments } from "../lib/snippet";
 import { formatTimestamp } from "../lib/time";
 
@@ -147,11 +148,15 @@ export function SearchPage() {
         {matches.map((match) => (
           <article className="search-result" key={`${match.kind}-${match.id}`}>
             <div className="search-result-header">
-              {/* The result links into the timeline it was found in. Milestone
-                  1.5 shipped these as plain text because no opportunity had a
-                  URL yet (D-039); 2.1 gave them one. */}
+              {/* The result links to the match, not merely to the deal it
+                  was found in. Milestone 1.5 shipped these as plain text
+                  because no opportunity had a URL yet (D-039); 2.1 gave them
+                  one; 6.0 made the link name the entry, note or comment that
+                  actually matched, which is what the reader searched for.
+                  `searchResultHref` is in `lib/domain.ts` so the four kinds
+                  resolving to three levels is tested without a DOM. */}
               <h2>
-                <Link to={`/opportunities/${match.opportunity_id}`}>
+                <Link to={searchResultHref(match)}>
                   {match.opportunity_name}
                 </Link>
               </h2>

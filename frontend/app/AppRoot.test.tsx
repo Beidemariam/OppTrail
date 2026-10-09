@@ -89,13 +89,17 @@ describe("app routing", () => {
     expect(renderToStaticMarkup(<AppRoot />)).toBe("");
   });
 
-  it("links a search result into the timeline it was found in", async () => {
+  it("links a search result at the match inside the timeline", async () => {
+    // `/opportunities/10` until milestone 6.0, which made the link name the
+    // row that matched -- a note here, which is the default fixture's kind.
+    // The route still resolves to the same screen; what changed is that the
+    // screen is told where to go once it is there.
     start("/search?q=finance");
     await screen.findByText("Proposal sent");
 
     expect(
       screen.getByRole("link", { name: "Northwind rollout" }),
-    ).toHaveAttribute("href", "/opportunities/10");
+    ).toHaveAttribute("href", "/opportunities/10?note=200");
   });
 
   it("links the dashboard to the search route", async () => {

@@ -1,4 +1,4 @@
-STATUS: AWAITING_REVIEW phase=4
+STATUS: IN_PROGRESS phase=6
 
 # Autopilot Progress
 
@@ -5273,7 +5273,7 @@ settled.
 
 ### Milestones
 
-- [ ] 6.0 **A search result lands on the match, not on the deal.** Raised by
+- [x] 6.0 **A search result lands on the match, not on the deal.** Raised by
       the human at the Phase 4 gate, in their own words: *"when searching,
       clicking on the result should take me directly to the note comment or
       entry than just the opportunity."* They flagged it as unrelated to Phase
@@ -5290,6 +5290,44 @@ settled.
       most repeated finding (D-136's *"depth reads as absence"*). A result that
       drops a reader at the top of a fifty-entry timeline has answered the
       search without showing them the answer.
+
+      **Built as one mechanism over three levels, not three mechanisms**
+      (**D-170**). `?entry=` was the only thing a URL could name; it is now
+      one case of a `LinkTarget` — a level and an id — parsed once in
+      `OpportunityPanel` and passed down, with `isLinked` deciding at each
+      level whether this row is the one. Four searchable kinds resolve to
+      three levels, because an attachment is rendered on the entry it hangs
+      off and is addressed by that entry (`searchResultHref`). The scroll that
+      the entry card had written inline since 3.2 moved into
+      `app/useLinkTarget.ts`, so the three callers share one definition.
+
+      Three things worth keeping:
+
+      - **Precedence, not exclusivity.** A URL naming several levels means
+        the innermost, so a link can say which entry a comment sits under
+        without the entry stealing the mark. One thing on screen claims to be
+        the answer.
+      - **A link opens a resolved thread; it does not reopen it.** A resolved
+        discussion collapses to one line (3.3), so a link to a comment inside
+        one would land a reader on something they cannot see — the same
+        failure one level further down than 3.7 found it. The thread expands
+        for reading and still says "Resolved by ...", because reopening is a
+        state change for everybody (D-128).
+      - **A stale parameter is ignored, not an error.** `?note=999999` opens
+        the deal and marks nothing, the same answer as no parameter — a
+        hand-edited or outdated URL should not break the screen.
+
+      Two tests in the existing suite asserted the old behaviour and were
+      changed rather than worked around: `AppRoot.test.tsx` expected
+      `/opportunities/10`, and the e2e search spec expected
+      `/opportunities/\d+$`. That second assertion *was* the defect, written
+      down.
+
+      One observation, logged not built: **a notification is not a link at
+      all.** `app/NotificationMenu.tsx` renders no anchor, so being told
+      somebody mentioned you in a comment leaves finding it to you — a larger
+      instance of this same finding than the one 6.0 fixes, and outside a
+      milestone scoped to search results.
 
 - [ ] 6.1 Custom fields: definition table + JSON value column + expression
       indexes (ADR 0006); fields flow into table columns, filters, and the

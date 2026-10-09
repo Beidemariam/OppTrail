@@ -1,8 +1,13 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 
-import { type Access, type TimelineEntry } from "../lib/domain";
+import {
+  type Access,
+  type LinkTarget,
+  type TimelineEntry,
+  isLinked,
+} from "../lib/domain";
 import {
   useAddNote,
   useDeleteTimelineEntry,
@@ -17,20 +22,23 @@ import { NoteBlock } from "./NoteBlock";
 import { Composer } from "./RichTextEditor";
 import { TimelineEntryForm } from "./TimelineEntryForm";
 import { useUndoableDelete } from "./Toasts";
+import { useLinkTarget } from "./useLinkTarget";
 
 /** The opportunity's history, in the order the API returned it. */
 export function TimelineEntryList({
   entries,
   opportunityId,
   access,
-  linkedEntryId,
+  linkTarget,
 }: {
   entries: TimelineEntry[];
   opportunityId: number;
   access: Access;
-  /** The entry a link pointed at, if the reader arrived through one
-   * (milestone 3.2, `?entry=` in `app/OpportunityPanel.tsx`). */
-  linkedEntryId?: number | null;
+  /** What a link pointed at, if the reader arrived through one (milestone
+   * 3.2 for an entry, 6.0 for the two levels below it). Passed whole rather
+   * than one id per level, so a new level is a case in `isLinked` instead of
+   * another prop threaded through three components. */
+  linkTarget?: LinkTarget | null;
 }) {
   if (entries.length === 0) {
     return <p className="empty-state">No timeline entries match this view.</p>;
@@ -44,7 +52,7 @@ export function TimelineEntryList({
           entry={entry}
           opportunityId={opportunityId}
           access={access}
-          linked={entry.id === linkedEntryId}
+          linkTarget={linkTarget}
         />
       ))}
     </div>
@@ -64,24 +72,22 @@ function TimelineEntryCard({
   entry,
   opportunityId,
   access,
-  linked,
+  linkTarget,
 }: {
   entry: TimelineEntry;
   opportunityId: number;
   access: Access;
-  /** Whether a link brought the reader here (milestone 3.2). */
-  linked: boolean;
+  /** What a link brought the reader to, at any level (milestone 3.2, 6.0). */
+  linkTarget?: LinkTarget | null;
 }) {
   // A link to an entry lands on the entry, not on the top of its timeline
   // (milestone 3.2, D-124): the card scrolls itself into view and stays marked
   // for as long as the URL names it, which is what tells the reader which of
-  // fifty cards the note they came from was talking about.
-  const cardRef = useRef<HTMLElement>(null);
-  useEffect(() => {
-    if (linked) {
-      cardRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
-    }
-  }, [linked]);
+  // fifty cards the note they came from was talking about. The scroll moved
+  // into `useLinkTarget` in milestone 6.0, when notes and comments needed the
+  // same behaviour.
+  const linked = isLinked(linkTarget, "entry", entry.id);
+  const cardRef = useLinkTarget<HTMLElement>(linked);
   const editTriggerRef = useRef<HTMLButtonElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const editor = useInlineEditor(editTriggerRef, titleRef);
@@ -183,7 +189,12 @@ function TimelineEntryCard({
 
         <div className="notes-list">
           {entry.notes.map((item) => (
-            <NoteBlock key={item.id} note={item} access={access} />
+            <NoteBlock
+              key={item.id}
+              note={item}
+              access={access}
+              linkTarget={linkTarget}
+            />
           ))}
 
           {access.canWriteTimeline && (

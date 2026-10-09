@@ -3,10 +3,12 @@
 import { useState } from "react";
 
 import {
+  isLinked,
   reactionEmoji,
   type Access,
   type Comment,
   type CommentThread as Thread,
+  type LinkTarget,
 } from "../lib/domain";
 import {
   useAddComment,
@@ -16,6 +18,7 @@ import {
 } from "../lib/queries";
 import { MarkdownText } from "./MarkdownText";
 import { Composer } from "./RichTextEditor";
+import { useLinkTarget } from "./useLinkTarget";
 
 /**
  * The reactions on one comment or reply (milestone 3.3a): the emoji already
@@ -110,6 +113,49 @@ function ReactionBar({
 }
 
 /**
+ * One reply in a thread (milestone 3.3), its own component since milestone
+ * 6.0: a search result can point at a reply, and the hook that scrolls it
+ * into view cannot be called inside a `map`.
+ */
+function CommentReply({
+  reply,
+  access,
+  onDelete,
+  linkTarget,
+}: {
+  reply: Comment;
+  access: Access;
+  onDelete: (commentId: number) => void;
+  linkTarget?: LinkTarget | null;
+}) {
+  const linked = isLinked(linkTarget, "comment", reply.id);
+  const rowRef = useLinkTarget<HTMLDivElement>(linked);
+
+  return (
+    <div className={`comment-row${linked ? " is-linked" : ""}`} ref={rowRef}>
+      <div>
+        <strong>{reply.author_name}</strong>
+        <MarkdownText content={reply.body} />
+        <ReactionBar
+          commentId={reply.id}
+          reactions={reply.reactions}
+          canReact={access.canWriteTimeline}
+        />
+      </div>
+      {access.canChangeItem(reply.created_by) && (
+        <button
+          type="button"
+          className="danger-button compact"
+          onClick={() => onDelete(reply.id)}
+        >
+          Delete
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
  * One discussion on a note: the comment that opened it, the answers under it,
  * and whether it is finished (milestone 3.3, `docs/FEATURES.md` §7).
  *
@@ -132,20 +178,36 @@ export function CommentThread({
   thread,
   access,
   onDelete,
+  linkTarget,
 }: {
   thread: Thread;
   access: Access;
   /** Delete with Undo, owned by the note so one toast serves them all. */
   onDelete: (commentId: number) => void;
+  /** What a link pointed at (milestone 6.0). A comment is the innermost
+   * thing search can match, and the only one that can be *hidden* when the
+   * reader arrives -- see `linkedInside` below. */
+  linkTarget?: LinkTarget | null;
 }) {
   const [expanded, setExpanded] = useState(false);
   const addComment = useAddComment();
   const resolveThread = useResolveThread();
   const resolved = thread.resolved_at !== null;
+  // A resolved thread collapses to one line, so a link to a comment inside one
+  // would land on a reader who cannot see it -- the "depth reads as absence"
+  // failure (D-136) that milestone 6.0 exists to remove, reappearing one level
+  // down. A link opens the thread it points into; it does not *reopen* it,
+  // which is a state change for everybody (D-128). The reader still sees
+  // "Resolved by ..." above the discussion, so nothing is misrepresented.
+  const linkedRoot = isLinked(linkTarget, "comment", thread.id);
+  const linkedInside =
+    linkedRoot ||
+    thread.replies.some((reply) => isLinked(linkTarget, "comment", reply.id));
   // Resolving and deleting are one rule with one answer (`lib/permissions.ts`).
   const canManageThread = access.canChangeItem(thread.created_by);
+  const rootRef = useLinkTarget<HTMLDivElement>(linkedRoot);
 
-  if (resolved && !expanded) {
+  if (resolved && !expanded && !linkedInside) {
     return (
       <div className="comment-thread is-resolved is-collapsed">
         <p className="comment-resolved">
@@ -181,7 +243,10 @@ export function CommentThread({
         </div>
       )}
 
-      <div className="comment-row">
+      <div
+        className={`comment-row${linkedRoot ? " is-linked" : ""}`}
+        ref={rootRef}
+      >
         <div>
           <strong>{thread.author_name}</strong>
           <MarkdownText content={thread.body} />
@@ -221,26 +286,13 @@ export function CommentThread({
       {thread.replies.length > 0 && (
         <div className="comment-replies">
           {thread.replies.map((reply) => (
-            <div className="comment-row" key={reply.id}>
-              <div>
-                <strong>{reply.author_name}</strong>
-                <MarkdownText content={reply.body} />
-                <ReactionBar
-                  commentId={reply.id}
-                  reactions={reply.reactions}
-                  canReact={access.canWriteTimeline}
-                />
-              </div>
-              {access.canChangeItem(reply.created_by) && (
-                <button
-                  type="button"
-                  className="danger-button compact"
-                  onClick={() => onDelete(reply.id)}
-                >
-                  Delete
-                </button>
-              )}
-            </div>
+            <CommentReply
+              key={reply.id}
+              reply={reply}
+              access={access}
+              onDelete={onDelete}
+              linkTarget={linkTarget}
+            />
           ))}
         </div>
       )}
