@@ -3153,3 +3153,108 @@ kbd {
   border-left: 1px solid var(--border-subtle);
   padding-left: var(--space-3);
 }
+
+/* An entry's documents (milestone 4.3). The list reads as a list of files
+   rather than as cards: an attachment is one line -- name, size, who put it
+   there -- and the name is the download. */
+.attachment-list {
+  display: grid;
+  gap: var(--space-1);
+  justify-items: start;
+}
+
+.attachment-list ul {
+  display: grid;
+  gap: var(--space-1);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+}
+
+.attachment-row {
+  align-items: center;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: var(--text-sm);
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+}
+
+/* The filename is the flexible half of the row and the one allowed to yield,
+   which is what keeps the Delete button beside it at its own size
+   (milestone 3.8, D-138). */
+.attachment-row a {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.attachment-row .meta-row {
+  margin: 0;
+}
+
+.attachment-picker {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: var(--text-sm);
+  gap: var(--space-2);
+}
+
+.attachment-picker label {
+  display: grid;
+  gap: 2px;
+}
+
+.attachment-picker input[type="file"] {
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+/* Attaching while writing (milestone 4.3a). Laid out like the form's other
+   labelled fields rather than like the card's disclosure, because here it is
+   one field of a form and not a thing to reveal. */
+.entry-file {
+  display: grid;
+  font-size: var(--text-sm);
+  gap: var(--space-1);
+  justify-items: start;
+}
+
+.entry-file input[type="file"] {
+  font: inherit;
+  font-size: var(--text-sm);
+  max-width: 100%;
+}
+
+/* A task's discussion (milestone 4.5). Indented under the task it belongs to
+   and quieter than it: this is the log of what happened, not the action item. */
+.task-discussion {
+  border-left: 2px solid var(--border-subtle);
+  display: grid;
+  gap: var(--space-1);
+  justify-items: start;
+  margin-top: var(--space-1);
+  padding-left: var(--space-2);
+}
+
+.task-discussion ul {
+  display: grid;
+  gap: var(--space-1);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+}
+
+.task-comment {
+  font-size: var(--text-sm);
+}
+
+.task-comment .meta-row {
+  margin: 0;
+}

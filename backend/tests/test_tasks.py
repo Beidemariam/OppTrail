@@ -81,7 +81,7 @@ def test_a_task_carries_its_deal_its_assignee_and_its_due_date(client: TestClien
     assert task["title"] == "Send the revised pricing"
     assert task["opportunity_name"] == "Expansion"
     assert task["completed_at"] is None
-    assert task["assignee_id"] is None
+    assert task["assignees"] == []
     assert task["due_date"] == days_from_now(3)
 
 
@@ -105,10 +105,10 @@ def test_an_assignee_is_named_by_email_and_told(client: TestClient) -> None:
     signup(client, "owner@example.com", "Owner")
     opportunity = create_opportunity(client)
 
-    task = create_task(client, opportunity["id"], assignee_email="GAVIN@example.com")
+    task = create_task(client, opportunity["id"], assignee_emails=["GAVIN@example.com"])
 
-    assert task["assignee_id"] == colleague["id"]
-    assert task["assignee_name"] == "Gavin"
+    assert [item["user_id"] for item in task["assignees"]] == [colleague["id"]]
+    assert [item["name"] for item in task["assignees"]] == ["Gavin"]
 
     logout(client)
     login(client, "gavin@example.com")
@@ -123,7 +123,7 @@ def test_assigning_a_task_to_yourself_notifies_nobody(client: TestClient) -> Non
     signup(client, "owner@example.com", "Owner")
     opportunity = create_opportunity(client)
 
-    create_task(client, opportunity["id"], assignee_email="owner@example.com")
+    create_task(client, opportunity["id"], assignee_emails=["owner@example.com"])
 
     assert client.get("/api/v2/notifications?type=task_assigned").json()["items"] == []
 
@@ -136,7 +136,7 @@ def test_an_unknown_assignee_is_refused_before_anything_is_written(
 
     response = client.post(
         f"/api/v2/opportunities/{opportunity['id']}/tasks",
-        json={"title": "Call back", "assignee_email": "nobody@example.com"},
+        json={"title": "Call back", "assignee_emails": ["nobody@example.com"]},
     )
 
     assert response.status_code == 422
@@ -213,7 +213,7 @@ def test_the_assignee_can_complete_a_task_they_did_not_write(client: TestClient)
     signup(client, "owner@example.com", "Owner")
     opportunity = create_opportunity(client)
     share(client, opportunity["id"], "gavin@example.com", "editor")
-    task = create_task(client, opportunity["id"], assignee_email="gavin@example.com")
+    task = create_task(client, opportunity["id"], assignee_emails=["gavin@example.com"])
     logout(client)
 
     login(client, "gavin@example.com")
@@ -250,7 +250,7 @@ def test_completing_twice_keeps_the_first_completion(client: TestClient) -> None
     signup(client, "owner@example.com", "Owner")
     opportunity = create_opportunity(client)
     share(client, opportunity["id"], "gavin@example.com", "editor")
-    task = create_task(client, opportunity["id"], assignee_email="gavin@example.com")
+    task = create_task(client, opportunity["id"], assignee_emails=["gavin@example.com"])
     logout(client)
 
     login(client, "gavin@example.com")
@@ -329,10 +329,10 @@ def test_my_tasks_spans_opportunities_and_hides_the_ones_you_cannot_see(
     private = create_opportunity(client, "Private deal")
     share(client, shared["id"], "gavin@example.com", "editor")
     create_task(
-        client, shared["id"], title="On the shared deal", assignee_email="gavin@example.com"
+        client, shared["id"], title="On the shared deal", assignee_emails=["gavin@example.com"]
     )
     create_task(
-        client, private["id"], title="On the private deal", assignee_email="gavin@example.com"
+        client, private["id"], title="On the private deal", assignee_emails=["gavin@example.com"]
     )
     logout(client)
 
@@ -347,8 +347,10 @@ def test_my_tasks_shows_open_work_by_default(client: TestClient) -> None:
     """A list of everything you have ever finished is not a to-do list."""
     signup(client, "owner@example.com", "Owner")
     opportunity = create_opportunity(client)
-    done = create_task(client, opportunity["id"], title="Done", assignee_email="owner@example.com")
-    create_task(client, opportunity["id"], title="Open", assignee_email="owner@example.com")
+    done = create_task(
+        client, opportunity["id"], title="Done", assignee_emails=["owner@example.com"]
+    )
+    create_task(client, opportunity["id"], title="Open", assignee_emails=["owner@example.com"])
     client.post(f"/api/v2/tasks/{done['id']}/complete")
 
     assert [t["title"] for t in client.get("/api/v2/tasks").json()["items"]] == ["Open"]
@@ -363,17 +365,17 @@ def test_overdue_is_a_date_filter_and_skips_the_undated(client: TestClient) -> N
         client,
         opportunity["id"],
         title="Overdue",
-        assignee_email="owner@example.com",
+        assignee_emails=["owner@example.com"],
         due_date=days_from_now(-2),
     )
     create_task(
         client,
         opportunity["id"],
         title="Later",
-        assignee_email="owner@example.com",
+        assignee_emails=["owner@example.com"],
         due_date=days_from_now(4),
     )
-    create_task(client, opportunity["id"], title="No date", assignee_email="owner@example.com")
+    create_task(client, opportunity["id"], title="No date", assignee_emails=["owner@example.com"])
 
     overdue = client.get(f"/api/v2/tasks?due_before={days_from_now(0)}").json()["items"]
 
@@ -428,7 +430,7 @@ def test_deleting_an_opportunity_stamps_its_tasks_too(client: TestClient) -> Non
     """
     signup(client, "owner@example.com", "Owner")
     opportunity = create_opportunity(client)
-    task = create_task(client, opportunity["id"], assignee_email="owner@example.com")
+    task = create_task(client, opportunity["id"], assignee_emails=["owner@example.com"])
 
     assert client.delete(f"/api/v2/opportunities/{opportunity['id']}").status_code == 204
 
@@ -467,14 +469,14 @@ def test_the_calendar_reads_every_visible_task_in_a_date_range(client: TestClien
         client,
         opportunity["id"],
         title="Gavin's task",
-        assignee_email="gavin@example.com",
+        assignee_emails=["gavin@example.com"],
         due_date=days_from_now(4),
     )
     create_task(
         client,
         opportunity["id"],
         title="Mine, this month",
-        assignee_email="owner@example.com",
+        assignee_emails=["owner@example.com"],
         due_date=days_from_now(6),
     )
     create_task(client, opportunity["id"], title="Far future", due_date=days_from_now(90))
@@ -524,7 +526,7 @@ def test_a_task_due_far_in_the_future_is_still_in_its_own_month(client: TestClie
         client,
         opportunity["id"],
         title="Send updated pricing",
-        assignee_email="owner@example.com",
+        assignee_emails=["owner@example.com"],
         due_date="2027-08-19",
     )
 
@@ -633,3 +635,399 @@ def test_a_task_edit_can_be_put_back(client: TestClient) -> None:
     assert client.post(f"/api/v2/tasks/{task['id']}/versions/3/restore").status_code == 200
     versions = client.get(f"/api/v2/tasks/{task['id']}/versions").json()["items"]
     assert len(versions) == 3
+
+
+# --- A task's discussion (milestone 4.5, D-162) ----------------------------
+
+
+def comment_on(client: TestClient, task_id: int, body: str) -> dict:
+    response = client.post(f"/api/v2/tasks/{task_id}/comments", json={"body": body})
+    assert response.status_code == 201, response.json()
+    return response.json()
+
+
+def test_a_task_carries_the_discussion_it_provokes(client: TestClient) -> None:
+    """Read with the task rather than through a list route of its own, the way
+    a note's comments are -- and chronological, because a log is."""
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    # Assigned to the writer, because My Tasks below answers with the caller's
+    # own assignments and an unassigned task is on nobody's list.
+    task = create_task(client, opportunity["id"], assignee_emails=["owner@example.com"])
+
+    comment_on(client, task["id"], "  Chased them, no answer  ")
+    comment_on(client, task["id"], "Moved to Thursday")
+
+    tasks = client.get(f"/api/v2/opportunities/{opportunity['id']}/tasks").json()["items"]
+    discussion = next(item for item in tasks if item["id"] == task["id"])["comments"]
+    assert [item["body"] for item in discussion] == [
+        "Chased them, no answer",
+        "Moved to Thursday",
+    ]
+    assert discussion[0]["author_name"] == "Owner"
+    # My Tasks reads the same shape, so a discussion is not a reason to open
+    # the deal.
+    mine = client.get("/api/v2/tasks").json()["items"]
+    assert len(next(item for item in mine if item["id"] == task["id"])["comments"]) == 2
+
+
+def test_a_viewer_reads_the_discussion_and_cannot_add_to_it(client: TestClient) -> None:
+    signup(client, "owner@example.com", "Owner")
+    signup(client, "viewer@example.com", "Viewer")
+    login(client, "owner@example.com")
+    opportunity = create_opportunity(client)
+    task = create_task(client, opportunity["id"])
+    comment_on(client, task["id"], "Chased them")
+    share(client, opportunity["id"], "viewer@example.com", "viewer")
+    logout(client)
+    login(client, "viewer@example.com")
+
+    readable = client.get(f"/api/v2/opportunities/{opportunity['id']}/tasks").json()["items"]
+    refused = client.post(f"/api/v2/tasks/{task['id']}/comments", json={"body": "Mine"})
+
+    assert len(readable[0]["comments"]) == 1
+    assert refused.status_code == 403
+
+
+def test_a_comment_tells_everyone_the_task_is_about(client: TestClient) -> None:
+    """The task's author and **everyone** it is assigned to, as a set -- so
+    somebody who is both is told once -- and never the person who wrote the
+    comment.
+
+    Both directions are asserted on purpose. The earlier version of this test
+    only checked that the author hears and the author-assignee does not, which
+    passed happily when milestone 4.6 left this read on `tasks.assignee_id` --
+    a column 4.6 stopped writing. An assignee who is not the author is the case
+    that caught it, and only the end-to-end run did.
+    """
+    signup(client, "owner@example.com", "Owner")
+    signup(client, "gavin@example.com", "Gavin")
+    signup(client, "max@example.com", "Maximilian")
+    login(client, "owner@example.com")
+    opportunity = create_opportunity(client)
+    share(client, opportunity["id"], "gavin@example.com", "editor")
+    share(client, opportunity["id"], "max@example.com", "editor")
+    task = create_task(
+        client,
+        opportunity["id"],
+        assignee_emails=["gavin@example.com", "max@example.com"],
+    )
+    logout(client)
+
+    login(client, "gavin@example.com")
+    comment_on(client, task["id"], "Left a voicemail")
+    gavin_inbox = client.get("/api/v2/notifications?type=task_comment").json()["items"]
+    logout(client)
+
+    # Gavin wrote the comment and is an assignee: no notification to himself.
+    assert gavin_inbox == []
+    # The author hears, and so does the other assignee.
+    for email in ("owner@example.com", "max@example.com"):
+        login(client, email)
+        inbox = client.get("/api/v2/notifications?type=task_comment").json()["items"]
+        logout(client)
+        assert [item["payload"]["title"] for item in inbox] == ["Call them back"], email
+
+
+def test_a_comment_is_immutable(client: TestClient) -> None:
+    """`AGENTS.md` invariant 2, read against the second kind of comment: there
+    is no edit route, so removing it is the only change it can undergo."""
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    task = create_task(client, opportunity["id"])
+    comment = comment_on(client, task["id"], "Chased them")
+
+    assert client.patch(
+        f"/api/v2/task-comments/{comment['id']}", json={"body": "No"}
+    ).status_code in (
+        404,
+        405,
+    )
+
+
+def test_deleting_a_comment_is_soft_audited_and_undoable(client: TestClient) -> None:
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    task = create_task(client, opportunity["id"])
+    comment = comment_on(client, task["id"], "Chased them")
+
+    assert client.delete(f"/api/v2/task-comments/{comment['id']}").status_code == 204
+    assert task_comments(client, opportunity["id"], task["id"]) == []
+
+    assert client.post(f"/api/v2/task-comments/{comment['id']}/restore").status_code == 204
+    assert task_comments(client, opportunity["id"], task["id"]) == ["Chased them"]
+
+    actions = [
+        item["action"]
+        for item in client.get(f"/api/v2/opportunities/{opportunity['id']}/audit-log").json()[
+            "items"
+        ]
+    ]
+    assert actions == ["task_comment_deleted", "task_comment_restored"]
+
+
+def task_comments(client: TestClient, opportunity_id: int, task_id: int) -> list[str]:
+    tasks = client.get(f"/api/v2/opportunities/{opportunity_id}/tasks").json()["items"]
+    task = next(item for item in tasks if item["id"] == task_id)
+    return [item["body"] for item in task["comments"]]
+
+
+def test_the_discussion_is_a_level_of_the_task_cascade(client: TestClient) -> None:
+    """A comment is readable only through its task, so it goes with the task
+    and with the deal -- asserted against the row's own stamp, because every
+    read filters the deleted parent anyway (4.1's first cascade test did not,
+    and passed with the cascade removed)."""
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    task = create_task(client, opportunity["id"])
+    comment = comment_on(client, task["id"], "Chased them")
+
+    assert client.delete(f"/api/v2/tasks/{task['id']}").status_code == 204
+    assert comment_deleted_at(comment["id"]) is not None
+
+    assert client.post(f"/api/v2/tasks/{task['id']}/restore").status_code == 204
+    assert comment_deleted_at(comment["id"]) is None
+
+    assert client.delete(f"/api/v2/opportunities/{opportunity['id']}").status_code == 204
+    assert comment_deleted_at(comment["id"]) is not None
+
+
+def comment_deleted_at(comment_id: int) -> str | None:
+    with db_connection() as connection:
+        row = connection.execute(
+            "SELECT deleted_at FROM task_comments WHERE id = ?",
+            (comment_id,),
+        ).fetchone()
+    return row["deleted_at"]
+
+
+def test_a_comment_deleted_on_its_own_stays_deleted_when_the_task_comes_back(
+    client: TestClient,
+) -> None:
+    """One cascade writes one stamp, so a restore asks for that stamp back --
+    the rule every other restore in this app follows."""
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    task = create_task(client, opportunity["id"])
+    kept = comment_on(client, task["id"], "Chased them")
+    removed = comment_on(client, task["id"], "Wrong task")
+
+    assert client.delete(f"/api/v2/task-comments/{removed['id']}").status_code == 204
+    # Backdated for the reason `test_restore.py`'s own helper backdates:
+    # `utc_now()` has one-second resolution, so a delete made through the API
+    # microseconds before the cascade would share its stamp and come back with
+    # it -- the window D-067 accepts. This fixture means "deleted a while ago".
+    with db_connection() as connection:
+        connection.execute(
+            "UPDATE task_comments SET deleted_at = datetime(deleted_at, '-1 hour') WHERE id = ?",
+            (removed["id"],),
+        )
+        connection.commit()
+    assert client.delete(f"/api/v2/tasks/{task['id']}").status_code == 204
+    assert client.post(f"/api/v2/tasks/{task['id']}/restore").status_code == 204
+
+    assert task_comments(client, opportunity["id"], task["id"]) == ["Chased them"]
+    assert comment_deleted_at(kept["id"]) is None
+    assert comment_deleted_at(removed["id"]) is not None
+
+
+# --- More than one person on a task (milestone 4.6, D-146's other half) ----
+
+
+def test_a_task_can_be_handed_to_several_people(client: TestClient) -> None:
+    signup(client, "owner@example.com", "Owner")
+    gavin = signup(client, "gavin@example.com", "Gavin")
+    max_ = signup(client, "max@example.com", "Maximilian")
+    login(client, "owner@example.com")
+    opportunity = create_opportunity(client)
+    share(client, opportunity["id"], "gavin@example.com", "editor")
+    share(client, opportunity["id"], "max@example.com", "editor")
+
+    task = create_task(
+        client,
+        opportunity["id"],
+        assignee_emails=["GAVIN@example.com", "max@example.com", "gavin@example.com"],
+    )
+
+    # Ascending by id, and the duplicate is one row rather than two.
+    assert [item["user_id"] for item in task["assignees"]] == sorted([gavin["id"], max_["id"]])
+    assert [item["name"] for item in task["assignees"]] == ["Gavin", "Maximilian"]
+
+
+def test_each_new_assignee_is_told_once_and_the_assigner_never(client: TestClient) -> None:
+    signup(client, "owner@example.com", "Owner")
+    signup(client, "gavin@example.com", "Gavin")
+    signup(client, "max@example.com", "Maximilian")
+    login(client, "owner@example.com")
+    opportunity = create_opportunity(client)
+    share(client, opportunity["id"], "gavin@example.com", "editor")
+    share(client, opportunity["id"], "max@example.com", "editor")
+
+    task = create_task(
+        client,
+        opportunity["id"],
+        assignee_emails=["gavin@example.com", "owner@example.com"],
+    )
+    # Adding Maximilian leaves Gavin where he was: he is not told again.
+    assert (
+        client.patch(
+            f"/api/v2/tasks/{task['id']}",
+            json={"assignee_emails": ["gavin@example.com", "max@example.com"]},
+        ).status_code
+        == 200
+    )
+    logout(client)
+
+    assert assignment_count(client, "owner@example.com") == 0
+    assert assignment_count(client, "gavin@example.com") == 1
+    assert assignment_count(client, "max@example.com") == 1
+
+
+def assignment_count(client: TestClient, email: str) -> int:
+    login(client, email)
+    items = client.get("/api/v2/notifications?type=task_assigned").json()["items"]
+    logout(client)
+    return len(items)
+
+
+def test_any_assignee_may_close_it_and_none_may_rewrite_it(client: TestClient) -> None:
+    """**D-142** read against a set: a shared task is done when whoever got to
+    it says so. Editing stays author-or-owner (D-005), which is the line that
+    did not move."""
+    signup(client, "owner@example.com", "Owner")
+    signup(client, "gavin@example.com", "Gavin")
+    signup(client, "max@example.com", "Maximilian")
+    login(client, "owner@example.com")
+    opportunity = create_opportunity(client)
+    share(client, opportunity["id"], "gavin@example.com", "editor")
+    share(client, opportunity["id"], "max@example.com", "editor")
+    task = create_task(
+        client,
+        opportunity["id"],
+        assignee_emails=["gavin@example.com", "max@example.com"],
+    )
+    logout(client)
+
+    login(client, "max@example.com")
+    completed = client.post(f"/api/v2/tasks/{task['id']}/complete")
+    renamed = client.patch(f"/api/v2/tasks/{task['id']}", json={"title": "Mine now"})
+
+    assert completed.status_code == 200
+    assert completed.json()["completed_by_name"] == "Maximilian"
+    assert renamed.status_code == 403
+
+
+def test_my_tasks_answers_everyone_the_task_is_for(client: TestClient) -> None:
+    signup(client, "owner@example.com", "Owner")
+    signup(client, "gavin@example.com", "Gavin")
+    login(client, "owner@example.com")
+    opportunity = create_opportunity(client)
+    share(client, opportunity["id"], "gavin@example.com", "editor")
+    create_task(
+        client,
+        opportunity["id"],
+        title="Shared chase",
+        assignee_emails=["owner@example.com", "gavin@example.com"],
+    )
+    create_task(
+        client, opportunity["id"], title="Mine alone", assignee_emails=["owner@example.com"]
+    )
+
+    mine = [item["title"] for item in client.get("/api/v2/tasks").json()["items"]]
+    logout(client)
+    login(client, "gavin@example.com")
+    theirs = [item["title"] for item in client.get("/api/v2/tasks").json()["items"]]
+
+    assert sorted(mine) == ["Mine alone", "Shared chase"]
+    assert theirs == ["Shared chase"]
+
+
+def test_clearing_the_list_leaves_a_task_nobody_owes(client: TestClient) -> None:
+    signup(client, "owner@example.com", "Owner")
+    login(client, "owner@example.com")
+    opportunity = create_opportunity(client)
+    task = create_task(client, opportunity["id"], assignee_emails=["owner@example.com"])
+
+    cleared = client.patch(f"/api/v2/tasks/{task['id']}", json={"assignee_emails": []})
+
+    assert cleared.status_code == 200
+    assert cleared.json()["assignees"] == []
+    assert client.get("/api/v2/tasks").json()["items"] == []
+
+
+def test_one_unknown_address_writes_nothing_at_all(client: TestClient) -> None:
+    """The refusal is about the request rather than one field, so a list with a
+    bad address in it does not half-apply -- the answer `assign_owner` gives."""
+    signup(client, "owner@example.com", "Owner")
+    login(client, "owner@example.com")
+    opportunity = create_opportunity(client)
+    task = create_task(client, opportunity["id"], assignee_emails=["owner@example.com"])
+
+    refused = client.patch(
+        f"/api/v2/tasks/{task['id']}",
+        json={"assignee_emails": ["owner@example.com", "nobody@example.com"]},
+    )
+
+    assert refused.status_code == 422
+    assert "nobody@example.com" in refused.json()["error"]["message"]
+    assert len(task_by_id(client, opportunity["id"], task["id"])["assignees"]) == 1
+
+
+def task_by_id(client: TestClient, opportunity_id: int, task_id: int) -> dict:
+    items = client.get(f"/api/v2/opportunities/{opportunity_id}/tasks").json()["items"]
+    return next(item for item in items if item["id"] == task_id)
+
+
+def test_the_history_records_the_whole_set_and_can_put_it_back(client: TestClient) -> None:
+    """Invariant 8 read against a set (milestone 4.6): the snapshot is the list,
+    and a restore writes the list back -- which `apply_version` cannot do on its
+    own, because a set is a table rather than a column."""
+    signup(client, "owner@example.com", "Owner")
+    signup(client, "gavin@example.com", "Gavin")
+    signup(client, "max@example.com", "Maximilian")
+    login(client, "owner@example.com")
+    opportunity = create_opportunity(client)
+    share(client, opportunity["id"], "gavin@example.com", "editor")
+    share(client, opportunity["id"], "max@example.com", "editor")
+    task = create_task(client, opportunity["id"], assignee_emails=["gavin@example.com"])
+
+    assert (
+        client.patch(
+            f"/api/v2/tasks/{task['id']}",
+            json={"assignee_emails": ["gavin@example.com", "max@example.com"]},
+        ).status_code
+        == 200
+    )
+
+    versions = client.get(f"/api/v2/tasks/{task['id']}/versions").json()["items"]
+    assert [[item["name"] for item in version["assignees"]] for version in versions] == [
+        ["Gavin"],
+        ["Gavin", "Maximilian"],
+    ]
+
+    restored = client.post(f"/api/v2/tasks/{task['id']}/versions/1/restore")
+    assert restored.status_code == 200
+    assert [item["name"] for item in restored.json()["assignees"]] == ["Gavin"]
+    # The restore is itself an edit, so the history grew rather than rewound.
+    after = client.get(f"/api/v2/tasks/{task['id']}/versions").json()["items"]
+    assert [[item["name"] for item in version["assignees"]] for version in after] == [
+        ["Gavin"],
+        ["Gavin", "Maximilian"],
+        ["Gavin"],
+    ]
+
+
+def test_restoring_the_same_set_writes_nothing(client: TestClient) -> None:
+    """D-120, which needed the canonical ordering to keep working: two
+    snapshots of the same people have to compare equal as strings."""
+    signup(client, "owner@example.com", "Owner")
+    signup(client, "gavin@example.com", "Gavin")
+    login(client, "owner@example.com")
+    opportunity = create_opportunity(client)
+    share(client, opportunity["id"], "gavin@example.com", "editor")
+    task = create_task(client, opportunity["id"], assignee_emails=["gavin@example.com"])
+
+    assert client.post(f"/api/v2/tasks/{task['id']}/versions/1/restore").status_code == 200
+
+    versions = client.get(f"/api/v2/tasks/{task['id']}/versions").json()["items"]
+    assert len(versions) == 1

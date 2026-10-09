@@ -11,6 +11,7 @@ dependencies = [
     "nh3>=0.3.7",
     "openai>=3.8.0",
     "pydantic-settings>=2.10.0",
+    "python-multipart>=0.0.20",
     "uvicorn[standard]>=0.35.0",
     "weasyprint>=70.0",
 ]
@@ -39,7 +40,15 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI's `Depends(...)`/`Cookie(...)` default-argument pattern is idiomatic,
 # not the mutable-default bug B008 exists to catch.
-extend-immutable-calls = ["fastapi.Depends", "fastapi.Cookie", "fastapi.Query", "fastapi.Path"]
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Cookie",
+    "fastapi.Query",
+    "fastapi.Path",
+    # `File(...)` is the same pattern, and the one route that takes a file
+    # (milestone 4.3) declares it the way FastAPI documents.
+    "fastapi.File",
+]
 
 [tool.mypy]
 python_version = "3.13"

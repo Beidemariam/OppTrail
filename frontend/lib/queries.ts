@@ -587,6 +587,20 @@ async function optimisticOpportunities(
   return [[keys.opportunities, previous]];
 }
 
+/** The same for an entry's files (milestone 4.3), so an optimistic delete
+ * reaches them wherever the entry sits. */
+function mapAttachments(
+  entries: TimelineEntry[],
+  update: (
+    attachments: TimelineEntry["attachments"],
+  ) => TimelineEntry["attachments"],
+): TimelineEntry[] {
+  return entries.map((entry) => ({
+    ...entry,
+    attachments: update(entry.attachments),
+  }));
+}
+
 /** Every note in a timeline, wherever it hangs, through one function. */
 function mapNotes(
   entries: TimelineEntry[],
@@ -796,6 +810,78 @@ export function useRestoreComment() {
 }
 
 /* ---------------------------------------------------------------------------
+ * Attachments (milestone 4.3, `docs/FEATURES.md` §6)
+ *
+ * An entry's files arrive with the entry (`TimelineEntry["attachments"]`), so
+ * there is no read here — only the three writes, and all three invalidate the
+ * timeline the files are drawn in. The download is not a request this layer
+ * makes at all: it is a plain link, like the three export links, because a
+ * file the browser saves has nothing to put in a cache.
+ * ------------------------------------------------------------------------- */
+
+/** Where the browser fetches one attachment's bytes. A link, not a hook: the
+ * response is a download (`Content-Disposition: attachment`), so routing it
+ * through `apiRequest` would buffer a file nothing renders. */
+export function attachmentDownloadPath(attachmentId: number): string {
+  return `/api/v2/attachments/${attachmentId}/download`;
+}
+
+/**
+ * Attaching a file.
+ *
+ * `FormData` rather than JSON, which is the one request in the app that is not
+ * JSON — `lib/api.ts` leaves the content type to the browser for exactly this
+ * body, because a multipart boundary is the browser's to generate. Not
+ * optimistic: the server decides the file's sniffed type, its size and whether
+ * it is allowed at all, so there is nothing truthful to draw until it answers
+ * (D-068's rule for creates).
+ */
+export function useUploadAttachment() {
+  return useTimelineWrite(
+    ({ entryId, file }: { entryId: number; file: File }) => {
+      const body = new FormData();
+      body.append("file", file);
+      return apiRequest(`/api/v2/timeline/${entryId}/attachments`, {
+        method: "POST",
+        body,
+      });
+    },
+  );
+}
+
+/**
+ * Removing one, optimistically — the cache already holds the row that
+ * disappears, which is the test 2.4b sets for applying a delete immediately.
+ * Paired with `useRestoreAttachment` through `useUndoableDelete`, so there is
+ * no confirmation: the toast is the way back.
+ */
+export function useDeleteAttachment() {
+  const client = useQueryClient();
+  return useMutation<unknown, Error, number, Snapshot>({
+    mutationFn: (attachmentId: number) =>
+      apiRequest(`/api/v2/attachments/${attachmentId}`, { method: "DELETE" }),
+    onMutate: (attachmentId) =>
+      optimisticTimelines(client, (entries) =>
+        mapAttachments(entries, (attachments) =>
+          attachments.filter((attachment) => attachment.id !== attachmentId),
+        ),
+      ),
+    onError: (_error, _attachmentId, snapshot) => rollback(client, snapshot),
+    // An audit row, so the activity log is stale too — the rule every other
+    // delete here follows.
+    onSettled: () => invalidate(client, keys.allTimelines, keys.allActivity),
+  });
+}
+
+export function useRestoreAttachment() {
+  return useRestore(
+    (id) => `/api/v2/attachments/${id}/restore`,
+    keys.allTimelines,
+    keys.allActivity,
+  );
+}
+
+/* ---------------------------------------------------------------------------
  * Tasks (milestone 4.1, `docs/FEATURES.md` §8)
  *
  * Reads are whole rather than windowed, like the activity log's: a deal has a
@@ -839,7 +925,11 @@ export function useMyTasks(includeCompleted = false) {
 
 export interface TaskInput {
   title: string;
-  assignee_email?: string | null;
+  description?: string;
+  /** Everyone the task is for (milestone 4.6). Sending `[]` on an edit clears
+   * it; leaving the key out leaves the list alone, which is the server's own
+   * rule for this field. */
+  assignee_emails?: string[];
   due_date?: string | null;
   entry_id?: number | null;
 }
@@ -904,6 +994,49 @@ export function useSetTaskDone() {
       ),
     onSuccess: () => invalidate(client, keys.allTasks, keys.myTasks),
   });
+}
+
+/**
+ * A task's discussion (milestone 4.5).
+ *
+ * Writes only: the comments arrive with the task (`Task["comments"]`), so there
+ * is no read here — the same shape a note's comments have. Not optimistic, like
+ * every other task write: the row the server answers with carries an
+ * `author_name` the cache does not hold.
+ */
+export function useAddTaskComment() {
+  const client = useQueryClient();
+  return useMutation<unknown, Error, { taskId: number; body: string }>({
+    mutationFn: ({ taskId, body }) =>
+      apiRequest(`/api/v2/tasks/${taskId}/comments`, {
+        method: "POST",
+        body: JSON.stringify({ body }),
+      }),
+    // The two people a task is about are notified, and one of them may be the
+    // reader (`notifications`); both task reads carry the comment.
+    onSuccess: () =>
+      invalidate(client, keys.allTasks, keys.myTasks, keys.notifications),
+  });
+}
+
+export function useDeleteTaskComment() {
+  const client = useQueryClient();
+  return useMutation<unknown, Error, number>({
+    mutationFn: (commentId) =>
+      apiRequest(`/api/v2/task-comments/${commentId}`, { method: "DELETE" }),
+    // An audit row, so the activity log is stale too.
+    onSuccess: () =>
+      invalidate(client, keys.allTasks, keys.myTasks, keys.allActivity),
+  });
+}
+
+export function useRestoreTaskComment() {
+  return useRestore(
+    (id) => `/api/v2/task-comments/${id}/restore`,
+    keys.allTasks,
+    keys.myTasks,
+    keys.allActivity,
+  );
 }
 
 export function useDeleteTask() {

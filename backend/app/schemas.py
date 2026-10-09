@@ -388,6 +388,32 @@ class CommentThread(CommentPublic):
     replies: list[CommentPublic]
 
 
+class AttachmentPublic(BaseModel):
+    """One file on an entry (milestone 4.3, `docs/FEATURES.md` §6).
+
+    `sha256` is in the payload because it is what the file *is* -- two
+    attachments with one digest are one document, which is worth being able to
+    see -- and because it is how the stored file is addressed (ADR 0008). It is
+    not a download token: the download route resolves the digest from the row
+    the id names, after the same permission check as every other read, so
+    knowing a digest grants nothing.
+
+    `byte_size` rather than a formatted size: the reader's locale is the
+    client's business, and the PDF export's manifest (milestone 4.4) formats it
+    differently from the screen.
+    """
+
+    id: int
+    entry_id: int
+    sha256: str
+    filename: str
+    content_type: str
+    byte_size: int
+    uploaded_by: int
+    uploader_name: str
+    created_at: str
+
+
 class NotePublic(BaseModel):
     id: int
     entry_id: int
@@ -420,6 +446,13 @@ class TimelineEntryPublic(BaseModel):
     # `?entry=` links carry.
     sequence: int
     notes: list[NotePublic]
+    # The entry's files, read with it rather than through a list route of
+    # their own (milestone 4.3) -- the shape a note's comments already have,
+    # and for the same reason: an entry is the page unit, so its attachments
+    # travel with it and a page of entries costs one more query rather than
+    # one per card. The four writes that answer with an entry send `[]`, like
+    # `notes`: the client invalidates the timeline and reads it back.
+    attachments: list[AttachmentPublic]
 
 
 class NoteCreate(BaseModel):
@@ -588,6 +621,25 @@ class WatchStatus(BaseModel):
     watching: bool
 
 
+# A task is for a handful of people, not a mailing list. The cap exists so one
+# request cannot write an unbounded number of rows, which is the same reason
+# `BULK_ACTION_MAX_IDS` exists; nothing in `FEATURES.md` §8 asks for more.
+MAX_TASK_ASSIGNEES = 10
+
+
+class TaskAssigneePublic(BaseModel):
+    """One person a task is for (milestone 4.6).
+
+    A list of these replaced the `assignee_id`/`assignee_name` pair: a task can
+    be handed to several people, and two shapes for one fact is how a client
+    comes to believe the wrong one. Ids and names arrive in the same order,
+    ascending by id, which is the order the version snapshot records too.
+    """
+
+    user_id: int
+    name: str
+
+
 class TaskCreate(BaseModel):
     """A task as written (milestone 4.1, `docs/FEATURES.md` §8).
 
@@ -603,17 +655,19 @@ class TaskCreate(BaseModel):
     # default: "call them back Thursday" needs no elaboration, and requiring one
     # would put a second field in front of the common case.
     description: str = ""
-    assignee_email: str | None = None
+    # A list since milestone 4.6, replacing `assignee_email`. Empty means
+    # nobody, which is what an unassigned task always was.
+    assignee_emails: list[str] = Field(default_factory=list, max_length=MAX_TASK_ASSIGNEES)
     due_date: str | None = None
     entry_id: int | None = None
 
-    @field_validator("assignee_email")
+    @field_validator("assignee_emails")
     @classmethod
-    def normalize_assignee_email(cls, value: str | None) -> str | None:
+    def normalize_assignee_emails(cls, value: list[str]) -> list[str]:
         # Lowercased like `ShareCreate.email`, because signup stores it that
         # way: an assignee typed with a capital would otherwise resolve to
         # nobody and the task would be refused for a reason nobody could see.
-        return value.strip().lower() if value else value
+        return [email.strip().lower() for email in value if email.strip()]
 
     @field_validator("title")
     @classmethod
@@ -640,13 +694,18 @@ class TaskUpdate(BaseModel):
 
     title: str | None = Field(default=None, min_length=1)
     description: str | None = None
-    assignee_email: str | None = None
+    # The whole list, or absent. Sending `[]` clears it; not sending the key
+    # leaves it alone -- the same "absent means leave it" rule `due_date`
+    # follows, which is why `model_fields_set` decides and not the value.
+    assignee_emails: list[str] | None = Field(default=None, max_length=MAX_TASK_ASSIGNEES)
     due_date: str | None = None
 
-    @field_validator("assignee_email")
+    @field_validator("assignee_emails")
     @classmethod
-    def normalize_assignee_email(cls, value: str | None) -> str | None:
-        return value.strip().lower() if value else value
+    def normalize_assignee_emails(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        return [email.strip().lower() for email in value if email.strip()]
 
     @field_validator("title")
     @classmethod
@@ -659,6 +718,32 @@ class TaskUpdate(BaseModel):
         # `None` clears the date; the route tells "clear it" from "leave it
         # alone" by whether the key was sent at all, not by the value.
         return canonical_date(value) if value else None
+
+
+class TaskCommentCreate(BaseModel):
+    body: str = Field(min_length=1)
+
+    @field_validator("body")
+    @classmethod
+    def strip_body(cls, value: str) -> str:
+        return stripped(value)
+
+
+class TaskCommentPublic(BaseModel):
+    """One line of a task's discussion (milestone 4.5).
+
+    Flat: no `parent_id`, no resolved pair, no reactions (**D-162**). It is
+    immutable like every other comment in this app (invariant 2), so there is
+    no `updated_at` and no `edited` marker -- the absence of those fields is
+    the shape of the rule rather than an omission.
+    """
+
+    id: int
+    task_id: int
+    body: str
+    created_by: int
+    author_name: str
+    created_at: str
 
 
 class TaskPublic(BaseModel):
@@ -674,8 +759,9 @@ class TaskPublic(BaseModel):
     entry_title: str | None
     title: str
     description: str
-    assignee_id: int | None
-    assignee_name: str | None
+    # Everyone this task is for (milestone 4.6), ascending by id. Empty is a
+    # task nobody owes, which is what an unassigned one always was.
+    assignees: list[TaskAssigneePublic]
     due_date: str | None
     # `NULL` means open. The pair answers "when" and "who" rather than just
     # "whether", which a boolean could not (D-095's lesson, applied at the
@@ -687,6 +773,11 @@ class TaskPublic(BaseModel):
     author_name: str | None
     created_at: str
     updated_at: str
+    # The task's discussion, read with it rather than through a list route of
+    # its own (milestone 4.5) -- the shape a note's comments already have, so a
+    # page of tasks costs one more query rather than one per row. The writes
+    # answer with the single comment they wrote, like `POST /notes/{id}/comments`.
+    comments: list[TaskCommentPublic]
 
 
 class TaskVersionPublic(BaseModel):
@@ -702,8 +793,10 @@ class TaskVersionPublic(BaseModel):
     version_number: int
     title: str
     description: str
-    assignee_id: int | None
-    assignee_name: str | None
+    # A list since milestone 4.6, from the snapshot's `assignee_ids`. A version
+    # written before that revision carries one id and reads as a one-person
+    # list, which is what it always meant.
+    assignees: list[TaskAssigneePublic]
     due_date: str | None
     edited_by: int
     editor_name: str | None
@@ -725,6 +818,10 @@ AuditAction = Literal[
     "comment_restored",
     "task_deleted",
     "task_restored",
+    "attachment_deleted",
+    "attachment_restored",
+    "task_comment_deleted",
+    "task_comment_restored",
 ]
 
 
@@ -828,6 +925,38 @@ class AuditDetailTaskRestored(BaseModel):
     author_id: int
 
 
+# An attachment is identified in the log by its name and its size: "which
+# document disappeared" is answered by the filename, and the size is what
+# tells two drafts of one proposal apart when both were called `proposal.pdf`.
+class AuditDetailAttachmentDeleted(BaseModel):
+    attachment_id: int
+    entry_id: int
+    filename: str
+    byte_size: int
+
+
+class AuditDetailAttachmentRestored(BaseModel):
+    attachment_id: int
+    entry_id: int
+    filename: str
+    byte_size: int
+
+
+# A task comment is identified in the log by the task it was on and who wrote
+# it: the body is gone from every read once it is deleted, and an owner asking
+# what happened wants to know which discussion lost a line.
+class AuditDetailTaskCommentDeleted(BaseModel):
+    comment_id: int
+    task_id: int
+    author_id: int
+
+
+class AuditDetailTaskCommentRestored(BaseModel):
+    comment_id: int
+    task_id: int
+    author_id: int
+
+
 AuditDetail = (
     AuditDetailOpportunityDeleted
     | AuditDetailOpportunityRestored
@@ -843,6 +972,10 @@ AuditDetail = (
     | AuditDetailCommentRestored
     | AuditDetailTaskDeleted
     | AuditDetailTaskRestored
+    | AuditDetailAttachmentDeleted
+    | AuditDetailAttachmentRestored
+    | AuditDetailTaskCommentDeleted
+    | AuditDetailTaskCommentRestored
 )
 
 AUDIT_DETAIL_MODELS: dict[str, type[BaseModel]] = {
@@ -860,6 +993,10 @@ AUDIT_DETAIL_MODELS: dict[str, type[BaseModel]] = {
     "comment_restored": AuditDetailCommentRestored,
     "task_deleted": AuditDetailTaskDeleted,
     "task_restored": AuditDetailTaskRestored,
+    "attachment_deleted": AuditDetailAttachmentDeleted,
+    "attachment_restored": AuditDetailAttachmentRestored,
+    "task_comment_deleted": AuditDetailTaskCommentDeleted,
+    "task_comment_restored": AuditDetailTaskCommentRestored,
 }
 
 
@@ -976,9 +1113,27 @@ NotificationType = Literal[
     # something, which is the one change nobody asks for. `notifications.type`
     # carries no CHECK constraint, so this costs no migration.
     "task_assigned",
+    # A comment on a task you wrote or owe (milestone 4.5). Its own type rather
+    # than `shared_activity`, for the reason `task_assigned` has one: it goes to
+    # the two people the task is about rather than to everyone on the deal, and
+    # an inbox line that cannot say which is which is a worse inbox.
+    "task_comment",
 ]
 
-SourceType = Literal["entry", "note", "comment"]
+# What a notification is about. "attachment" since milestone 4.3: a file
+# landing on a shared deal is activity on it, told through the same
+# `shared_activity` notification a note is rather than a type of its own --
+# the sentence the inbox shows comes from the payload's `title`.
+SourceType = Literal["entry", "note", "comment", "attachment"]
+
+# What the search index holds. It was the same literal as `SourceType` until
+# milestone 4.3 split them, and they stayed apart: this one is the set of
+# things the FTS5 index stores terms for. Attachments joined it in **4.8** on
+# the human's ruling -- indexed by *filename*, which is the only text a file
+# has here, since nothing reads what is inside one (D-158). That milestone
+# also widened ADR 0007's encoding from `* 4` to `* 8` (**D-167**), so this
+# list has room for four more rather than none.
+SearchKind = Literal["entry", "note", "comment", "attachment"]
 
 
 class NotificationPayloadShareAdded(BaseModel):
@@ -1047,6 +1202,21 @@ class NotificationPayloadTaskAssigned(BaseModel):
     due_date: str | None
 
 
+class NotificationPayloadTaskComment(BaseModel):
+    """Somebody said something about a task you wrote or owe (milestone 4.5).
+
+    The task's title rides along for the reason `task_assigned`'s does: an
+    inbox line that says only "new comment on a task" sends the reader looking
+    for which one. The two recipients are a set, so the person who both wrote
+    the task and owes it is told once.
+    """
+
+    opportunity_id: int
+    actor_id: int
+    task_id: int
+    title: str
+
+
 NotificationPayload = (
     NotificationPayloadShareAdded
     | NotificationPayloadShareRoleChanged
@@ -1054,6 +1224,7 @@ NotificationPayload = (
     | NotificationPayloadOwnerChanged
     | NotificationPayloadMention
     | NotificationPayloadTaskAssigned
+    | NotificationPayloadTaskComment
     | NotificationPayloadSharedActivity
     | NotificationPayloadComment
 )
@@ -1067,6 +1238,7 @@ NOTIFICATION_PAYLOAD_MODELS: dict[str, type[BaseModel]] = {
     "shared_activity": NotificationPayloadSharedActivity,
     "comment": NotificationPayloadComment,
     "task_assigned": NotificationPayloadTaskAssigned,
+    "task_comment": NotificationPayloadTaskComment,
 }
 
 
@@ -1117,7 +1289,7 @@ class SearchResultPublic(BaseModel):
     itself -- so every result addresses one place in one timeline.
     """
 
-    kind: SourceType
+    kind: SearchKind
     id: int
     opportunity_id: int
     opportunity_name: str

@@ -19,6 +19,9 @@ const kindLabels: Record<SearchResult["kind"], string> = {
   entry: "Entry",
   note: "Note",
   comment: "Comment",
+  // Milestone 4.8: a file is found by its name, which is the only text it has
+  // here. The result links to the entry it hangs off, like every other kind.
+  attachment: "File",
 };
 
 function searchPath(query: string, cursor: string | null): string {
@@ -120,8 +123,8 @@ export function SearchPage() {
       <section className="search-results" aria-label="Search results">
         {query === "" && (
           <p className="empty-state">
-            Search entries, notes and comments across every opportunity you can
-            read.
+            Search entries, notes, comments and file names across every
+            opportunity you can read.
           </p>
         )}
 

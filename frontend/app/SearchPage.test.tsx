@@ -44,7 +44,7 @@ describe("search page", () => {
     start();
 
     expect(
-      await screen.findByText(/Search entries, notes and comments/),
+      await screen.findByText(/Search entries, notes, comments and file names/),
     ).toBeInTheDocument();
     expect(api.callsTo("GET", "/api/v2/search")).toHaveLength(0);
   });
@@ -61,7 +61,7 @@ describe("search page", () => {
         }),
       ],
     });
-    await screen.findByText(/Search entries, notes and comments/);
+    await screen.findByText(/Search entries, notes, comments and file names/);
 
     await search("finance");
 
@@ -96,7 +96,7 @@ describe("search page", () => {
     await userEvent.click(screen.getByRole("button", { name: "Search" }));
 
     expect(
-      await screen.findByText(/Search entries, notes and comments/),
+      await screen.findByText(/Search entries, notes, comments and file names/),
     ).toBeInTheDocument();
     expect(screen.queryByRole("article")).not.toBeInTheDocument();
   });
@@ -112,6 +112,35 @@ describe("search page", () => {
     );
 
     expect(await screen.findByText(/OppTrail ·/)).toBeInTheDocument();
+  });
+
+  it("names a file result as a file (milestone 4.8)", async () => {
+    // The fourth searchable kind. Its title is the filename, which is the
+    // whole document — nothing reads what is inside a file — so the row has
+    // to say what was matched or a reader cannot tell it from an entry.
+    start(
+      {
+        searchResults: [
+          aSearchResult({
+            kind: "attachment",
+            id: 700,
+            title: "Northwind procurement schedule.pdf",
+            snippet: {
+              text: "Northwind procurement schedule.pdf",
+              matches: [],
+            },
+          }),
+        ],
+      },
+      "/search?q=procurement",
+    );
+
+    expect(await screen.findByText("File")).toBeInTheDocument();
+    expect(
+      screen.getByText("Northwind procurement schedule.pdf", {
+        selector: ".search-result-title",
+      }),
+    ).toBeInTheDocument();
   });
 
   it("says so when nothing matches", async () => {

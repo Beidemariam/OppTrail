@@ -37,7 +37,18 @@ test("the owner can export in every format from the timeline", async ({
 
   const response = await page.request.get(jsonHref!);
   expect(response.status()).toBe(200);
-  expect((await response.json()).opportunity.name).toBe(NORTHWIND);
+  const exported = await response.json();
+  expect(exported.opportunity.name).toBe(NORTHWIND);
+  // The attachment manifest (milestone 4.4). Asserted on the JSON rather than
+  // the PDF because the PDF renderer needs WeasyPrint's native libraries,
+  // which a Mac does not have -- and the manifest reads from the same
+  // `fetch_export_data` either way. The seed puts one file on `Proposal sent`.
+  const files = exported.entries.flatMap(
+    (entry: { attachments: { filename: string }[] }) => entry.attachments,
+  );
+  expect(files.map((file: { filename: string }) => file.filename)).toContain(
+    "Northwind proposal.pdf",
+  );
 });
 
 test("export respects the viewer, outsider and anonymous cases", async ({

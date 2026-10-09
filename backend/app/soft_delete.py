@@ -47,6 +47,16 @@ USER_DATA_TABLES = (
     # delete with an audit row and an Undo. Completing one is not a delete at
     # all -- `completed_at` is a field, and a done task stays readable.
     "tasks",
+    # A task's discussion is content as well (milestone 4.5): immutable like
+    # every other comment here, and soft-deleted like every other thing a
+    # person wrote.
+    "task_comments",
+    # An attachment is content too (milestone 4.3): somebody uploaded the
+    # contract and a colleague may be about to read it, so deleting one is a
+    # soft delete with an audit row and an Undo. **The file on disk is never
+    # removed** (**D-149**) -- the row can come back, and a content-addressed
+    # blob may be shared with a row nobody deleted.
+    "attachments",
 )
 
 
@@ -71,23 +81,77 @@ def soft_delete_comment(connection: sqlite3.Connection, comment_id: int) -> None
 
 
 def soft_delete_task(connection: sqlite3.Connection, task_id: int) -> None:
-    """Delete one task (milestone 4.1).
+    """Delete one task, and the discussion on it (milestone 4.1, 4.5).
 
-    Nothing hangs off a task -- `FEATURES.md` §8 rules out subtasks -- so this
-    is the one delete in this module with no cascade, and the flattest evidence
-    that the shape of these helpers follows the data rather than a convention.
+    `FEATURES.md` §8 rules out subtasks, so a task had no cascade at all until
+    comments arrived -- and a comment is readable only through the task it is
+    on, which is the same rule every other level of this tree follows.
     """
+    deleted_at = utc_now()
+    connection.execute(
+        "UPDATE task_comments SET deleted_at = ? WHERE task_id = ? AND deleted_at IS NULL",
+        (deleted_at, task_id),
+    )
     connection.execute(
         "UPDATE tasks SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
-        (utc_now(), task_id),
+        (deleted_at, task_id),
     )
 
 
 def restore_task(connection: sqlite3.Connection, task_id: int, deleted_at: str) -> None:
-    """Undo one `soft_delete_task`, scoped by the stamp like every restore here."""
+    """Undo one `soft_delete_task`, discussion included, scoped by the stamp
+    like every restore here -- so a comment deleted on its own an hour earlier
+    carries a different stamp and stays deleted."""
+    connection.execute(
+        "UPDATE task_comments SET deleted_at = NULL WHERE task_id = ? AND deleted_at = ?",
+        (task_id, deleted_at),
+    )
     connection.execute(
         "UPDATE tasks SET deleted_at = NULL WHERE id = ? AND deleted_at = ?",
         (task_id, deleted_at),
+    )
+
+
+def soft_delete_task_comment(connection: sqlite3.Connection, comment_id: int) -> None:
+    """Delete one line of a task's discussion (milestone 4.5)."""
+    connection.execute(
+        "UPDATE task_comments SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
+        (utc_now(), comment_id),
+    )
+
+
+def restore_task_comment(
+    connection: sqlite3.Connection,
+    comment_id: int,
+    deleted_at: str,
+) -> None:
+    """Undo one `soft_delete_task_comment`, scoped by the stamp."""
+    connection.execute(
+        "UPDATE task_comments SET deleted_at = NULL WHERE id = ? AND deleted_at = ?",
+        (comment_id, deleted_at),
+    )
+
+
+def soft_delete_attachment(connection: sqlite3.Connection, attachment_id: int) -> None:
+    """Delete one attachment (milestone 4.3).
+
+    Nothing hangs off an attachment and nothing is unlinked from disk
+    (**D-149**): this stamps the row, and the bytes stay where the digest says
+    they are. A delete that removed the file could not be undone, and the
+    digest it addresses may be another entry's attachment as well.
+    """
+    connection.execute(
+        "UPDATE attachments SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
+        (utc_now(), attachment_id),
+    )
+
+
+def restore_attachment(connection: sqlite3.Connection, attachment_id: int, deleted_at: str) -> None:
+    """Undo one `soft_delete_attachment`, scoped by the stamp like every
+    restore here."""
+    connection.execute(
+        "UPDATE attachments SET deleted_at = NULL WHERE id = ? AND deleted_at = ?",
+        (attachment_id, deleted_at),
     )
 
 
@@ -105,6 +169,15 @@ def soft_delete_note(connection: sqlite3.Connection, note_id: int) -> None:
 
 def soft_delete_timeline_entry(connection: sqlite3.Connection, entry_id: int) -> None:
     deleted_at = utc_now()
+    # Attachments are a level of this tree (milestone 4.3): a file is read
+    # through the entry it was attached to and has nowhere else to appear, so
+    # leaving it live would leave a document reachable with no context. Unlike
+    # a task, which outlives the entry that prompted it because an action item
+    # is a fact about the deal rather than about the entry.
+    connection.execute(
+        "UPDATE attachments SET deleted_at = ? WHERE entry_id = ? AND deleted_at IS NULL",
+        (deleted_at, entry_id),
+    )
     connection.execute(
         """
         UPDATE comments
@@ -169,6 +242,15 @@ def soft_delete_opportunity(connection: sqlite3.Connection, opportunity_id: int)
     )
     connection.execute(
         """
+        UPDATE attachments
+        SET deleted_at = ?
+        WHERE deleted_at IS NULL
+            AND entry_id IN (SELECT id FROM timeline_entries WHERE opportunity_id = ?)
+        """,
+        (deleted_at, opportunity_id),
+    )
+    connection.execute(
+        """
         UPDATE timeline_entries
         SET deleted_at = ?
         WHERE opportunity_id = ? AND deleted_at IS NULL
@@ -183,10 +265,19 @@ def soft_delete_opportunity(connection: sqlite3.Connection, opportunity_id: int)
         """,
         (deleted_at, opportunity_id),
     )
-    # Tasks are a level of this tree too (milestone 4.1). Missing this would
-    # leave live action items pointing at a deleted deal, and My Tasks reads
-    # across opportunities -- so they would keep appearing on somebody's list
-    # for a deal that is gone.
+    # Tasks are a level of this tree too (milestone 4.1), and their discussions
+    # with them (4.5). Missing the tasks would leave live action items pointing
+    # at a deleted deal, and My Tasks reads across opportunities -- so they
+    # would keep appearing on somebody's list for a deal that is gone.
+    connection.execute(
+        """
+        UPDATE task_comments
+        SET deleted_at = ?
+        WHERE deleted_at IS NULL
+            AND task_id IN (SELECT id FROM tasks WHERE opportunity_id = ?)
+        """,
+        (deleted_at, opportunity_id),
+    )
     connection.execute(
         """
         UPDATE tasks
@@ -224,6 +315,10 @@ def restore_timeline_entry(connection: sqlite3.Connection, entry_id: int, delete
     )
     connection.execute(
         "UPDATE notes SET deleted_at = NULL WHERE entry_id = ? AND deleted_at = ?",
+        (entry_id, deleted_at),
+    )
+    connection.execute(
+        "UPDATE attachments SET deleted_at = NULL WHERE entry_id = ? AND deleted_at = ?",
         (entry_id, deleted_at),
     )
     connection.execute(
@@ -295,6 +390,15 @@ def restore_opportunity(
     )
     connection.execute(
         """
+        UPDATE attachments
+        SET deleted_at = NULL
+        WHERE deleted_at = ?
+            AND entry_id IN (SELECT id FROM timeline_entries WHERE opportunity_id = ?)
+        """,
+        (deleted_at, opportunity_id),
+    )
+    connection.execute(
+        """
         UPDATE timeline_entries
         SET deleted_at = NULL
         WHERE opportunity_id = ? AND deleted_at = ?
@@ -308,6 +412,15 @@ def restore_opportunity(
         WHERE opportunity_id = ? AND deleted_at = ?
         """,
         (opportunity_id, deleted_at),
+    )
+    connection.execute(
+        """
+        UPDATE task_comments
+        SET deleted_at = NULL
+        WHERE deleted_at = ?
+            AND task_id IN (SELECT id FROM tasks WHERE opportunity_id = ?)
+        """,
+        (deleted_at, opportunity_id),
     )
     connection.execute(
         """

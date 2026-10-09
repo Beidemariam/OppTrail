@@ -3,6 +3,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from .attachment_utils import attachments_by_entry_id
 from .audit_utils import create_audit_log_entry
 from .auth import get_current_user
 from .database import db_connection
@@ -21,6 +22,7 @@ from .permissions import (
     require_timeline_write,
 )
 from .schemas import (
+    AttachmentPublic,
     CommentCreate,
     CommentPublic,
     CommentThread,
@@ -210,7 +212,11 @@ ENTRY_ROWS_SQL = f"""
 """
 
 
-def entry_from_row(row: sqlite3.Row, notes: list[NotePublic]) -> TimelineEntryPublic:
+def entry_from_row(
+    row: sqlite3.Row,
+    notes: list[NotePublic],
+    attachments: list[AttachmentPublic],
+) -> TimelineEntryPublic:
     return TimelineEntryPublic(
         id=row["id"],
         opportunity_id=row["opportunity_id"],
@@ -225,6 +231,7 @@ def entry_from_row(row: sqlite3.Row, notes: list[NotePublic]) -> TimelineEntryPu
         created_at=row["created_at"],
         sequence=row["sequence"],
         notes=notes,
+        attachments=attachments,
     )
 
 
@@ -444,10 +451,10 @@ def entries_with_notes(
     connection: sqlite3.Connection,
     entries: list[sqlite3.Row],
 ) -> list[TimelineEntryPublic]:
-    """Attach every entry's notes, each note's comments, and each comment's
-    reactions (milestone 3.3a).
+    """Attach every entry's notes, each note's comments, each comment's
+    reactions (milestone 3.3a) and each entry's files (milestone 4.3).
 
-    Four queries for the whole set rather than two per entry, so a page of
+    Five queries for the whole set rather than four per entry, so a page of
     entries costs the same number of round trips as one.
     """
     entry_ids = [entry["id"] for entry in entries]
@@ -494,7 +501,16 @@ def entries_with_notes(
             note_from_row(note, comments_by_note_id.get(note["id"], []))
         )
 
-    return [entry_from_row(entry, notes_by_entry_id.get(entry["id"], [])) for entry in entries]
+    attachments_by_entry = attachments_by_entry_id(connection, entry_ids)
+
+    return [
+        entry_from_row(
+            entry,
+            notes_by_entry_id.get(entry["id"], []),
+            attachments_by_entry.get(entry["id"], []),
+        )
+        for entry in entries
+    ]
 
 
 @router.get(
@@ -632,7 +648,7 @@ def create_timeline_entry(
         ).fetchone()
 
     publish_timeline_changed(opportunity_id)
-    return entry_from_row(row, [])
+    return entry_from_row(row, [], [])
 
 
 @router.patch("/timeline/{entry_id}", response_model=TimelineEntryPublic)
@@ -705,7 +721,7 @@ def update_timeline_entry(
     # go and see: the flag tracks the write rather than the request.
     if changed:
         publish_timeline_changed(entry["opportunity_id"])
-    return entry_from_row(row, [])
+    return entry_from_row(row, [], [])
 
 
 def timeline_entry_version_from_row(row: sqlite3.Row) -> TimelineEntryVersionPublic:
@@ -837,7 +853,7 @@ def restore_timeline_entry_version(
 
     if changed:
         publish_timeline_changed(entry["opportunity_id"])
-    return entry_from_row(row, [])
+    return entry_from_row(row, [], [])
 
 
 @router.delete("/timeline/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)

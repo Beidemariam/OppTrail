@@ -19,6 +19,7 @@ from fastapi.testclient import TestClient
 from test_timeline import edit_note
 
 from app.activity import ACTIVITY_STRIDE, SOURCE_RANKS
+from app.database import db_connection
 
 
 def signup(client: TestClient, email: str, name: str) -> int:
@@ -364,6 +365,23 @@ def test_walking_the_cursor_yields_every_event_exactly_once(
     assert walked == whole
 
 
+def pin_feed_stamps(stamp: str = "2026-01-01T00:00:00Z") -> None:
+    """Give every row the feed reads one identical `created_at`.
+
+    The test below is about what orders events whose timestamps *collide*, and
+    `utc_now()` has one-second resolution (D-067), so three API calls in a row
+    normally collide on their own. Normally: under load they straddle a second
+    boundary, the collision stops happening and the test fails having proved
+    nothing wrong with the code -- the wall-clock dependency this project's own
+    test rules forbid, and it is how this was found. Pinning the stamps makes
+    the collision a property of the fixture rather than of the machine.
+    """
+    with db_connection() as connection:
+        for table in ("timeline_entries", "audit_log_entries", "opportunity_versions"):
+            connection.execute(f"UPDATE {table} SET created_at = ?", (stamp,))
+        connection.commit()
+
+
 def test_events_from_one_action_read_in_the_order_it_performed_them(
     client: TestClient,
 ) -> None:
@@ -378,11 +396,12 @@ def test_events_from_one_action_read_in_the_order_it_performed_them(
         client.patch(f"/api/v2/opportunities/{opportunity['id']}", json={"name": "Renamed"})
     ).status_code == 200
     assert client.delete(f"/api/v2/timeline/{entry_id}").status_code == 204
+    pin_feed_stamps()
 
     events = activity(client, opportunity["id"])
     stamps = {event["occurred_at"] for event in events}
 
-    assert len(stamps) == 1, "the whole test ran inside one second"
+    assert len(stamps) == 1, "the fixture pins every stamp to one value"
     assert sources(events) == ["system_entry", "version", "audit_log"]
 
 

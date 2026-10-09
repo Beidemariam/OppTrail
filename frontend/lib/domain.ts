@@ -32,6 +32,30 @@ export function formatMoney(currency: string, value: string | number): string {
   })}`;
 }
 
+/**
+ * A file size as a person reads it (milestone 4.3).
+ *
+ * The API sends `byte_size` and never a formatted string, for the reason it
+ * sends a currency and an amount rather than formatted money: the screen and
+ * the PDF export's manifest format it differently, and the reader's locale is
+ * the client's business. Powers of 1024 with the unit the sizes actually land
+ * in -- a proposal is "2.4 MB", not "2,411,724 bytes".
+ */
+export function formatBytes(bytes: number): string {
+  const units = ["bytes", "KB", "MB"];
+  let size = bytes;
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  // Whole bytes, one decimal once the number is small enough for it to mean
+  // something: "0.5 KB" tells a reader more than "512 bytes" does not.
+  return unit === 0
+    ? `${size} ${units[unit]}`
+    : `${size.toFixed(1)} ${units[unit]}`;
+}
+
 /** The fixed stage list as a type: the generated `Opportunity["stage"]`
  * union, named once so every stage-carrying signature reads the same. */
 export type Stage = (typeof stages)[number];
@@ -125,6 +149,12 @@ export type Task = components["schemas"]["TaskPublic"];
 /** One recorded state of a task (milestone 4.2a), the fourth history of the
  * shape `VersionField` describes. */
 export type TaskVersion = components["schemas"]["TaskVersionPublic"];
+/** One line of a task's discussion (milestone 4.5). Flat and immutable: no
+ * reply, no resolve, no reaction, and no edit (**D-162**). */
+export type TaskComment = components["schemas"]["TaskCommentPublic"];
+/** One file on a timeline entry (milestone 4.3, `docs/FEATURES.md` §6). Read
+ * with the entry it hangs off, the way a note's comments are. */
+export type Attachment = components["schemas"]["AttachmentPublic"];
 export type TimelineNote = components["schemas"]["NotePublic"];
 /** One discussion on a note: the comment that opened it, the replies under
  * it, and whether anyone has called it finished (milestone 3.3). */
@@ -233,9 +263,9 @@ export const noteVersionFields: VersionField<NoteVersion>[] = [
 
 /** A task's editable fields (milestone 4.2a). `completed_at` is absent because
  * ticking a task off is toggle state rather than content, so it is not
- * versioned -- see the revision's docstring. The assignee reads as a name
- * because that is what the snapshot means to a person; the id is what it
- * stores. */
+ * versioned -- see the revision's docstring. The assignees read as names
+ * because that is what the snapshot means to a person; ids are what it
+ * stores, and since milestone 4.6 it stores a set of them. */
 export const taskVersionFields: VersionField<TaskVersion>[] = [
   { field: "title", label: "Task", read: (version) => version.title },
   {
@@ -244,9 +274,15 @@ export const taskVersionFields: VersionField<TaskVersion>[] = [
     read: (version) => version.description || "None",
   },
   {
-    field: "assignee_id",
+    // The snapshot's column is `assignee_ids` and the read is a list of names
+    // (milestone 4.6). A version written before that revision carries one
+    // person, which reads as a one-name list.
+    field: "assignee_ids",
     label: "Assigned to",
-    read: (version) => version.assignee_name ?? "Nobody",
+    read: (version) =>
+      version.assignees.length > 0
+        ? version.assignees.map((item) => item.name).join(", ")
+        : "Nobody",
   },
   {
     field: "due_date",

@@ -40,6 +40,14 @@ ERROR_CODES = {
     404: "not_found",
     405: "method_not_allowed",
     409: "conflict",
+    # Both arrived with the first endpoint in this app that takes a file
+    # (milestone 4.3). Without them a refused upload answered
+    # `code: "internal_error"`, which tells the client the server broke when in
+    # fact the file was too big or of a type the allowlist does not carry --
+    # the exact distinction `code` exists to make, found by posting a renamed
+    # executable at the real container rather than by a test.
+    413: "payload_too_large",
+    415: "unsupported_media_type",
     422: "validation_error",
     429: "rate_limited",
 }

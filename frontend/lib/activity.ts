@@ -37,6 +37,17 @@ export function activitySentence(event: ActivityEvent): string {
   return editSentence(detail);
 }
 
+/**
+ * The sentence for an audit row, with **no `default` branch** (milestone 4.3).
+ *
+ * There was one, answering "removed a colleague's access", and it is what
+ * `task_deleted` and `task_restored` read as from the moment milestone 4.1
+ * shipped them: a catch-all in a switch over a closed union silently answers
+ * for whatever is added next. Without it, a new action makes this function
+ * return `string | undefined` and the build fails naming it -- the same reason
+ * `versionFieldLabel` below is a `Record` keyed by the union rather than a
+ * chain of ternaries, and the same defect one layer over.
+ */
 function auditSentence(
   detail: components["schemas"]["ActivityAuditEvent"],
 ): string {
@@ -57,6 +68,18 @@ function auditSentence(
       return "deleted a comment";
     case "comment_restored":
       return "restored a comment";
+    case "task_deleted":
+      return "deleted a task";
+    case "task_restored":
+      return "restored a task";
+    case "attachment_deleted":
+      return "removed an attachment";
+    case "attachment_restored":
+      return "restored an attachment";
+    case "task_comment_deleted":
+      return "deleted a comment on a task";
+    case "task_comment_restored":
+      return "restored a comment on a task";
     // An access change is reported to every reader by its system entry, so
     // the feed drops the audit row that repeats it
     // (`backend/app/activity.py`). The actions are still in the type the
@@ -68,7 +91,7 @@ function auditSentence(
       return "changed a colleague's role";
     case "owner_changed":
       return "handed this opportunity to someone else";
-    default:
+    case "share_removed":
       return "removed a colleague's access";
   }
 }

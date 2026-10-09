@@ -52,6 +52,17 @@ class VersionedTable:
     parent_table: str
     key_column: str
     fields: tuple[str, ...]
+    # The subset a restore writes back with one `UPDATE`, when that is not all
+    # of `fields`. Milestone 4.6 is the first case: a task's assignees are a
+    # **set**, snapshotted as `assignee_ids` and held in `task_assignees`
+    # rather than in a column of `tasks`, so `apply_version` cannot write it
+    # and the route puts the set back itself. Everything else leaves this
+    # `None`, which means "every field is a column of the parent".
+    applied_fields: tuple[str, ...] | None = None
+
+    @property
+    def restored_columns(self) -> tuple[str, ...]:
+        return self.applied_fields if self.applied_fields is not None else self.fields
 
 
 NOTE_VERSIONS = VersionedTable("note_versions", "notes", "note_id", ("body",))
@@ -80,7 +91,15 @@ TASK_VERSIONS = VersionedTable(
     "task_versions",
     "tasks",
     "task_id",
-    ("title", "description", "assignee_id", "due_date"),
+    # `assignee_ids` rather than `assignee_id` since milestone 4.6: a task can
+    # be handed to several people, so the snapshot records the whole set as the
+    # canonical string `routes_tasks.TASK_ROWS_SQL` produces -- ids ascending,
+    # comma separated, NULL for nobody. Canonical is what lets
+    # `version_is_current` keep comparing strings without knowing what they
+    # mean. The older `assignee_id` column is still in the table and still
+    # holds what it always held (D-097); nothing reads it.
+    ("title", "description", "assignee_ids", "due_date"),
+    applied_fields=("title", "description", "due_date"),
 )
 
 
@@ -173,7 +192,12 @@ def apply_version(
     beside the snapshot and the snapshot cannot supply: the write's own
     `updated_at`, and the note's `edited` marker.
     """
-    assignments: dict[str, object] = {field: version[field] for field in spec.fields}
+    # Only the columns the parent actually has -- every field, unless the table
+    # declared otherwise. A snapshot field that is not a column of the parent
+    # (milestone 4.6's `assignee_ids`, which lives in `task_assignees`) is the
+    # caller's to put back: this `UPDATE` is the wrong shape for a set, and
+    # widening it would make every other restore pay for the one that needs it.
+    assignments: dict[str, object] = {field: version[field] for field in spec.restored_columns}
     assignments.update(extra)
     columns = ", ".join(f"{name} = ?" for name in assignments)
     connection.execute(

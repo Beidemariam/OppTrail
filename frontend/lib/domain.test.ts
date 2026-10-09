@@ -13,6 +13,7 @@ import {
   emptyOpportunityViewState,
   emptyTimelineFilters,
   tasksDueOn,
+  formatBytes,
   formatMoney,
   matchesSavedView,
   monthLabel,
@@ -75,8 +76,7 @@ function aTask(overrides: Partial<Task> = {}): Task {
     entry_title: null,
     title: "Send updated pricing",
     description: "",
-    assignee_id: 1,
-    assignee_name: "Alex",
+    assignees: [{ user_id: 1, name: "Alex" }],
     due_date: "2026-12-02",
     completed_at: null,
     completed_by: null,
@@ -85,6 +85,7 @@ function aTask(overrides: Partial<Task> = {}): Task {
     author_name: "Alex",
     created_at: "2026-11-01T09:00:00Z",
     updated_at: "2026-11-01T09:00:00Z",
+    comments: [],
     ...overrides,
   };
 }
@@ -232,6 +233,19 @@ describe("the shared formatting and ordering helpers (milestone 2.7)", () => {
     expect(formatMoney("USD", "185000.00")).toBe("USD 185,000");
     expect(formatMoney("EUR", "1234.5")).toBe("EUR 1,234.5");
     expect(formatMoney("GBP", 0)).toBe("GBP 0");
+  });
+
+  it("reads a file size in the unit it lands in (milestone 4.3)", () => {
+    // The API sends `byte_size` and never a formatted string, for the same
+    // reason it sends a currency and an amount: the screen and the PDF
+    // manifest format it differently.
+    expect(formatBytes(0)).toBe("0 bytes");
+    expect(formatBytes(512)).toBe("512 bytes");
+    expect(formatBytes(1024)).toBe("1.0 KB");
+    expect(formatBytes(2_411_724)).toBe("2.3 MB");
+    // Powers of 1024 stop at MB, because the upload cap is 10 MiB -- a
+    // gigabyte unit would be a unit nothing can reach.
+    expect(formatBytes(10 * 1024 * 1024)).toBe("10.0 MB");
   });
 
   it("reads the list in sort order and the board in stage order", () => {

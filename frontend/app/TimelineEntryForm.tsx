@@ -1,10 +1,10 @@
 "use client";
 
-import { FormEvent, useState, type RefObject } from "react";
+import { ChangeEvent, FormEvent, useState, type RefObject } from "react";
 
 import { entryTypes, type EntryType, type TimelineEntry } from "../lib/domain";
 import { submitFormOnModEnter } from "../lib/keyboard";
-import { useSaveTimelineEntry } from "../lib/queries";
+import { useSaveTimelineEntry, useUploadAttachment } from "../lib/queries";
 import {
   localInputToUtc,
   nowDateTimeInput,
@@ -63,22 +63,57 @@ export function TimelineEntryForm({
   onDone: () => void;
 }) {
   const [form, setForm] = useState(() => formFor(editing));
+  const [file, setFile] = useState<File | null>(null);
+  // The entry this form has already created, if the save succeeded and the
+  // upload after it did not. Without it, pressing the button again would post
+  // a second entry rather than retrying the file (milestone 4.3a).
+  const [createdId, setCreatedId] = useState<number | null>(null);
   const save = useSaveTimelineEntry(opportunityId);
+  const upload = useUploadAttachment();
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    save.mutate(
-      {
-        entryId: editing?.id ?? null,
+    const saved = await save
+      .mutateAsync({
+        entryId: createdId ?? editing?.id ?? null,
         payload: {
           ...form,
           // `datetime-local` is always local wall-clock time; the API stores
           // canonical UTC (`lib/time.ts`).
           event_timestamp: localInputToUtc(form.event_timestamp),
         },
-      },
-      { onSuccess: () => onDone() },
-    );
+      })
+      .then(
+        (entry) => entry,
+        () => null,
+      );
+    // `save.isError` renders below; the draft stays where it is.
+    if (!saved) {
+      return;
+    }
+    setCreatedId(saved.id);
+
+    if (file) {
+      // The entry has to exist before its file can hang off it, so this is one
+      // request after the other rather than one request carrying both. That is
+      // also why the failure below has its own sentence: the entry is already
+      // posted by the time a refused file is known about, and telling somebody
+      // their entry failed when it did not is worse than telling them nothing.
+      const attached = await upload
+        .mutateAsync({ entryId: saved.id, file })
+        .then(
+          () => true,
+          () => false,
+        );
+      if (!attached) {
+        return;
+      }
+    }
+    onDone();
+  }
+
+  function chooseFile(event: ChangeEvent<HTMLInputElement>) {
+    setFile(event.target.files?.[0] ?? null);
   }
 
   return (
@@ -139,6 +174,17 @@ export function TimelineEntryForm({
           onChange={(body) => setForm({ ...form, body })}
         />
       </div>
+      {/* Attaching where a person writes (milestone 4.3a). 4.3 put the control
+          on the posted card only, which is where a file is *read*; the human
+          looked for it in this form twice -- "I can't find the attach button
+          on any entry when I edit or try to create new" -- and that is the
+          moment a proposal is actually to hand. The card keeps its own
+          control, because a file that arrives later (the signed copy) should
+          not require editing the entry to add. */}
+      <label className="entry-file">
+        Attach a file (optional)
+        <input type="file" onChange={chooseFile} />
+      </label>
       <div className="inline-actions">
         <button className="primary-button" type="submit">
           {editing ? "Save Entry" : "Add Entry"}
@@ -155,7 +201,13 @@ export function TimelineEntryForm({
           {editing ? "Updating entry..." : "Adding entry..."}
         </p>
       )}
+      {upload.isPending && <p className="status">Attaching {file?.name}...</p>}
       {save.isError && <p className="error">{save.error.message}</p>}
+      {upload.isError && (
+        <p className="error">
+          The entry was saved. The file was not attached: {upload.error.message}
+        </p>
+      )}
     </form>
   );
 }

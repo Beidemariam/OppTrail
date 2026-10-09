@@ -23,14 +23,29 @@ import sqlite3
 
 from .pagination import PageRequest, cursor_clause, split_page
 from .permissions import ACCESSIBLE_OPPORTUNITY_IDS_SQL
-from .schemas import SearchResultPublic, SearchSnippet, SnippetMatch, SourceType
+from .schemas import SearchKind, SearchResultPublic, SearchSnippet, SnippetMatch
 
 # Kind codes, and the base that separates them from the source row id.
-DOCUMENT_BASE = 4
-KIND_CODES: dict[SourceType, int] = {"entry": 0, "note": 1, "comment": 2}
+#
+# The base was 4 until milestone 4.8, which both added the fourth kind and
+# widened it to 8 (**D-167**) -- the action the 1.4 review's note asked the
+# first milestone needing a fourth type to take, rather than spending the last
+# code and leaving v3's email to pay for a rowid rewrite. Four codes are free.
+# It is interpolated into the queries below: it was a constant that did not
+# govern them until this milestone, because `/ 4` and `% 4` were written out
+# literally in four places.
+DOCUMENT_BASE = 8
+KIND_CODES: dict[SearchKind, int] = {
+    "entry": 0,
+    "note": 1,
+    "comment": 2,
+    # The filename, indexed as a title (milestone 4.8). There is no body: the
+    # file's contents are not read, here or anywhere (**D-158**).
+    "attachment": 3,
+}
 
 
-def document_id(kind: SourceType, source_id: int) -> int:
+def document_id(kind: SearchKind, source_id: int) -> int:
     """The `search_index` rowid for one source row."""
     return source_id * DOCUMENT_BASE + KIND_CODES[kind]
 
@@ -111,7 +126,7 @@ def matches_pattern(tokens: list[str]) -> re.Pattern[str] | None:
 # and each filters `deleted_at IS NULL` at every level it joins through, like
 # every other read in the app -- the triggers already keep deleted rows out of
 # the index, and a read that depends on that is a read that trusts a cache.
-SEARCH_DOCUMENTS_SQL = """
+SEARCH_DOCUMENTS_SQL = f"""
     WITH matches AS (
         SELECT rowid AS document_id, bm25(search_index) AS rank
         FROM search_index
@@ -133,8 +148,8 @@ SEARCH_DOCUMENTS_SQL = """
             matches.rank AS rank
         FROM matches
         JOIN timeline_entries
-            ON timeline_entries.id = matches.document_id / 4
-            AND matches.document_id % 4 = 0
+            ON timeline_entries.id = matches.document_id / {DOCUMENT_BASE}
+            AND matches.document_id % {DOCUMENT_BASE} = 0
         WHERE timeline_entries.deleted_at IS NULL
 
         UNION ALL
@@ -154,8 +169,8 @@ SEARCH_DOCUMENTS_SQL = """
             matches.rank
         FROM matches
         JOIN notes
-            ON notes.id = matches.document_id / 4
-            AND matches.document_id % 4 = 1
+            ON notes.id = matches.document_id / {DOCUMENT_BASE}
+            AND matches.document_id % {DOCUMENT_BASE} = 1
         JOIN timeline_entries ON timeline_entries.id = notes.entry_id
         WHERE notes.deleted_at IS NULL
             AND timeline_entries.deleted_at IS NULL
@@ -177,12 +192,40 @@ SEARCH_DOCUMENTS_SQL = """
             matches.rank
         FROM matches
         JOIN comments
-            ON comments.id = matches.document_id / 4
-            AND matches.document_id % 4 = 2
+            ON comments.id = matches.document_id / {DOCUMENT_BASE}
+            AND matches.document_id % {DOCUMENT_BASE} = 2
         JOIN notes ON notes.id = comments.note_id
         JOIN timeline_entries ON timeline_entries.id = notes.entry_id
         WHERE comments.deleted_at IS NULL
             AND notes.deleted_at IS NULL
+            AND timeline_entries.deleted_at IS NULL
+
+        UNION ALL
+
+        -- A file, found by its name (milestone 4.8). `title` is the filename
+        -- and there is no body, so the snippet `result_from_row` builds falls
+        -- back to the title -- which is the whole document. The entry it hangs
+        -- off is what the result links to, so a filename hit lands on the
+        -- conversation it belongs to rather than on the deal.
+        SELECT
+            'attachment',
+            attachments.id,
+            attachments.entry_id,
+            NULL,
+            timeline_entries.opportunity_id,
+            timeline_entries.type,
+            attachments.uploaded_by,
+            attachments.created_at,
+            attachments.filename,
+            '',
+            matches.document_id,
+            matches.rank
+        FROM matches
+        JOIN attachments
+            ON attachments.id = matches.document_id / {DOCUMENT_BASE}
+            AND matches.document_id % {DOCUMENT_BASE} = 3
+        JOIN timeline_entries ON timeline_entries.id = attachments.entry_id
+        WHERE attachments.deleted_at IS NULL
             AND timeline_entries.deleted_at IS NULL
     )
     SELECT
@@ -197,21 +240,21 @@ SEARCH_DOCUMENTS_SQL = """
 
 # The timeline's keyword filter, reimplemented against the index (ADR 0007): an
 # entry matches when it matches itself, or one of its notes or comments does.
-MATCHING_ENTRY_IDS_SQL = """
+MATCHING_ENTRY_IDS_SQL = f"""
     WITH matches(document_id) AS (
         SELECT rowid FROM search_index WHERE search_index MATCH ?
     )
-    SELECT matches.document_id / 4
+    SELECT matches.document_id / {DOCUMENT_BASE}
     FROM matches
-    WHERE matches.document_id % 4 = 0
+    WHERE matches.document_id % {DOCUMENT_BASE} = 0
 
     UNION
 
     SELECT notes.entry_id
     FROM matches
     JOIN notes
-        ON notes.id = matches.document_id / 4
-        AND matches.document_id % 4 = 1
+        ON notes.id = matches.document_id / {DOCUMENT_BASE}
+        AND matches.document_id % {DOCUMENT_BASE} = 1
     WHERE notes.deleted_at IS NULL
 
     UNION
@@ -219,8 +262,8 @@ MATCHING_ENTRY_IDS_SQL = """
     SELECT notes.entry_id
     FROM matches
     JOIN comments
-        ON comments.id = matches.document_id / 4
-        AND matches.document_id % 4 = 2
+        ON comments.id = matches.document_id / {DOCUMENT_BASE}
+        AND matches.document_id % {DOCUMENT_BASE} = 2
     JOIN notes ON notes.id = comments.note_id
     WHERE comments.deleted_at IS NULL
         AND notes.deleted_at IS NULL
@@ -314,17 +357,22 @@ def result_from_row(row: sqlite3.Row, tokens: list[str]) -> SearchResultPublic:
 # this module (a revision is frozen in time). The rebuild-matches-migration
 # test in tests/test_search.py is what keeps the two identical.
 INDEX_SOURCES = (
-    """
+    f"""
     INSERT INTO search_index(rowid, title, body)
-    SELECT id * 4 + 0, title, body FROM timeline_entries WHERE deleted_at IS NULL
+    SELECT id * {DOCUMENT_BASE} + 0, title, body FROM timeline_entries WHERE deleted_at IS NULL
     """,
-    """
+    f"""
     INSERT INTO search_index(rowid, title, body)
-    SELECT id * 4 + 1, '', body FROM notes WHERE deleted_at IS NULL
+    SELECT id * {DOCUMENT_BASE} + 1, '', body FROM notes WHERE deleted_at IS NULL
     """,
-    """
+    f"""
     INSERT INTO search_index(rowid, title, body)
-    SELECT id * 4 + 2, '', body FROM comments WHERE deleted_at IS NULL
+    SELECT id * {DOCUMENT_BASE} + 2, '', body FROM comments WHERE deleted_at IS NULL
+    """,
+    # The fourth kind (milestone 4.8): the filename as the title, no body.
+    f"""
+    INSERT INTO search_index(rowid, title, body)
+    SELECT id * {DOCUMENT_BASE} + 3, filename, '' FROM attachments WHERE deleted_at IS NULL
     """,
 )
 

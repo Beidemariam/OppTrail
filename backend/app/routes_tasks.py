@@ -48,8 +48,21 @@ from .permissions import (
     require_opportunity_owner,
     require_timeline_write,
 )
-from .schemas import TaskCreate, TaskPublic, TaskUpdate, TaskVersionPublic
-from .soft_delete import restore_task, soft_delete_task
+from .schemas import (
+    TaskAssigneePublic,
+    TaskCommentCreate,
+    TaskCommentPublic,
+    TaskCreate,
+    TaskPublic,
+    TaskUpdate,
+    TaskVersionPublic,
+)
+from .soft_delete import (
+    restore_task,
+    restore_task_comment,
+    soft_delete_task,
+    soft_delete_task_comment,
+)
 from .time_utils import utc_now
 from .versioning import (
     TASK_VERSIONS,
@@ -65,26 +78,132 @@ router = APIRouter(prefix="/api/v2", tags=["tasks"])
 # because My Tasks shows tasks from several opportunities at once and a bare
 # title is not actionable. Shared for the reason `ENTRY_ROWS_SQL` is: five reads
 # answer with a task and a client cannot tell which one produced the row.
+# `assignee_ids` is the canonical form of the set: ids ascending, comma
+# separated, NULL for nobody. Canonical because `task_versions` snapshots this
+# exact string and `versioning.version_is_current` compares two of them
+# (milestone 4.6) -- SQLite's `group_concat` has no ordering of its own, so the
+# order comes from the subquery. `assignee_names` is the same set for reading,
+# in the same order, so the two never disagree about who is on a task.
 TASK_ROWS_SQL = """
     SELECT
         tasks.*,
         opportunities.name AS opportunity_name,
         timeline_entries.title AS entry_title,
-        assignees.name AS assignee_name,
         authors.name AS author_name,
-        completers.name AS completed_by_name
+        completers.name AS completed_by_name,
+        (
+            SELECT group_concat(user_id)
+            FROM (
+                SELECT user_id FROM task_assignees
+                WHERE task_assignees.task_id = tasks.id
+                ORDER BY user_id
+            )
+        ) AS assignee_ids,
+        (
+            SELECT group_concat(name, char(31))
+            FROM (
+                SELECT users.name AS name
+                FROM task_assignees
+                JOIN users ON users.id = task_assignees.user_id
+                WHERE task_assignees.task_id = tasks.id
+                ORDER BY task_assignees.user_id
+            )
+        ) AS assignee_names
     FROM tasks
     JOIN opportunities ON opportunities.id = tasks.opportunity_id
     LEFT JOIN timeline_entries
         ON timeline_entries.id = tasks.entry_id
         AND timeline_entries.deleted_at IS NULL
-    LEFT JOIN users AS assignees ON assignees.id = tasks.assignee_id
     LEFT JOIN users AS authors ON authors.id = tasks.created_by
     LEFT JOIN users AS completers ON completers.id = tasks.completed_by
 """
 
+# `group_concat`'s separator for names: a name can contain a comma ("Osei,
+# Blair") and cannot contain a control character, so the two lists are split on
+# different things on purpose.
+NAME_SEPARATOR = chr(31)
 
-def task_from_row(row: sqlite3.Row) -> TaskPublic:
+
+def assignee_ids_of(row: sqlite3.Row) -> list[int]:
+    """The set a task row carries, as ids. Empty when nobody is on it."""
+    raw = row["assignee_ids"]
+    return [int(value) for value in raw.split(",")] if raw else []
+
+
+def version_assignees(row: sqlite3.Row) -> list[TaskAssigneePublic]:
+    """The people a recorded version was assigned to (milestone 4.6).
+
+    Its own function rather than `assignees_of`, because the two read different
+    columns: a task row carries the set from `task_assignees`, a version row
+    carries the snapshot string and joins the names to it. The commas on both
+    sides of the `instr` match are what stop id `3` matching `13`.
+    """
+    raw = row["assignee_ids"]
+    ids = sorted(int(value) for value in raw.split(",")) if raw else []
+    names = row["assignee_names"].split(NAME_SEPARATOR) if row["assignee_names"] else []
+    return [
+        TaskAssigneePublic(user_id=user_id, name=name)
+        for user_id, name in zip(ids, names, strict=False)
+    ]
+
+
+def assignees_of(row: sqlite3.Row) -> list[TaskAssigneePublic]:
+    ids = assignee_ids_of(row)
+    names = row["assignee_names"].split(NAME_SEPARATOR) if row["assignee_names"] else []
+    return [
+        TaskAssigneePublic(user_id=user_id, name=name)
+        for user_id, name in zip(ids, names, strict=True)
+    ]
+
+
+TASK_COMMENT_ROWS_SQL = """
+    SELECT task_comments.*, users.name AS author_name
+    FROM task_comments
+    JOIN users ON users.id = task_comments.created_by
+"""
+
+
+def task_comment_from_row(row: sqlite3.Row) -> TaskCommentPublic:
+    return TaskCommentPublic(
+        id=row["id"],
+        task_id=row["task_id"],
+        body=row["body"],
+        created_by=row["created_by"],
+        author_name=row["author_name"],
+        created_at=row["created_at"],
+    )
+
+
+def comments_by_task_id(
+    connection: sqlite3.Connection,
+    task_ids: list[int],
+) -> dict[int, list[TaskCommentPublic]]:
+    """Every comment on the given tasks, one query for the whole set
+    (milestone 4.5) -- the shape `attachments_by_entry_id` and
+    `reactions_by_comment_id` already use, so a page of tasks costs one more
+    round trip rather than one per row."""
+    if not task_ids:
+        return {}
+    placeholders = ",".join("?" for _ in task_ids)
+    rows = connection.execute(
+        f"""
+        {TASK_COMMENT_ROWS_SQL}
+        WHERE task_comments.deleted_at IS NULL
+            AND task_comments.task_id IN ({placeholders})
+        ORDER BY task_comments.created_at ASC, task_comments.id ASC
+        """,
+        task_ids,
+    ).fetchall()
+    grouped: dict[int, list[TaskCommentPublic]] = {}
+    for row in rows:
+        grouped.setdefault(row["task_id"], []).append(task_comment_from_row(row))
+    return grouped
+
+
+def task_from_row(
+    row: sqlite3.Row,
+    comments: list[TaskCommentPublic] | None = None,
+) -> TaskPublic:
     return TaskPublic(
         id=row["id"],
         opportunity_id=row["opportunity_id"],
@@ -95,8 +214,9 @@ def task_from_row(row: sqlite3.Row) -> TaskPublic:
         entry_title=row["entry_title"],
         title=row["title"],
         description=row["description"],
-        assignee_id=row["assignee_id"],
-        assignee_name=row["assignee_name"],
+        # A list since milestone 4.6, and no `assignee_id` beside it: two
+        # shapes for one fact is how a client comes to believe the wrong one.
+        assignees=assignees_of(row),
         due_date=row["due_date"],
         completed_at=row["completed_at"],
         completed_by=row["completed_by"],
@@ -105,6 +225,11 @@ def task_from_row(row: sqlite3.Row) -> TaskPublic:
         author_name=row["author_name"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
+        # Defaulted rather than required, because the six writes that answer
+        # with a task answer with the row they changed and the client refetches
+        # -- the same thing `entry_from_row` does with an entry's notes. Only
+        # the two reads that draw a list fill it.
+        comments=comments or [],
     )
 
 
@@ -127,6 +252,80 @@ def fetch_task(connection: sqlite3.Connection, task_id: int) -> sqlite3.Row:
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
     return row
+
+
+def notify_assigned(
+    connection: sqlite3.Connection,
+    *,
+    opportunity_id: int,
+    actor_id: int,
+    task_id: int,
+    title: str,
+    due_date: str | None,
+    user_ids: list[int],
+) -> None:
+    """Tell each person they were handed this, once, and never the person doing
+    the handing (milestone 4.6 made it a loop; the rule is 4.1's)."""
+    for user_id in sorted(set(user_ids)):
+        if user_id == actor_id:
+            continue
+        create_notification(
+            connection,
+            user_id,
+            "task_assigned",
+            {
+                "opportunity_id": opportunity_id,
+                "actor_id": actor_id,
+                "task_id": task_id,
+                "title": title,
+                "due_date": due_date,
+            },
+        )
+
+
+def set_assignees(connection: sqlite3.Connection, task_id: int, user_ids: list[int]) -> None:
+    """Make `task_assignees` say exactly this (milestone 4.6).
+
+    Written as a replacement rather than a diff: the request carries the whole
+    list, so working out what to add and what to remove here would be deriving
+    something the caller already knows. The delete is an ordinary `DELETE FROM`
+    and is meant to be -- an assignment is "this person owes this now", the
+    toggle state `soft_delete.py` keeps out of `USER_DATA_TABLES` for the same
+    reason it keeps `reactions` and `watchers` out (**D-130**). Who *used* to
+    owe it is in `task_versions`, which is the history that matters.
+    """
+    connection.execute("DELETE FROM task_assignees WHERE task_id = ?", (task_id,))
+    now = utc_now()
+    for user_id in sorted(set(user_ids)):
+        connection.execute(
+            "INSERT INTO task_assignees (task_id, user_id, created_at) VALUES (?, ?, ?)",
+            (task_id, user_id, now),
+        )
+
+
+def resolve_assignees(connection: sqlite3.Connection, emails: list[str]) -> list[int]:
+    """Emails to user ids, or 422 naming the first address nobody uses.
+
+    One query rather than one per address, and the refusal is about the request
+    rather than about one field -- so a list with one bad address in it writes
+    nothing at all, which is the answer `assign_owner` gives (3.0a).
+    """
+    wanted = list(dict.fromkeys(email.strip() for email in emails if email.strip()))
+    if not wanted:
+        return []
+    placeholders = ",".join("?" for _ in wanted)
+    rows = connection.execute(
+        f"SELECT id, email FROM users WHERE email IN ({placeholders})",
+        wanted,
+    ).fetchall()
+    found = {row["email"]: int(row["id"]) for row in rows}
+    for email in wanted:
+        if email not in found:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f"No user with email {email}",
+            )
+    return [found[email] for email in wanted]
 
 
 def resolve_assignee(connection: sqlite3.Connection, email: str) -> int:
@@ -159,19 +358,21 @@ def require_task_completion(
     task: sqlite3.Row,
     user_id: int,
 ) -> None:
-    """Who may tick a task off: its author, the opportunity owner, or **the
-    person it is assigned to** (**D-142**).
+    """Who may tick a task off: its author, the opportunity owner, or **anyone
+    it is assigned to** (**D-142**, read against a set since milestone 4.6).
 
     The first two are D-005's rule, resolved through the same
     `require_timeline_write` gate every other write uses. The third is the
     addition, and the reason this function exists at all: a task assigned to
-    somebody who cannot close it is worse than no task, and the assignee is the
-    one person the row itself names as responsible.
+    somebody who cannot close it is worse than no task. With more than one
+    person on it, "the assignee" became "any of them" -- a shared task is done
+    when whoever got to it says so, and asking the other two to agree is a
+    workflow this app does not have.
     """
     role = require_timeline_write(connection, int(task["opportunity_id"]), user_id)
     if role == "owner":
         return
-    if user_id in (task["created_by"], task["assignee_id"]):
+    if user_id == task["created_by"] or user_id in assignee_ids_of(task):
         return
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
@@ -195,9 +396,7 @@ def create_task(
     with db_connection() as connection:
         require_timeline_write(connection, opportunity_id, int(user["id"]))
 
-        assignee_id = (
-            resolve_assignee(connection, payload.assignee_email) if payload.assignee_email else None
-        )
+        assignee_ids = resolve_assignees(connection, payload.assignee_emails)
         if payload.entry_id is not None:
             # The link must point at an entry on *this* deal. A foreign key
             # cannot say that, so the route does -- the same rule a reply's
@@ -221,17 +420,16 @@ def create_task(
         cursor = connection.execute(
             """
             INSERT INTO tasks (
-                opportunity_id, entry_id, title, description, assignee_id,
+                opportunity_id, entry_id, title, description,
                 due_date, created_by, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 opportunity_id,
                 payload.entry_id,
                 payload.title,
                 payload.description,
-                assignee_id,
                 payload.due_date,
                 int(user["id"]),
                 now,
@@ -239,20 +437,20 @@ def create_task(
             ),
         )
         task_id = int(cursor.lastrowid or 0)
+        # `tasks.assignee_id` is not written here at all since milestone 4.6:
+        # the join table is the truth and the column is frozen until Phase 6
+        # drops it, so there is no second place for the two to disagree.
+        set_assignees(connection, task_id, assignee_ids)
 
-        if assignee_id is not None and assignee_id != int(user["id"]):
-            create_notification(
-                connection,
-                assignee_id,
-                "task_assigned",
-                {
-                    "opportunity_id": opportunity_id,
-                    "actor_id": int(user["id"]),
-                    "task_id": task_id,
-                    "title": payload.title,
-                    "due_date": payload.due_date,
-                },
-            )
+        notify_assigned(
+            connection,
+            opportunity_id=opportunity_id,
+            actor_id=int(user["id"]),
+            task_id=task_id,
+            title=payload.title,
+            due_date=payload.due_date,
+            user_ids=assignee_ids,
+        )
 
         row = fetch_task(connection, task_id)
         # Version 1 at creation, so the history opens with what the task said on
@@ -313,7 +511,12 @@ def list_tasks(
         ).fetchall()
 
     tasks, next_cursor = split_page(rows, page.limit, lambda row: (row["due_date"], row["id"]))
-    return Page(items=[task_from_row(row) for row in tasks], next_cursor=next_cursor)
+    with db_connection() as connection:
+        comments = comments_by_task_id(connection, [row["id"] for row in tasks])
+    return Page(
+        items=[task_from_row(row, comments.get(row["id"], [])) for row in tasks],
+        next_cursor=next_cursor,
+    )
 
 
 @router.get("/tasks", response_model=Page[TaskPublic])
@@ -359,7 +562,13 @@ def list_tasks_across_opportunities(
     # two of its own, so the assignee's placeholder is bound after them.
     params: list[object] = [int(user["id"]), int(user["id"])]
     if assignee == "me":
-        where.append("tasks.assignee_id = ?")
+        # A membership test since milestone 4.6, served by
+        # `idx_task_assignees_user`: "what do I owe" reads the join table the
+        # other way round from "who is on this task".
+        where.append(
+            "EXISTS (SELECT 1 FROM task_assignees "
+            "WHERE task_assignees.task_id = tasks.id AND task_assignees.user_id = ?)"
+        )
         params.append(int(user["id"]))
     if not include_completed:
         where.append("tasks.completed_at IS NULL")
@@ -398,7 +607,12 @@ def list_tasks_across_opportunities(
         ).fetchall()
 
     tasks, next_cursor = split_page(rows, page.limit, lambda row: (row["due_date"], row["id"]))
-    return Page(items=[task_from_row(row) for row in tasks], next_cursor=next_cursor)
+    with db_connection() as connection:
+        comments = comments_by_task_id(connection, [row["id"] for row in tasks])
+    return Page(
+        items=[task_from_row(row, comments.get(row["id"], [])) for row in tasks],
+        next_cursor=next_cursor,
+    )
 
 
 @router.patch("/tasks/{task_id}", response_model=TaskPublic)
@@ -429,7 +643,8 @@ def update_task(
         sent = payload.model_fields_set
         assignments: list[str] = []
         params: list[object] = []
-        notify_assignee: int | None = None
+        added_assignees: list[int] = []
+        changing_assignees = "assignee_emails" in sent and payload.assignee_emails is not None
 
         if "title" in sent and payload.title is not None:
             assignments.append("title = ?")
@@ -440,52 +655,55 @@ def update_task(
         if "due_date" in sent:
             assignments.append("due_date = ?")
             params.append(payload.due_date)
-        if "assignee_email" in sent:
-            assignee_id = (
-                resolve_assignee(connection, payload.assignee_email)
-                if payload.assignee_email
-                else None
-            )
-            assignments.append("assignee_id = ?")
-            params.append(assignee_id)
-            # Told only when the assignee actually changes, and never to the
-            # person doing the assigning: re-saving a task with the same
-            # assignee is not news.
-            if assignee_id is not None and assignee_id not in (
-                task["assignee_id"],
-                int(user["id"]),
-            ):
-                notify_assignee = assignee_id
+        if changing_assignees:
+            # Resolved before anything is written, so a list naming one address
+            # nobody uses writes nothing at all.
+            wanted = resolve_assignees(connection, payload.assignee_emails or [])
+            # Only the people who were not on it already are told, and never
+            # the person doing the assigning: re-saving a task with the same
+            # people is not news, and somebody who was already on it has been
+            # told once.
+            added_assignees = [
+                user_id
+                for user_id in wanted
+                if user_id not in assignee_ids_of(task) and user_id != int(user["id"])
+            ]
 
-        if not assignments:
+        if not assignments and not changing_assignees:
             return task_from_row(task)
 
         now = utc_now()
-        assignments.append("updated_at = ?")
-        params.append(now)
-        params.append(task_id)
-        connection.execute(
-            f"UPDATE tasks SET {', '.join(assignments)} WHERE id = ?",
-            params,
-        )
+        if assignments:
+            assignments.append("updated_at = ?")
+            params.append(now)
+            params.append(task_id)
+            connection.execute(
+                f"UPDATE tasks SET {', '.join(assignments)} WHERE id = ?",
+                params,
+            )
+        if changing_assignees:
+            set_assignees(connection, task_id, wanted)
+            # The assignees live in another table, so the parent's own
+            # `updated_at` has to be moved on purpose -- otherwise handing a
+            # task to somebody else would leave the row looking untouched.
+            connection.execute(
+                "UPDATE tasks SET updated_at = ? WHERE id = ?",
+                (now, task_id),
+            )
 
         row = fetch_task(connection, task_id)
         # After the write, from the row read back, stamped with this write's own
         # time -- the rule every other versioned edit follows (milestone 2.10).
         record_version(connection, TASK_VERSIONS, task_id, row, int(user["id"]), now)
-        if notify_assignee is not None:
-            create_notification(
-                connection,
-                notify_assignee,
-                "task_assigned",
-                {
-                    "opportunity_id": opportunity_id,
-                    "actor_id": int(user["id"]),
-                    "task_id": task_id,
-                    "title": row["title"],
-                    "due_date": row["due_date"],
-                },
-            )
+        notify_assigned(
+            connection,
+            opportunity_id=opportunity_id,
+            actor_id=int(user["id"]),
+            task_id=task_id,
+            title=row["title"],
+            due_date=row["due_date"],
+            user_ids=added_assignees,
+        )
         connection.commit()
 
     publish_opportunity_changed(opportunity_id)
@@ -647,6 +865,185 @@ def restore_deleted_task(
     publish_opportunity_changed(opportunity_id)
 
 
+# --- A task's discussion (milestone 4.5, D-162) -----------------------------
+#
+# Flat and chronological: no reply, no resolve, no reaction. A task comment is
+# immutable like every other comment in this app (`AGENTS.md` invariant 2), so
+# there is no PATCH here either -- what exists is write it, read it with the
+# task, remove it, put it back.
+
+
+def fetch_task_comment(
+    connection: sqlite3.Connection,
+    comment_id: int,
+    *,
+    deleted: bool = False,
+) -> sqlite3.Row:
+    """One comment with the deal it hangs off, or 404.
+
+    `deleted=True` is the restore path's mirror image: the row must be deleted
+    and everything above it must not be, so a comment cannot come back under a
+    task that is gone.
+    """
+    row: sqlite3.Row | None = connection.execute(
+        f"""
+        SELECT task_comments.*, users.name AS author_name, tasks.opportunity_id
+        FROM task_comments
+        JOIN users ON users.id = task_comments.created_by
+        JOIN tasks ON tasks.id = task_comments.task_id
+        JOIN opportunities ON opportunities.id = tasks.opportunity_id
+        WHERE task_comments.id = ?
+            AND task_comments.deleted_at IS {"NOT NULL" if deleted else "NULL"}
+            AND tasks.deleted_at IS NULL
+            AND opportunities.deleted_at IS NULL
+        """,
+        (comment_id,),
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comment not found")
+    return row
+
+
+@router.post(
+    "/tasks/{task_id}/comments",
+    response_model=TaskCommentPublic,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_task_comment(
+    task_id: int,
+    payload: TaskCommentCreate,
+    user: sqlite3.Row = Depends(get_current_user),
+) -> TaskCommentPublic:
+    """Say something about a task. Editors may, viewers may not -- the gate
+    adding a note or a comment already has, because this is adding something
+    rather than changing somebody else's.
+
+    Told to the two people a task is about: whoever wrote it and whoever owes
+    it. That is `notify_note_comment`'s rule read against a task -- a set, so
+    one person who is both gets one notification rather than two -- and the
+    commenter is never told about their own comment.
+    """
+    with db_connection() as connection:
+        task = fetch_task(connection, task_id)
+        opportunity_id = int(task["opportunity_id"])
+        require_timeline_write(connection, opportunity_id, int(user["id"]))
+
+        cursor = connection.execute(
+            """
+            INSERT INTO task_comments (task_id, body, created_by, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (task_id, payload.body, int(user["id"]), utc_now()),
+        )
+        comment_id = int(cursor.lastrowid or 0)
+
+        # Everyone the task is about: whoever wrote it and **everyone** it is
+        # assigned to (milestone 4.6 made that a set). Read from
+        # `assignee_ids_of`, not from `tasks.assignee_id` -- that column stopped
+        # being written in 4.6, and reading it here is how this notification
+        # silently stopped reaching assignees until `e2e/24-tasks.spec.ts`
+        # noticed. A set, so somebody who is both author and assignee is told
+        # once, and never the person who wrote the comment.
+        recipients = {
+            int(value)
+            for value in (task["created_by"], *assignee_ids_of(task))
+            if value is not None and int(value) != int(user["id"])
+        }
+        for recipient in sorted(recipients):
+            create_notification(
+                connection,
+                recipient,
+                "task_comment",
+                {
+                    "opportunity_id": opportunity_id,
+                    "actor_id": int(user["id"]),
+                    "task_id": task_id,
+                    "title": task["title"],
+                },
+            )
+
+        row = connection.execute(
+            f"{TASK_COMMENT_ROWS_SQL} WHERE task_comments.id = ?",
+            (comment_id,),
+        ).fetchone()
+        connection.commit()
+
+    publish_opportunity_changed(opportunity_id)
+    return task_comment_from_row(row)
+
+
+@router.delete("/task-comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_task_comment(
+    comment_id: int,
+    user: sqlite3.Row = Depends(get_current_user),
+) -> None:
+    """Author or opportunity owner (D-005), soft and audited like every other
+    delete -- and like a note's comment, which cannot be edited either, so
+    removing it is the only change it can undergo."""
+    with db_connection() as connection:
+        comment = fetch_task_comment(connection, comment_id)
+        opportunity_id = int(comment["opportunity_id"])
+        require_delete_permission(
+            connection,
+            opportunity_id,
+            int(user["id"]),
+            comment["created_by"],
+            "Only the comment's author or the opportunity owner can delete it",
+        )
+
+        soft_delete_task_comment(connection, comment_id)
+        create_audit_log_entry(
+            connection,
+            opportunity_id=opportunity_id,
+            actor_id=int(user["id"]),
+            action="task_comment_deleted",
+            detail={
+                "comment_id": comment_id,
+                "task_id": int(comment["task_id"]),
+                "author_id": comment["created_by"],
+            },
+        )
+        connection.commit()
+
+    publish_opportunity_changed(opportunity_id)
+
+
+@router.post("/task-comments/{comment_id}/restore", status_code=status.HTTP_204_NO_CONTENT)
+def restore_deleted_task_comment(
+    comment_id: int,
+    user: sqlite3.Row = Depends(get_current_user),
+) -> None:
+    """Undo the delete (2.4b's shape), scoped by the delete's own stamp: a
+    comment that went with its whole task comes back with the task, and one
+    deleted on its own comes back here."""
+    with db_connection() as connection:
+        comment = fetch_task_comment(connection, comment_id, deleted=True)
+        opportunity_id = int(comment["opportunity_id"])
+        require_delete_permission(
+            connection,
+            opportunity_id,
+            int(user["id"]),
+            comment["created_by"],
+            "Only the comment's author or the opportunity owner can restore it",
+        )
+
+        restore_task_comment(connection, comment_id, comment["deleted_at"])
+        create_audit_log_entry(
+            connection,
+            opportunity_id=opportunity_id,
+            actor_id=int(user["id"]),
+            action="task_comment_restored",
+            detail={
+                "comment_id": comment_id,
+                "task_id": int(comment["task_id"]),
+                "author_id": comment["created_by"],
+            },
+        )
+        connection.commit()
+
+    publish_opportunity_changed(opportunity_id)
+
+
 @router.get("/tasks/{task_id}/versions", response_model=Page[TaskVersionPublic])
 def list_task_versions_page(
     task_id: int,
@@ -661,8 +1058,13 @@ def list_task_versions_page(
     task with no history at all, which is the invariant violation the human found
     at the Phase 4 checkpoint.
 
-    `assignee_name` is resolved here rather than stored, so a history row reads
-    "Gavin" rather than "3" while the snapshot keeps the id it was written with.
+    The names are resolved here rather than stored, so a history row reads
+    "Gavin" rather than "3" while the snapshot keeps the ids it was written
+    with -- and since milestone 4.6 that is a *set*: `assignee_ids` holds
+    "3,7" and this joins each id to its name, in the ascending order the
+    snapshot was written in. A version recorded before that revision carries
+    one id and reads as a one-person list, because that is what it always
+    meant (D-097).
     """
     continuation, cursor_values = cursor_clause(
         page,
@@ -680,10 +1082,16 @@ def list_task_versions_page(
             SELECT
                 task_versions.*,
                 editors.name AS editor_name,
-                assignees.name AS assignee_name
+                (
+                    SELECT group_concat(users.name, char(31))
+                    FROM users
+                    WHERE instr(
+                        ',' || task_versions.assignee_ids || ',',
+                        ',' || users.id || ','
+                    ) > 0
+                ) AS assignee_names
             FROM task_versions
             JOIN users AS editors ON editors.id = task_versions.edited_by
-            LEFT JOIN users AS assignees ON assignees.id = task_versions.assignee_id
             WHERE task_versions.task_id = ?
             {f"AND {continuation}" if continuation else ""}
             ORDER BY task_versions.version_number ASC, task_versions.id ASC
@@ -701,8 +1109,7 @@ def list_task_versions_page(
                 version_number=row["version_number"],
                 title=row["title"],
                 description=row["description"],
-                assignee_id=row["assignee_id"],
-                assignee_name=row["assignee_name"],
+                assignees=version_assignees(row),
                 due_date=row["due_date"],
                 edited_by=row["edited_by"],
                 editor_name=row["editor_name"],
@@ -728,7 +1135,7 @@ def restore_task_version(
     be undone in turn, and restoring what is already current writes nothing --
     which also makes a retry idempotent.
 
-    **The assignee is restored with everything else, and notifies nobody.** The
+    **The assignees are restored with everything else, and notify nobody.** The
     same reasoning a restored note sends no second mention (D-120): whoever this
     task was assigned to was told when it happened, and a restore announcing it
     again would make every undo a fresh ping. A task handed to somebody *new* by
@@ -748,15 +1155,23 @@ def restore_task_version(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Task version not found",
             )
-        current = connection.execute(
-            "SELECT * FROM tasks WHERE id = ?",
-            (task_id,),
-        ).fetchone()
-
-        if not version_is_current(TASK_VERSIONS, version, current):
+        # The task as `fetch_task` reads it, not `SELECT *`: one of the
+        # snapshot's fields (`assignee_ids`, milestone 4.6) is computed from
+        # `task_assignees` rather than stored on the row, so a raw read has
+        # nothing to compare against.
+        if not version_is_current(TASK_VERSIONS, version, task):
             changed = True
             now = utc_now()
             apply_version(connection, TASK_VERSIONS, task_id, version, {"updated_at": now})
+            # And the set is put back here, because `apply_version` writes
+            # columns and this one is a table. The snapshot's canonical string
+            # is parsed with the same rule that wrote it.
+            raw = version["assignee_ids"]
+            set_assignees(
+                connection,
+                task_id,
+                [int(value) for value in raw.split(",")] if raw else [],
+            )
             row = fetch_task(connection, task_id)
             record_version(connection, TASK_VERSIONS, task_id, row, int(user["id"]), now)
             connection.commit()

@@ -252,8 +252,10 @@ function TaskChip({ task }: { task: Task }) {
         {task.title}
       </Link>
       <span className="chip-opportunity">{task.opportunity_name}</span>
-      {task.assignee_name && (
-        <span className="chip-opportunity">{task.assignee_name}</span>
+      {task.assignees.length > 0 && (
+        <span className="chip-opportunity">
+          {task.assignees.map((item) => item.name).join(", ")}
+        </span>
       )}
     </article>
   );

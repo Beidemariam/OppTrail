@@ -14,6 +14,7 @@ import {
 } from "../lib/queries";
 import { useInlineEditor } from "./InlineEdit";
 import { RichTextEditor } from "./RichTextEditor";
+import { TaskDiscussion } from "./TaskDiscussion";
 import { TaskRow } from "./TaskRow";
 import { useUndoableDelete } from "./Toasts";
 
@@ -85,6 +86,10 @@ export function TaskPanel({
                 onDelete={() => removeWithUndo(task.id)}
               />
             )}
+            {/* The discussion is on the open task, in the deal's own panel:
+                this is where a task is read in context, and `/tasks` is a
+                to-do list rather than a place to catch up (milestone 4.5). */}
+            <TaskDiscussion task={task} access={access} />
           </TaskRow>
         ))}
       </ul>
@@ -204,23 +209,22 @@ function TaskFields({
   const members = useMembers(opportunityId);
   const [title, setTitle] = useState(task?.title ?? "");
   const [description, setDescription] = useState(task?.description ?? "");
-  const [assignee, setAssignee] = useState(() => {
-    // The stored assignee is an id; this control is keyed by email, so the
-    // current value is resolved from the member list once it arrives. Seeded
-    // empty and corrected below rather than left blank, because a saved edit
-    // that silently unassigned somebody would be the worst kind of bug here.
-    return "";
-  });
+  // A list since milestone 4.6. The stored assignees are ids; this control is
+  // keyed by email, so the current value is resolved from the member list once
+  // it arrives. Seeded empty and corrected below rather than left blank,
+  // because a saved edit that silently unassigned somebody would be the worst
+  // kind of bug here.
+  const [assignees, setAssignees] = useState<string[]>([]);
   const [assigneeReady, setAssigneeReady] = useState(task === null);
   const [dueDate, setDueDate] = useState(task?.due_date ?? "");
 
   const people = members.data ?? [];
   if (!assigneeReady && people.length > 0) {
     setAssigneeReady(true);
-    const current = people.find(
-      (member) => member.user_id === task?.assignee_id,
+    const ids = new Set((task?.assignees ?? []).map((item) => item.user_id));
+    setAssignees(
+      people.filter((member) => ids.has(member.user_id)).map((m) => m.email),
     );
-    setAssignee(current?.email ?? "");
   }
 
   const save = task ? edit : create;
@@ -230,7 +234,7 @@ function TaskFields({
     const fields = {
       title,
       description,
-      assignee_email: assignee || null,
+      assignee_emails: assignees,
       due_date: dueDate || null,
     };
     const done = { onSuccess: () => onDone() };
@@ -270,14 +274,28 @@ function TaskFields({
           onChange={setDescription}
         />
       </div>
+      {/* Multiple since milestone 4.6, and a native multi-select rather than
+          a widget: it is keyboard-operable and announced correctly without any
+          of this app's own code, which is the bar `docs/DESIGN-SYSTEM.md` sets
+          for a control a screen reader has to understand. The hint says how,
+          because a multi-select is the one native control people do not know
+          how to use. */}
       <label>
         For
         <select
           aria-label="Who this task is for"
-          value={assignee}
-          onChange={(event) => setAssignee(event.target.value)}
+          multiple
+          size={Math.min(Math.max(people.length, 2), 4)}
+          value={assignees}
+          onChange={(event) =>
+            setAssignees(
+              Array.from(
+                event.target.selectedOptions,
+                (option) => option.value,
+              ),
+            )
+          }
         >
-          <option value="">Nobody yet</option>
           {people.map((member) => (
             <option key={member.email} value={member.email}>
               {member.name}
@@ -285,6 +303,12 @@ function TaskFields({
           ))}
         </select>
       </label>
+      {/* Both modifiers named rather than sniffed: `navigator.platform` is
+          deprecated, and a sentence that reads correctly everywhere is better
+          than a branch that has to be told which machine it is on. */}
+      <p className="meta-row task-form-hint">
+        Nobody, or several: hold Ctrl (Cmd on a Mac) to pick more than one.
+      </p>
       <label>
         Due
         <input

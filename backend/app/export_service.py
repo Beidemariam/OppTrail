@@ -7,6 +7,7 @@ from typing import Any
 
 from markdown_it import MarkdownIt
 
+from .attachment_utils import attachments_by_entry_id
 from .permissions import ACCESSIBLE_OPPORTUNITY_IDS_SQL
 from .sanitize import sanitize_html
 
@@ -38,6 +39,23 @@ def render_markdown_to_safe_html(text: str) -> str:
     return sanitize_html(_markdown.render(text))
 
 
+def format_byte_size(byte_size: int) -> str:
+    """A file size as a reader of the document reads it (milestone 4.4).
+
+    The same job `lib/domain.ts`'s `formatBytes` does for the screen, and
+    deliberately a second implementation rather than a shared one: there is no
+    code path between the browser and WeasyPrint, and what travels between them
+    is `byte_size` itself (`AttachmentPublic`), which is why the API sends a
+    number and never a formatted string.
+    """
+    size = float(byte_size)
+    for unit in ("bytes", "KB"):
+        if size < 1024:
+            return f"{int(size)} {unit}" if unit == "bytes" else f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} MB"
+
+
 def escape_csv_value(value: object) -> object:
     if isinstance(value, str) and value.startswith(CSV_FORMULA_PREFIXES):
         return f"'{value}"
@@ -52,7 +70,21 @@ def safe_export_filename(name: str, extension: str) -> str:
 def fetch_export_data(
     connection: sqlite3.Connection,
     opportunity_id: int,
+    order: str = "desc",
 ) -> dict[str, Any]:
+    """Everything one deal is made of, in the order the reader asked for.
+
+    **The order is a parameter because the export was contradicting the
+    screen** (milestone 4.4b): entries came out oldest-first whatever the
+    timeline was set to, so a reader working newest-first got a document that
+    ran the other way. The caller passes what the timeline is showing, and the
+    default is `desc` — the timeline's own default (D-137), so a bare link
+    matches what most readers see.
+
+    **Only the entries turn.** A note's comments and an entry's notes stay
+    chronological inside it either way: the reading order is a question about
+    which event you meet first, not about reading a conversation backwards.
+    """
     opportunity = connection.execute(
         """
         SELECT opportunities.*, users.name AS owner_name
@@ -73,12 +105,22 @@ def fetch_export_data(
         LEFT JOIN users ON users.id = timeline_entries.created_by
         WHERE timeline_entries.opportunity_id = ?
             AND timeline_entries.deleted_at IS NULL
-        ORDER BY timeline_entries.event_timestamp ASC, timeline_entries.created_at ASC
-        """,
+        ORDER BY timeline_entries.event_timestamp {direction},
+                 timeline_entries.created_at {direction}
+        """.format(direction="ASC" if order == "asc" else "DESC"),
         (opportunity_id,),
     ).fetchall()
 
     entry_ids = [entry["id"] for entry in entries]
+    # The entry's files (milestone 4.4), through the same helper the timeline
+    # read uses rather than a second copy of the query -- so an export cannot
+    # disagree with the screen about which files are on a deal. `model_dump`
+    # because this module answers with plain dicts (it is the JSON export's
+    # payload as well as the PDF's input), which is the one conversion needed.
+    attachments_by_entry: dict[int, list[dict[str, Any]]] = {
+        entry_id: [attachment.model_dump() for attachment in attachments]
+        for entry_id, attachments in attachments_by_entry_id(connection, entry_ids).items()
+    }
     notes_by_entry_id: dict[int, list[dict[str, Any]]] = {}
     comments_by_note_id: dict[int, list[dict[str, Any]]] = {}
     if entry_ids:
@@ -164,6 +206,7 @@ def fetch_export_data(
                 "system_generated": bool(entry["system_generated"]),
                 "created_at": entry["created_at"],
                 "notes": notes_by_entry_id.get(entry["id"], []),
+                "attachments": attachments_by_entry.get(entry["id"], []),
             }
             for entry in entries
         ],
@@ -193,6 +236,14 @@ def export_data_to_csv(data: dict[str, Any]) -> str:
         "updated_at",
         "edited",
         "system_generated",
+        # Attachments (milestone 4.4). Appended rather than slotted in beside
+        # `title`, so a reader whose spreadsheet or script already reads this
+        # file keeps every column where it was -- and `filename` is its own
+        # column rather than borrowed from `title`, because a file's name is
+        # not an entry's title and a formula guard has to apply to both.
+        "filename",
+        "content_type",
+        "byte_size",
     ]
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     writer.writeheader()
@@ -223,6 +274,21 @@ def export_data_to_csv(data: dict[str, Any]) -> str:
                 "system_generated": int(entry["system_generated"]),
             }
         )
+        for attachment in entry["attachments"]:
+            write_row(
+                {
+                    **base,
+                    "row_type": "attachment",
+                    "entry_id": entry["id"],
+                    "parent_entry_id": entry["id"],
+                    "created_by": attachment["uploaded_by"],
+                    "author_name": attachment["uploader_name"],
+                    "created_at": attachment["created_at"],
+                    "filename": attachment["filename"],
+                    "content_type": attachment["content_type"],
+                    "byte_size": attachment["byte_size"],
+                }
+            )
         for note in entry["notes"]:
             write_row(
                 {
@@ -265,6 +331,48 @@ def export_data_to_pdf(data: dict[str, Any]) -> bytes:
     html = render_export_html(data)
     pdf_bytes: bytes = HTML(string=html).write_pdf()
     return pdf_bytes
+
+
+def attachment_count(data: dict[str, Any]) -> int:
+    return sum(len(entry["attachments"]) for entry in data["entries"])
+
+
+def render_entry_attachments(entry: dict[str, Any]) -> str:
+    """One entry's files, listed under the entry they belong to (milestone
+    4.4, moved here by **4.4a**).
+
+    **A list, not the files** -- embedding them would make an export unbounded,
+    which is the one thing `docs/FEATURES.md` §6 says about this explicitly.
+    Each line is what a person needs to go and find the document: its name, its
+    size, and who put it there.
+
+    **Beside the entry rather than in a section at the end.** D-154 chose the
+    end of the document, on the argument that a manifest answers a question
+    about the whole file; the human ruled for that **against a description of
+    it** and then reversed on the document itself -- *"better to keep each file
+    next to its entry"* -- which is the stronger evidence and the one this
+    follows. Nothing is lost in the other direction: the summary still counts
+    them, so "does this deal have documents at all" is answered on page one.
+
+    Absent entirely on an entry with no files, for the reason `TaskSummary`
+    draws nothing when nothing is due.
+    """
+    if not entry["attachments"]:
+        return ""
+    items = "".join(
+        f"""
+        <li>
+          <strong>{escape(attachment["filename"])}</strong>
+          <span>{escape(format_byte_size(attachment["byte_size"]))}</span>
+          <span>{escape(attachment["uploader_name"])}</span>
+        </li>
+        """
+        for attachment in entry["attachments"]
+    )
+    return f"""
+      <h3>Attachments</h3>
+      <ul class="files">{items}</ul>
+    """
 
 
 def render_export_html(data: dict[str, Any]) -> str:
@@ -321,6 +429,7 @@ def render_export_html(data: dict[str, Any]) -> str:
               <h2>{escape(entry["title"])}</h2>
               <div class="rendered">{body_html}</div>
               {follow_up}
+              {render_entry_attachments(entry)}
               <h3>Notes</h3>
               {notes_block}
             </article>
@@ -330,6 +439,7 @@ def render_export_html(data: dict[str, Any]) -> str:
     timeline_html = (
         "".join(entries_html) if entries_html else '<p class="muted">No timeline entries.</p>'
     )
+    files = attachment_count(data)
 
     return f"""
     <!doctype html>
@@ -399,6 +509,9 @@ def render_export_html(data: dict[str, Any]) -> str:
             white-space: pre-wrap;
           }}
           .rendered pre code {{ background: none; padding: 0; }}
+          .files {{ margin: 6px 0 0 18px; padding: 0; }}
+          .files li {{ margin-bottom: 4px; }}
+          .files span {{ color: #6b7280; margin-left: 8px; }}
           .rendered table {{ border-collapse: collapse; margin: 0 0 6px; }}
           .rendered th, .rendered td {{
             border: 1px solid #d1d5db;
@@ -426,8 +539,16 @@ def render_export_html(data: dict[str, Any]) -> str:
                 {escape(opportunity["expected_close_date"] or "Not set")}
               </div></div>
             <div><div class="label">Exported Rows</div>
-              <div class="value">{len(data["entries"])} entries</div></div>
+              <div class="value">
+                {len(data["entries"])} entries, {files} attachments
+              </div></div>
           </div>
+          {
+        '<p class="muted">Attachments are listed on the entry they belong to,'
+        " and are not included in this file.</p>"
+        if files
+        else ""
+    }
         </section>
         {timeline_html}
       </body>

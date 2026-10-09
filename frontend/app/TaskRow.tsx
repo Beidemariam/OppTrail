@@ -71,7 +71,13 @@ export function TaskRow({
         ) : (
           <span className="task-due">No date</span>
         )}
-        {task.assignee_name && <span>{task.assignee_name}</span>}
+        {/* Every name, since a task can be for more than one person
+            (milestone 4.6). Joined rather than listed: this is a meta row, and
+            two people are the normal case rather than a list worth its own
+            layout. */}
+        {task.assignees.length > 0 && (
+          <span>{task.assignees.map((item) => item.name).join(", ")}</span>
+        )}
         {/* An entry's title rather than its id: the link is the reader's way
             back to why the task exists (D-124's shape). `entry_title` is null
             once that entry is deleted, and the task stays. */}

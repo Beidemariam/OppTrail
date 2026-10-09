@@ -52,3 +52,26 @@ describe("notificationText", () => {
     );
   });
 });
+
+describe("the two notifications a task sends", () => {
+  // Both carry the task's title so the inbox line names it, and both fall
+  // back rather than printing an empty sentence — the shape `shared_activity`
+  // established and the reason an assignment does not read "you were assigned
+  // a task" with no hint of which one (milestone 4.1, 4.5).
+  it.each([
+    ["task_assigned", "You were assigned: Send the pricing"],
+    ["task_comment", "New comment on: Send the pricing"],
+  ])("names the task in a %s", (type, expected) => {
+    expect(
+      notificationText(notification(type, { title: "Send the pricing" })),
+    ).toBe(expected);
+  });
+
+  it.each([
+    ["task_assigned", "You were assigned a task."],
+    ["task_comment", "New comment on a task."],
+  ])("falls back when a %s carries no title", (type, expected) => {
+    expect(notificationText(notification(type, {}))).toBe(expected);
+    expect(notificationText(notification(type, { title: "" }))).toBe(expected);
+  });
+});

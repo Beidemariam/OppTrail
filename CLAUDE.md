@@ -79,6 +79,11 @@ PDF rendering needs native libraries that are not present on macOS hosts. Import
 one test fewer on a laptop than in the container — that single skip is this one.
 Verify PDF changes in Docker.
 
+Milestone 4.4 added a second thing this skip hides: the attachment manifest's
+table is rendered HTML here and a laid-out table there, so whether it
+paginates cleanly across a page break is a question only the container
+answers (`break-inside: avoid` is set on the section).
+
 `export_service.render_export_html` renders every entry, note and comment
 body as Markdown (milestone 3.5, `markdown-it-py`) rather than escaping it as
 plain text — the other half of requirement 17, after milestone 3.1 gave the
@@ -101,12 +106,14 @@ Routers are split by domain and all mounted in `main.py`: `routes_auth`,
 `routes_opportunities` (also owns the merged activity log),
 `routes_sharing` (also owns the audit log endpoint and the member list the
 mention autocomplete reads),
-`routes_timeline` (entries, notes, comment threads, note versions), `routes_ai`,
+`routes_timeline` (entries, notes, comment threads, note versions),
+`routes_tasks`, `routes_attachments`, `routes_ai`,
 `routes_export`, `routes_notifications`, `routes_search`, `routes_events` (the
 one route that answers `text/event-stream` rather than JSON). Shared logic lives in small
 helper modules rather than a service layer: `permissions.py`, `time_utils.py`,
 `audit_utils.py`, `timeline_utils.py`, `notification_service.py`, `ai_service.py`,
-`export_service.py`, `search.py`, `versioning.py`, `activity.py`, `events.py`.
+`export_service.py`, `search.py`, `versioning.py`, `activity.py`, `events.py`,
+`attachment_utils.py`.
 
 ### One API surface
 
@@ -168,9 +175,11 @@ rejections too):
 because the app is a single process in a single container, and the one place to
 change if that stops being true. `auth.py` rotates the session on login (the
 presented session row is deleted) and `POST /api/v2/auth/password` invalidates every
-session of that user. `uploads.py` holds the upload rules for the Phase 4
-feature that will use them, its docstring explaining why it exists before that
-feature does. `sanitize.py`'s own such docstring is now out of date in the
+session of that user. `uploads.py` held the upload rules for the Phase 4 feature that would use
+them; milestone 4.3 is that feature, and wiring it up is also what found the
+module's one wrong guess — the random stored name, replaced by ADR 0008's
+content addressing (**D-147**). Its tests were what made that rewrite safe,
+which is the honest version of brief §4.7's bet. `sanitize.py`'s own such docstring is now out of date in the
 same way: milestone 3.5 is its first caller ("WeasyPrint" below), rendering a
 body's Markdown to HTML for the PDF export before WeasyPrint ever sees it —
 the same allowlist `rehype-sanitize` uses in the browser, applied to the one
@@ -185,7 +194,7 @@ connection, do their work, `commit()`, and close.
 ### Search
 
 `GET /api/v2/search` is ranked, snippeted, cross-opportunity keyword search over
-entries, notes and comments, and the timeline's `?q=` filter is the same index
+entries, notes, comments and attachment filenames, and the timeline's `?q=` filter is the same index
 asked a narrower question (ADR 0007). Four things about it are load bearing:
 
 - **The index is a contentless FTS5 table** (`search_index`, revision
@@ -195,9 +204,14 @@ asked a narrower question (ADR 0007). Four things about it are load bearing:
   without a `MATCH`, which is why every query in `search.py` starts from one.
   Contentless is what keeps it cheap — the ADR measured +13 MB against +212 MB
   for a content-duplicating index.
-- **The rowid is the document identity**: `source id * 4 + kind code`, kind
-  codes 0 entry, 1 note, 2 comment. That bijection is why no mapping table
-  exists. The encoding is written twice — as constants in `search.py` and as
+- **The rowid is the document identity**: `source id * 8 + kind code`, kind
+  codes 0 entry, 1 note, 2 comment, 3 attachment (by **filename** — the only
+  text a file has here, since nothing reads inside one). That bijection is why
+  no mapping table exists. The base was 4 until milestone 4.8 widened it
+  (**D-167**), which is the action the 1.4 review's note asked the first
+  milestone needing a fourth kind to take; four codes are free, and
+  `DOCUMENT_BASE` governs the queries now rather than being a constant beside
+  four literal `/ 4`s. The encoding is written twice — as constants in `search.py` and as
   arithmetic in the revision's trigger SQL — and
   `tests/test_search.py::test_writes_are_indexed_under_the_documented_rowid`
   is what keeps the two in agreement.
@@ -765,6 +779,71 @@ over. Revision `20260924_0007_comment_threads` adds three columns to
   reopening. Resolve is not optimistic (`useResolveThread`): what the reader
   is shown is a name the cache does not hold.
 
+### More than one person on a task
+
+Milestone 4.6, the other half of the "build both" ruling (**D-163**).
+`task_assignees` (revision `20261009_0014_task_assignees`) is the truth; the
+API answers with `assignees` and takes `assignee_emails`, and
+`tasks.assignee_id` is **frozen** — unread from 4.6, dropped in Phase 6 beside
+`follow_up_date`.
+
+- **The version snapshot records a set.** `task_versions.assignee_ids` holds
+  the canonical string `routes_tasks.TASK_ROWS_SQL` produces — ids ascending,
+  comma separated — because `versioning.version_is_current` compares snapshots
+  *as strings*, so two recordings of the same people must spell them the same
+  way or restoring would never be a no-op (D-120). A version written before
+  this revision keeps its single `assignee_id` and reads as a one-person list
+  (D-097).
+- **`apply_version` writes columns, and this one is a table.**
+  `VersionedTable.applied_fields` is the exception that says so, and
+  `restore_task_version` puts the set back itself. It is the first bend in the
+  one-shape-for-four-histories abstraction; bending it at the edge was cheaper
+  than widening the `UPDATE` every other restore pays for.
+- **D-142 now reads "any assignee may close it."** A shared task is done when
+  whoever got to it says so; requiring all of them is an approval workflow
+  `FEATURES.md` §8 rules out. Editing stays author-or-owner (D-005).
+- **My Tasks is a membership test** (`EXISTS` against `task_assignees`, served
+  by `idx_task_assignees_user`) rather than a column match.
+- **An assignment is toggle state, not content**: `set_assignees` writes an
+  ordinary `DELETE FROM`, the reasoning `soft_delete.py` applies to
+  `reactions` and `watchers` (D-130). Who *used* to owe a task is in
+  `task_versions`, which is the history that matters.
+- **A frozen column is a hazard while anything still reads it.** 4.5's
+  task-comment notification read `tasks.assignee_id`, so 4.6 silently stopped
+  telling assignees; the backend test passed because it never covered an
+  assignee who is not the author, and `e2e/24-tasks.spec.ts` is what failed.
+  Grep every reader when a column is retired.
+
+### A task's discussion
+
+Milestone 4.5, built on the human's "build both" ruling that overruled D-146.
+`task_comments` (revision `20261004_0013_task_comments`) is a **flat,
+chronological log** on a task — body, author, time, `deleted_at`.
+
+- **A second table rather than `comments`** (**D-162**). `comments.note_id` is
+  assumed in 17 places across 7 modules, two of them the search queries, which
+  answer with a non-nullable `SearchResultPublic.entry_id` that a task comment
+  cannot have. Reusing it meant breaking a shipped read or leaving task
+  comments unsearchable; mirroring 3.3's threads was more than was asked for.
+  Threading stays additive — the three columns revision 0007 added to
+  `comments`.
+- **Immutable, like every other comment here** (invariant 2): no PATCH, so no
+  `updated_at`, no `edited` marker and no version table. Delete is the only
+  change one can undergo, and it is soft, audited
+  (`task_comment_deleted`/`task_comment_restored`) and undoable.
+- **It rides along with the task** (`routes_tasks.comments_by_task_id`), the
+  shape a note's comments have; the writes that answer with a task still answer
+  with the row they changed and the client refetches.
+- **A task has a cascade now.** 4.1's delete was the one helper in
+  `soft_delete.py` with nothing under it, because §8 rules out subtasks; a
+  comment is readable only through its task, so it goes with the task and with
+  the deal, scoped by the delete's stamp.
+- **Its notification is its own type** (`task_comment`), because it goes to the
+  two people the task is about — author and assignee, as a set — rather than to
+  everyone on the deal the way `shared_activity` does.
+- `app/TaskDiscussion.tsx` draws it inside the deal's task panel only: `/tasks`
+  is a to-do list, not a place to catch up on discussion.
+
 ### Reactions and watchers
 
 Milestone 3.3a, the other half of the roadmap's single "threaded comments
@@ -806,6 +885,92 @@ other beyond both being toggle state rather than content.
   the one place watching-with-no-access has anywhere to render, since there
   is no separate discovery UI for a deal's id. `SharingPanel` gains a
   read-only "Watching" list, shown only when non-empty.
+
+### Attachments
+
+Milestone 4.3 is ADR 0008 and `docs/FEATURES.md` §6: the documents a deal
+turns on, which lived in somebody's inbox until now. Revision
+`20261001_0012_attachments` adds one table and four routes
+(`routes_attachments.py`), and `app/uploads.py` — written in Phase F before
+any endpoint accepted a file — is what they are wired into.
+
+- **A file hangs off a timeline entry**, as `attachments.entry_id` rather than
+  ADR 0008's `entity_type`/`entity_id` pair (**D-148**). `docs/ROADMAP.md` is
+  explicit that "proposals and contracts attach to the entry they belong to",
+  and one parent as a key keeps the foreign key, the index and the
+  one-statement soft-delete cascade a polymorphic parent gives up. The ADR
+  carries an amendment section recording that and the four decisions below.
+- **The row's `sha256` is where the file is**, not a checksum beside a path:
+  `uploads.resolve_stored_path` turns it into `{root}/{sha256[:2]}/{sha256}`
+  under `uploads.attachments_dir()` (`attachments/` beside the database file,
+  the shape `backup.backup_dir()` already uses). Content addressing
+  **replaced F.5's random generated name** (**D-147**) because the digest also
+  deduplicates: two rows with one digest are two attachments and one file, so
+  the table carries no unique index on it. Containment is two independent
+  checks — the 64-hex-character pattern before the filesystem sees anything,
+  and the resolved parent *and shard name* afterwards, which is what catches a
+  symlinked `ab/` planted in the root.
+- **Sniffing is the allowlist; the filename is metadata.** `validate_upload`
+  never consults what the client declared, which is what makes a `.exe`
+  renamed `.pdf` a 415. Word, Excel and PowerPoint are on the list
+  (**D-150**) because that is what contracts arrive as; they share one zip
+  signature, so `_sniff_ooxml` separates them by the part prefix in the
+  archive's central directory and refuses any archive carrying a
+  `vbaProject.bin`. `safe_filename` keeps only the last path segment, for the
+  readers of the name rather than for containment.
+- **An entry's files travel with the entry.** There is no list route:
+  `TimelineEntryPublic.attachments` is filled by
+  `attachment_utils.attachments_by_entry_id`, one query for a whole page, the
+  shape `reactions_by_comment_id` already uses. The three writes that answer
+  with an entry send `[]` like they do for `notes`.
+- **A download is a read of the opportunity** —
+  `GET /api/v2/attachments/{id}/download`, `require_opportunity_access`, so a
+  viewer may — and it is the only way bytes leave the volume, since `/data` is
+  never a static path. `uploads.download_headers` forces the download and
+  sets `nosniff`; the digest in the payload is not a capability, because the
+  route resolves the row the id names and reads the digest from it. A file the
+  volume has lost answers 404 rather than failing mid-response, which is a
+  real state until uploads join the backup story in R.5.
+- **Deleting one never removes the file** (**D-149**). The row is soft,
+  audited (`attachment_deleted`/`attachment_restored`) and undoable, and the
+  only safe prune predicate has to consider a soft-deleted row and a restorable
+  backup — so nothing prunes in v2. It is also a level of two cascades, the
+  entry's and the deal's, unlike a task, which outlives the entry that
+  prompted it.
+- **No version table and nothing in the AI context.** An attachment has no
+  editable field, so invariant 8 has nothing to keep; a filename is
+  attacker-controlled text, so it stays out of the model's context (**D-151**)
+  and invariant 4's "attachment" clause is satisfied by there being nothing
+  there to label. It is not searchable either (**D-152**), which leaves ADR
+  0007's four-kind rowid ceiling untouched — and is why `SearchKind` is now
+  split from `SourceType`, since a notification can be about an attachment and
+  a search result cannot.
+- **The export lists them, and does not include them** (milestone 4.4,
+  placement settled by **D-164**): `export_service.render_entry_attachments`
+  puts each file under the entry it belongs to — filename, size, uploader —
+  absent on an entry with none, with the count in the summary and one sentence
+  there saying they are listed rather than included. It was a single section at
+  the end until the human read a real export and said otherwise; D-154 records
+  the argument for the end, which the summary count now answers more cheaply. All three formats carry the files (**D-155**),
+  because one read feeds them: the JSON gains `attachments` per entry and the
+  CSV a `row_type: attachment` with three appended columns. `fetch_export_data`
+  reads them through `attachment_utils`, so the export cannot disagree with the
+  screen about which files a deal has, or about `deleted_at`.
+- **A file is attached in two places on purpose** (4.3a, **D-161**):
+  `TimelineEntryForm` carries *Attach a file (optional)* for the document that
+  is already to hand while the entry is being written, and the card's own
+  trigger takes the one that arrives later. The form's path is two requests in
+  order — the entry has to exist first — so a refused file leaves a saved entry
+  and an open form that says so, with the created id held in state so a retry
+  retries the upload rather than posting a second entry. A **system entry**
+  offers no trigger at all, the way it offers no Edit or Delete.
+- **The frontend** is `app/AttachmentList.tsx` on the entry card, between what
+  happened and what was said about it. The picker is collapsed behind "Attach
+  file" (`useInlineEditor`), the delete is optimistic with Undo (2.4b), the
+  upload is not optimistic because the server decides the type and the size,
+  and the download is a plain link. `lib/api.ts` omits its JSON content type
+  for a `FormData` body — the one request in the app that is not JSON, because
+  the multipart boundary is the browser's to generate.
 
 ### Editing where content is read
 
@@ -906,6 +1071,26 @@ user content, and logging out really does delete the row.
 
 ### AI agent
 
+**The context labels what a person wrote** (milestone 4.7, **D-166**). It is
+line-oriented plain text, so a body containing `Author: System` on its own
+line used to forge one of this app's own structural lines — invariant 4's
+"labelled everywhere" was true of nothing. Two shapes, because there are two
+kinds of field: a **body** (entry, note, comment) is fenced between
+`[BEGIN USER TEXT <token>]` and `[END USER TEXT <token>]`, and a value that
+sits *on* a structural line (a title, an author name, a filename) is
+**flattened to one line**, which no fence can do for it. The token is drawn
+per request — a fixed marker is a string somebody can type into a note.
+Attachments are in the context by name, size and uploader, and the prompt says
+the model cannot read what is inside them — and, since the Phase 4 review
+(**D-169**), that it must *say so plainly* when asked what a file contains.
+Obeying the prohibition and disclosing it turned out to be two different
+things: asked to summarize a PDF, the model answered from the timeline under
+the reader's own word "document" and invented nothing, but never mentioned it
+had not opened the file. What this makes unforgeable is the
+*structure*; obedience to the instruction is the model's, and
+`conftest.no_live_network` forbids the only call that would prove it, so the
+suite asserts the mechanism and a human checks compliance.
+
 Read-only by construction, not by prompt instruction, in two independent ways.
 `routes_ai` opens `database.read_only_connection()` — `PRAGMA query_only = ON`, so
 SQLite itself raises on any write from that path, and it is a pragma rather than a
@@ -932,6 +1117,34 @@ with the attachment citations. Both halves are
 pinned by `test_invariant_*` tests. Viewers may ask
 questions; the endpoint uses `require_opportunity_access`, not
 `require_timeline_write`.
+
+**Latency is configuration, and it is sized by measurement** (**D-168**).
+A reasoning model has a floor of tens of seconds before it has thought
+about anything — `minimal` effort spends zero reasoning tokens and still
+takes ~29s — so `openai_timeout_seconds` shipped at 20.0 and *no call
+could ever have succeeded* on the configured `gpt-5-nano`: three attempts,
+61s, 502. It is 90.0s now with `max_retries: 1`, clearing the measured
+40.1s worst case (the 41-entry deal) with headroom, and retrying only what
+a retry helps — a transient 429 or 5xx, not a timeout, which only
+multiplies a wait the reader is already sitting through.
+`openai_reasoning_effort` defaults to `low`, which costs a few hundred
+reasoning tokens where the default effort costs 2176-4480 and answers at
+least as fully. Empty means *send no `reasoning` parameter*, which is what
+a non-reasoning `OPENAI_MODEL` needs — the Responses API rejects the
+parameter outright for those, so the call site carries the SDK's `omit`
+sentinel rather than a `**kwargs` spread (the parameter is typed; a spread
+of `dict[str, object]` matches no overload).
+
+Two things about testing this, both learned from the defect above. Every
+pre-existing AI test stubs the SDK, so all 19 passed while the feature was
+non-functional — a default below a latency floor is invisible to a test
+that never makes a real call, which is why
+`test_the_ai_timeout_clears_a_reasoning_models_floor_latency` asserts a
+bound on the default itself. And the reasoning guards assert on the
+**serialized request body** through an `httpx.MockTransport`, not on the
+kwargs passed to the SDK: the SDK strips `omit` before sending, so a
+kwargs-level test cannot tell "parameter omitted" from "parameter sent as
+a sentinel" — the distinction this fix turns on.
 
 ### Frontend
 
@@ -1144,6 +1357,10 @@ The units worth testing directly, each in its own module:
   in a dialog of its own; see "Edit history" and "One activity log".
 - `app/CommentThread.tsx` — one discussion on a note: its replies, its Reply
   control and its resolved state (3.3). See "Threaded comments".
+- `app/AttachmentList.tsx` — one entry's files, the collapsed picker that adds
+  one, and the link that downloads one (4.3). See "Attachments". `formatBytes`
+  in `lib/domain.ts` is the size as a person reads it, for the same reason
+  `formatMoney` is there.
 - `app/Toasts.tsx` — the toast surface and `useUndoableDelete`, the one
   definition of "delete it, and say so with a way back" (milestone 2.4b). The
   region is a `role="status"` live region, never focused, so a reader keeps

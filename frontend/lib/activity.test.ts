@@ -109,6 +109,16 @@ describe("activitySentence", () => {
       ["note_restored", "restored a note"],
       ["comment_deleted", "deleted a comment"],
       ["comment_restored", "restored a comment"],
+      // Tasks (milestone 4.1) and attachments (4.3). The first two are a fix
+      // as much as an addition: `auditSentence` carried a `default` branch
+      // answering "removed a colleague's access", so from the moment 4.1
+      // shipped `task_deleted` the feed reported a deleted task as a revoked
+      // share. The branch is gone, which is what makes a missing case a build
+      // failure instead of a wrong sentence.
+      ["task_deleted", "deleted a task"],
+      ["task_restored", "restored a task"],
+      ["attachment_deleted", "removed an attachment"],
+      ["attachment_restored", "restored an attachment"],
     ];
 
     for (const [action, sentence] of sentences) {
@@ -193,7 +203,9 @@ describe("a task's field labels (milestone 4.2a)", () => {
     // reassignment read "changed Assignee id on a task". A `Record` keyed by the
     // target cannot forget one the type union knows about, which is the whole
     // reason for the shape.
-    expect(versionFieldLabel("task", "assignee_id")).toBe("Assigned to");
+    // `assignee_ids` since milestone 4.6: the snapshot records the whole set,
+    // and the label is the one `lib/domain.ts` declares for it.
+    expect(versionFieldLabel("task", "assignee_ids")).toBe("Assigned to");
     expect(versionFieldLabel("task", "due_date")).toBe("Due");
     expect(versionFieldLabel("task", "title")).toBe("Task");
     // The fallback is still there for a column with no declared label.

@@ -24,7 +24,8 @@ def search_everything(
     author_id: int | None = None,
     user: sqlite3.Row = Depends(get_current_user),
 ) -> Page[SearchResultPublic]:
-    """Ranked, snippeted matches in entries, notes and comments, across every
+    """Ranked, snippeted matches in entries, notes, comments and attachment
+    filenames (the fourth kind since milestone 4.8), across every
     opportunity this user can read and no others (`FEATURES.md` §13).
 
     The filters are the timeline's, by the same names: `type` is the type of

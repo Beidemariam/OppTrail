@@ -10,17 +10,39 @@ class Settings(BaseSettings):
     # Applied to the OpenAI client itself (`ai_service.ask_openai`), so a hung
     # or flaky call fails the request instead of hanging it indefinitely.
     # `max_retries` uses the SDK's own backoff, not a hand-rolled retry loop.
-    openai_timeout_seconds: float = 20.0
-    openai_max_retries: int = 2
+    #
+    # Sized by measurement, not by guess (D-168). A reasoning model's floor
+    # latency is tens of seconds before it has thought about anything: the
+    # shipped 20.0 was below it, so every call failed three times and answered
+    # 502 after a minute. Measured against the development data at
+    # `openai_reasoning_effort = "low"`: ~29s for a two-entry timeline, 40.1s
+    # for a 41-entry one. 90.0 clears that with headroom for a longer deal.
+    # One retry rather than two, because the retry that matters here is for a
+    # transient 429 or 5xx and a timeout retry only multiplies the wait a
+    # reader is already sitting through.
+    openai_timeout_seconds: float = 90.0
+    openai_max_retries: int = 1
+    # How hard the model thinks before answering. Load bearing for latency:
+    # unset, a reasoning model spends thousands of reasoning tokens
+    # summarizing a short timeline (measured: 2176-4480 tokens, 65-105s)
+    # where "low" spends a few hundred in ~30s and answers at least as fully.
+    # Empty string omits the parameter entirely, which is what a
+    # non-reasoning `openai_model` needs - the Responses API rejects
+    # `reasoning` outright for those, so this cannot be hardcoded.
+    openai_reasoning_effort: str = "low"
     environment: str = "development"
     # Attempts per source address per window, applied to login and signup
     # separately (`rate_limit.py`). Sized so a normal human never meets it and
     # a credential-stuffing run does.
     auth_rate_limit_attempts: int = 20
     auth_rate_limit_window_seconds: int = 300
-    # 10 MiB. No endpoint accepts a file yet; `uploads.py` explains why the
-    # limit is defined now.
+    # 10 MiB, the cap ADR 0008 names. Read by `uploads.validate_upload`, which
+    # `routes_attachments.py` is the first caller of (milestone 4.3).
     max_upload_bytes: int = 10 * 1024 * 1024
+    # `None` means "next to the database file" (`uploads.attachments_dir()`),
+    # the same default `backup_dir` takes: ADR 0008's blobs live under the same
+    # `/data` volume as the database they belong to.
+    attachments_dir: str | None = None
     # ADR 0003's live-update stream. A connection is closed deliberately after
     # `sse_max_connection_seconds` and the browser's own `EventSource`
     # reconnects (`app/events.py`), so an intermediary never gets to reap a
@@ -72,6 +94,17 @@ class Settings(BaseSettings):
     def _seconds_must_be_positive(cls, value: float, info: ValidationInfo) -> float:
         if value <= 0:
             raise ValueError(f"{str(info.field_name).upper()} must be greater than 0, got: {value}")
+        return value
+
+    @field_validator("openai_reasoning_effort")
+    @classmethod
+    def _openai_reasoning_effort_must_be_known(cls, value: str) -> str:
+        allowed = ("", "minimal", "low", "medium", "high")
+        if value not in allowed:
+            raise ValueError(
+                "OPENAI_REASONING_EFFORT must be one of "
+                f"{', '.join(repr(option) for option in allowed)}, got: {value!r}"
+            )
         return value
 
     @field_validator("openai_max_retries")

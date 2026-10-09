@@ -15,6 +15,12 @@ node_modules/
 out/
 tsconfig.tsbuildinfo
 
+# The container's bind-mounted volume (`./data` -> `/data`): the database, its
+# backups, and ADR 0008's attachment blobs. The blobs are content-addressed and
+# carry no extension, so no pattern below matches them -- milestone 4.3 is what
+# made this directory something other than one ignored `.db` file.
+data/
+
 # Local data and logs
 *.db
 # WAL puts the journal and shared-memory files alongside the database.

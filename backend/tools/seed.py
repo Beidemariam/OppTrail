@@ -123,6 +123,50 @@ def add_task(session: Session, opportunity_id: int, **fields: Any) -> int:
     return int(response.json()["id"])
 
 
+def add_attachment(
+    session: Session,
+    entry_id: int,
+    filename: str,
+    data: bytes,
+    content_type: str,
+) -> int:
+    """One file on an entry (milestone 4.3). Posted as multipart, like a browser
+    would -- the route takes no JSON at all, and the bytes are what decide the
+    stored type, so a seeded file has to be a real one of its kind.
+    """
+    response = check(
+        session.client.post(
+            f"/api/v2/timeline/{entry_id}/attachments",
+            files={"file": (filename, data, content_type)},
+        ),
+        f"attaching {filename} to entry {entry_id}",
+    )
+    return int(response.json()["id"])
+
+
+# A valid, minimal PDF: one empty page, which is enough for the magic-byte
+# sniffer and small enough to live in this file. A tour that seeded a text file
+# called `.pdf` would be seeding the thing `validate_upload` refuses.
+DEMO_PDF = (
+    b"%PDF-1.4\n"
+    b"1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
+    b"2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
+    b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>endobj\n"
+    b"trailer<</Root 1 0 R>>\n"
+    b"%%EOF\n"
+)
+
+
+def add_task_comment(session: Session, task_id: int, body: str) -> int:
+    """One line of a task's discussion (milestone 4.5). Flat and immutable, so
+    there is nothing to edit here and no thread to seed."""
+    response = check(
+        session.client.post(f"/api/v2/tasks/{task_id}/comments", json={"body": body}),
+        f"commenting on task {task_id}",
+    )
+    return int(response.json()["id"])
+
+
 def add_note(session: Session, entry_id: int, body: str) -> dict[str, Any]:
     """The created note, not just its id: an edit needs the `updated_at` it is
     written against (ADR 0003's guard on `PATCH /api/v2/notes/{id}`).
@@ -300,13 +344,24 @@ def seed() -> None:
     )
     # The follow-up the tour names, as a task (milestone 4.2): assigned to Blair,
     # who ran the demo, and linked to the entry that prompted it.
-    add_task(
+    # Two people on it since milestone 4.6, which is what the tour's line about
+    # a shared task needs to be true.
+    permissions_task = add_task(
         blair,
         northwind,
         title="Send the permissions model to the security lead",
-        assignee_email=BLAIR,
+        assignee_emails=[BLAIR, ALEX],
         due_date=days_ago(-3)[:10],
         entry_id=demo,
+    )
+    # The discussion a task provokes (milestone 4.5): two people, oldest first,
+    # and the second one is Alex so the tour can show that an owner may delete
+    # a colleague's line while an editor may not (D-005).
+    add_task_comment(
+        blair, permissions_task, "Drafted it, waiting on the security lead's template."
+    )
+    add_task_comment(
+        alex, permissions_task, "They replied - use the **short form**, not the full one."
     )
     demo_note = add_note(
         blair,
@@ -349,6 +404,16 @@ def seed() -> None:
         body="Three-year term, 185k ARR, 60-day pilot clause.",
         event_timestamp=days_ago(6, hour=16),
     )
+    # The document the deal turns on, on the entry that records sending it
+    # (milestone 4.3). Blair, an editor, attaches the redlined copy to their own
+    # entry below, so the tour has one file each from two people.
+    add_attachment(
+        alex,
+        proposal,
+        "Northwind proposal.pdf",
+        DEMO_PDF,
+        "application/pdf",
+    )
     revised = add_note(alex, proposal, "Sent the first cut with list pricing.")
     edit_note(
         alex,
@@ -356,13 +421,22 @@ def seed() -> None:
         "Sent the first cut with list pricing, then revised to a 8% discount.",
     )
 
-    add_entry(
+    redlines = add_entry(
         blair,
         northwind,
         type="email",
         title="Legal sent redlines",
         body="Two changes to the data-processing addendum.",
         event_timestamp=days_ago(2, hour=11),
+    )
+    # An editor's own file, so the tour can show that Delete is offered on your
+    # own attachment and not on a colleague's (D-005's rule, mirrored in the UI).
+    add_attachment(
+        blair,
+        redlines,
+        "redlines.txt",
+        b"DPA 4.2: replace 'may' with 'shall'.\nDPA 7.1: 30-day breach notice.\n",
+        "text/plain",
     )
 
     # Milestone 2.6's three new entry types, each with its own icon.
@@ -686,6 +760,35 @@ def main(argv: list[str] | None = None) -> int:
         "  /api/v2/tasks?assignee=any is scoped the same way search is -\n"
         "  Casey sees it because they can read Northwind, and Dana sees\n"
         "  nothing at all.\n"
+        "\n"
+        "  More than one person on a task (milestone 4.6): the security-model\n"
+        "  task is Blair's and Alex's, so it is on both of their lists at\n"
+        "  /tasks and either of them can tick it off - a shared task is done\n"
+        "  when whoever got to it says so. Only its author and the deal's\n"
+        "  owner can rewrite it, which is the line that did not move.\n"
+        "\n"
+        "  A task's discussion (milestone 4.5) is on Blair's security-model\n"
+        "  task: two lines, oldest first, written by Blair and then Alex. It is\n"
+        "  deliberately flat - no reply, no resolve, no reaction, and no edit at\n"
+        "  all, because a comment is immutable here. Alex, the owner, is offered\n"
+        "  Delete on both lines; Blair, an editor, only on their own. Casey, a\n"
+        "  viewer, reads them and is offered no Comment control. Blair's inbox\n"
+        "  carries 'New comment on: Send the permissions model...', because a\n"
+        "  comment tells the two people the task is about - its author and\n"
+        "  whoever owes it - and never the person who wrote it.\n"
+        "\n"
+        "  Attachments (milestone 4.3) are on Northwind: 'Northwind\n"
+        "  proposal.pdf' sits on the Proposal sent entry as Alex, and\n"
+        "  'redlines.txt' on Legal sent redlines as Blair - the document on\n"
+        "  the entry that records sending it, which is where a file belongs\n"
+        "  rather than on the deal. Alex, the owner, is offered Delete on\n"
+        "  both; Blair, an editor, only on their own. Casey, a viewer, can\n"
+        "  download either and attach nothing. The download is the only way\n"
+        "  out of the volume - GET /api/v2/attachments/1/download answers\n"
+        "  Content-Disposition: attachment and nosniff, and Dana, shared on\n"
+        "  nothing, gets 404 rather than a hint that the file exists. Try\n"
+        "  attaching something that is not on the allowlist, or an\n"
+        "  executable renamed .pdf: the bytes decide, not the name.\n"
         "\n"
         "  Rich content (milestone 3.1) is on Northwind's first entry: the\n"
         "  note under Intro call renders a bold figure, a bullet list and a\n"

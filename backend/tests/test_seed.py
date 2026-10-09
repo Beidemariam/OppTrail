@@ -54,6 +54,9 @@ def test_seed_populates_every_shipped_feature(tmp_path) -> None:
                 "saved_views",
                 "reactions",
                 "watchers",
+                "tasks",
+                "attachments",
+                "task_comments",
             )
         }
         entry_types = {
@@ -101,6 +104,9 @@ def test_seed_populates_every_shipped_feature(tmp_path) -> None:
         "saved_views",
         "reactions",
         "watchers",
+        "tasks",
+        "attachments",
+        "task_comments",
     ):
         assert counts[table] > 0, f"{table} is empty after seeding"
 
@@ -202,6 +208,41 @@ def test_seeded_permissions_match_the_printed_tour(tmp_path) -> None:
         watchers = alex.get(f"/api/v2/opportunities/{northwind}/watchers").json()["items"]
         assert {item["user_email"] for item in watchers} == {DANA}
         assert casey.get(f"/api/v2/opportunities/{northwind}/watchers").status_code == 403
+
+        # The attachments tour line (milestone 4.3): one file each from two
+        # people, on the entries they belong to, and a download that answers to
+        # a viewer and not to an outsider.
+        entries = alex.get(f"/api/v2/opportunities/{northwind}/timeline").json()["items"]
+        attachments = {
+            attachment["filename"]: (entry["title"], attachment["id"])
+            for entry in entries
+            for attachment in entry["attachments"]
+        }
+        assert attachments["Northwind proposal.pdf"][0] == "Proposal sent"
+        assert attachments["redlines.txt"][0] == "Legal sent redlines"
+        proposal_file = attachments["Northwind proposal.pdf"][1]
+
+        download = casey.get(f"/api/v2/attachments/{proposal_file}/download")
+        assert download.status_code == 200
+        assert download.headers["content-disposition"].startswith("attachment; ")
+        assert download.headers["x-content-type-options"] == "nosniff"
+        assert dana.get(f"/api/v2/attachments/{proposal_file}/download").status_code == 404
+        # The bytes decide, not the name -- which is the line of the tour a
+        # reader is invited to try by hand.
+        assert (
+            casey.post(
+                f"/api/v2/timeline/{entries[0]['id']}/attachments",
+                files={"file": ("notes.txt", b"viewer cannot attach", "text/plain")},
+            ).status_code
+            == 403
+        )
+        assert (
+            alex.post(
+                f"/api/v2/timeline/{entries[0]['id']}/attachments",
+                files={"file": ("setup.pdf", b"MZ\x90\x00", "application/pdf")},
+            ).status_code
+            == 415
+        )
 
         # The composer's `@` list (milestone 3.2): the tour says Dana is on
         # nobody's, and that the read is offered to whoever can already read

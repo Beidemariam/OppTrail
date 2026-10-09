@@ -33,7 +33,7 @@ CANONICAL = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 # The revision `alembic upgrade head` is expected to land on. Written down
 # rather than read from the script directory, for the same reason
 # `expected_schema.sql` is: a new revision should have to say so here.
-HEAD_REVISION = "0011_task_description_and_versions"
+HEAD_REVISION = "0015_search_attachments"
 
 
 @pytest.fixture
@@ -361,7 +361,17 @@ def test_existing_follow_up_dates_become_tasks(database_url: str) -> None:
     assert task["due_date"] == "2026-01-12"
     assert task["entry_id"] == 1
     assert task["opportunity_id"] == 1
+    # Written by revision 0010 into the column of the day, and carried into
+    # `task_assignees` by 0014 -- which is the pair this asserts, because a
+    # backfill that leaves the join table empty would take the task off the
+    # one list it exists to appear on (milestone 4.6).
     assert task["assignee_id"] == 1
+    with db_connection() as connection:
+        assignees = connection.execute(
+            "SELECT user_id FROM task_assignees WHERE task_id = ?",
+            (task["id"],),
+        ).fetchall()
+    assert [row["user_id"] for row in assignees] == [1]
     assert task["created_by"] == 1
     assert task["completed_at"] is None
     assert task["created_at"] == entry["created_at"]

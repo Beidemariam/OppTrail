@@ -26,6 +26,14 @@ export function notificationText(notification: AppNotification): string {
       ? `You were assigned: ${payload.title}`
       : "You were assigned a task.";
   }
+  if (notification.type === "task_comment") {
+    // Named for the same reason an assignment is (milestone 4.5): "new comment
+    // on a task" sends the reader looking for which one.
+    const payload = notification.payload;
+    return "title" in payload && payload.title
+      ? `New comment on: ${payload.title}`
+      : "New comment on a task.";
+  }
   if (notification.type === "shared_activity") {
     const payload = notification.payload;
     return "title" in payload && payload.title

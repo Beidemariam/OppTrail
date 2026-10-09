@@ -109,6 +109,19 @@ interface Note {
   comments: CommentThread[];
 }
 
+/** One file on an entry (milestone 4.3). */
+interface Attachment {
+  id: number;
+  entry_id: number;
+  sha256: string;
+  filename: string;
+  content_type: string;
+  byte_size: number;
+  uploaded_by: number;
+  uploader_name: string;
+  created_at: string;
+}
+
 interface TimelineEntry {
   id: number;
   opportunity_id: number;
@@ -127,6 +140,7 @@ interface TimelineEntry {
    * exactly the property worth keeping. */
   sequence: number;
   notes: Note[];
+  attachments: Attachment[];
 }
 
 /** The calendar's follow-up layer (milestone 3.0b, D-088): a `TimelineEntry`
@@ -160,6 +174,7 @@ type Member = components["schemas"]["OpportunityMemberPublic"];
 /** Generated, like `Member`: a task has a dozen fields and the fake has no
  * reason to restate them (milestone 4.1). */
 type Task = components["schemas"]["TaskPublic"];
+type TaskComment = components["schemas"]["TaskCommentPublic"];
 
 /** The merged activity log's row shape, straight from the generated client. */
 type ActivityEvent = components["schemas"]["ActivityEventPublic"];
@@ -213,6 +228,22 @@ export function anEntry(overrides: Partial<TimelineEntry> = {}): TimelineEntry {
     created_at: "2026-09-02T14:00:00Z",
     sequence: 1,
     notes: [],
+    attachments: [],
+    ...overrides,
+  };
+}
+
+export function anAttachment(overrides: Partial<Attachment> = {}): Attachment {
+  return {
+    id: 700,
+    entry_id: 100,
+    sha256: "a".repeat(64),
+    filename: "proposal.pdf",
+    content_type: "application/pdf",
+    byte_size: 2_411_724,
+    uploaded_by: ALEX.id,
+    uploader_name: ALEX.name,
+    created_at: "2026-09-02T15:00:00Z",
     ...overrides,
   };
 }
@@ -227,8 +258,7 @@ export function aTask(overrides: Partial<Task> = {}): Task {
     entry_title: null,
     title: "Send the revised pricing",
     description: "",
-    assignee_id: ALEX.id,
-    assignee_name: ALEX.name,
+    assignees: [{ user_id: ALEX.id, name: ALEX.name }],
     due_date: null,
     completed_at: null,
     completed_by: null,
@@ -237,6 +267,22 @@ export function aTask(overrides: Partial<Task> = {}): Task {
     author_name: ALEX.name,
     created_at: "2026-09-02T14:00:00Z",
     updated_at: "2026-09-02T14:00:00Z",
+    comments: [],
+    ...overrides,
+  };
+}
+
+/** One line of a task's discussion (milestone 4.5). */
+export function aTaskComment(
+  overrides: Partial<TaskComment> = {},
+): TaskComment {
+  return {
+    id: 800,
+    task_id: 500,
+    body: "Chased them, no answer.",
+    created_by: ALEX.id,
+    author_name: ALEX.name,
+    created_at: "2026-09-03T09:00:00Z",
     ...overrides,
   };
 }
@@ -368,6 +414,7 @@ export class FakeApi {
   /** Deleted tasks, so `POST .../restore` has something to put back
    * (milestone 4.1) -- the same shape `deleted` uses for the other kinds. */
   private deletedTasks = new Map<number, Task>();
+  private deletedTaskComments = new Map<number, TaskComment>();
   private pending: Set<string>;
   private pageSize: number | undefined;
   private held = new Map<
@@ -395,6 +442,10 @@ export class FakeApi {
     opportunities: new Map<number, { index: number; item: Opportunity }>(),
     entries: new Map<number, { index: number; item: TimelineEntry }>(),
     notes: new Map<number, { index: number; entryId: number; item: Note }>(),
+    attachments: new Map<
+      number,
+      { index: number; entryId: number; item: Attachment }
+    >(),
     comments: new Map<
       number,
       { index: number; noteId: number; item: CommentThread }
@@ -464,8 +515,15 @@ export class FakeApi {
     options: RequestInit = {},
   ): Promise<Response> {
     const method = (options.method ?? "GET").toUpperCase();
-    const body = options.body ? JSON.parse(options.body as string) : undefined;
-    this.calls.push({ method, path, body });
+    // One request in the app sends a file rather than JSON (milestone 4.3), so
+    // the fake reads the same two shapes the real wrapper writes.
+    const file =
+      options.body instanceof FormData
+        ? (options.body.get("file") as File)
+        : undefined;
+    const body =
+      options.body && !file ? JSON.parse(options.body as string) : undefined;
+    this.calls.push({ method, path, body: file ? { file: file.name } : body });
 
     if (this.pending.has(`${method} ${path.split("?")[0]}`)) {
       await this.gate(`${method} ${path.split("?")[0]}`).wait;
@@ -733,20 +791,20 @@ export class FakeApi {
       const opportunity = this.opportunities.find(
         (item) => item.id === opportunityId,
       );
-      const member = this.shares.find(
-        (share) => share.email === body.assignee_email,
-      );
+      const assigneesFor = (emails: string[] | undefined) =>
+        (emails ?? []).map((email) => {
+          const member = this.shares.find((share) => share.email === email);
+          return { user_id: member?.user_id ?? 0, name: member?.name ?? email };
+        });
       const created: Task = aTask({
         id: this.nextId++,
         opportunity_id: opportunityId,
         opportunity_name: opportunity?.name ?? "",
         title: String(body.title),
         due_date: body.due_date ?? null,
-        // Resolved from the email the way the route does, so a test that
+        // Resolved from the emails the way the route does, so a test that
         // assigns somebody reads their name back rather than the author's.
-        assignee_id: member?.user_id ?? (body.assignee_email ? 0 : null),
-        assignee_name:
-          member?.name ?? (body.assignee_email ? body.assignee_email : null),
+        assignees: assigneesFor(body.assignee_emails),
         entry_id: body.entry_id ?? null,
       });
       this.tasks.push(created);
@@ -766,7 +824,10 @@ export class FakeApi {
         this.tasks
           .filter(
             (task) =>
-              (anyAssignee || task.assignee_id === this.user?.id) &&
+              (anyAssignee ||
+                task.assignees.some(
+                  (item) => item.user_id === this.user?.id,
+                )) &&
               (includeCompleted || !task.completed_at) &&
               (!from || (task.due_date ?? "") >= from) &&
               (!to || (task.due_date ?? "") <= to),
@@ -796,6 +857,17 @@ export class FakeApi {
       if (method === "PATCH") {
         Object.assign(task, body);
         return this.json(task);
+      }
+      if (segments[2] === "comments" && method === "POST") {
+        const created = aTaskComment({
+          id: this.nextId++,
+          task_id: id,
+          body: String(body.body),
+          created_by: this.user?.id ?? ALEX.id,
+          author_name: this.user?.name ?? ALEX.name,
+        });
+        task.comments = [...task.comments, created];
+        return this.json(created, 201);
       }
       if (method === "DELETE") {
         this.tasks = this.tasks.filter((item) => item.id !== id);
@@ -906,6 +978,18 @@ export class FakeApi {
         }
         return this.page(this.versions.entries.get(entryId) ?? [], path);
       }
+      if (segments[2] === "attachments") {
+        const entry = this.entries.find((item) => item.id === entryId)!;
+        const created = anAttachment({
+          id: this.nextId++,
+          entry_id: entryId,
+          filename: file!.name,
+          byte_size: file!.size,
+          content_type: file!.type,
+        });
+        entry.attachments.push(created);
+        return this.json(created, 201);
+      }
       if (segments[2] === "notes") {
         const entry = this.entries.find((item) => item.id === entryId)!;
         const created = aNote({
@@ -941,6 +1025,34 @@ export class FakeApi {
       const index = this.entries.findIndex((item) => item.id === entryId);
       this.deleted.entries.set(entryId, { index, item: this.entries[index] });
       this.entries = this.entries.filter((item) => item.id !== entryId);
+      return new Response(null, { status: 204 });
+    }
+    if (segments[0] === "task-comments") {
+      const commentId = Number(segments[1]);
+      const owner = this.tasks.find((item) =>
+        item.comments.some((comment) => comment.id === commentId),
+      )!;
+      const comment = owner.comments.find((item) => item.id === commentId)!;
+      this.deletedTaskComments.set(commentId, comment);
+      owner.comments = owner.comments.filter((item) => item.id !== commentId);
+      return new Response(null, { status: 204 });
+    }
+    if (segments[0] === "attachments") {
+      const attachmentId = Number(segments[1]);
+      const entry = this.entries.find((item) =>
+        item.attachments.some((attachment) => attachment.id === attachmentId),
+      );
+      const attachment = entry!.attachments.find(
+        (item) => item.id === attachmentId,
+      )!;
+      this.deleted.attachments.set(attachmentId, {
+        index: entry!.attachments.indexOf(attachment),
+        entryId: entry!.id,
+        item: attachment,
+      });
+      entry!.attachments = entry!.attachments.filter(
+        (item) => item.id !== attachmentId,
+      );
       return new Response(null, { status: 204 });
     }
     if (segments[0] === "notes") {
@@ -1288,6 +1400,28 @@ export class FakeApi {
       if (owner) {
         put(owner.notes, note.index, note.item);
         this.deleted.notes.delete(id);
+        return new Response(null, { status: 204 });
+      }
+    }
+
+    const taskComment = this.deletedTaskComments.get(id);
+    if (kind === "task-comments" && taskComment) {
+      const owner = this.tasks.find((item) => item.id === taskComment.task_id);
+      if (owner) {
+        owner.comments = [...owner.comments, taskComment].sort(
+          (a, b) => a.id - b.id,
+        );
+        this.deletedTaskComments.delete(id);
+        return new Response(null, { status: 204 });
+      }
+    }
+
+    const attachment = this.deleted.attachments.get(id);
+    if (kind === "attachments" && attachment) {
+      const owner = this.entries.find((item) => item.id === attachment.entryId);
+      if (owner) {
+        put(owner.attachments, attachment.index, attachment.item);
+        this.deleted.attachments.delete(id);
         return new Response(null, { status: 204 });
       }
     }

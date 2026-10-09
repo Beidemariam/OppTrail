@@ -9,6 +9,7 @@ import {
   useRestoreTimelineEntry,
 } from "../lib/queries";
 import { formatTimestamp } from "../lib/time";
+import { AttachmentList } from "./AttachmentList";
 import { EntryTypeBadge } from "./EntryTypeBadge";
 import { useInlineEditor } from "./InlineEdit";
 import { MarkdownText } from "./MarkdownText";
@@ -174,6 +175,11 @@ function TimelineEntryCard({
         )}
 
         {failure && <p className="error">{failure.error?.message}</p>}
+
+        {/* The entry's documents, between what happened and what was said
+            about it (milestone 4.3): a proposal belongs to the entry that
+            records sending it, and the notes under it are the discussion. */}
+        <AttachmentList entry={entry} access={access} />
 
         <div className="notes-list">
           {entry.notes.map((item) => (

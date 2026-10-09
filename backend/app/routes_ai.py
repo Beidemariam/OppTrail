@@ -43,6 +43,7 @@ def ask_ai_agent(
             question=payload.question,
             timeout=settings.openai_timeout_seconds,
             max_retries=settings.openai_max_retries,
+            reasoning_effort=settings.openai_reasoning_effort,
         )
     except Exception as exc:
         logger.warning(

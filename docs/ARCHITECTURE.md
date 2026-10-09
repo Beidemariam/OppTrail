@@ -91,6 +91,10 @@ Keep the current module shape — it is sound. Additions:
   (ADR 0009).
 - `jobs/` — scheduled tasks, framework-free so they stay directly testable.
 - `attachments.py` — validation, content addressing, streamed download (ADR 0008).
+  Shipped in milestone 4.3 as three modules rather than one: `uploads.py`
+  (the rules and the content addressing, stood up in Phase F milestone F.5),
+  `routes_attachments.py` (the four routes and the permission boundary) and
+  `attachment_utils.py` (the row read the timeline and the export share).
 - Alembic replaces `schema.sql` + `run_migrations()` (ADR 0002).
 
 ## Cross-cutting standards

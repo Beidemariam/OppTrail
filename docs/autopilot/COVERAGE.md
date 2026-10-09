@@ -2223,3 +2223,119 @@ Coverage across the phases so far:
 | Authorization-matrix endpoints | 47 | 52 | 69 |
 
 Full detail and the try-it steps: `docs/autopilot/reviews/phase-3-summary.md`.
+
+## Phase 4 — gate (end of phase, every milestone 4.1–4.8 done, plus 4.9)
+
+Eleven milestones: 4.1 and 4.1b (the task model, its eight routes and its three
+screens), 4.2 (the `follow_up_date` migration), 4.2a (the checkpoint rework —
+`task_versions`, the task editor, the 401 that left the app looking signed in),
+4.3 (attachments), 4.3a (attaching from the composer, from the gate review),
+4.4 (the export manifest), and the human's "build both" ruling as 4.5 (a task's
+discussion) and 4.6 (more than one person on a task) — then **4.7** (the AI context labels
+what a person wrote) and **4.8** (a file is found by its name), which are the
+human's two "now" rulings from the final round. Six schema revisions beyond
+4.1's: `0011_task_description_and_versions`, `0012_attachments`,
+`0013_task_comments`, `0014_task_assignees` and `0015_search_attachments` —
+the last of which rebuilds the search index, because widening the rowid
+encoding moves every row in it (**D-167**).
+
+Then **4.9**, which is not a milestone the roadmap planned: the human reported
+the AI as not working during this review and it was not working at all
+(**D-168**). `openai_timeout_seconds` shipped at 20.0 against a reasoning
+model whose floor latency is ~29s even spending zero reasoning tokens, so
+every call failed three times and answered 502 after 61s — *no call could ever
+have succeeded* on the configured `gpt-5-nano`. It is 90.0s now with one retry
+rather than two, and `openai_reasoning_effort` defaults to `low`, which the
+measurement says costs a few hundred reasoning tokens where the default costs
+2176–4480 and answers at least as fully. **The nineteen existing AI tests all
+passed throughout**, because every one of them stubs the SDK and the defect
+lived in a default — so the four added here assert on the serialized request
+body through an `httpx.MockTransport`, and one asserts a bound on the default
+itself, which is the only shape of test that could have caught it. No schema
+change.
+
+**Re-measured on 2026-10-09** after 4.5 and 4.6; the figures below replace the
+4.4 ones. Two numbers moved for reasons worth naming: the backend suite grew by
+the task discussion and the assignee set, and the **frontend branch threshold
+was briefly missed** (89.79% against 90%) because 4.6 added branches faster
+than tests covered them. It was met by covering what the new code added —
+every notification sentence, which had been at 66% branch since `task_assigned`
+shipped — rather than by lowering the threshold, which `CLAUDE.md` forbids.
+
+The figures below were taken after 4.4's last change, with the full sandbox
+half of the split gate re-run from scratch — including a second Playwright run
+after the dependency bump below, because a bundler patch changes the artifact
+every end-to-end test loads.
+
+```
+backend:  ruff check (all passed), ruff format --check (96 files),
+          mypy app tools (45 source files)                all clean
+          583 passed, 1 skipped, 97.52% combined line+branch coverage
+          (--cov-fail-under=90 enforced); the >=95%-branch modules
+          (permissions.py, audit_utils.py, auth.py, soft_delete.py,
+          routes_ai.py, versioning.py) all at 100%, and this phase's
+          new modules too -- routes_tasks.py, routes_attachments.py,
+          attachment_utils.py and uploads.py all 100%
+          the one skip is the real-PDF render (WeasyPrint's native
+          libraries are absent on macOS, CLAUDE.md's WeasyPrint note);
+          4.4 added the attachment manifest to that renderer, so this
+          skip is load bearing for this phase the way 3.5's was
+          pip-audit                                      no known vulnerabilities
+frontend: tsc --noEmit, eslint, prettier --check          all clean
+          (0 errors, 3 warnings -- the same three named at the Phase 3
+          gate, none of them new this phase)
+          581 passed (36 files), 96.9% statements / 90.63% branch /
+          95.6% functions / 96.9% line (thresholds 96/96/95/90 all met)
+          npm audit            5 high, all one package, no upstream fix
+                               (D-156 -- `braces` <=3.0.3 with 3.0.3 the
+                               latest published release, reached through
+                               micromatch -> fast-glob ->
+                               @next/eslint-plugin-next -> eslint-config-next;
+                               a development dependency, and the image copies
+                               only `frontend/out` into the final stage, so
+                               nothing of it ships). The critical one in the
+                               same report -- Next.js `next/og` RCE -- was
+                               fixed by bumping next and eslint-config-next
+                               16.3.4 -> 16.3.8, and `npm audit fix` cleared
+                               brace-expansion at the lockfile level.
+contract: scripts/generate-api-client.sh --check           up to date
+e2e:      78 passed, 1 skipped (25 specs), axe clean on every screen in
+          both light and dark; DEFERRED_AXE_RULES still empty. The skip
+          is the PDF export, for the same reason as the backend's.
+docker:   deferred to the host half -- scripts/autopilot-gate.sh 4
+          (no Docker socket in this sandbox, per sandbox/README.md).
+          Load-bearing this phase for two reasons: the PDF renderer
+          gained the manifest (4.4), and attachments write to the
+          `/data` volume for the first time (4.3), so the image's
+          non-root `app` user has to be able to create
+          `/data/attachments`.
+```
+
+Coverage floors (brief §6.2) all met with room: backend >= 90% line / >= 80%
+branch (97% combined); frontend >= 80% line (96.85%, against the project's own
+96/96/95/90 thresholds); the auth, permissions, soft-delete, audit and
+AI-agent modules >= 95% branch (all at 100%).
+
+Authorization-matrix endpoints: 69 (Phase 3 gate) → 86 (eight task routes plus
+the two 4.2a added, the four attachment routes, and the three a task's
+discussion needs). `Case` gained a `files`
+leg so the one multipart endpoint is exercised as a real multipart request
+rather than a JSON stand-in.
+
+New guard this phase, not a feature test: `lib/activity.ts`'s audit sentence
+switch lost its `default` branch, so a new audit action is a build failure
+rather than a wrong sentence — which is what it had been since 4.1 shipped
+`task_deleted`.
+
+Coverage across the phases so far:
+
+| | Phase 1 gate | Phase 2 gate | Phase 3 gate | Phase 4 gate |
+|---|---|---|---|---|
+| Backend tests | 258 | 338 | 458 | 584 |
+| Backend coverage | 97.28% | 97.27% | 98.08% | 97% |
+| Frontend tests | 102 | 429 | 530 | 581 |
+| Frontend line coverage | 88.38% | 97.07% | 97.09% | 96.87% |
+| E2E tests | 18 (7 specs) | 57 (17 specs) | 69 (22 specs) | 79 (25 specs) |
+| Authorization-matrix endpoints | 47 | 52 | 69 | 86 |
+
+Full detail and the try-it steps: `docs/autopilot/reviews/phase-4-summary.md`.

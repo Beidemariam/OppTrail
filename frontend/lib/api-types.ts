@@ -1038,7 +1038,8 @@ export interface paths {
         };
         /**
          * Search Everything
-         * @description Ranked, snippeted matches in entries, notes and comments, across every
+         * @description Ranked, snippeted matches in entries, notes, comments and attachment
+         *     filenames (the fourth kind since milestone 4.8), across every
          *     opportunity this user can read and no others (`FEATURES.md` §13).
          *
          *     The filters are the timeline's, by the same names: `type` is the type of
@@ -1308,6 +1309,77 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/tasks/{task_id}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Task Comment
+         * @description Say something about a task. Editors may, viewers may not -- the gate
+         *     adding a note or a comment already has, because this is adding something
+         *     rather than changing somebody else's.
+         *
+         *     Told to the two people a task is about: whoever wrote it and whoever owes
+         *     it. That is `notify_note_comment`'s rule read against a task -- a set, so
+         *     one person who is both gets one notification rather than two -- and the
+         *     commenter is never told about their own comment.
+         */
+        post: operations["create_task_comment_api_v2_tasks__task_id__comments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/task-comments/{comment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Task Comment
+         * @description Author or opportunity owner (D-005), soft and audited like every other
+         *     delete -- and like a note's comment, which cannot be edited either, so
+         *     removing it is the only change it can undergo.
+         */
+        delete: operations["delete_task_comment_api_v2_task_comments__comment_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/task-comments/{comment_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Deleted Task Comment
+         * @description Undo the delete (2.4b's shape), scoped by the delete's own stamp: a
+         *     comment that went with its whole task comes back with the task, and one
+         *     deleted on its own comes back here.
+         */
+        post: operations["restore_deleted_task_comment_api_v2_task_comments__comment_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/tasks/{task_id}/versions": {
         parameters: {
             query?: never;
@@ -1325,8 +1397,13 @@ export interface paths {
          *     task with no history at all, which is the invariant violation the human found
          *     at the Phase 4 checkpoint.
          *
-         *     `assignee_name` is resolved here rather than stored, so a history row reads
-         *     "Gavin" rather than "3" while the snapshot keeps the id it was written with.
+         *     The names are resolved here rather than stored, so a history row reads
+         *     "Gavin" rather than "3" while the snapshot keeps the ids it was written
+         *     with -- and since milestone 4.6 that is a *set*: `assignee_ids` holds
+         *     "3,7" and this joins each id to its name, in the ascending order the
+         *     snapshot was written in. A version recorded before that revision carries
+         *     one id and reads as a one-person list, because that is what it always
+         *     meant (D-097).
          */
         get: operations["list_task_versions_page_api_v2_tasks__task_id__versions_get"];
         put?: never;
@@ -1356,7 +1433,7 @@ export interface paths {
          *     be undone in turn, and restoring what is already current writes nothing --
          *     which also makes a retry idempotent.
          *
-         *     **The assignee is restored with everything else, and notifies nobody.** The
+         *     **The assignees are restored with everything else, and notify nobody.** The
          *     same reasoning a restored note sends no second mention (D-120): whoever this
          *     task was assigned to was told when it happened, and a restore announcing it
          *     again would make every undo a fresh ping. A task handed to somebody *new* by
@@ -1365,6 +1442,119 @@ export interface paths {
          *     than silence, and the change is on the deal's activity log either way.
          */
         post: operations["restore_task_version_api_v2_tasks__task_id__versions__version_number__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/timeline/{entry_id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Attachment
+         * @description Put a file on an entry. Editors may, viewers may not -- the same gate as
+         *     adding a note, because this is adding something rather than changing
+         *     somebody else's.
+         *
+         *     What the client declared the file to be is never consulted: only the
+         *     sniffed type decides, which is what makes a `.exe` renamed `.pdf` a 415.
+         *
+         *     The read stops one byte past the limit, which is all `validate_upload` needs
+         *     to answer 413. It is worth being precise about what that bounds
+         *     (**D-153**): Starlette's multipart parser has already spooled the whole
+         *     request before this `def` handler runs, so the cap refuses what gets
+         *     *stored* rather than what gets *received*. Enforcing it while reading needs
+         *     this app's first `async def` route handler; a request-size middleware in
+         *     front of routing is the cheaper answer and is a cross-cutting control of
+         *     its own. The residual is accepted the way ADR 0008 accepts the absence of
+         *     virus scanning.
+         */
+        post: operations["upload_attachment_api_v2_timeline__entry_id__attachments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/attachments/{attachment_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Attachment
+         * @description Read the file. Any role on the deal may, including a viewer -- this is
+         *     `require_opportunity_access`, the same gate as reading the timeline the
+         *     file is attached to.
+         *
+         *     The response is forced to download and marked `nosniff`
+         *     (`uploads.download_headers`), so a file that got past the type allowlist
+         *     still cannot be rendered as HTML in this app's origin. The filename the
+         *     reader gets back is the one that was uploaded; the path it came from is the
+         *     digest.
+         */
+        get: operations["download_attachment_api_v2_attachments__attachment_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/attachments/{attachment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Attachment
+         * @description Take a file off an entry: its uploader or the opportunity owner (D-005).
+         *
+         *     Soft, audited and undoable like every other delete -- and **the bytes stay
+         *     on disk** (**D-149**), because the row can come back and the digest may be
+         *     another entry's attachment as well.
+         */
+        delete: operations["delete_attachment_api_v2_attachments__attachment_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/attachments/{attachment_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Deleted Attachment
+         * @description Undo the delete (milestone 2.4b's shape), scoped by the delete's own
+         *     stamp: a file deleted with its entry comes back with the entry, and one
+         *     deleted on its own comes back here.
+         *
+         *     Restoring something that is not deleted is a 404, the same answer as one
+         *     that never existed, and the restore writes its own audit row rather than
+         *     removing the delete's -- the log is the sequence of what happened.
+         */
+        post: operations["restore_deleted_attachment_api_v2_attachments__attachment_id__restore_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1406,9 +1596,9 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "opportunity_deleted" | "opportunity_restored" | "share_added" | "share_role_changed" | "share_removed" | "owner_changed" | "timeline_entry_deleted" | "timeline_entry_restored" | "note_deleted" | "note_restored" | "comment_deleted" | "comment_restored" | "task_deleted" | "task_restored";
+            action: "opportunity_deleted" | "opportunity_restored" | "share_added" | "share_role_changed" | "share_removed" | "owner_changed" | "timeline_entry_deleted" | "timeline_entry_restored" | "note_deleted" | "note_restored" | "comment_deleted" | "comment_restored" | "task_deleted" | "task_restored" | "attachment_deleted" | "attachment_restored" | "task_comment_deleted" | "task_comment_restored";
             /** Detail */
-            detail: components["schemas"]["AuditDetailOpportunityDeleted"] | components["schemas"]["AuditDetailOpportunityRestored"] | components["schemas"]["AuditDetailShareAdded"] | components["schemas"]["AuditDetailShareRoleChanged"] | components["schemas"]["AuditDetailShareRemoved"] | components["schemas"]["AuditDetailOwnerChanged"] | components["schemas"]["AuditDetailTimelineEntryDeleted"] | components["schemas"]["AuditDetailTimelineEntryRestored"] | components["schemas"]["AuditDetailNoteDeleted"] | components["schemas"]["AuditDetailNoteRestored"] | components["schemas"]["AuditDetailCommentDeleted"] | components["schemas"]["AuditDetailCommentRestored"] | components["schemas"]["AuditDetailTaskDeleted"] | components["schemas"]["AuditDetailTaskRestored"];
+            detail: components["schemas"]["AuditDetailOpportunityDeleted"] | components["schemas"]["AuditDetailOpportunityRestored"] | components["schemas"]["AuditDetailShareAdded"] | components["schemas"]["AuditDetailShareRoleChanged"] | components["schemas"]["AuditDetailShareRemoved"] | components["schemas"]["AuditDetailOwnerChanged"] | components["schemas"]["AuditDetailTimelineEntryDeleted"] | components["schemas"]["AuditDetailTimelineEntryRestored"] | components["schemas"]["AuditDetailNoteDeleted"] | components["schemas"]["AuditDetailNoteRestored"] | components["schemas"]["AuditDetailCommentDeleted"] | components["schemas"]["AuditDetailCommentRestored"] | components["schemas"]["AuditDetailTaskDeleted"] | components["schemas"]["AuditDetailTaskRestored"] | components["schemas"]["AuditDetailAttachmentDeleted"] | components["schemas"]["AuditDetailAttachmentRestored"] | components["schemas"]["AuditDetailTaskCommentDeleted"] | components["schemas"]["AuditDetailTaskCommentRestored"];
         };
         /**
          * ActivityEditEvent
@@ -1483,6 +1673,63 @@ export interface components {
             answer: string;
             /** Referenced Entry Numbers */
             referenced_entry_numbers: number[];
+        };
+        /**
+         * AttachmentPublic
+         * @description One file on an entry (milestone 4.3, `docs/FEATURES.md` §6).
+         *
+         *     `sha256` is in the payload because it is what the file *is* -- two
+         *     attachments with one digest are one document, which is worth being able to
+         *     see -- and because it is how the stored file is addressed (ADR 0008). It is
+         *     not a download token: the download route resolves the digest from the row
+         *     the id names, after the same permission check as every other read, so
+         *     knowing a digest grants nothing.
+         *
+         *     `byte_size` rather than a formatted size: the reader's locale is the
+         *     client's business, and the PDF export's manifest (milestone 4.4) formats it
+         *     differently from the screen.
+         */
+        AttachmentPublic: {
+            /** Id */
+            id: number;
+            /** Entry Id */
+            entry_id: number;
+            /** Sha256 */
+            sha256: string;
+            /** Filename */
+            filename: string;
+            /** Content Type */
+            content_type: string;
+            /** Byte Size */
+            byte_size: number;
+            /** Uploaded By */
+            uploaded_by: number;
+            /** Uploader Name */
+            uploader_name: string;
+            /** Created At */
+            created_at: string;
+        };
+        /** AuditDetailAttachmentDeleted */
+        AuditDetailAttachmentDeleted: {
+            /** Attachment Id */
+            attachment_id: number;
+            /** Entry Id */
+            entry_id: number;
+            /** Filename */
+            filename: string;
+            /** Byte Size */
+            byte_size: number;
+        };
+        /** AuditDetailAttachmentRestored */
+        AuditDetailAttachmentRestored: {
+            /** Attachment Id */
+            attachment_id: number;
+            /** Entry Id */
+            entry_id: number;
+            /** Filename */
+            filename: string;
+            /** Byte Size */
+            byte_size: number;
         };
         /** AuditDetailCommentDeleted */
         AuditDetailCommentDeleted: {
@@ -1588,6 +1835,24 @@ export interface components {
              */
             to_role: "viewer" | "editor";
         };
+        /** AuditDetailTaskCommentDeleted */
+        AuditDetailTaskCommentDeleted: {
+            /** Comment Id */
+            comment_id: number;
+            /** Task Id */
+            task_id: number;
+            /** Author Id */
+            author_id: number;
+        };
+        /** AuditDetailTaskCommentRestored */
+        AuditDetailTaskCommentRestored: {
+            /** Comment Id */
+            comment_id: number;
+            /** Task Id */
+            task_id: number;
+            /** Author Id */
+            author_id: number;
+        };
         /** AuditDetailTaskDeleted */
         AuditDetailTaskDeleted: {
             /** Task Id */
@@ -1652,15 +1917,20 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "opportunity_deleted" | "opportunity_restored" | "share_added" | "share_role_changed" | "share_removed" | "owner_changed" | "timeline_entry_deleted" | "timeline_entry_restored" | "note_deleted" | "note_restored" | "comment_deleted" | "comment_restored" | "task_deleted" | "task_restored";
+            action: "opportunity_deleted" | "opportunity_restored" | "share_added" | "share_role_changed" | "share_removed" | "owner_changed" | "timeline_entry_deleted" | "timeline_entry_restored" | "note_deleted" | "note_restored" | "comment_deleted" | "comment_restored" | "task_deleted" | "task_restored" | "attachment_deleted" | "attachment_restored" | "task_comment_deleted" | "task_comment_restored";
             /** Detail */
-            detail: components["schemas"]["AuditDetailOpportunityDeleted"] | components["schemas"]["AuditDetailOpportunityRestored"] | components["schemas"]["AuditDetailShareAdded"] | components["schemas"]["AuditDetailShareRoleChanged"] | components["schemas"]["AuditDetailShareRemoved"] | components["schemas"]["AuditDetailOwnerChanged"] | components["schemas"]["AuditDetailTimelineEntryDeleted"] | components["schemas"]["AuditDetailTimelineEntryRestored"] | components["schemas"]["AuditDetailNoteDeleted"] | components["schemas"]["AuditDetailNoteRestored"] | components["schemas"]["AuditDetailCommentDeleted"] | components["schemas"]["AuditDetailCommentRestored"] | components["schemas"]["AuditDetailTaskDeleted"] | components["schemas"]["AuditDetailTaskRestored"];
+            detail: components["schemas"]["AuditDetailOpportunityDeleted"] | components["schemas"]["AuditDetailOpportunityRestored"] | components["schemas"]["AuditDetailShareAdded"] | components["schemas"]["AuditDetailShareRoleChanged"] | components["schemas"]["AuditDetailShareRemoved"] | components["schemas"]["AuditDetailOwnerChanged"] | components["schemas"]["AuditDetailTimelineEntryDeleted"] | components["schemas"]["AuditDetailTimelineEntryRestored"] | components["schemas"]["AuditDetailNoteDeleted"] | components["schemas"]["AuditDetailNoteRestored"] | components["schemas"]["AuditDetailCommentDeleted"] | components["schemas"]["AuditDetailCommentRestored"] | components["schemas"]["AuditDetailTaskDeleted"] | components["schemas"]["AuditDetailTaskRestored"] | components["schemas"]["AuditDetailAttachmentDeleted"] | components["schemas"]["AuditDetailAttachmentRestored"] | components["schemas"]["AuditDetailTaskCommentDeleted"] | components["schemas"]["AuditDetailTaskCommentRestored"];
             /** Created At */
             created_at: string;
         };
         /** AuthResponse */
         AuthResponse: {
             user: components["schemas"]["UserPublic"];
+        };
+        /** Body_upload_attachment_api_v2_timeline__entry_id__attachments_post */
+        Body_upload_attachment_api_v2_timeline__entry_id__attachments_post: {
+            /** File */
+            file: string;
         };
         /** BulkActionResponse */
         BulkActionResponse: {
@@ -1884,7 +2154,7 @@ export interface components {
              * Source Type
              * @enum {string}
              */
-            source_type: "entry" | "note" | "comment";
+            source_type: "entry" | "note" | "comment" | "attachment";
             /** Source Id */
             source_id: number;
             /** Actor Id */
@@ -1898,7 +2168,7 @@ export interface components {
              * Source Type
              * @enum {string}
              */
-            source_type: "entry" | "note" | "comment";
+            source_type: "entry" | "note" | "comment" | "attachment";
             /** Source Id */
             source_id: number;
             /** Actor Id */
@@ -1967,7 +2237,7 @@ export interface components {
              * Source Type
              * @enum {string}
              */
-            source_type: "entry" | "note" | "comment";
+            source_type: "entry" | "note" | "comment" | "attachment";
             /** Source Id */
             source_id: number;
             /** Actor Id */
@@ -1997,6 +2267,25 @@ export interface components {
             due_date: string | null;
         };
         /**
+         * NotificationPayloadTaskComment
+         * @description Somebody said something about a task you wrote or owe (milestone 4.5).
+         *
+         *     The task's title rides along for the reason `task_assigned`'s does: an
+         *     inbox line that says only "new comment on a task" sends the reader looking
+         *     for which one. The two recipients are a set, so the person who both wrote
+         *     the task and owes it is told once.
+         */
+        NotificationPayloadTaskComment: {
+            /** Opportunity Id */
+            opportunity_id: number;
+            /** Actor Id */
+            actor_id: number;
+            /** Task Id */
+            task_id: number;
+            /** Title */
+            title: string;
+        };
+        /**
          * NotificationPublic
          * @description `read_at` is the source of truth (milestone 1.7), so a client can tell
          *     not just whether a notification was read but order a history by it. The
@@ -2012,9 +2301,9 @@ export interface components {
              * Type
              * @enum {string}
              */
-            type: "share_added" | "share_role_changed" | "share_removed" | "owner_changed" | "mention" | "shared_activity" | "comment" | "task_assigned";
+            type: "share_added" | "share_role_changed" | "share_removed" | "owner_changed" | "mention" | "shared_activity" | "comment" | "task_assigned" | "task_comment";
             /** Payload */
-            payload: components["schemas"]["NotificationPayloadShareAdded"] | components["schemas"]["NotificationPayloadShareRoleChanged"] | components["schemas"]["NotificationPayloadShareRemoved"] | components["schemas"]["NotificationPayloadOwnerChanged"] | components["schemas"]["NotificationPayloadMention"] | components["schemas"]["NotificationPayloadTaskAssigned"] | components["schemas"]["NotificationPayloadSharedActivity"] | components["schemas"]["NotificationPayloadComment"];
+            payload: components["schemas"]["NotificationPayloadShareAdded"] | components["schemas"]["NotificationPayloadShareRoleChanged"] | components["schemas"]["NotificationPayloadShareRemoved"] | components["schemas"]["NotificationPayloadOwnerChanged"] | components["schemas"]["NotificationPayloadMention"] | components["schemas"]["NotificationPayloadTaskAssigned"] | components["schemas"]["NotificationPayloadTaskComment"] | components["schemas"]["NotificationPayloadSharedActivity"] | components["schemas"]["NotificationPayloadComment"];
             /** Read At */
             read_at: string | null;
             /** Grouped Key */
@@ -2406,7 +2695,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "entry" | "note" | "comment";
+            kind: "entry" | "note" | "comment" | "attachment";
             /** Id */
             id: number;
             /** Opportunity Id */
@@ -2498,6 +2787,49 @@ export interface components {
             length: number;
         };
         /**
+         * TaskAssigneePublic
+         * @description One person a task is for (milestone 4.6).
+         *
+         *     A list of these replaced the `assignee_id`/`assignee_name` pair: a task can
+         *     be handed to several people, and two shapes for one fact is how a client
+         *     comes to believe the wrong one. Ids and names arrive in the same order,
+         *     ascending by id, which is the order the version snapshot records too.
+         */
+        TaskAssigneePublic: {
+            /** User Id */
+            user_id: number;
+            /** Name */
+            name: string;
+        };
+        /** TaskCommentCreate */
+        TaskCommentCreate: {
+            /** Body */
+            body: string;
+        };
+        /**
+         * TaskCommentPublic
+         * @description One line of a task's discussion (milestone 4.5).
+         *
+         *     Flat: no `parent_id`, no resolved pair, no reactions (**D-162**). It is
+         *     immutable like every other comment in this app (invariant 2), so there is
+         *     no `updated_at` and no `edited` marker -- the absence of those fields is
+         *     the shape of the rule rather than an omission.
+         */
+        TaskCommentPublic: {
+            /** Id */
+            id: number;
+            /** Task Id */
+            task_id: number;
+            /** Body */
+            body: string;
+            /** Created By */
+            created_by: number;
+            /** Author Name */
+            author_name: string;
+            /** Created At */
+            created_at: string;
+        };
+        /**
          * TaskCreate
          * @description A task as written (milestone 4.1, `docs/FEATURES.md` §8).
          *
@@ -2514,8 +2846,8 @@ export interface components {
              * @default
              */
             description: string;
-            /** Assignee Email */
-            assignee_email?: string | null;
+            /** Assignee Emails */
+            assignee_emails?: string[];
             /** Due Date */
             due_date?: string | null;
             /** Entry Id */
@@ -2537,10 +2869,8 @@ export interface components {
             title: string;
             /** Description */
             description: string;
-            /** Assignee Id */
-            assignee_id: number | null;
-            /** Assignee Name */
-            assignee_name: string | null;
+            /** Assignees */
+            assignees: components["schemas"]["TaskAssigneePublic"][];
             /** Due Date */
             due_date: string | null;
             /** Completed At */
@@ -2557,6 +2887,8 @@ export interface components {
             created_at: string;
             /** Updated At */
             updated_at: string;
+            /** Comments */
+            comments: components["schemas"]["TaskCommentPublic"][];
         };
         /**
          * TaskUpdate
@@ -2575,8 +2907,8 @@ export interface components {
             title?: string | null;
             /** Description */
             description?: string | null;
-            /** Assignee Email */
-            assignee_email?: string | null;
+            /** Assignee Emails */
+            assignee_emails?: string[] | null;
             /** Due Date */
             due_date?: string | null;
         };
@@ -2599,10 +2931,8 @@ export interface components {
             title: string;
             /** Description */
             description: string;
-            /** Assignee Id */
-            assignee_id: number | null;
-            /** Assignee Name */
-            assignee_name: string | null;
+            /** Assignees */
+            assignees: components["schemas"]["TaskAssigneePublic"][];
             /** Due Date */
             due_date: string | null;
             /** Edited By */
@@ -2663,6 +2993,8 @@ export interface components {
             sequence: number;
             /** Notes */
             notes: components["schemas"]["NotePublic"][];
+            /** Attachments */
+            attachments: components["schemas"]["AttachmentPublic"][];
         };
         /** TimelineEntryUpdate */
         TimelineEntryUpdate: {
@@ -4461,7 +4793,9 @@ export interface operations {
     };
     export_json_api_v2_opportunities__opportunity_id__export_json_get: {
         parameters: {
-            query?: never;
+            query?: {
+                order?: "asc" | "desc";
+            };
             header?: never;
             path: {
                 opportunity_id: number;
@@ -4494,7 +4828,9 @@ export interface operations {
     };
     export_csv_api_v2_opportunities__opportunity_id__export_csv_get: {
         parameters: {
-            query?: never;
+            query?: {
+                order?: "asc" | "desc";
+            };
             header?: never;
             path: {
                 opportunity_id: number;
@@ -4527,7 +4863,9 @@ export interface operations {
     };
     export_pdf_api_v2_opportunities__opportunity_id__export_pdf_get: {
         parameters: {
-            query?: never;
+            query?: {
+                order?: "asc" | "desc";
+            };
             header?: never;
             path: {
                 opportunity_id: number;
@@ -5145,6 +5483,105 @@ export interface operations {
             };
         };
     };
+    create_task_comment_api_v2_tasks__task_id__comments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskCommentCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskCommentPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_task_comment_api_v2_task_comments__comment_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                comment_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_deleted_task_comment_api_v2_task_comments__comment_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                comment_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_task_versions_page_api_v2_tasks__task_id__versions_get: {
         parameters: {
             query?: {
@@ -5203,6 +5640,138 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TaskPublic"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_attachment_api_v2_timeline__entry_id__attachments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_attachment_api_v2_timeline__entry_id__attachments_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_attachment_api_v2_attachments__attachment_id__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachment_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file itself, as a download: `Content-Disposition: attachment` and `X-Content-Type-Options: nosniff`, with the sniffed content type recorded at upload. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_attachment_api_v2_attachments__attachment_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachment_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_deleted_attachment_api_v2_attachments__attachment_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachment_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

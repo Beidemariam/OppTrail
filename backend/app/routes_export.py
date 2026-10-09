@@ -1,5 +1,5 @@
 import sqlite3
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse, Response
@@ -29,9 +29,13 @@ def get_export_data(
     connection: sqlite3.Connection,
     opportunity_id: int,
     user_id: int,
+    order: str = "desc",
 ) -> dict[str, Any]:
+    """`order` is the timeline's own reading order, passed through by the link
+    the reader clicks (milestone 4.4b) -- so the document runs the way the
+    screen it was exported from does."""
     require_opportunity_access(connection, opportunity_id, user_id)
-    return fetch_export_data(connection, opportunity_id)
+    return fetch_export_data(connection, opportunity_id, order)
 
 
 # --- Exporting a selection (milestone 3.0a) ---------------------------------
@@ -109,10 +113,11 @@ def export_selection_csv(
 @router.get("/{opportunity_id}/export/json")
 def export_json(
     opportunity_id: int,
+    order: Literal["asc", "desc"] = "desc",
     user: sqlite3.Row = Depends(get_current_user),
 ) -> JSONResponse:
     with db_connection() as connection:
-        data = get_export_data(connection, opportunity_id, int(user["id"]))
+        data = get_export_data(connection, opportunity_id, int(user["id"]), order)
 
     filename = safe_export_filename(data["opportunity"]["name"], "json")
     return JSONResponse(
@@ -124,10 +129,11 @@ def export_json(
 @router.get("/{opportunity_id}/export/csv")
 def export_csv(
     opportunity_id: int,
+    order: Literal["asc", "desc"] = "desc",
     user: sqlite3.Row = Depends(get_current_user),
 ) -> Response:
     with db_connection() as connection:
-        data = get_export_data(connection, opportunity_id, int(user["id"]))
+        data = get_export_data(connection, opportunity_id, int(user["id"]), order)
 
     filename = safe_export_filename(data["opportunity"]["name"], "csv")
     return Response(
@@ -140,10 +146,11 @@ def export_csv(
 @router.get("/{opportunity_id}/export/pdf")
 def export_pdf(
     opportunity_id: int,
+    order: Literal["asc", "desc"] = "desc",
     user: sqlite3.Row = Depends(get_current_user),
 ) -> Response:
     with db_connection() as connection:
-        data = get_export_data(connection, opportunity_id, int(user["id"]))
+        data = get_export_data(connection, opportunity_id, int(user["id"]), order)
 
     filename = safe_export_filename(data["opportunity"]["name"], "pdf")
     return Response(

@@ -240,57 +240,6 @@ CREATE TABLE 'search_index_docsize'(id INTEGER PRIMARY KEY, sz BLOB);
 
 CREATE TABLE 'search_index_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID;
 
-CREATE TRIGGER timeline_entries_search_insert AFTER INSERT ON timeline_entries BEGIN
-    INSERT INTO search_index(rowid, title, body)
-    SELECT new.id * 4 + 0, new.title, new.body WHERE new.deleted_at IS NULL;
-END;
-
-CREATE TRIGGER timeline_entries_search_update AFTER UPDATE ON timeline_entries BEGIN
-    INSERT INTO search_index(search_index, rowid, title, body)
-    SELECT 'delete', old.id * 4 + 0, old.title, old.body WHERE old.deleted_at IS NULL;
-    INSERT INTO search_index(rowid, title, body)
-    SELECT new.id * 4 + 0, new.title, new.body WHERE new.deleted_at IS NULL;
-END;
-
-CREATE TRIGGER timeline_entries_search_delete AFTER DELETE ON timeline_entries BEGIN
-    INSERT INTO search_index(search_index, rowid, title, body)
-    SELECT 'delete', old.id * 4 + 0, old.title, old.body WHERE old.deleted_at IS NULL;
-END;
-
-CREATE TRIGGER notes_search_insert AFTER INSERT ON notes BEGIN
-    INSERT INTO search_index(rowid, title, body)
-    SELECT new.id * 4 + 1, '', new.body WHERE new.deleted_at IS NULL;
-END;
-
-CREATE TRIGGER notes_search_update AFTER UPDATE ON notes BEGIN
-    INSERT INTO search_index(search_index, rowid, title, body)
-    SELECT 'delete', old.id * 4 + 1, '', old.body WHERE old.deleted_at IS NULL;
-    INSERT INTO search_index(rowid, title, body)
-    SELECT new.id * 4 + 1, '', new.body WHERE new.deleted_at IS NULL;
-END;
-
-CREATE TRIGGER notes_search_delete AFTER DELETE ON notes BEGIN
-    INSERT INTO search_index(search_index, rowid, title, body)
-    SELECT 'delete', old.id * 4 + 1, '', old.body WHERE old.deleted_at IS NULL;
-END;
-
-CREATE TRIGGER comments_search_insert AFTER INSERT ON comments BEGIN
-    INSERT INTO search_index(rowid, title, body)
-    SELECT new.id * 4 + 2, '', new.body WHERE new.deleted_at IS NULL;
-END;
-
-CREATE TRIGGER comments_search_update AFTER UPDATE ON comments BEGIN
-    INSERT INTO search_index(search_index, rowid, title, body)
-    SELECT 'delete', old.id * 4 + 2, '', old.body WHERE old.deleted_at IS NULL;
-    INSERT INTO search_index(rowid, title, body)
-    SELECT new.id * 4 + 2, '', new.body WHERE new.deleted_at IS NULL;
-END;
-
-CREATE TRIGGER comments_search_delete AFTER DELETE ON comments BEGIN
-    INSERT INTO search_index(search_index, rowid, title, body)
-    SELECT 'delete', old.id * 4 + 2, '', old.body WHERE old.deleted_at IS NULL;
-END;
-
 -- Revision 0009_tasks (milestone 4.1): action items scoped to an opportunity.
 -- `completed_at`/`completed_by` rather than a boolean done flag, for the reason
 -- revision 0003 gave `notifications.read_at`; `due_date` is a date because
@@ -327,9 +276,147 @@ CREATE TABLE task_versions (
     due_date TEXT,
     edited_by INTEGER NOT NULL REFERENCES users(id),
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+-- Revision 0014_task_assignees: a snapshot of a *set*, ids ascending and comma
+-- separated. The old single-id column above stays exactly as written, because
+-- a recorded version is what this database can still show (D-097). SQLite's
+-- ALTER puts a new column after the last one and before the table constraint,
+-- which is why it reads here in that order.
+    assignee_ids TEXT,
     UNIQUE (task_id, version_number)
 );
 
 CREATE INDEX idx_tasks_opportunity ON tasks (opportunity_id, due_date, id);
 
 CREATE INDEX idx_tasks_assignee ON tasks (assignee_id, completed_at, due_date, id);
+
+-- Revision 0012_attachments (milestone 4.3): the documents a deal turns on.
+-- `sha256` is the file's address on disk (ADR 0008), not a checksum beside a
+-- path, and `entry_id` is a key rather than ADR 0008's entity_type/entity_id
+-- pair (D-148).
+CREATE TABLE attachments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entry_id INTEGER NOT NULL REFERENCES timeline_entries(id),
+    sha256 TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    content_type TEXT NOT NULL,
+    byte_size INTEGER NOT NULL,
+    uploaded_by INTEGER NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    deleted_at TEXT
+);
+
+CREATE INDEX idx_attachments_entry ON attachments (entry_id, created_at, id);
+
+-- Revision 0013_task_comments (milestone 4.5): the discussion a task provokes.
+-- Flat and chronological rather than threaded (D-162), and immutable like
+-- every other comment here, so there is no `updated_at` and no version table.
+CREATE TABLE task_comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL REFERENCES tasks(id),
+    body TEXT NOT NULL,
+    created_by INTEGER NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    deleted_at TEXT
+);
+
+CREATE INDEX idx_task_comments_task ON task_comments (task_id, created_at, id);
+
+-- Revision 0014_task_assignees (milestone 4.6): more than one person on a task.
+-- The join table is the truth; `tasks.assignee_id` stays unread until Phase 6
+-- drops it with `follow_up_date`, and `task_versions.assignee_ids` is how a
+-- snapshot records a set (ids ascending, comma separated).
+CREATE TABLE task_assignees (
+    task_id INTEGER NOT NULL REFERENCES tasks(id),
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    PRIMARY KEY (task_id, user_id)
+);
+
+CREATE INDEX idx_task_assignees_user ON task_assignees (user_id, task_id);
+
+-- Revision 0015_search_attachments (milestone 4.8): twelve triggers, and
+-- the encoding widened from `* 4` to `* 8` (D-167) so the index has room
+-- for four more kinds. Attachments are indexed by filename, as a title.
+CREATE TRIGGER attachments_search_delete AFTER DELETE ON attachments BEGIN
+    INSERT INTO search_index(search_index, rowid, title, body)
+    SELECT 'delete', old.id * 8 + 3, old.filename, ''
+    WHERE old.deleted_at IS NULL;
+END;
+
+CREATE TRIGGER attachments_search_insert AFTER INSERT ON attachments BEGIN
+    INSERT INTO search_index(rowid, title, body)
+    SELECT new.id * 8 + 3, new.filename, ''
+    WHERE new.deleted_at IS NULL;
+END;
+
+CREATE TRIGGER attachments_search_update AFTER UPDATE ON attachments BEGIN
+    INSERT INTO search_index(search_index, rowid, title, body)
+    SELECT 'delete', old.id * 8 + 3, old.filename, ''
+    WHERE old.deleted_at IS NULL;
+    INSERT INTO search_index(rowid, title, body)
+    SELECT new.id * 8 + 3, new.filename, ''
+    WHERE new.deleted_at IS NULL;
+END;
+
+CREATE TRIGGER comments_search_delete AFTER DELETE ON comments BEGIN
+    INSERT INTO search_index(search_index, rowid, title, body)
+    SELECT 'delete', old.id * 8 + 2, '', old.body
+    WHERE old.deleted_at IS NULL;
+END;
+
+CREATE TRIGGER comments_search_insert AFTER INSERT ON comments BEGIN
+    INSERT INTO search_index(rowid, title, body)
+    SELECT new.id * 8 + 2, '', new.body
+    WHERE new.deleted_at IS NULL;
+END;
+
+CREATE TRIGGER comments_search_update AFTER UPDATE ON comments BEGIN
+    INSERT INTO search_index(search_index, rowid, title, body)
+    SELECT 'delete', old.id * 8 + 2, '', old.body
+    WHERE old.deleted_at IS NULL;
+    INSERT INTO search_index(rowid, title, body)
+    SELECT new.id * 8 + 2, '', new.body
+    WHERE new.deleted_at IS NULL;
+END;
+
+CREATE TRIGGER notes_search_delete AFTER DELETE ON notes BEGIN
+    INSERT INTO search_index(search_index, rowid, title, body)
+    SELECT 'delete', old.id * 8 + 1, '', old.body
+    WHERE old.deleted_at IS NULL;
+END;
+
+CREATE TRIGGER notes_search_insert AFTER INSERT ON notes BEGIN
+    INSERT INTO search_index(rowid, title, body)
+    SELECT new.id * 8 + 1, '', new.body
+    WHERE new.deleted_at IS NULL;
+END;
+
+CREATE TRIGGER notes_search_update AFTER UPDATE ON notes BEGIN
+    INSERT INTO search_index(search_index, rowid, title, body)
+    SELECT 'delete', old.id * 8 + 1, '', old.body
+    WHERE old.deleted_at IS NULL;
+    INSERT INTO search_index(rowid, title, body)
+    SELECT new.id * 8 + 1, '', new.body
+    WHERE new.deleted_at IS NULL;
+END;
+
+CREATE TRIGGER timeline_entries_search_delete AFTER DELETE ON timeline_entries BEGIN
+    INSERT INTO search_index(search_index, rowid, title, body)
+    SELECT 'delete', old.id * 8 + 0, old.title, old.body
+    WHERE old.deleted_at IS NULL;
+END;
+
+CREATE TRIGGER timeline_entries_search_insert AFTER INSERT ON timeline_entries BEGIN
+    INSERT INTO search_index(rowid, title, body)
+    SELECT new.id * 8 + 0, new.title, new.body
+    WHERE new.deleted_at IS NULL;
+END;
+
+CREATE TRIGGER timeline_entries_search_update AFTER UPDATE ON timeline_entries BEGIN
+    INSERT INTO search_index(search_index, rowid, title, body)
+    SELECT 'delete', old.id * 8 + 0, old.title, old.body
+    WHERE old.deleted_at IS NULL;
+    INSERT INTO search_index(rowid, title, body)
+    SELECT new.id * 8 + 0, new.title, new.body
+    WHERE new.deleted_at IS NULL;
+END;

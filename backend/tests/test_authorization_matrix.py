@@ -79,6 +79,15 @@ class World:
     # distinction D-005's rule turns on.
     task_id: int
     deleted_task_id: int
+    # Milestone 4.3. Uploaded by the **owner**, so the editor's 403 on the
+    # delete is D-005's rule read against a file they did not upload.
+    attachment_id: int
+    deleted_attachment_id: int
+    # Milestone 4.5, on the owner's task and written by the owner, so the
+    # editor's 403 on the delete is D-005 read against a comment they did not
+    # write.
+    task_comment_id: int
+    deleted_task_comment_id: int
 
 
 @dataclass(frozen=True)
@@ -89,11 +98,17 @@ class Case:
     handful of surfaces that are deliberately identity-independent (health, the
     API 404 catch-all, the static frontend); there the assertion is that the
     response does not vary by caller, which is the property worth protecting.
+
+    `files` is the multipart alternative to `body`, for the one route in the app
+    that takes a file (milestone 4.3): the upload is a real multipart request
+    here rather than a JSON stand-in, because what the parser does with it is
+    part of what is being authorized.
     """
 
     expected: dict[Actor, int] | None
     url: Callable[[World], str]
     body: Callable[[World, Actor], Any] | None = None
+    files: Callable[[World, Actor], Any] | None = None
     same_for_everyone: bool = False
     notes: str = ""
 
@@ -395,6 +410,50 @@ MATRIX: dict[Endpoint, Case] = {
     Endpoint("POST", "/api/v2/tasks/{task_id}/restore"): Case(
         expected=scoped(viewer=403, editor=403, owner=204),
         url=lambda world: f"/api/v2/tasks/{world.deleted_task_id}/restore",
+        body=lambda world, actor: None,
+    ),
+    # --- A task's discussion (milestone 4.5) ----------------------------
+    # Writing one is adding, so it is the editors-may gate a note comment has;
+    # removing one is author-or-owner (D-005), and the matrix's comment is the
+    # owner's. There is no PATCH: a comment is immutable (invariant 2).
+    Endpoint("POST", "/api/v2/tasks/{task_id}/comments"): Case(
+        expected=scoped(viewer=403, editor=201, owner=201),
+        url=lambda world: f"/api/v2/tasks/{world.task_id}/comments",
+        body=lambda world, actor: {"body": f"Comment by {actor}"},
+    ),
+    Endpoint("DELETE", "/api/v2/task-comments/{comment_id}"): Case(
+        expected=scoped(viewer=403, editor=403, owner=204),
+        url=lambda world: f"/api/v2/task-comments/{world.task_comment_id}",
+    ),
+    Endpoint("POST", "/api/v2/task-comments/{comment_id}/restore"): Case(
+        expected=scoped(viewer=403, editor=403, owner=204),
+        url=lambda world: f"/api/v2/task-comments/{world.deleted_task_comment_id}/restore",
+        body=lambda world, actor: None,
+    ),
+    # --- Attachments (milestone 4.3) ------------------------------------
+    # Uploading is adding, so it is the gate a note already has: editors may,
+    # viewers may not. Downloading is a *read* of the opportunity, so a viewer
+    # may -- which is the roadmap's acceptance criterion for this phase, and
+    # the reason the file never leaves the volume any other way. Removing one
+    # is author-or-owner (D-005), and the matrix's attachment is the owner's.
+    Endpoint("POST", "/api/v2/timeline/{entry_id}/attachments"): Case(
+        expected=scoped(viewer=403, editor=201, owner=201),
+        url=lambda world: f"/api/v2/timeline/{world.entry_id}/attachments",
+        files=lambda world, actor: {
+            "file": (f"{actor}.txt", f"posted by {actor}".encode(), "text/plain")
+        },
+    ),
+    Endpoint("GET", "/api/v2/attachments/{attachment_id}/download"): Case(
+        expected=scoped(viewer=200, editor=200, owner=200),
+        url=lambda world: f"/api/v2/attachments/{world.attachment_id}/download",
+    ),
+    Endpoint("DELETE", "/api/v2/attachments/{attachment_id}"): Case(
+        expected=scoped(viewer=403, editor=403, owner=204),
+        url=lambda world: f"/api/v2/attachments/{world.attachment_id}",
+    ),
+    Endpoint("POST", "/api/v2/attachments/{attachment_id}/restore"): Case(
+        expected=scoped(viewer=403, editor=403, owner=204),
+        url=lambda world: f"/api/v2/attachments/{world.deleted_attachment_id}/restore",
         body=lambda world, actor: None,
     ),
     # Reactions (milestone 3.3a, D-130): any role that may write the timeline
@@ -822,13 +881,44 @@ def world(tmp_path, monkeypatch) -> World:
     # succeed while editing it must not.
     task_id = owner.post(
         f"/api/v2/opportunities/{opportunity_id}/tasks",
-        json={"title": "Matrix task", "assignee_email": emails["editor"]},
+        json={"title": "Matrix task", "assignee_emails": [emails["editor"]]},
     ).json()["id"]
     deleted_task_id = owner.post(
         f"/api/v2/opportunities/{opportunity_id}/tasks",
         json={"title": "Matrix deleted task"},
     ).json()["id"]
     assert owner.delete(f"/api/v2/tasks/{deleted_task_id}").status_code == 204
+
+    # Attachments (milestone 4.3), on the live entry above. `text/plain` has no
+    # magic bytes, so the fixture's file is validated by decoding -- the same
+    # path a real text attachment takes.
+    def attach(filename: str) -> int:
+        response = owner.post(
+            f"/api/v2/timeline/{entry_id}/attachments",
+            files={"file": (filename, b"matrix attachment", "text/plain")},
+        )
+        assert response.status_code == 201, response.json()
+        return int(response.json()["id"])
+
+    def task_comment(body: str) -> int:
+        response = owner.post(f"/api/v2/tasks/{task_id}/comments", json={"body": body})
+        assert response.status_code == 201, response.json()
+        return int(response.json()["id"])
+
+    task_comment_id = task_comment("Matrix task comment")
+    deleted_task_comment_id = task_comment("Matrix deleted task comment")
+    assert owner.delete(f"/api/v2/task-comments/{deleted_task_comment_id}").status_code == 204
+
+    attachment_id = attach("matrix.txt")
+    # A second file with *different* bytes, so deleting it cannot remove the
+    # live one's blob: identical content is one file on disk (ADR 0008).
+    deleted_attachment_response = owner.post(
+        f"/api/v2/timeline/{entry_id}/attachments",
+        files={"file": ("matrix-deleted.txt", b"matrix deleted attachment", "text/plain")},
+    )
+    assert deleted_attachment_response.status_code == 201
+    deleted_attachment_id = int(deleted_attachment_response.json()["id"])
+    assert owner.delete(f"/api/v2/attachments/{deleted_attachment_id}").status_code == 204
 
     yield World(
         clients=clients,
@@ -847,6 +937,10 @@ def world(tmp_path, monkeypatch) -> World:
         deleted_opportunity_id=deleted_opportunity_id,
         task_id=task_id,
         deleted_task_id=deleted_task_id,
+        attachment_id=attachment_id,
+        deleted_attachment_id=deleted_attachment_id,
+        task_comment_id=task_comment_id,
+        deleted_task_comment_id=deleted_task_comment_id,
     )
 
     for client in clients.values():
@@ -888,6 +982,8 @@ def test_authorization_matrix(endpoint: Endpoint, world: World) -> None:
             body = case.body(world, actor)
             if body is not None:
                 kwargs["json"] = body
+        if case.files is not None:
+            kwargs["files"] = case.files(world, actor)
 
         # The unauthorized cases never reach the renderer — require_opportunity_access
         # runs inside routes_export.get_export_data, so a missing native library

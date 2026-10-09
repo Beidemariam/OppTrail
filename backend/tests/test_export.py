@@ -118,7 +118,10 @@ def test_export_json_csv_and_pdf_for_owner(client: TestClient, monkeypatch) -> N
     titles = [entry["title"] for entry in data["entries"]]
     timestamps = [entry["event_timestamp"] for entry in data["entries"]]
     assert "Hidden call" not in titles
-    assert timestamps == sorted(timestamps)
+    # Newest first by default since milestone 4.4b: the export follows the
+    # timeline's own default reading order (D-137) rather than contradicting
+    # the screen it was exported from.
+    assert timestamps == sorted(timestamps, reverse=True)
     exported_later = next(entry for entry in data["entries"] if entry["id"] == later_entry["id"])
     assert exported_later["notes"][0]["id"] == note["id"]
     assert exported_later["notes"][0]["comments"][0]["id"] == comment["id"]
@@ -139,6 +142,57 @@ def test_export_json_csv_and_pdf_for_owner(client: TestClient, monkeypatch) -> N
     assert pdf_response.headers["content-type"].startswith("application/pdf")
     assert pdf_response.content.startswith(b"%PDF")
     assert earlier_entry["title"] in titles
+
+
+def test_the_export_reads_in_the_order_the_timeline_does(client: TestClient) -> None:
+    """Milestone 4.4b, from the human's note on check T6: *"the export comes in
+    reverse chronology than the timeline for which I chose descending ... make
+    it the same as the timeline view"*. The link carries the order the reader
+    is in; a bare link gets the timeline's default.
+    """
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    create_entry(client, opportunity["id"], "Later call", "2026-09-04T13:00:00")
+    create_entry(client, opportunity["id"], "Earlier call", "2026-09-01T09:00:00")
+
+    def titles(query: str) -> list[str]:
+        response = client.get(f"/api/v2/opportunities/{opportunity['id']}/export/json{query}")
+        assert response.status_code == 200
+        return [entry["title"] for entry in response.json()["entries"]]
+
+    newest_first = titles("")
+    oldest_first = titles("?order=asc")
+
+    assert newest_first.index("Later call") < newest_first.index("Earlier call")
+    assert oldest_first == list(reversed(newest_first))
+    # An order the API does not know is refused rather than guessed at.
+    assert (
+        client.get(
+            f"/api/v2/opportunities/{opportunity['id']}/export/json?order=sideways"
+        ).status_code
+        == 422
+    )
+
+
+def test_a_discussion_is_never_read_backwards(client: TestClient) -> None:
+    """Only the entries turn. A note's comments are a conversation, and the
+    reading order is a question about which event you meet first."""
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    entry = create_entry(client, opportunity["id"], "Discovery call", "2026-09-04T13:00:00")
+    note = client.post(f"/api/v2/timeline/{entry['id']}/notes", json={"body": "First note"}).json()
+    client.post(f"/api/v2/notes/{note['id']}/comments", json={"body": "First comment"})
+    client.post(f"/api/v2/notes/{note['id']}/comments", json={"body": "Second comment"})
+
+    exported = client.get(
+        f"/api/v2/opportunities/{opportunity['id']}/export/json?order=desc"
+    ).json()
+    # By title, not by position: newest-first puts the "Opportunity created"
+    # system entry first, which is exactly the assumption this change breaks.
+    discovery = next(item for item in exported["entries"] if item["title"] == "Discovery call")
+    comments = discovery["notes"][0]["comments"]
+
+    assert [item["body"] for item in comments] == ["First comment", "Second comment"]
 
 
 def test_shared_users_can_export_and_unshared_user_cannot(
@@ -196,7 +250,7 @@ def test_csv_export_neutralizes_spreadsheet_formulas(client: TestClient) -> None
             assert not (value or "").startswith(("=", "+", "@"))
 
 
-def test_pdf_html_renders_timeline_in_order_and_escapes_bodies(
+def test_pdf_html_renders_timeline_in_the_readers_order_and_escapes_bodies(
     client: TestClient,
 ) -> None:
     from app.export_service import fetch_export_data, render_export_html
@@ -214,7 +268,9 @@ def test_pdf_html_renders_timeline_in_order_and_escapes_bodies(
         data = fetch_export_data(connection, opportunity["id"])
     html = render_export_html(data)
 
-    assert html.index("First call") < html.index("Second call")
+    # Newest first, which is what the reader's timeline shows by default
+    # (milestone 4.4b).
+    assert html.index("Second call") < html.index("First call")
     assert "<script>alert(1)</script>" not in html
     assert "&lt;script&gt;" in html
     assert "Expansion" in html and "Acme" in html
@@ -289,6 +345,165 @@ def test_pdf_html_sanitizes_raw_html_even_if_the_markdown_parser_let_it_through(
 
     assert "<script>" not in html
     assert "ok" in html
+
+
+# --- The attachment manifest (milestone 4.4, `docs/FEATURES.md` §6) ---------
+
+
+def attach(client: TestClient, entry_id: int, filename: str, data: bytes) -> dict:
+    response = client.post(
+        f"/api/v2/timeline/{entry_id}/attachments",
+        files={"file": (filename, data, "application/pdf")},
+    )
+    assert response.status_code == 201, response.json()
+    return response.json()
+
+
+@pytest.mark.parametrize(
+    ("byte_size", "expected"),
+    [
+        (0, "0 bytes"),
+        (512, "512 bytes"),
+        (1024, "1.0 KB"),
+        (2_411_724, "2.3 MB"),
+        (10 * 1024 * 1024, "10.0 MB"),
+    ],
+)
+def test_a_file_size_reads_the_way_the_screen_reads_it(byte_size: int, expected: str) -> None:
+    """The same answers `lib/domain.ts`'s `formatBytes` gives, deliberately as a
+    second implementation: nothing travels between WeasyPrint and the browser
+    except `byte_size` itself, which is why the API sends a number."""
+    from app.export_service import format_byte_size
+
+    assert format_byte_size(byte_size) == expected
+
+
+def test_the_pdf_lists_each_file_under_its_own_entry(client: TestClient) -> None:
+    """§6: "Attachments appear in PDF export as a listed manifest with filename,
+    size and uploader -- **not** embedded, which would make exports unbounded."
+
+    Both halves are asserted, and so is the placement the human ruled for after
+    reading a real export (milestone 4.4a, overruling D-154): the file is under
+    the entry it belongs to, not in a section at the end.
+    """
+    from app.export_service import fetch_export_data, render_export_html
+
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    entry = create_entry(client, opportunity["id"], "Proposal sent", "2026-09-04T13:00:00")
+    contents = b"%PDF-1.7 " + b"x" * 3000
+    attach(client, entry["id"], "quarterly proposal.pdf", contents)
+
+    with db_connection() as connection:
+        data = fetch_export_data(connection, opportunity["id"])
+    html = render_export_html(data)
+
+    # The file is inside its entry's own article, which is what "next to its
+    # entry" means in a document with no columns to put it beside.
+    entry_html = html[html.index("Proposal sent") :]
+    listing = entry_html[entry_html.index('<ul class="files">') :]
+    assert "quarterly proposal.pdf" in listing
+    assert "2.9 KB" in listing
+    assert "Owner" in listing
+    # Nothing is left at the end of the document (4.4a removed that section).
+    assert '<section class="manifest">' not in html
+    # Not embedded: nothing of the file's own bytes reaches the document, which
+    # is the half of §6 that keeps an export's size bounded -- and the summary
+    # says so once, where a reader meets the document.
+    assert "xxxxxxxxxx" not in html
+    assert "1 attachments" in html
+    assert "are not included in this file" in html
+
+
+def test_the_manifest_is_absent_when_there_are_no_files(client: TestClient) -> None:
+    """A section announcing that there are no documents is the clutter the
+    Design bar rules out -- the same reason `TaskSummary` draws nothing when
+    nothing is due."""
+    from app.export_service import fetch_export_data, render_export_html
+
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    create_entry(client, opportunity["id"], "Discovery call", "2026-09-04T13:00:00")
+
+    with db_connection() as connection:
+        data = fetch_export_data(connection, opportunity["id"])
+    html = render_export_html(data)
+
+    assert '<ul class="files">' not in html
+    assert "0 attachments" in html
+    # And the sentence about files is absent too, because there are none to
+    # explain.
+    assert "are not included in this file" not in html
+
+
+def test_a_filename_cannot_carry_markup_into_the_export(client: TestClient) -> None:
+    """The filename is the one field in the manifest a person chose, and it
+    reaches the document as typed by design -- `uploads.safe_filename` strips
+    paths, not markup -- so escaping it here is the boundary.
+
+    The payload has no `/` in it on purpose. A tag with a closing half loses its
+    front to the path stripping (`</script>` contains a separator, so
+    `<script>alert(1)</script>.pdf` is *recorded* as `script>.pdf`), which is a
+    real property of that function and not the one this test is about.
+    """
+    from app.export_service import fetch_export_data, render_export_html
+
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    entry = create_entry(client, opportunity["id"], "Proposal sent", "2026-09-04T13:00:00")
+    attach(client, entry["id"], "<img src=x onerror=alert(1)>.pdf", b"%PDF-1.7 payload")
+
+    with db_connection() as connection:
+        data = fetch_export_data(connection, opportunity["id"])
+    html = render_export_html(data)
+
+    assert "<img src=x" not in html
+    assert "&lt;img src=x onerror=alert(1)&gt;.pdf" in html
+
+
+def test_the_csv_and_json_carry_the_files_too(client: TestClient) -> None:
+    """One read feeds all three formats (`fetch_export_data`), so leaving the
+    files out of two of them would make "export this deal" mean three different
+    things. The CSV's new columns are appended, so a reader of the old file
+    keeps every column where it was."""
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    entry = create_entry(client, opportunity["id"], "Proposal sent", "2026-09-04T13:00:00")
+    attachment = attach(client, entry["id"], "proposal.pdf", b"%PDF-1.7 payload")
+
+    exported = client.get(f"/api/v2/opportunities/{opportunity['id']}/export/json").json()
+    rows = list(
+        csv.DictReader(
+            StringIO(client.get(f"/api/v2/opportunities/{opportunity['id']}/export/csv").text)
+        )
+    )
+
+    entry_json = next(item for item in exported["entries"] if item["id"] == entry["id"])
+    assert [item["filename"] for item in entry_json["attachments"]] == ["proposal.pdf"]
+    assert entry_json["attachments"][0]["sha256"] == attachment["sha256"]
+
+    attachment_row = next(row for row in rows if row["row_type"] == "attachment")
+    assert attachment_row["filename"] == "proposal.pdf"
+    assert attachment_row["byte_size"] == str(attachment["byte_size"])
+    assert attachment_row["parent_entry_id"] == str(entry["id"])
+    assert attachment_row["author_name"] == "Owner"
+
+
+def test_a_deleted_file_is_not_in_the_export(client: TestClient) -> None:
+    """The export reads through the same helper the timeline does, so the
+    `deleted_at` filter is the same one -- this is what pins that, since a
+    second copy of the query is exactly where the filter goes missing."""
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    entry = create_entry(client, opportunity["id"], "Proposal sent", "2026-09-04T13:00:00")
+    kept = attach(client, entry["id"], "kept.pdf", b"%PDF-1.7 kept")
+    removed = attach(client, entry["id"], "removed.pdf", b"%PDF-1.7 removed")
+    assert client.delete(f"/api/v2/attachments/{removed['id']}").status_code == 204
+
+    exported = client.get(f"/api/v2/opportunities/{opportunity['id']}/export/json").json()
+    entry_json = next(item for item in exported["entries"] if item["id"] == entry["id"])
+
+    assert [item["id"] for item in entry_json["attachments"]] == [kept["id"]]
 
 
 def test_pdf_export_produces_a_real_pdf(client: TestClient) -> None:

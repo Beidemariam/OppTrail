@@ -90,11 +90,19 @@ export async function apiRequest<T>(
   options: RequestInit = {},
 ): Promise<T> {
   const method = (options.method ?? "GET").toUpperCase();
+  // One request in the app sends a file rather than JSON (milestone 4.3's
+  // upload). A multipart body carries a boundary the browser generates, so
+  // declaring the content type here would send a header that does not match
+  // the bytes and the server's parser would find no parts; `fetch` fills it in
+  // for a `FormData` body when it is left alone. Everything else is JSON, so
+  // the default stays the default.
+  const isFormData =
+    typeof FormData !== "undefined" && options.body instanceof FormData;
   const response = await fetch(path, {
     ...options,
     credentials: "include",
     headers: {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...(SAFE_METHODS.has(method) ? {} : { "X-CSRF-Token": csrfToken() }),
       ...(options.headers ?? {}),
     },

@@ -2,8 +2,16 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ALEX, BLAIR, aTask, anEntry, anOpportunity } from "./test-api";
+import {
+  ALEX,
+  BLAIR,
+  aTask,
+  aTaskComment,
+  anEntry,
+  anOpportunity,
+} from "./test-api";
 import { openTimeline, renderApp, renderDashboard } from "./test-app";
+import { writeInEditor } from "./test-editor";
 
 /**
  * Tasks on screen (milestone 4.1): the panel on a deal, My Tasks across deals,
@@ -100,7 +108,7 @@ describe("a deal's task panel", () => {
     await waitFor(() => expect(api.callsTo("POST", "/tasks")).toHaveLength(1));
     expect(api.callsTo("POST", "/tasks")[0].body).toMatchObject({
       title: "Call them back",
-      assignee_email: BLAIR.email,
+      assignee_emails: [BLAIR.email],
       due_date: isoDaysFromToday(3),
     });
     // Posting closes the composer, the way posting a note unmounts its editor.
@@ -173,7 +181,13 @@ describe("a deal's task panel", () => {
     await renderDashboard({
       opportunities: [anOpportunity({ current_user_role: "viewer" })],
       entries: [anEntry()],
-      tasks: [aTask({ id: 501, created_by: BLAIR.id, assignee_id: BLAIR.id })],
+      tasks: [
+        aTask({
+          id: 501,
+          created_by: BLAIR.id,
+          assignees: [{ user_id: BLAIR.id, name: BLAIR.name }],
+        }),
+      ],
     });
     await openTimeline("Northwind rollout");
     const panel = await waitFor(() => taskPanel());
@@ -245,8 +259,16 @@ describe("my tasks", () => {
         user: ALEX,
         opportunities: [anOpportunity()],
         tasks: [
-          aTask({ id: 501, title: "Mine", assignee_id: ALEX.id }),
-          aTask({ id: 502, title: "Blair's", assignee_id: BLAIR.id }),
+          aTask({
+            id: 501,
+            title: "Mine",
+            assignees: [{ user_id: ALEX.id, name: ALEX.name }],
+          }),
+          aTask({
+            id: 502,
+            title: "Blair's",
+            assignees: [{ user_id: BLAIR.id, name: BLAIR.name }],
+          }),
         ],
       },
       "/tasks",
@@ -393,6 +415,8 @@ describe("editing a task (milestone 4.2a)", () => {
 
     await userEvent.clear(title);
     await userEvent.type(title, "Call them today");
+    // Adding somebody rather than replacing them, which is what a multi-select
+    // does and what milestone 4.6 is for: the task was Alex's and is now both.
     await userEvent.selectOptions(
       within(taskPanel()).getByLabelText("Who this task is for"),
       BLAIR.email,
@@ -408,10 +432,44 @@ describe("editing a task (milestone 4.2a)", () => {
     await waitFor(() =>
       expect(api.callsTo("PATCH", "/api/v2/tasks/501")).toHaveLength(1),
     );
-    expect(api.callsTo("PATCH", "/api/v2/tasks/501")[0].body).toMatchObject({
+    const patched = api.callsTo("PATCH", "/api/v2/tasks/501")[0].body as {
+      assignee_emails: string[];
+    };
+    expect(patched).toMatchObject({
       title: "Call them today",
-      assignee_email: BLAIR.email,
       due_date: isoDaysFromToday(5),
+    });
+    expect([...patched.assignee_emails].sort()).toEqual(
+      [ALEX.email, BLAIR.email].sort(),
+    );
+  });
+
+  it("hands a task to nobody by taking everyone off the list", async () => {
+    // The other direction, which a multi-select needs a deliberate gesture
+    // for: `assignee_emails: []` is how the API is told to clear it, and
+    // leaving the key out would mean "leave it alone".
+    const api = await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [anEntry()],
+      tasks: [aTask({ id: 501 })],
+    });
+    await openTimeline("Northwind rollout");
+    const panel = await waitFor(() => taskPanel());
+    await userEvent.click(within(panel).getByRole("button", { name: "Edit" }));
+
+    await userEvent.deselectOptions(
+      within(taskPanel()).getByLabelText("Who this task is for"),
+      ALEX.email,
+    );
+    await userEvent.click(
+      within(taskPanel()).getByRole("button", { name: "Save Task" }),
+    );
+
+    await waitFor(() =>
+      expect(api.callsTo("PATCH", "/api/v2/tasks/501")).toHaveLength(1),
+    );
+    expect(api.callsTo("PATCH", "/api/v2/tasks/501")[0].body).toMatchObject({
+      assignee_emails: [],
     });
   });
 
@@ -624,5 +682,105 @@ describe("when a task read or write fails", () => {
     expect(
       await screen.findByText("Tasks are unavailable"),
     ).toBeInTheDocument();
+  });
+});
+
+describe("a task's discussion (milestone 4.5)", () => {
+  async function openPanelWith(
+    comments: ReturnType<typeof aTaskComment>[],
+    role: "owner" | "viewer" = "owner",
+  ) {
+    const api = await renderDashboard({
+      opportunities: [anOpportunity({ current_user_role: role })],
+      entries: [anEntry()],
+      tasks: [aTask({ comments })],
+    });
+    await openTimeline("Northwind rollout");
+    await screen.findByText("Send the revised pricing");
+    return api;
+  }
+
+  it("reads as a log: who said what, when, oldest first", async () => {
+    await openPanelWith([
+      aTaskComment({ id: 801, body: "Chased them, no answer." }),
+      aTaskComment({
+        id: 802,
+        body: "Moved to **Thursday**",
+        created_by: BLAIR.id,
+        author_name: BLAIR.name,
+      }),
+    ]);
+
+    const discussion = taskPanel().querySelector(
+      ".task-discussion",
+    ) as HTMLElement;
+    const lines = within(discussion).getAllByRole("listitem");
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toHaveTextContent("Chased them, no answer.");
+    expect(lines[1]).toHaveTextContent(BLAIR.name);
+    // Markdown, like every other body in this app.
+    expect(within(discussion).getByText("Thursday").tagName).toBe("STRONG");
+  });
+
+  it("writes one through the collapsed composer", async () => {
+    const api = await openPanelWith([]);
+
+    await userEvent.click(
+      within(taskPanel()).getByRole("button", { name: "Comment" }),
+    );
+    writeInEditor(
+      screen.getByRole("textbox", { name: "Comment on this task" }),
+      "Left a voicemail",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Add Comment" }));
+
+    await waitFor(() =>
+      expect(
+        api.calls.some((call) => call.path === "/api/v2/tasks/500/comments"),
+      ).toBe(true),
+    );
+    expect(await screen.findByText("Left a voicemail")).toBeInTheDocument();
+  });
+
+  it("offers Delete and no edit at all, because a comment is immutable", async () => {
+    // `AGENTS.md` invariant 2, read against the second kind of comment: the
+    // API has no edit route, so the screen offers no edit control.
+    await openPanelWith([aTaskComment({ body: "Chased them" })]);
+
+    const comment = screen
+      .getByText("Chased them")
+      .closest(".task-comment") as HTMLElement;
+    expect(
+      within(comment).getByRole("button", { name: "Delete" }),
+    ).toBeInTheDocument();
+    expect(
+      within(comment).queryByRole("button", { name: "Edit" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("deletes with Undo rather than a confirmation", async () => {
+    await openPanelWith([aTaskComment({ body: "Wrong task" })]);
+    const comment = screen
+      .getByText("Wrong task")
+      .closest(".task-comment") as HTMLElement;
+
+    await userEvent.click(
+      within(comment).getByRole("button", { name: "Delete" }),
+    );
+
+    await waitFor(() =>
+      expect(screen.queryByText("Wrong task")).not.toBeInTheDocument(),
+    );
+    await userEvent.click(await screen.findByRole("button", { name: "Undo" }));
+    expect(await screen.findByText("Wrong task")).toBeInTheDocument();
+  });
+
+  it("lets a viewer read the discussion and not add to it", async () => {
+    await openPanelWith([aTaskComment({ body: "Chased them" })], "viewer");
+
+    expect(screen.getByText("Chased them")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Comment" }),
+    ).not.toBeInTheDocument();
   });
 });

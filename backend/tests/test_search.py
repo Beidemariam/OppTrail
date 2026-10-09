@@ -149,12 +149,14 @@ def test_writes_are_indexed_under_the_documented_rowid(client: TestClient) -> No
     entry = create_entry(client, opportunity["id"])
     note = create_note(client, entry["id"], "Legal has questions about procurement")
     comment = create_comment(client, note["id"], "Procurement replied")
+    attachment = attach(client, entry["id"], "procurement schedule.pdf")
 
     assert indexed_document_ids() == sorted(
         [
             document_id("entry", entry["id"]),
             document_id("note", note["id"]),
             document_id("comment", comment["id"]),
+            document_id("attachment", attachment["id"]),
         ]
     )
 
@@ -607,10 +609,11 @@ def test_search_reads_the_index_and_never_scans_a_source_table(client: TestClien
     )
     plan = query_plan(sql, ('"procurement"*', 1, 1, 51))
 
-    # The index drives the query: three MATCH scans, one per document kind.
-    assert sum("search_index VIRTUAL TABLE" in step for step in plan) == 3
+    # The index drives the query: one MATCH scan per document kind, four of
+    # them since milestone 4.8 added attachments.
+    assert sum("search_index VIRTUAL TABLE" in step for step in plan) == 4
     # And every match is resolved by rowid, so no source table is read whole.
-    for table in ("timeline_entries", "notes", "comments"):
+    for table in ("timeline_entries", "notes", "comments", "attachments"):
         assert f"SCAN {table}" not in plan
         assert any(step.startswith(f"SEARCH {table} USING INTEGER PRIMARY KEY") for step in plan), (
             f"{table} is not reached by rowid: {plan}"
@@ -784,3 +787,81 @@ def test_upgrading_an_mvp_database_indexes_the_rows_it_already_has(
 
     assert indexed_document_ids('"budget"*') == [document_id("entry", 1)]
     assert indexed_document_ids('"agreed"*') == [document_id("comment", 1)]
+
+
+# --- Files, found by name (milestone 4.8, D-159 ruled "now") ---------------
+
+
+def attach(client: TestClient, entry_id: int, filename: str) -> dict:
+    response = client.post(
+        f"/api/v2/timeline/{entry_id}/attachments",
+        files={"file": (filename, b"%PDF-1.7 contents", "application/pdf")},
+    )
+    assert response.status_code == 201, response.json()
+    return response.json()
+
+
+def test_a_file_is_found_by_its_name_and_lands_on_its_entry(client: TestClient) -> None:
+    """The filename is the only text a file has here -- nothing reads what is
+    inside one (D-158) -- so it is indexed as the document's title, and the
+    result points at the entry the file hangs off rather than at the deal."""
+    signup(client)
+    opportunity = create_opportunity(client)
+    entry = create_entry(client, opportunity["id"])
+    attachment = attach(client, entry["id"], "Northwind procurement schedule.pdf")
+
+    results = client.get("/api/v2/search?q=procurement").json()["items"]
+    found = next(item for item in results if item["kind"] == "attachment")
+
+    assert found["id"] == attachment["id"]
+    assert found["title"] == "Northwind procurement schedule.pdf"
+    assert found["entry_id"] == entry["id"]
+    assert found["opportunity_id"] == opportunity["id"]
+    # The snippet falls back to the title, because the whole document is the
+    # name, and the match is marked inside it like any other.
+    assert "procurement" in found["snippet"]["text"].lower()
+    assert found["snippet"]["matches"]
+
+
+def test_a_deleted_file_leaves_the_index(client: TestClient) -> None:
+    signup(client)
+    opportunity = create_opportunity(client)
+    entry = create_entry(client, opportunity["id"])
+    attachment = attach(client, entry["id"], "Northwind procurement schedule.pdf")
+
+    assert client.delete(f"/api/v2/attachments/{attachment['id']}").status_code == 204
+    after_delete = client.get("/api/v2/search?q=procurement").json()["items"]
+
+    assert client.post(f"/api/v2/attachments/{attachment['id']}/restore").status_code == 204
+    after_restore = client.get("/api/v2/search?q=procurement").json()["items"]
+
+    assert not [item for item in after_delete if item["kind"] == "attachment"]
+    assert [item for item in after_restore if item["kind"] == "attachment"]
+
+
+def test_a_file_on_someone_elses_deal_is_not_findable(client: TestClient) -> None:
+    """The permission filter is inside the query for every kind
+    (`ACCESSIBLE_OPPORTUNITY_IDS_SQL`), and a fourth kind is a fourth chance to
+    forget it."""
+    signup(client, "owner@example.com", "Owner")
+    opportunity = create_opportunity(client)
+    entry = create_entry(client, opportunity["id"])
+    attach(client, entry["id"], "Northwind procurement schedule.pdf")
+    assert client.post("/api/v2/auth/logout").status_code == 200
+    signup(client, "outsider@example.com", "Outsider")
+
+    results = client.get("/api/v2/search?q=procurement").json()["items"]
+
+    assert results == []
+
+
+def test_the_widened_encoding_leaves_room(client: TestClient) -> None:
+    """**D-167**: the 1.4 review's note asked the milestone that needed a
+    fourth kind to widen the base rather than spend the last code. Asserted
+    rather than commented, because the next person to add a kind will read
+    this before they read the note."""
+    from app.search import DOCUMENT_BASE, KIND_CODES
+
+    assert DOCUMENT_BASE == 8
+    assert max(KIND_CODES.values()) == 3
+    assert DOCUMENT_BASE - len(KIND_CODES) == 4

@@ -254,6 +254,7 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
           <TimelineHeading
             opportunity={opportunity}
             canManage={access.canManage}
+            order={filters.order}
             onRefresh={() => void timeline.refetch()}
           />
 
@@ -285,10 +286,14 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
 function TimelineHeading({
   opportunity,
   canManage,
+  order,
   onRefresh,
 }: {
   opportunity: Opportunity;
   canManage: boolean;
+  /** The timeline's own reading order, passed to the export so the document
+   * runs the way this screen does (milestone 4.4b). */
+  order: TimelineFilters["order"];
   onRefresh: () => void;
 }) {
   const save = useOpportunityFieldSave();
@@ -332,7 +337,7 @@ function TimelineHeading({
         </p>
       </div>
       <div className="export-actions">
-        <ExportControl opportunityId={opportunity.id} />
+        <ExportControl opportunityId={opportunity.id} order={order} />
         {/* One destination for what happened here, offered to every role:
             the log answers with the events the reader's role may see rather
             than refusing them, and an edit row opens to the field-by-field
@@ -359,7 +364,13 @@ const exportFormats: ExportFormat[] = ["pdf", "csv", "json"];
  * names the format it will download, so picking one is visible without a
  * second label.
  */
-function ExportControl({ opportunityId }: { opportunityId: number }) {
+function ExportControl({
+  opportunityId,
+  order,
+}: {
+  opportunityId: number;
+  order: TimelineFilters["order"];
+}) {
   const [format, setFormat] = useState<ExportFormat>("pdf");
   return (
     <>
@@ -376,7 +387,7 @@ function ExportControl({ opportunityId }: { opportunityId: number }) {
       </select>
       <a
         className="secondary-button"
-        href={`/api/v2/opportunities/${opportunityId}/export/${format}`}
+        href={`/api/v2/opportunities/${opportunityId}/export/${format}?order=${order}`}
       >
         Export {format.toUpperCase()}
       </a>
