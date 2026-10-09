@@ -235,13 +235,60 @@ yours to run (`scripts/autopilot-gate.sh 4`).
 
 ## 6. Out-of-scope items noticed, logged not built
 
-- Comments on a task and multiple assignees (D-146) — asked for, deferred.
-- Searchable attachment filenames (D-152), which would widen ADR 0007's rowid
-  encoding. The fourth slot is still free.
-- Live `?entry=` links in the AI's answers, which `PROGRESS.md` has carried
-  since 3.9 and which needs a real model call to verify rather than a mocked one.
+This section was written before the review and **three of its four items were
+then built**, because the human ruled against each deferral. Kept as written,
+with the outcomes, because a review packet that quietly rewrites its own
+recommendations is not a record of anything.
+
+- ~~Comments on a task and multiple assignees (D-146) — asked for,
+  deferred.~~ **Overruled: *"build both"*.** Shipped as milestones 4.5 and
+  4.6 (D-162, D-163). This was the second time a reading of mine in the
+  D-005 family was overruled in the stricter direction.
+- ~~Searchable attachment filenames (D-152), which would widen ADR 0007's
+  rowid encoding. The fourth slot is still free.~~ **Overruled: *"now"*.**
+  Shipped as milestone 4.8, and it widened the encoding from `* 4` to `* 8`
+  rather than spending the last slot (D-167) — the action the 1.4 review's
+  own note asked the first milestone needing a fourth kind to take.
+- ~~Live `?entry=` links in the AI's answers.~~ Still not built, and still
+  the right call: it needs a real model call to verify. What the review *did*
+  settle is the adjacent half — labelling, built as 4.7 on the human's
+  *"build now"* (D-166), then demonstrated against a real model in T9/T10.
 - A request-size middleware (D-153), which belongs beside the other request
-  controls in `security.py` rather than inside a feature.
+  controls in `security.py` rather than inside a feature. **Still open.**
+
+Two items were added by the review itself rather than carried into it:
+**milestone 6.0** (a search result should open the entry, note or comment it
+matched, not just the deal — the human's own request, scheduled for all four
+kinds at once) and the AI's answer-streaming question, left as a note rather
+than a milestone.
+
+## 6a. Verdict
+
+**Accepted** by the human on 2026-10-09, after ten of ten manual checks
+passed.
+
+The phase took two defect reports from the human during review, both found by
+using the app rather than by reading about it, and both invisible to a green
+suite:
+
+1. A refused upload answered `"code": "internal_error"` (D-160) — twenty tests
+   checked the status and the sentence, none the code.
+2. **The AI had never worked at all** with the configured model (D-168):
+   a 20.0s timeout against a reasoning model with a ~29s floor latency, so
+   every call failed three times and 502'd. Nineteen AI tests passed
+   throughout, because every one of them stubs the SDK and the defect lived
+   in a default. Fixed as milestone 4.9, with guards that assert on the
+   serialized request body and on the default itself.
+
+Two review observations became small milestones of their own: 4.3a (attaching
+belongs in the composer, where the file is already to hand) and 4.9a (the
+model must *say* it cannot read a file, not merely refrain from pretending
+it did — D-169).
+
+And two fixes came out of gating the accepted work, neither belonging to a
+milestone: a test that depended on the whole test body running inside one
+second, and `data/` — the container's volume — not being ignored, because
+ADR 0008's attachment blobs carry no extension for a pattern to match.
 
 ---
 
