@@ -75,6 +75,7 @@ describe("the six aggregations on screen", () => {
     });
 
     expect(within(card).getByText("12.5 days")).toBeInTheDocument();
+    expect(within(card).getByText("8 days")).toBeInTheDocument();
     expect(within(card).getAllByText("Not yet measured").length).toBe(5);
     expect(
       within(card).getByText(/Measured from stage changes recorded since/),

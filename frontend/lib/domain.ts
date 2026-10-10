@@ -1288,3 +1288,24 @@ export function weekLabel(week: string): string {
   const [year, index] = week.split("-");
   return index ? `${year}-W${index}` : week;
 }
+
+/**
+ * An average stage duration as a person reads it.
+ *
+ * Three answers, and the distinction between the first two is §10's whole
+ * point: `null` means *nothing has been measured* ("earlier history is absent
+ * and should be labelled as such rather than silently shown as zero"), while
+ * `0` means it **was** measured and the deal moved on the same day. Printing
+ * "0 days" for both would collapse exactly the difference the spec asks to be
+ * kept — so an absence says so, and a real sub-day span says that instead of
+ * a number that reads as nothing.
+ */
+export function stageDurationText(averageDays: number | null): string {
+  if (averageDays === null) {
+    return "Not yet measured";
+  }
+  if (averageDays < 1) {
+    return "Less than a day";
+  }
+  return `${averageDays} ${averageDays === 1 ? "day" : "days"}`;
+}

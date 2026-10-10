@@ -7,6 +7,7 @@ import {
   activityByRep,
   activityWeeks,
   formatMoney,
+  stageDurationText,
   weekLabel,
   winRatePercent,
   type Dashboard,
@@ -271,11 +272,7 @@ function Reports({ data }: { data: Dashboard }) {
           {data.time_in_stage.stages.map((stage) => (
             <li key={stage.stage}>
               <span>{stage.stage}</span>
-              <span>
-                {stage.average_days === null
-                  ? "Not yet measured"
-                  : `${stage.average_days} days`}
-              </span>
+              <span>{stageDurationText(stage.average_days)}</span>
               <span>
                 {stage.spans === 0
                   ? ""

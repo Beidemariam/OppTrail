@@ -22,6 +22,7 @@ import {
   linkTargetFromParams,
   matchesCustomFilters,
   searchResultHref,
+  stageDurationText,
   weekLabel,
   winRatePercent,
   type CustomField,
@@ -840,5 +841,19 @@ describe("the dashboard's reading helpers (milestone 6.2)", () => {
     // -week convention this app has no reason to have.
     expect(weekLabel("2026-40")).toBe("2026-W40");
     expect(weekLabel("nonsense")).toBe("nonsense");
+  });
+});
+
+describe("an average stage duration (milestone 6.2)", () => {
+  it("keeps 'never measured' and 'measured as same-day' apart", () => {
+    // §10's point is this exact distinction. Printing "0 days" for both
+    // collapses it -- and a real sub-day span is not nothing, which is what a
+    // bare 0 reads as. Found by running the metric against the human's own
+    // data, where a deal moved stage twice in one day.
+    expect(stageDurationText(null)).toBe("Not yet measured");
+    expect(stageDurationText(0)).toBe("Less than a day");
+    expect(stageDurationText(0.4)).toBe("Less than a day");
+    expect(stageDurationText(1)).toBe("1 day");
+    expect(stageDurationText(12.5)).toBe("12.5 days");
   });
 });

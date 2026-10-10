@@ -76,9 +76,15 @@ test("an unmeasured stage is labelled, never drawn as zero", async ({
 
   const card = page.getByRole("region", { name: "Average time in stage" });
   await expect(card).toBeVisible();
+  // Never "0 days": an unmeasured stage says so, and a genuinely same-day
+  // span says "Less than a day" -- which is a different fact, and the
+  // distinction §10 asks to be kept. The first version of this assertion
+  // forbade "0 days" and would have passed for the wrong reason, because the
+  // seeded data happens to have no sub-day span; the human's own data does.
   await expect(card.getByText("0 days")).toHaveCount(0);
+  await expect(card.getByText("Not yet measured").first()).toBeVisible();
   // Either it has measured something and says since when, or it says it has
-  // measured nothing. Never a bare zero.
+  // measured nothing.
   await expect(card).toContainText(
     /Measured from stage changes recorded since|No stage change has been recorded yet/,
   );
