@@ -2,7 +2,14 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ALEX, BLAIR, anEntry, anOpportunity } from "./test-api";
+import {
+  ALEX,
+  BLAIR,
+  aComment,
+  aNote,
+  anEntry,
+  anOpportunity,
+} from "./test-api";
 import {
   acceptConfirmation,
   cancelConfirmation,
@@ -1853,6 +1860,91 @@ describe("two view states in one URL (milestone 2.2)", () => {
 });
 
 describe("notifications", () => {
+  it("follows a notification to the row it is about (milestone 6.1a)", async () => {
+    // The human's ruling. Until this the panel rendered no anchor at all, so
+    // "you were mentioned in a comment" left the reader to go and find it.
+    const api = await renderDashboard({
+      opportunities: [anOpportunity({ id: 10, name: "Northwind rollout" })],
+      entries: [
+        anEntry({
+          id: 100,
+          title: "Security review",
+          notes: [aNote({ id: 200, comments: [aComment({ id: 300 })] })],
+        }),
+      ],
+      notifications: [
+        {
+          id: 1,
+          type: "mention",
+          payload: {
+            opportunity_id: 10,
+            source_type: "comment",
+            source_id: 300,
+            actor_id: 2,
+            email: "alex@example.com",
+          },
+          read_at: null,
+          created_at: "2026-09-03T09:00:00Z",
+        },
+      ],
+    });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /Notifications/ }),
+    );
+    await userEvent.click(
+      await screen.findByRole("link", {
+        name: "You were mentioned in a timeline update.",
+      }),
+    );
+
+    // It lands on the comment, marked -- 6.0's mechanism, not a second one.
+    await waitFor(() =>
+      expect(document.querySelector(".comment-row.is-linked")).not.toBeNull(),
+    );
+    // Clicking through is reading it.
+    await waitFor(() =>
+      expect(api.callsTo("PATCH", "/api/v2/notifications/1/read")).toHaveLength(
+        1,
+      ),
+    );
+    // And the panel closes, rather than covering the row it just opened.
+    expect(
+      screen.queryByText("You were mentioned in a timeline update."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers no link when access was just removed", async () => {
+    // The reader cannot open what it is about, so a link would be a 404.
+    await renderDashboard({
+      notifications: [
+        {
+          id: 2,
+          type: "share_removed",
+          payload: { opportunity_id: 10, actor_id: 2, role: "viewer" },
+          read_at: null,
+          created_at: "2026-09-03T09:00:00Z",
+        },
+      ],
+    });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /Notifications/ }),
+    );
+    expect(
+      await screen.findByText("Your opportunity access was removed."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", {
+        name: "Your opportunity access was removed.",
+      }),
+    ).not.toBeInTheDocument();
+    // Still markable, which is why the button is not replaced by the link.
+    expect(
+      screen.getByRole("button", { name: "Mark read" }),
+    ).toBeInTheDocument();
+  });
+
   it("lists unread notifications and marks one read without losing it from history", async () => {
     const api = await renderDashboard({
       notifications: [

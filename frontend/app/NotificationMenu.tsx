@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Link } from "react-router";
 
 import { notificationTypeOptions, type NotificationType } from "../lib/domain";
 import {
@@ -8,13 +9,23 @@ import {
   useMarkNotificationRead,
   useNotifications,
 } from "../lib/queries";
-import { notificationText } from "../lib/notifications";
+import { notificationHref, notificationText } from "../lib/notifications";
 import { formatTimestamp } from "../lib/time";
 
 /**
  * The inbox from milestone 1.7: full history rather than unread-only, read
  * from `GET /api/v2/notifications` and marked read through v1's per-row PATCH
  * (`CLAUDE.md`, "Notifications").
+ *
+ * **Each line is a link since milestone 6.1a**, on the human's ruling. Until
+ * then the panel rendered no anchor at all, so being told somebody mentioned
+ * you in a comment left you to go and find it — the same failure milestone 6.0
+ * removed from search results, and reusing that mechanism rather than a second
+ * one (`lib/notifications.ts`'s `notificationHref`). Following a line marks it
+ * read and closes the panel: clicking through *is* reading it, and a panel left
+ * open would cover the row it just sent the reader to. The explicit Mark read
+ * button stays for the notifications that lead nowhere and for a reader
+ * clearing the list without visiting anything.
  */
 export function NotificationMenu() {
   const [open, setOpen] = useState(false);
@@ -95,30 +106,48 @@ export function NotificationMenu() {
             </p>
           ) : (
             <div className="notification-list">
-              {visible.map((notification) => (
-                <article
-                  className={
-                    notification.read_at
-                      ? "notification-row is-read"
-                      : "notification-row"
-                  }
-                  key={notification.id}
-                >
-                  <div>
-                    <strong>{notificationText(notification)}</strong>
-                    <span>{formatTimestamp(notification.created_at)}</span>
-                  </div>
-                  {!notification.read_at && (
-                    <button
-                      type="button"
-                      className="secondary-button compact-button"
-                      onClick={() => markRead.mutate(notification.id)}
-                    >
-                      Mark read
-                    </button>
-                  )}
-                </article>
-              ))}
+              {visible.map((notification) => {
+                const href = notificationHref(notification);
+                return (
+                  <article
+                    className={
+                      notification.read_at
+                        ? "notification-row is-read"
+                        : "notification-row"
+                    }
+                    key={notification.id}
+                  >
+                    <div>
+                      {href ? (
+                        <Link
+                          className="notification-link"
+                          to={href}
+                          onClick={() => {
+                            if (!notification.read_at) {
+                              markRead.mutate(notification.id);
+                            }
+                            setOpen(false);
+                          }}
+                        >
+                          {notificationText(notification)}
+                        </Link>
+                      ) : (
+                        <strong>{notificationText(notification)}</strong>
+                      )}
+                      <span>{formatTimestamp(notification.created_at)}</span>
+                    </div>
+                    {!notification.read_at && (
+                      <button
+                        type="button"
+                        className="secondary-button compact-button"
+                        onClick={() => markRead.mutate(notification.id)}
+                      >
+                        Mark read
+                      </button>
+                    )}
+                  </article>
+                );
+              })}
             </div>
           )}
         </div>

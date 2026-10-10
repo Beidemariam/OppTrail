@@ -911,3 +911,31 @@ ruling:
   without it, including the ones that have no custom fields on them at all.
   It is the same reasoning ADR 0006 applies to archiving: a definition change
   must not invalidate rows already written.
+
+### The human's ruling on D-171 (2026-10-10)
+
+**Accepted as built, and deferred rather than declined:** *"no admin role
+needed for now but put it as a requirement for V3."*
+
+So any authenticated caller continues to define, rename and archive custom
+fields in v2, and `docs/ROADMAP.md`'s v3 table now carries **an admin role**
+as a requirement rather than as a possibility. Three things that makes true:
+
+- **The current rule is a recorded decision, not an oversight.** It was
+  flagged `needs human review: Y` precisely because it is the widest write
+  surface in the product, and it has now been read and kept.
+- **v3's admin role has a concrete job list**, which is what stops it being
+  an abstraction nobody can scope: custom field definitions (6.1), automation
+  rules (6.3 — the first thing here that writes with nobody clicking), and
+  administering email ingestion. That is three callers, all of them global
+  rather than opportunity-scoped, which is exactly the gap the three existing
+  roles cannot fill.
+- **Nothing has to be backfilled.** Every definition already records
+  `created_by`, so the gate is a flag and a dependency, and
+  `test_authorization_matrix.py`'s rows for the five field routes are what
+  will fail loudly the moment somebody narrows the rule — which is the point
+  of having written them out per actor.
+
+**Also ruled: build the notification link** (*"include link in notification"*).
+Logged as an observation at 6.0 and not built because that milestone's scope
+was search results; it is **milestone 6.1a**, below.

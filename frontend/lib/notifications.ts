@@ -54,3 +54,47 @@ export function notificationText(notification: AppNotification): string {
   }
   return "New notification.";
 }
+
+/**
+ * Where a notification leads, or `null` when it leads nowhere useful.
+ *
+ * Milestone 6.1a, on the human's ruling (*"include link in notification"*).
+ * Until this, the inbox rendered no anchor at all: being told somebody
+ * mentioned you in a comment left you to go and find it, which is the same
+ * "depth reads as absence" failure (D-136) that milestone 6.0 removed from
+ * search results one screen over. It reuses 6.0's mechanism exactly rather
+ * than inventing a second one — `?entry=`, `?note=` and `?comment=` already
+ * scroll a row into view and mark it (`lib/domain.ts`'s `LinkTarget`).
+ *
+ * Three shapes, decided by what the payload actually knows:
+ *
+ * - **A mention, a comment or shared activity** carries `source_type` and
+ *   `source_id`, so it addresses the row itself. An `attachment` source
+ *   resolves to the deal rather than to the file: a notification payload does
+ *   not carry the entry an attachment hangs off, and inventing a lookup to
+ *   find it is a request the inbox should not be making.
+ * - **A task** carries `task_id`, and a task is read in its deal's sidebar
+ *   panel, so the link opens the deal. `/tasks` is the cross-deal list and is
+ *   not where a notification about one deal's task should land.
+ * - **An access change** is about the record, so it opens the record. A
+ *   `share_removed` is the one notification that deliberately leads nowhere:
+ *   the reader can no longer open what it is about, and a link to a 404 is
+ *   worse than no link.
+ */
+export function notificationHref(notification: AppNotification): string | null {
+  const payload = notification.payload;
+  if (!("opportunity_id" in payload)) {
+    return null;
+  }
+  const deal = `/opportunities/${payload.opportunity_id}`;
+
+  if (notification.type === "share_removed") {
+    return null;
+  }
+  if ("source_type" in payload && "source_id" in payload) {
+    return payload.source_type === "attachment"
+      ? deal
+      : `${deal}?${payload.source_type}=${payload.source_id}`;
+  }
+  return deal;
+}

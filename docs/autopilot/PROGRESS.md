@@ -5384,6 +5384,36 @@ settled.
         checkbox did not change its state": ticking a column re-renders the
         panel, and Playwright re-reads the element to confirm. `.click()`,
         which is the trap `e2e/24-tasks.spec.ts` already records.
+- [x] 6.1a **A notification is a link** (the human's ruling, *"include link
+      in notification"*).
+
+      Raised as an observation at 6.0 and not built because that milestone's
+      scope was search results: `app/NotificationMenu.tsx` rendered no anchor
+      at all, so "you were mentioned in a comment" left the reader to go and
+      find it — a larger instance of D-136's *"depth reads as absence"* than
+      the one 6.0 fixed.
+
+      **It reuses 6.0's mechanism rather than inventing a second one.**
+      `lib/notifications.ts`'s `notificationHref` resolves a payload to the
+      same `?entry=` / `?note=` / `?comment=` a search result writes, so the
+      row scrolls into view and is marked by the code that already does that.
+      Three shapes, decided by what each payload actually knows:
+
+      - A **mention, comment or shared activity** carries `source_type` and
+        `source_id`, so it addresses the row. An `attachment` source resolves
+        to the deal instead: the payload does not carry the entry a file hangs
+        off, and the inbox should not be issuing a lookup to find out.
+      - A **task** notification opens the deal, because a task is read in
+        that deal's sidebar panel; `/tasks` is the cross-deal list and is not
+        where a notification about one deal belongs.
+      - **`share_removed` leads nowhere on purpose.** The reader can no longer
+        open what it is about, and a link to a 404 is worse than no link — so
+        that line stays plain text with its Mark read button.
+
+      Following a line **marks it read and closes the panel**: clicking
+      through is reading it, and a panel left open covers the row it just sent
+      the reader to.
+
 - [ ] 6.2 Six live-computed dashboard aggregations — no rollup tables
       (pipeline, win/loss, time in stage, stalled, activity, forecast per
       `FEATURES.md` §10); index on `(created_by, created_at)` for

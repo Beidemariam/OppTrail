@@ -2071,6 +2071,25 @@ a.danger-button {
   outline-offset: 4px;
 }
 
+/* A notification line is a link (milestone 6.1a). Styled as the strong text
+   it replaced rather than as a body link: the whole row already reads as one
+   item, and an underlined sentence per row turns the inbox into a list of
+   links rather than a list of events. */
+.notification-link {
+  color: var(--text-primary);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.notification-link:hover {
+  text-decoration: underline;
+}
+
+.notification-link:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 /* Custom fields (milestone 6.1). The inputs reuse the form's own field
    styling; what needs declaring is the fieldset that groups them, the
    definition list in the manage dialog, and the heading a custom table column

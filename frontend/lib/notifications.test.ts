@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { notificationText } from "./notifications";
+import { notificationHref, notificationText } from "./notifications";
 
 type Notification = Parameters<typeof notificationText>[0];
 
@@ -73,5 +73,106 @@ describe("the two notifications a task sends", () => {
   ])("falls back when a %s carries no title", (type, expected) => {
     expect(notificationText(notification(type, {}))).toBe(expected);
     expect(notificationText(notification(type, { title: "" }))).toBe(expected);
+  });
+});
+
+describe("where a notification leads (milestone 6.1a)", () => {
+  it("addresses the row a mention or comment is on", () => {
+    // 6.0's mechanism, reused rather than reinvented: these are the same
+    // parameters a search result writes.
+    expect(
+      notificationHref(
+        notification("mention", {
+          opportunity_id: 3,
+          source_type: "comment",
+          source_id: 42,
+          actor_id: 2,
+          email: "a@b.c",
+        }),
+      ),
+    ).toBe("/opportunities/3?comment=42");
+    expect(
+      notificationHref(
+        notification("comment", {
+          opportunity_id: 3,
+          source_type: "note",
+          source_id: 7,
+          actor_id: 2,
+        }),
+      ),
+    ).toBe("/opportunities/3?note=7");
+    expect(
+      notificationHref(
+        notification("shared_activity", {
+          opportunity_id: 3,
+          source_type: "entry",
+          source_id: 9,
+          actor_id: 2,
+          title: "Call",
+        }),
+      ),
+    ).toBe("/opportunities/3?entry=9");
+  });
+
+  it("sends an attachment to its deal, not to a row it cannot name", () => {
+    // The payload does not carry the entry a file hangs off, and the inbox
+    // should not be issuing a lookup to find out.
+    expect(
+      notificationHref(
+        notification("shared_activity", {
+          opportunity_id: 3,
+          source_type: "attachment",
+          source_id: 70,
+          actor_id: 2,
+          title: "contract.pdf",
+        }),
+      ),
+    ).toBe("/opportunities/3");
+  });
+
+  it("sends a task notification to the deal whose panel holds it", () => {
+    expect(
+      notificationHref(
+        notification("task_assigned", {
+          opportunity_id: 3,
+          actor_id: 2,
+          task_id: 5,
+          title: "Chase procurement",
+          due_date: null,
+        }),
+      ),
+    ).toBe("/opportunities/3");
+  });
+
+  it("leads nowhere when access was just removed", () => {
+    // The one notification that deliberately has no link: the reader cannot
+    // open what it is about, and a link to a 404 is worse than no link.
+    expect(
+      notificationHref(
+        notification("share_removed", {
+          opportunity_id: 3,
+          actor_id: 2,
+          role: "viewer",
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it("opens the record for an access change that still grants access", () => {
+    for (const type of [
+      "share_added",
+      "share_role_changed",
+      "owner_changed",
+    ] as const) {
+      expect(
+        notificationHref(
+          notification(type, {
+            opportunity_id: 3,
+            actor_id: 2,
+            role: "editor",
+          }),
+        ),
+      ).toBe("/opportunities/3");
+    }
   });
 });

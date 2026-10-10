@@ -1,7 +1,6 @@
 import { expect, test } from "@playwright/test";
 
 import {
-  NORTHWIND,
   createOpportunity,
   openEntryForm,
   openTimeline,
