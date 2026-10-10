@@ -18,6 +18,7 @@ import {
   customFilters,
   activityByRep,
   activityWeeks,
+  cardCustomValues,
   isLinked,
   linkTargetFromParams,
   matchesCustomFilters,
@@ -855,5 +856,48 @@ describe("an average stage duration (milestone 6.2)", () => {
     expect(stageDurationText(0.4)).toBe("Less than a day");
     expect(stageDurationText(1)).toBe("1 day");
     expect(stageDurationText(12.5)).toBe("12.5 days");
+  });
+});
+
+describe("which custom values a card shows (milestone 6.2a)", () => {
+  const field = (overrides: Partial<CustomField>): CustomField => ({
+    id: 1,
+    entity_type: "entry",
+    key: "follow_up",
+    label: "Follow up",
+    type: "checkbox",
+    options: [],
+    required: false,
+    position: 0,
+    created_by: 1,
+    created_at: "2026-09-01T09:00:00Z",
+    updated_at: "2026-09-01T09:00:00Z",
+    archived_at: null,
+    ...overrides,
+  });
+
+  it("shows a yes/no field only when it is yes", () => {
+    // The human's request: "I created a field called 'follow up' yes/no. I'd
+    // like it displayed on the entry when yes." The converse matters as much
+    // -- "Follow up: No" is an absence taking up the room of a fact.
+    const fields = [field({})];
+    expect(cardCustomValues(fields, { follow_up: true })).toHaveLength(1);
+    expect(cardCustomValues(fields, { follow_up: false })).toEqual([]);
+    expect(cardCustomValues(fields, {})).toEqual([]);
+  });
+
+  it("shows every other type whenever it holds something", () => {
+    // "Region: EMEA" and "Region: APAC" are both facts, unlike a No.
+    const fields = [field({ key: "region", label: "Region", type: "text" })];
+    expect(cardCustomValues(fields, { region: "EMEA" })[0].text).toBe("EMEA");
+    expect(cardCustomValues(fields, { region: "" })).toEqual([]);
+    expect(cardCustomValues(fields, {})).toEqual([]);
+  });
+
+  it("drops a value whose field is no longer defined", () => {
+    // Archiving a field takes it off the card, like everywhere else.
+    expect(cardCustomValues([], { follow_up: true, region: "EMEA" })).toEqual(
+      [],
+    );
   });
 });

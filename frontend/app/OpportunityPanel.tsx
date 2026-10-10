@@ -9,7 +9,9 @@ import {
   type Access,
   type Opportunity,
   type TimelineFilters,
+  customFieldText,
   linkTargetFromParams,
+  type CustomValues,
 } from "../lib/domain";
 import { useKeyboardShortcuts } from "../lib/keyboard";
 import { useLiveUpdates } from "../lib/liveUpdates";
@@ -19,6 +21,7 @@ import {
   canWriteTimeline,
 } from "../lib/permissions";
 import {
+  useCustomFields,
   useMembers,
   useOpportunities,
   useSession,
@@ -305,6 +308,14 @@ function TimelineHeading({
 }) {
   const save = useOpportunityFieldSave();
   const facts = ["value", "stage", "expected_close_date"] as const;
+  // The deal's own custom fields, beside the three fixed facts (6.2a, the
+  // human's request at the 6.2 review: "please include Business field as one
+  // of the things to show in the top line summary of the opportunity"). Read
+  // only here: a value's control depends on its field's type, and this row is
+  // one line of facts rather than a form -- it is set in Edit, which is where
+  // `CustomFieldInputs` renders the right control for each type.
+  const fields = useCustomFields("opportunity");
+  const values = (opportunity.custom_values ?? {}) as CustomValues;
   return (
     <div className="timeline-heading">
       <div>
@@ -340,6 +351,15 @@ function TimelineHeading({
               {headingFact(opportunity, field)}
             </OpportunityField>
           ))}
+          {(fields.data ?? [])
+            // Only the ones this deal has a value for. A summary line listing
+            // every defined field as empty is a longer line that says less.
+            .filter((field) => customFieldText(field, values[field.key]) !== "")
+            .map((field) => (
+              <span key={field.key}>
+                {field.label}: {customFieldText(field, values[field.key])}
+              </span>
+            ))}
           <span>Your role: {opportunity.current_user_role}</span>
         </p>
       </div>

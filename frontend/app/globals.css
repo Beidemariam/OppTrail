@@ -2071,6 +2071,23 @@ a.danger-button {
   outline-offset: 4px;
 }
 
+/* A custom field value on an entry card (6.2a). A chip rather than plain
+   meta text: these are facts somebody chose to track, and they have to read
+   as distinct from the authorship line above them. */
+.entry-custom-values {
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.custom-value-chip {
+  background: var(--bg-sunken);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  padding: 2px var(--space-2);
+  white-space: nowrap;
+}
+
 /* Reports (milestone 6.2). Bars built from CSS rather than a charting
    library: six aggregations at this scale need a width and a label, and a
    dependency that draws axes is weight this screen does not need (D-073 --

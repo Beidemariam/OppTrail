@@ -5461,6 +5461,51 @@ settled.
       Deliberately **not** sortable or filterable by custom field: §10's six
       are what it asks for, and a seventh aggregation is a milestone rather
       than a parameter.
+- [x] 6.2a **The 6.2 review's three asks** (the human ruled *"Go"*, and
+      *"you can decide how to address the minor tweaks — now before any new
+      development or at the end. don't ask me, you decide and go."* Done now,
+      because two of the three touch 6.1's surfaces and automations will be
+      built on top of them).
+
+      - **The period drove one metric while reading as though it drove six.**
+        The human's finding: *"even when I pick 30 days, the activity per
+        person shows last 8 weeks."* Four of the six describe the pipeline as
+        it stands now and have no period to apply — a stage's deal count, a
+        forecast, what has gone quiet (its own fixed 14-day rule), and time in
+        stage (all recorded history, which it labels). Only win/loss and
+        activity are windowed. Both are driven now, **and every card states
+        the window it used**, which is the half that was missing: a control
+        whose scope is invisible has to be guessed at. `weeks` caps at 52,
+        because a per-week series cannot be unbounded.
+      - **A deal's custom fields are on its summary line**, beside value,
+        stage and close date — *"please include Business field as one of the
+        things to show in the top line summary"*. Read-only there: a value's
+        control depends on its field's type, and that row is one line of facts
+        rather than a form. Unset fields are left off entirely.
+      - **An entry's custom fields are on its card**, with the rule the
+        human's example implies — *"I created a field called 'follow up'
+        yes/no. I'd like it displayed on the entry when yes."* A `false`
+        checkbox is **not** shown, because "Follow up: No" is an absence
+        taking up the room of a fact; every other type shows whatever it
+        holds, since "Region: EMEA" and "Region: APAC" are both facts.
+
+      **One question answered rather than changed.** The human asked whether
+      "Less than a day" for Prospecting was accurate. It is: their only two
+      stage changes are 14 seconds apart (08:29:27 and 08:29:41 on 24
+      September), so Prospecting genuinely lasted 14 seconds and Needs
+      Analysis has nothing after it. The number is true and it is measuring
+      the deal being set up rather than the deal moving — which is what the
+      `earliest_change` label exists to let a reader work out.
+
+      **And a gap in the test fake, found by this work.** `app/test-api.ts`
+      says its shapes "follow `lib/api-types.ts` ... so a drift between this
+      fake and the API shows up as a type error". True of the aliased types
+      and **false** of `Opportunity` and `TimelineEntry`, which are
+      hand-written interfaces: `custom_values` had been on the real schema
+      since 6.1 and was simply absent here, and nothing complained until a
+      test tried to set it. Both now carry it, with the hazard written down
+      above them.
+
 - [ ] 6.3 Constrained rule builder: single-hop only (trigger → condition →
       action), dry-runnable, every automated write producing a traceable
       system entry naming the rule. Schema: `automation_rules`,

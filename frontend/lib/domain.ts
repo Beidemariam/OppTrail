@@ -1309,3 +1309,33 @@ export function stageDurationText(averageDays: number | null): string {
   }
   return `${averageDays} ${averageDays === 1 ? "day" : "days"}`;
 }
+
+/**
+ * The custom field values worth printing on a card (6.2a).
+ *
+ * Two rules, both from the human's request at the 6.2 review — *"I created a
+ * field called 'follow up' yes/no. I'd like it displayed on the entry when
+ * yes"*:
+ *
+ * - **An unset value is not shown.** A card listing every defined field as
+ *   empty is a longer card that says less.
+ * - **A `false` checkbox is not shown either**, which is the part worth
+ *   stating. "Follow up: No" is the absence of a fact taking up the room of
+ *   one; a yes/no field earns its place on a card only when it is yes. Every
+ *   other type shows whatever it holds, because "Region: EMEA" and
+ *   "Region: APAC" are both facts.
+ */
+export function cardCustomValues(
+  fields: CustomField[],
+  values: CustomValues,
+): { field: CustomField; text: string }[] {
+  return fields
+    .filter(
+      (field) => !(field.type === "checkbox" && values[field.key] !== true),
+    )
+    .map((field) => ({
+      field,
+      text: customFieldText(field, values[field.key]),
+    }))
+    .filter((entry) => entry.text !== "");
+}

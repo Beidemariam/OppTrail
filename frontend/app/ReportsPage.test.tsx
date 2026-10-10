@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -130,6 +130,48 @@ describe("the six aggregations on screen", () => {
     // Alex's two weeks total 15; Blair's single week is 3.
     expect(within(card).getByText("15")).toBeInTheDocument();
     expect(within(card).getByText("3")).toBeInTheDocument();
+  });
+
+  it("drives both windowed metrics from the period, and says which", async () => {
+    // The human's finding at the 6.2 review: the control drove win/loss alone
+    // while reading as though it drove everything. Four of the six have no
+    // period at all, so the fix is both halves -- the window applies to the
+    // two that are windowed, and every card states the one it used.
+    const api = await openReports();
+
+    expect(screen.getByText(/The period applies to/)).toBeInTheDocument();
+    expect(
+      within(
+        await screen.findByRole("region", { name: "Activity per person" }),
+      ).getByText("last 52 weeks"),
+    ).toBeInTheDocument();
+
+    await userEvent.selectOptions(
+      screen.getByLabelText("Win and loss period"),
+      "30",
+    );
+
+    // Thirty days is four weeks, and the activity card now says so.
+    await waitFor(() =>
+      expect(
+        api.calls.some(
+          (call) =>
+            call.path.startsWith("/api/v2/dashboard") &&
+            call.path.includes("weeks=4"),
+        ),
+      ).toBe(true),
+    );
+    expect(
+      within(
+        screen.getByRole("region", { name: "Activity per person" }),
+      ).getByText("last 4 weeks"),
+    ).toBeInTheDocument();
+    // And the win/loss card names the period it covers.
+    expect(
+      within(screen.getByRole("region", { name: "Win and loss" })).getByText(
+        "last 30 days",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("asks the API for the period the reader chose", async () => {

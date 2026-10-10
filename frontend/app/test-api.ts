@@ -53,6 +53,17 @@ export interface FakeApiOptions {
   pageSize?: number;
 }
 
+/**
+ * NOTE: hand-written, unlike most shapes in this file.
+ *
+ * The header above says shapes "follow `lib/api-types.ts`, which is generated
+ * from the live OpenAPI schema, so a drift between this fake and the API shows
+ * up as a type error". That is true of the aliased types and **not** of this
+ * interface or `TimelineEntry` below, which are spelled out by hand — so a new
+ * field on the real schema does not appear here and nothing complains until a
+ * test tries to set it. Milestone 6.2a is where that bit: `custom_values` had
+ * been on the API since 6.1 and was missing here.
+ */
 interface Opportunity {
   id: number;
   name: string;
@@ -67,6 +78,9 @@ interface Opportunity {
   updated_at: string;
   stalled: boolean;
   current_user_role: "owner" | "editor" | "viewer";
+  /** The deal's custom field values (milestone 6.1). Optional here because
+   * most fixtures have none, which is also what the API answers. */
+  custom_values?: Record<string, unknown>;
 }
 
 /** One person's reaction to a comment or reply (milestone 3.3a). */
@@ -141,6 +155,9 @@ interface TimelineEntry {
    * no component derives it -- the card prints what the API sent, which is
    * exactly the property worth keeping. */
   sequence: number;
+  /** The entry's custom field values (milestone 6.1), read on the card since
+   * 6.2a. */
+  custom_values?: Record<string, unknown>;
   notes: Note[];
   attachments: Attachment[];
 }

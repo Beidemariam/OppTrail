@@ -4,12 +4,15 @@ import { useRef } from "react";
 
 import {
   type Access,
+  type CustomValues,
   type LinkTarget,
   type TimelineEntry,
+  cardCustomValues,
   isLinked,
 } from "../lib/domain";
 import {
   useAddNote,
+  useCustomFields,
   useDeleteTimelineEntry,
   useRestoreTimelineEntry,
 } from "../lib/queries";
@@ -88,6 +91,11 @@ function TimelineEntryCard({
   // same behaviour.
   const linked = isLinked(linkTarget, "entry", entry.id);
   const cardRef = useLinkTarget<HTMLElement>(linked);
+  const entryFields = useCustomFields("entry");
+  const customValues = cardCustomValues(
+    entryFields.data ?? [],
+    (entry.custom_values ?? {}) as CustomValues,
+  );
   const editTriggerRef = useRef<HTMLButtonElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const editor = useInlineEditor(editTriggerRef, titleRef);
@@ -170,6 +178,22 @@ function TimelineEntryCard({
           By {entry.author_name ?? "System"}
           {entry.follow_up_date ? ` | Follow up ${entry.follow_up_date}` : ""}
         </p>
+        {/* What this team decided to track on an entry (6.2a, the human's
+            request at the 6.2 review). `cardCustomValues` is where the two
+            rules live: an unset value is not shown, and a `false` yes/no is
+            not shown either -- "Follow up: No" is an absence taking up the
+            room of a fact. */}
+        {customValues.length > 0 && (
+          <p className="meta-row entry-custom-values">
+            {customValues.map(({ field, text }) => (
+              <span key={field.key} className="custom-value-chip">
+                {field.type === "checkbox"
+                  ? field.label
+                  : `${field.label}: ${text}`}
+              </span>
+            ))}
+          </p>
+        )}
 
         {editor.editing && (
           <TimelineEntryForm

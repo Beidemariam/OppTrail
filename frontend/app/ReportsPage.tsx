@@ -40,10 +40,31 @@ import { formatTimestamp } from "../lib/time";
  *   measured" rather than "0 days" (§10's own caveat). A win rate with
  *   nothing closed reads "nothing closed yet", not "0%".
  */
-const PERIODS: { label: string; days: number | null }[] = [
-  { label: "All time", days: null },
-  { label: "Last 90 days", days: 90 },
-  { label: "Last 30 days", days: 30 },
+/**
+ * The period, and the window each choice gives the two metrics that have one.
+ *
+ * Four of the six describe the pipeline **as it stands now** and have no
+ * period to apply: a stage's deal count, a forecast, what has gone quiet
+ * (which carries its own fixed 14-day rule), and time in stage (which covers
+ * all recorded history and says how far back that reaches). Only win/loss and
+ * activity-per-rep are windowed.
+ *
+ * That was the defect the human found at the 6.2 review -- *"even when I pick
+ * 30 days, the activity per person shows last 8 weeks, so verify if the
+ * filter impacts all reported fields"*. The control drove win/loss alone
+ * while being labelled as though it drove everything. It now drives both
+ * windowed metrics, **and every card states the window it actually used**,
+ * which is the half that was missing: a control whose scope is invisible is a
+ * control that has to be guessed at.
+ *
+ * `weeks` is capped at the API's own 52, because a per-week series cannot be
+ * unbounded -- "All time" gives activity a year, and the card says so rather
+ * than claiming all of it.
+ */
+const PERIODS: { label: string; days: number | null; weeks: number }[] = [
+  { label: "All time", days: null, weeks: 52 },
+  { label: "Last 90 days", days: 90, weeks: 13 },
+  { label: "Last 30 days", days: 30, weeks: 4 },
 ];
 
 /** `since` as the API wants it: a date, or empty for all time. */
@@ -58,9 +79,11 @@ function sinceFor(days: number | null): string {
 export function ReportsPage() {
   const session = useSession();
   const [periodDays, setPeriodDays] = useState<number | null>(null);
+  const period =
+    PERIODS.find((candidate) => candidate.days === periodDays) ?? PERIODS[0];
   const dashboard = useDashboard(
     sinceFor(periodDays),
-    8,
+    period.weeks,
     Boolean(session.data),
   );
 
@@ -116,23 +139,29 @@ export function ReportsPage() {
                 )
               }
             >
-              {PERIODS.map((period) => (
+              {PERIODS.map((option) => (
                 <option
-                  key={period.label}
-                  value={period.days === null ? "" : String(period.days)}
+                  key={option.label}
+                  value={option.days === null ? "" : String(option.days)}
                 >
-                  {period.label}
+                  {option.label}
                 </option>
               ))}
             </select>
           </label>
         </div>
 
+        <p className="report-note">
+          The period applies to <strong>Win and loss</strong> and{" "}
+          <strong>Activity per person</strong>. The other four describe your
+          pipeline as it stands now.
+        </p>
+
         {dashboard.isError && (
           <p className="error">{dashboard.error.message}</p>
         )}
         {dashboard.isPending && <p className="status">Loading reports...</p>}
-        {dashboard.data && <Reports data={dashboard.data} />}
+        {dashboard.data && <Reports data={dashboard.data} period={period} />}
       </section>
     </main>
   );
@@ -168,7 +197,13 @@ function ReportCard({
   );
 }
 
-function Reports({ data }: { data: Dashboard }) {
+function Reports({
+  data,
+  period,
+}: {
+  data: Dashboard;
+  period: (typeof PERIODS)[number];
+}) {
   /**
    * A summed figure, labelled with the currency it is actually in.
    *
@@ -221,7 +256,7 @@ function Reports({ data }: { data: Dashboard }) {
       </ReportCard>
 
       <div className="report-row">
-        <ReportCard title="Win and loss">
+        <ReportCard title="Win and loss" meta={period.label.toLowerCase()}>
           {winRate === null ? (
             <p className="empty-state">
               Nothing closed yet in this period, so there is no win rate to
@@ -304,7 +339,10 @@ function Reports({ data }: { data: Dashboard }) {
         )}
       </ReportCard>
 
-      <ReportCard title="Activity per person" meta="last 8 weeks">
+      <ReportCard
+        title="Activity per person"
+        meta={`last ${period.weeks} weeks`}
+      >
         {reps.length === 0 ? (
           <p className="empty-state">
             Nothing has been logged in the last eight weeks.

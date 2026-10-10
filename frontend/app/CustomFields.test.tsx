@@ -133,6 +133,103 @@ describe("a select field appears in the three places §3 names", () => {
   });
 });
 
+describe("where a value is read (milestone 6.2a)", () => {
+  it("shows a deal's fields on its own summary line", async () => {
+    // The human's request at the 6.2 review: "please include Business field
+    // as one of the things to show in the top line summary of the opportunity
+    // in the right side next to value, close date etc."
+    await renderDashboard(
+      {
+        customFields: [
+          { ...REGION, type: "text", options: [], label: "Business" },
+        ],
+        opportunities: [
+          {
+            ...anOpportunity({ id: 10, name: "Northwind rollout" }),
+            custom_values: { region: "Public sector" },
+          },
+        ],
+        entries: [anEntry({ id: 100, title: "Discovery call" })],
+      },
+      "/opportunities/10",
+    );
+
+    const facts = await screen.findByText(/Business: Public sector/);
+    expect(facts).toBeInTheDocument();
+  });
+
+  it("leaves an unset field off the summary line entirely", async () => {
+    // A summary listing every defined field as empty is a longer line that
+    // says less.
+    await renderDashboard(
+      {
+        customFields: [
+          { ...REGION, type: "text", options: [], label: "Business" },
+        ],
+        opportunities: [
+          {
+            ...anOpportunity({ id: 10, name: "Northwind rollout" }),
+            custom_values: {},
+          },
+        ],
+        entries: [anEntry({ id: 100, title: "Discovery call" })],
+      },
+      "/opportunities/10",
+    );
+
+    await screen.findByText("Discovery call");
+    expect(screen.queryByText(/Business:/)).not.toBeInTheDocument();
+  });
+
+  it("shows a yes/no entry field on the card only when it is yes", async () => {
+    // The human's other request, and the rule that makes it useful: a "No"
+    // takes up the room of a fact without being one.
+    const followUp = aCustomField({
+      id: 902,
+      entity_type: "entry",
+      key: "follow_up",
+      label: "Follow up",
+      type: "checkbox",
+    });
+    await renderDashboard(
+      {
+        customFields: [followUp],
+        opportunities: [anOpportunity({ id: 10, name: "Northwind rollout" })],
+        entries: [
+          {
+            ...anEntry({ id: 100, title: "Needs chasing" }),
+            custom_values: { follow_up: true },
+          },
+          {
+            ...anEntry({ id: 101, title: "Nothing pending" }),
+            custom_values: { follow_up: false },
+          },
+        ],
+      },
+      "/opportunities/10",
+    );
+
+    const chased = (await screen.findByText("Needs chasing")).closest(
+      ".timeline-entry",
+    );
+    const settled = screen
+      .getByText("Nothing pending")
+      .closest(".timeline-entry");
+    expect(chased).not.toBeNull();
+    expect(settled).not.toBeNull();
+    // The label alone on the card that has it, and nothing on the one that
+    // does not -- not "Follow up: Yes" and "Follow up: No".
+    // Awaited: the card renders before the definition list arrives, so the
+    // chip appears a tick later than the entry title it sits under.
+    expect(
+      await within(chased as HTMLElement).findByText("Follow up"),
+    ).toBeInTheDocument();
+    expect(
+      within(settled as HTMLElement).queryByText(/Follow up/),
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe("defining and retiring a field", () => {
   it("defines one from a label, deriving the key it is stored under", async () => {
     const api = await renderDashboard({ opportunities: [anOpportunity()] });
