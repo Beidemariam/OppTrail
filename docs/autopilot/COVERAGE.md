@@ -2423,3 +2423,41 @@ touched, which is the rule.
 Four of the seven acceptance tests were confirmed failing against the unwired
 components first (the column picker and the filter bar with their custom-field
 branches removed).
+
+---
+
+## Milestone 6.2 — the six dashboard aggregations
+
+`docs/FEATURES.md` §10. One module, one route, one revision, one screen.
+
+```
+backend:  ruff, ruff format, mypy (45 source files)     all clean
+          613 passed, 1 skipped, 96.86% line+branch
+          app/dashboard.py at 100% branch
+          authorization matrix: 92 cases, 96 endpoints
+frontend: typecheck, lint (3 pre-existing warnings), prettier  clean
+          645 passed (39 files), 96.96% statements /
+          91.15% branch / 96.91% lines
+e2e:      85 passed, 1 skipped (27 specs)
+gate:     make check-fast -> MAKE_EXIT=0
+```
+
+**The performance assertion is the unusual test here.**
+`test_each_aggregate_answers_inside_the_budget` builds §10's own corpus — 400
+opportunities and 800,000 activity rows spread across two years — and asserts
+each of the six separately against the 300 ms budget. It costs about 25
+seconds, which is the price of the one acceptance criterion in this project
+that is a number rather than a behaviour, and it earned that cost immediately:
+it is what found three aggregations over budget, including one 5x over
+(**D-172**).
+
+Two details about how it is written, both deliberate:
+
+- **The corpus is spread over two years**, not stamped now. One of the six
+  reads a *window* of history, so a fixture with every row inside that window
+  measures something no deployment will ever ask.
+- **The margin is reported, not asserted tightly.** It runs on a laptop and in
+  a container, and a test that fails at 280 ms on a loaded machine teaches
+  nobody anything. What it catches is an order-of-magnitude regression, which
+  is exactly what it caught twice while this was being written — confirmed
+  afterwards by removing the two planner directives and watching it fail.

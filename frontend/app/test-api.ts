@@ -34,6 +34,7 @@ export interface FakeApiOptions {
   searchResults?: SearchResult[];
   savedViews?: SavedView[];
   customFields?: CustomField[];
+  dashboard?: Dashboard;
   /** Tasks (milestone 4.1). Seeded whole, like every other collection here. */
   tasks?: Task[];
   /** Paths that should fail, mapped to `[status, detail]`. */
@@ -343,6 +344,7 @@ export function aReply(
 
 type SearchResult = components["schemas"]["SearchResultPublic"];
 type CustomField = components["schemas"]["CustomFieldPublic"];
+type Dashboard = components["schemas"]["DashboardPublic"];
 
 /**
  * Edit history (milestone 2.10). The fake writes these itself rather than
@@ -356,6 +358,96 @@ type NoteVersion = components["schemas"]["NoteVersionPublic"];
 
 /** One custom field definition (milestone 6.1). Text on opportunities unless
  * a test says otherwise, which is the cheapest field to assert against. */
+/** A dashboard with nothing in it, which is what a new deployment shows. */
+export function emptyDashboard(): Dashboard {
+  return {
+    currency: "USD",
+    pipeline: [
+      { stage: "Prospecting", deals: 0, value: "0" },
+      { stage: "Qualification", deals: 0, value: "0" },
+      { stage: "Needs Analysis", deals: 0, value: "0" },
+      { stage: "Proposal", deals: 0, value: "0" },
+      { stage: "Negotiation", deals: 0, value: "0" },
+    ],
+    win_loss: { won: 0, lost: 0, won_value: "0", rate: null },
+    time_in_stage: {
+      stages: [
+        { stage: "Prospecting", average_days: null, spans: 0 },
+        { stage: "Qualification", average_days: null, spans: 0 },
+        { stage: "Needs Analysis", average_days: null, spans: 0 },
+        { stage: "Proposal", average_days: null, spans: 0 },
+        { stage: "Negotiation", average_days: null, spans: 0 },
+        { stage: "Closed Won", average_days: null, spans: 0 },
+        { stage: "Closed Lost", average_days: null, spans: 0 },
+      ],
+      earliest_change: null,
+    },
+    stalled: [],
+    activity: [],
+    forecast: { weighted_value: "0.00", stages: [] },
+  };
+}
+
+/** A dashboard with something to draw in every one of the six. */
+export function aDashboard(overrides: Partial<Dashboard> = {}): Dashboard {
+  return {
+    ...emptyDashboard(),
+    pipeline: [
+      { stage: "Prospecting", deals: 2, value: "30000" },
+      { stage: "Qualification", deals: 0, value: "0" },
+      { stage: "Needs Analysis", deals: 1, value: "45000" },
+      { stage: "Proposal", deals: 3, value: "120000" },
+      { stage: "Negotiation", deals: 1, value: "80000" },
+    ],
+    win_loss: { won: 3, lost: 1, won_value: "210000", rate: 0.75 },
+    time_in_stage: {
+      stages: [
+        { stage: "Prospecting", average_days: 12.5, spans: 4 },
+        { stage: "Qualification", average_days: 8, spans: 2 },
+        { stage: "Needs Analysis", average_days: null, spans: 0 },
+        { stage: "Proposal", average_days: null, spans: 0 },
+        { stage: "Negotiation", average_days: null, spans: 0 },
+        { stage: "Closed Won", average_days: null, spans: 0 },
+        { stage: "Closed Lost", average_days: null, spans: 0 },
+      ],
+      earliest_change: "2026-06-01T09:00:00Z",
+    },
+    stalled: [
+      {
+        opportunity_id: 10,
+        name: "Northwind rollout",
+        account_name: "Northwind",
+        stage: "Proposal",
+        value: "45000",
+        last_activity_at: "2026-08-01T09:00:00Z",
+      },
+    ],
+    activity: [
+      { author_id: 1, author_name: "Alex", week: "2026-38", items: 6 },
+      { author_id: 1, author_name: "Alex", week: "2026-39", items: 9 },
+      { author_id: 2, author_name: "Blair", week: "2026-39", items: 3 },
+    ],
+    forecast: {
+      weighted_value: "145000.00",
+      stages: [
+        {
+          stage: "Proposal",
+          value: "120000",
+          probability: 0.6,
+          weighted_value: "72000.00",
+        },
+        {
+          stage: "Negotiation",
+          value: "80000",
+          probability: 0.8,
+          weighted_value: "64000.00",
+        },
+      ],
+    },
+    ...overrides,
+  };
+}
+
 export function aCustomField(
   overrides: Partial<CustomField> = {},
 ): CustomField {
@@ -430,6 +522,7 @@ export class FakeApi {
   searchResults: SearchResult[];
   savedViews: SavedView[];
   customFields: CustomField[];
+  dashboard: Dashboard | null;
   tasks: Task[];
   failures: Record<string, [number, string]>;
   // The current `user`'s own watch set (milestone 3.3a), separate from
@@ -488,6 +581,7 @@ export class FakeApi {
     this.searchResults = options.searchResults ?? [];
     this.savedViews = options.savedViews ?? [];
     this.customFields = options.customFields ?? [];
+    this.dashboard = options.dashboard ?? null;
     this.tasks = options.tasks ?? [];
     this.failures = options.failures ?? {};
     this.pending = new Set(options.pending ?? []);
@@ -574,6 +668,15 @@ export class FakeApi {
       .split("/")
       .filter(Boolean);
 
+    // The dashboard (milestone 6.2). Canned rather than computed: these are
+    // six aggregations over data the fake does not hold in a shape it could
+    // aggregate, and what the screen has to get right is how it *draws* a
+    // number -- including the two that are deliberately absent (a win rate
+    // with nothing closed, a stage never measured). `tests/test_dashboard.py`
+    // is where the arithmetic is asserted.
+    if (bare === "/api/v2/dashboard" && method === "GET") {
+      return this.json(this.dashboard ?? emptyDashboard());
+    }
     // Custom fields (milestone 6.1). Stateful like the rest of this fake:
     // defining one has to make it appear as a column, a filter and a form
     // input, which is the consequence the tests are about rather than the

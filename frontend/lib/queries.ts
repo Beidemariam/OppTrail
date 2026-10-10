@@ -24,6 +24,7 @@ import type {
   AppNotification,
   CustomField,
   CustomFieldCreate,
+  Dashboard,
   CustomFieldEntity,
   CustomFieldUpdate,
   NoteVersion,
@@ -157,6 +158,10 @@ export const keys = {
    * the other's. */
   customFields: (entity: CustomFieldEntity) =>
     ["custom-fields", entity] as const,
+  /** The six aggregations (milestone 6.2), keyed by the window they were
+   * asked for: a different period is a different answer, not a refetch. */
+  dashboard: (since: string, weeks: number) =>
+    ["dashboard", since, weeks] as const,
   /** Whether the caller is watching one opportunity (milestone 3.3a) --
    * separate from `shares` because it needs no access to read: watching is
    * available with no share at all (D-129). */
@@ -583,6 +588,28 @@ export function useArchiveCustomField() {
         { method: "POST" },
       ),
     onSuccess: () => invalidateCustomFields(client),
+  });
+}
+
+/**
+ * The dashboard's six aggregations (milestone 6.2, `docs/FEATURES.md` §10).
+ *
+ * One request, not six: a dashboard draws them together, and six round trips
+ * would make the slowest metric the whole screen's latency. Not read through
+ * `fetchAll` either -- this is the one read in the app that is not a
+ * collection, so there is no cursor to walk.
+ */
+export function useDashboard(since = "", weeks = 8, enabled = true) {
+  return useQuery<Dashboard>({
+    queryKey: keys.dashboard(since, weeks),
+    enabled,
+    queryFn: () => {
+      const params = new URLSearchParams({ weeks: String(weeks) });
+      if (since) {
+        params.set("since", since);
+      }
+      return apiRequest<Dashboard>(`/api/v2/dashboard?${params}`);
+    },
   });
 }
 

@@ -2071,6 +2071,128 @@ a.danger-button {
   outline-offset: 4px;
 }
 
+/* Reports (milestone 6.2). Bars built from CSS rather than a charting
+   library: six aggregations at this scale need a width and a label, and a
+   dependency that draws axes is weight this screen does not need (D-073 --
+   a primitive arrives with the milestone that has a caller for it). */
+.report-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-4);
+  padding: var(--space-4);
+}
+
+.report-row {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.report-figure {
+  font-size: 2rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.report-note {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  margin: var(--space-2) 0 0;
+  max-width: 62ch;
+}
+
+.bar-list,
+.assumption-list,
+.stalled-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+}
+
+.bar-list > li {
+  align-items: center;
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: minmax(96px, 150px) 1fr minmax(96px, auto);
+}
+
+.bar-label {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bar-track {
+  background: var(--bg-sunken);
+  border-radius: var(--radius-sm);
+  display: block;
+  height: 14px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  background: var(--fill-accent);
+  display: block;
+  height: 100%;
+  min-width: 2px;
+}
+
+.bar-value {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.bar-value small {
+  color: var(--text-secondary);
+  display: block;
+  font-size: 0.75rem;
+}
+
+/* One rep's eight weeks. A row of bars with no axis: the title attribute
+   carries the number, and the total is printed beside it -- the shape is for
+   comparing people, not for reading values off. */
+.spark {
+  align-items: flex-end;
+  display: flex;
+  gap: 2px;
+  height: 34px;
+}
+
+.spark-bar {
+  background: var(--fill-accent);
+  border-radius: 1px;
+  flex: 1 1 auto;
+  min-height: 2px;
+}
+
+.assumption-list > li,
+.stalled-list > li {
+  border-top: 1px solid var(--border-subtle);
+  display: grid;
+  font-size: 0.9375rem;
+  gap: var(--space-3);
+  grid-template-columns: 1fr auto auto;
+  padding-top: var(--space-2);
+}
+
+.stalled-list > li {
+  grid-template-columns: 1fr auto auto auto;
+}
+
+.assumption-list > li:first-child,
+.stalled-list > li:first-child {
+  border-top: 0;
+}
+
 /* A notification line is a link (milestone 6.1a). Styled as the strong text
    it replaced rather than as a body link: the whole row already reads as one
    item, and an underlined sentence per row turns the inbox into a list of

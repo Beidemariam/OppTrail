@@ -9,6 +9,7 @@ import { DashboardPage, NoOpportunitySelected } from "./DashboardPage";
 import { DensityProvider } from "./Density";
 import { OpportunityPanel } from "./OpportunityPanel";
 import { SearchPage } from "./SearchPage";
+import { ReportsPage } from "./ReportsPage";
 import { TasksPage } from "./TasksPage";
 import { ShortcutsProvider } from "./ShortcutsProvider";
 import { ThemeProvider } from "./Theme";
@@ -56,6 +57,7 @@ export function AppRoutes() {
                     about one deal. The dashboard carries the overdue count and
                     links here. */}
                 <Route path="/tasks" element={<TasksPage />} />
+                <Route path="/reports" element={<ReportsPage />} />
                 <Route path="/" element={<DashboardPage />}>
                   <Route index element={<NoOpportunitySelected />} />
                   <Route

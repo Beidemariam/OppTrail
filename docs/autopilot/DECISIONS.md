@@ -939,3 +939,49 @@ as a requirement rather than as a possibility. Three things that makes true:
 **Also ruled: build the notification link** (*"include link in notification"*).
 Logged as an observation at 6.0 and not built because that milestone's scope
 was search results; it is **milestone 6.1a**, below.
+
+**D-172** | 2026-10-10 | Milestone 6.2's acceptance criterion is a number: "each dashboard aggregate returns inside 300 ms at seeded scale, asserted in CI" (`docs/FEATURES.md` §10). Writing the six aggregations the obvious way and then measuring them against the corpus §10 names — 400 opportunities, ~800,000 activity rows — found **three of the six over budget**: activity-per-rep at **1,533 ms**, the stalled list at **408 ms**, and average-time-in-stage at **352 ms**. | (a) accept the measurements and raise the budget, (b) add rollup tables or a materialized view, (c) fix the queries and the indexes, keeping the aggregations live | (c) | (a) is changing the exam to match the answer, and the budget is an acceptance criterion rather than a target. (b) is explicitly ruled out by §10 — "computed live, **no rollup tables, no materialized views, no warehouse**" — and it is the right ruling: a rollup is a second copy of a fact, and this project has spent four phases making sure every fact has one home. (c) got the worst case to **196 ms**, within §10's own measured expectation of 131 ms. Four changes, each forced by a measurement rather than by taste: **the stalled list became one grouped pass** instead of a correlated `MAX` per deal (408 ms to 157 ms); **three covering indexes** make that pass read index pages rather than table rows; **a partial index** on `type = 'stage_change'` turned time-in-stage from a scan of every entry into a seek; and **the activity union materializes the accessible set once** rather than re-deriving it per branch. | Y — all four are internal to `app/dashboard.py` and one revision. | N — the criterion was specified and this is meeting it. |
+
+**Two things about this worth more than the fix.**
+
+**§10's suggested index is in the wrong column order, and measurement is how
+that surfaced.** The spec says activity-per-rep "needs an index on
+`(created_by, created_at)`". The query asks *"who did what in the last eight
+weeks"*, so the date is the selective predicate and the author is only what it
+groups by — leading with the author makes the range unusable, and
+`EXPLAIN QUERY PLAN` showed the suggested index never being chosen.
+`(created_at, created_by)` is what revision `0017_activity_indexes` creates.
+The spec named the right pair and the wrong order; this is the first time in
+this project a specified technical detail has been contradicted by
+measurement, and the revision's docstring says so rather than quietly
+differing.
+
+**Two queries name their index, which is normally a smell.** `INDEXED BY` is
+a planner directive, and the reason it is here is that SQLite chose wrong in
+both directions depending on whether statistics existed: the entries branch of
+activity-per-rep took 794 ms on an `ANALYZE`d database and 19 ms when told to
+seek the date, while time-in-stage picked its partial index *only* on an
+`ANALYZE`d database and scanned 600,000 rows without one (352 ms against 2.4
+ms). **Nothing in this application runs `ANALYZE`**, so the plan that matters
+is the one without statistics — and a directive that is wrong fails loudly
+(`no such index`) rather than silently getting slow, which is the right
+failure for something a budget depends on. It is used in exactly the two
+places measurement showed the planner choosing wrong; the notes and comments
+branches pick correctly unaided and say nothing.
+
+**One thing added that §10 does not ask for: the currency the sums are in.**
+Four of the six metrics add `value` across deals and `opportunities` carries a
+currency per row, so a deployment holding both USD and EUR deals would get a
+total that is a number and not an amount. `DashboardPublic.currency` is the
+single currency when there is one and `null` when there is not, and the screen
+labels the figure "mixed currencies" rather than stamping a symbol on a sum
+that has none. Not a per-currency breakdown — that is a reporting feature
+nobody has asked for. What this prevents is the sum being *mislabelled*.
+
+**And one latent test bug the indexes exposed**, which is the same shape as
+the wall-clock flake 6.0 found: `test_migrations.py`'s `timestamps()` helper
+read a column with no `ORDER BY`, so it asserted on whatever order the chosen
+plan produced. Adding `idx_timeline_entries_activity` changed that plan, and a
+test about timestamp *formats* started failing over row order on a migration
+it had nothing to do with. An assertion on a list from an unordered query is
+an assertion about the query planner.

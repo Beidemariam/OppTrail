@@ -1663,6 +1663,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Dashboard */
+        get: operations["read_dashboard_api_v2_dashboard_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -2246,6 +2263,49 @@ export interface components {
             /** Options */
             options?: string[];
         };
+        /**
+         * DashboardPublic
+         * @description All six aggregations in one answer.
+         *
+         *     One request rather than six, because a dashboard draws them together and
+         *     six round trips would make the slowest one the whole screen's latency.
+         *     Each is still measured separately against §10's 300 ms budget, which is
+         *     what the CI assertion is about.
+         */
+        DashboardPublic: {
+            /** Currency */
+            currency: string | null;
+            /** Pipeline */
+            pipeline: components["schemas"]["PipelineStage"][];
+            win_loss: components["schemas"]["WinLoss"];
+            time_in_stage: components["schemas"]["TimeInStage"];
+            /** Stalled */
+            stalled: components["schemas"]["StalledOpportunity"][];
+            /** Activity */
+            activity: components["schemas"]["RepActivity"][];
+            forecast: components["schemas"]["Forecast"];
+        };
+        /** Forecast */
+        Forecast: {
+            /** Weighted Value */
+            weighted_value: string;
+            /** Stages */
+            stages: components["schemas"]["ForecastStage"][];
+        };
+        /** ForecastStage */
+        ForecastStage: {
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "Prospecting" | "Qualification" | "Needs Analysis" | "Proposal" | "Negotiation" | "Closed Won" | "Closed Lost";
+            /** Value */
+            value: string;
+            /** Probability */
+            probability: number;
+            /** Weighted Value */
+            weighted_value: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -2777,6 +2837,18 @@ export interface components {
             /** New Password */
             new_password: string;
         };
+        /** PipelineStage */
+        PipelineStage: {
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "Prospecting" | "Qualification" | "Needs Analysis" | "Proposal" | "Negotiation" | "Closed Won" | "Closed Lost";
+            /** Deals */
+            deals: number;
+            /** Value */
+            value: string;
+        };
         /** ReactionCreate */
         ReactionCreate: {
             /**
@@ -2808,6 +2880,17 @@ export interface components {
             user_name: string;
             /** Created At */
             created_at: string;
+        };
+        /** RepActivity */
+        RepActivity: {
+            /** Author Id */
+            author_id: number;
+            /** Author Name */
+            author_name: string;
+            /** Week */
+            week: string;
+            /** Items */
+            items: number;
         };
         /** SavedViewCreate */
         SavedViewCreate: {
@@ -2999,6 +3082,36 @@ export interface components {
             /** Length */
             length: number;
         };
+        /** StageDuration */
+        StageDuration: {
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "Prospecting" | "Qualification" | "Needs Analysis" | "Proposal" | "Negotiation" | "Closed Won" | "Closed Lost";
+            /** Average Days */
+            average_days: number | null;
+            /** Spans */
+            spans: number;
+        };
+        /** StalledOpportunity */
+        StalledOpportunity: {
+            /** Opportunity Id */
+            opportunity_id: number;
+            /** Name */
+            name: string;
+            /** Account Name */
+            account_name: string;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "Prospecting" | "Qualification" | "Needs Analysis" | "Proposal" | "Negotiation" | "Closed Won" | "Closed Lost";
+            /** Value */
+            value: string;
+            /** Last Activity At */
+            last_activity_at: string;
+        };
         /**
          * TaskAssigneePublic
          * @description One person a task is for (milestone 4.6).
@@ -3154,6 +3267,13 @@ export interface components {
             editor_name: string | null;
             /** Created At */
             created_at: string;
+        };
+        /** TimeInStage */
+        TimeInStage: {
+            /** Stages */
+            stages: components["schemas"]["StageDuration"][];
+            /** Earliest Change */
+            earliest_change: string | null;
         };
         /** TimelineEntryCreate */
         TimelineEntryCreate: {
@@ -3319,6 +3439,17 @@ export interface components {
             user_email: string;
             /** Created At */
             created_at: string;
+        };
+        /** WinLoss */
+        WinLoss: {
+            /** Won */
+            won: number;
+            /** Lost */
+            lost: number;
+            /** Won Value */
+            won_value: string;
+            /** Rate */
+            rate: number | null;
         };
     };
     responses: never;
@@ -6170,6 +6301,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CustomFieldPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_dashboard_api_v2_dashboard_get: {
+        parameters: {
+            query?: {
+                /** @description Win/loss period floor, as a canonical UTC timestamp or a date. */
+                since?: string | null;
+                weeks?: number;
+                stalled_limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardPublic"];
                 };
             };
             /** @description Validation Error */

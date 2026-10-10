@@ -1228,3 +1228,63 @@ export function matchesCustomFilters(
   }
   return true;
 }
+
+// --- Dashboard (milestone 6.2, `docs/FEATURES.md` §10) ---------------------
+
+/** The six aggregations, in one read. */
+export type Dashboard = components["schemas"]["DashboardPublic"];
+export type PipelineStage = components["schemas"]["PipelineStage"];
+export type StalledOpportunity = components["schemas"]["StalledOpportunity"];
+export type RepActivity = components["schemas"]["RepActivity"];
+
+/**
+ * A win rate as a percentage, or `null` when nothing has closed.
+ *
+ * The `null` is carried all the way to the screen rather than turned into 0
+ * here: a team that has closed nothing has no win rate, and "0%" is a
+ * different claim -- it says they lost everything.
+ */
+export function winRatePercent(rate: number | null): string | null {
+  return rate === null ? null : `${Math.round(rate * 100)}%`;
+}
+
+/** One rep's weekly counts, keyed by week, for a series per person. */
+export function activityByRep(
+  activity: RepActivity[],
+): { authorId: number; authorName: string; weeks: Map<string, number> }[] {
+  const byRep = new Map<
+    number,
+    { authorId: number; authorName: string; weeks: Map<string, number> }
+  >();
+  for (const row of activity) {
+    const existing = byRep.get(row.author_id) ?? {
+      authorId: row.author_id,
+      authorName: row.author_name,
+      weeks: new Map<string, number>(),
+    };
+    existing.weeks.set(row.week, row.items);
+    byRep.set(row.author_id, existing);
+  }
+  return [...byRep.values()].sort((a, b) =>
+    a.authorName.localeCompare(b.authorName),
+  );
+}
+
+/** Every week present in the series, oldest first -- the x axis. */
+export function activityWeeks(activity: RepActivity[]): string[] {
+  return [...new Set(activity.map((row) => row.week))].sort();
+}
+
+/**
+ * A `%Y-%W` week as something a person reads.
+ *
+ * The stored form is what SQLite can compute cheaply over a fixed-width
+ * timestamp; "2026-W40" is what it means. Deliberately not converted to a
+ * date: the first day of ISO week 40 depends on a locale convention this app
+ * has no reason to adopt, and the label only has to be ordered and
+ * distinguishable.
+ */
+export function weekLabel(week: string): string {
+  const [year, index] = week.split("-");
+  return index ? `${year}-W${index}` : week;
+}

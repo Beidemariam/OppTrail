@@ -15,6 +15,7 @@ from .routes_ai import router as ai_router
 from .routes_attachments import router as attachments_router
 from .routes_auth import router as auth_router
 from .routes_custom_fields import router as custom_fields_router
+from .routes_dashboard import router as dashboard_router
 from .routes_events import router as events_router
 from .routes_export import router as export_router
 from .routes_notifications import router as notifications_router
@@ -62,6 +63,7 @@ app.include_router(saved_views_router)
 app.include_router(tasks_router)
 app.include_router(attachments_router)
 app.include_router(custom_fields_router)
+app.include_router(dashboard_router)
 
 
 # Unversioned on purpose (D-094): this is an operations probe — the

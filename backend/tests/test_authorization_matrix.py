@@ -623,6 +623,16 @@ MATRIX: dict[Endpoint, Case] = {
         body=lambda world, actor: None,
         notes="Scoped by the query: marks only the caller's own rows.",
     ),
+    # The dashboard (milestone 6.2). Like search, a read that spans
+    # opportunities: there is no role to resolve, because the rows it
+    # aggregates are chosen by `ACCESSIBLE_OPPORTUNITY_IDS_SQL` inside each
+    # query. Every signed-in caller gets an answer; what differs is whose
+    # deals are in it, which `test_dashboard.py` is where to assert.
+    Endpoint("GET", "/api/v2/dashboard"): Case(
+        expected=authenticated_only(200),
+        url=lambda world: "/api/v2/dashboard",
+        notes="Scoped by the query: six aggregations over the caller's own accessible deals.",
+    ),
     # Custom field definitions (milestone 6.1, **D-171**). Global metadata, not
     # a record: `docs/FEATURES.md` §3 says "admin-defined" and this app has no
     # admin role, so the rule is any authenticated caller. Every actor below is

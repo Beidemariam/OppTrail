@@ -1343,6 +1343,91 @@ class SearchResultPublic(BaseModel):
     author_name: str | None
 
 
+# --- Dashboard (milestone 6.2, `docs/FEATURES.md` §10) ----------------------
+
+
+class PipelineStage(BaseModel):
+    stage: Stage
+    deals: int
+    value: str
+
+
+class WinLoss(BaseModel):
+    won: int
+    lost: int
+    won_value: str
+    # `None` when nothing has closed: a team that has closed nothing has no
+    # win rate, and 0.0 would read as having lost everything.
+    rate: float | None
+
+
+class StageDuration(BaseModel):
+    stage: Stage
+    # `None` where nothing has been measured. §10: earlier history "is absent
+    # and should be labelled as such rather than silently shown as zero".
+    average_days: float | None
+    spans: int
+
+
+class TimeInStage(BaseModel):
+    stages: list[StageDuration]
+    # The oldest stage change this database holds, which is how far back the
+    # numbers above can be trusted. `None` when none has been recorded.
+    earliest_change: str | None
+
+
+class StalledOpportunity(BaseModel):
+    opportunity_id: int
+    name: str
+    account_name: str
+    stage: Stage
+    value: str
+    last_activity_at: str
+
+
+class RepActivity(BaseModel):
+    author_id: int
+    author_name: str
+    # `%Y-%W`, computed in SQLite over the stored fixed-width timestamp.
+    week: str
+    items: int
+
+
+class ForecastStage(BaseModel):
+    stage: Stage
+    value: str
+    probability: float
+    weighted_value: str
+
+
+class Forecast(BaseModel):
+    weighted_value: str
+    # The assumptions, returned beside the number: a forecast whose ramp
+    # nobody can see is a number nobody should act on.
+    stages: list[ForecastStage]
+
+
+class DashboardPublic(BaseModel):
+    """All six aggregations in one answer.
+
+    One request rather than six, because a dashboard draws them together and
+    six round trips would make the slowest one the whole screen's latency.
+    Each is still measured separately against §10's 300 ms budget, which is
+    what the CI assertion is about.
+    """
+
+    # The currency the four summing metrics are in, or `None` when the
+    # accessible deals carry more than one -- in which case a total is a
+    # number and not an amount, and the screen says so (milestone 6.2).
+    currency: str | None
+    pipeline: list[PipelineStage]
+    win_loss: WinLoss
+    time_in_stage: TimeInStage
+    stalled: list[StalledOpportunity]
+    activity: list[RepActivity]
+    forecast: Forecast
+
+
 # --- Custom field definitions (milestone 6.1) -------------------------------
 
 

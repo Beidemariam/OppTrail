@@ -30,6 +30,14 @@ class Settings(BaseSettings):
     # non-reasoning `openai_model` needs - the Responses API rejects
     # `reasoning` outright for those, so this cannot be hardcoded.
     openai_reasoning_effort: str = "low"
+    # The forecast's stage ramp (milestone 6.2, `docs/FEATURES.md` §10 asks
+    # for "configurable probabilities"). A JSON object of stage name to a
+    # number between 0 and 1; any stage left out keeps
+    # `dashboard.DEFAULT_FORECAST_PROBABILITIES`, so a deployment can tune two
+    # stages without restating the other five. The right ramp is a property of
+    # a sales process rather than of this software, which is why it is
+    # configuration and not a constant.
+    forecast_probabilities: dict[str, float] = {}
     environment: str = "development"
     # Attempts per source address per window, applied to login and signup
     # separately (`rate_limit.py`). Sized so a normal human never meets it and
@@ -94,6 +102,17 @@ class Settings(BaseSettings):
     def _seconds_must_be_positive(cls, value: float, info: ValidationInfo) -> float:
         if value <= 0:
             raise ValueError(f"{str(info.field_name).upper()} must be greater than 0, got: {value}")
+        return value
+
+    @field_validator("forecast_probabilities")
+    @classmethod
+    def _probabilities_must_be_fractions(cls, value: dict[str, float]) -> dict[str, float]:
+        for stage, probability in value.items():
+            if not 0.0 <= probability <= 1.0:
+                raise ValueError(
+                    "FORECAST_PROBABILITIES values must be between 0 and 1, "
+                    f"got {probability} for {stage!r}"
+                )
         return value
 
     @field_validator("openai_reasoning_effort")

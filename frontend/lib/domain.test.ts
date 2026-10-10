@@ -16,10 +16,14 @@ import {
   customFieldText,
   customFilterState,
   customFilters,
+  activityByRep,
+  activityWeeks,
   isLinked,
   linkTargetFromParams,
   matchesCustomFilters,
   searchResultHref,
+  weekLabel,
+  winRatePercent,
   type CustomField,
   emptyOpportunityViewState,
   emptyTimelineFilters,
@@ -800,5 +804,41 @@ describe("custom fields (milestone 6.1)", () => {
     };
     expect(opportunityCell(deal, "custom:region", fields)).toBe("EMEA");
     expect(opportunityCell(deal, "custom:region", [])).toBe("");
+  });
+});
+
+describe("the dashboard's reading helpers (milestone 6.2)", () => {
+  it("keeps the absence of a win rate as an absence", () => {
+    // 0% is a different claim from "nothing closed": it says they lost
+    // everything.
+    expect(winRatePercent(null)).toBeNull();
+    expect(winRatePercent(0)).toBe("0%");
+    expect(winRatePercent(0.755)).toBe("76%");
+    expect(winRatePercent(1)).toBe("100%");
+  });
+
+  it("turns a flat activity series into one row per person", () => {
+    const series = [
+      { author_id: 2, author_name: "Blair", week: "2026-39", items: 3 },
+      { author_id: 1, author_name: "Alex", week: "2026-38", items: 6 },
+      { author_id: 1, author_name: "Alex", week: "2026-39", items: 9 },
+    ];
+    const reps = activityByRep(series);
+    // Alphabetical, so the rows do not move when the counts change.
+    expect(reps.map((rep) => rep.authorName)).toEqual(["Alex", "Blair"]);
+    expect([...reps[0].weeks]).toEqual([
+      ["2026-38", 6],
+      ["2026-39", 9],
+    ]);
+    // Every week present anywhere, oldest first -- the shared x axis.
+    expect(activityWeeks(series)).toEqual(["2026-38", "2026-39"]);
+  });
+
+  it("reads a stored week without inventing a date for it", () => {
+    // `%Y-%W` is what SQLite can compute cheaply over a fixed-width
+    // timestamp. Converting it to a date would mean adopting a first-day-of
+    // -week convention this app has no reason to have.
+    expect(weekLabel("2026-40")).toBe("2026-W40");
+    expect(weekLabel("nonsense")).toBe("nonsense");
   });
 });

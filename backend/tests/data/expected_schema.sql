@@ -13,6 +13,11 @@ CREATE INDEX idx_attachments_entry
 
 CREATE INDEX idx_audit_log_entries_opportunity_id ON audit_log_entries(opportunity_id);
 
+CREATE INDEX idx_comments_activity ON comments (note_id, created_at);
+
+CREATE INDEX idx_comments_created_author
+            ON comments (created_at, created_by);
+
 CREATE INDEX idx_comments_note_id ON comments(note_id);
 
 CREATE INDEX idx_comments_parent_id ON comments(parent_id);
@@ -24,6 +29,11 @@ CREATE INDEX idx_custom_field_definitions_live
 CREATE UNIQUE INDEX idx_custom_field_key_per_entity
         ON custom_field_definitions (entity_type, key)
         WHERE archived_at IS NULL;
+
+CREATE INDEX idx_notes_activity ON notes (entry_id, created_at);
+
+CREATE INDEX idx_notes_created_author
+            ON notes (created_at, created_by);
 
 CREATE INDEX idx_notes_entry_id ON notes(entry_id);
 
@@ -54,7 +64,17 @@ CREATE INDEX idx_tasks_assignee
 CREATE INDEX idx_tasks_opportunity
             ON tasks (opportunity_id, due_date, id);
 
+CREATE INDEX idx_timeline_entries_activity
+        ON timeline_entries (opportunity_id, event_timestamp);
+
+CREATE INDEX idx_timeline_entries_created_author
+            ON timeline_entries (created_at, created_by);
+
 CREATE INDEX idx_timeline_entries_opportunity_id ON timeline_entries(opportunity_id);
+
+CREATE INDEX idx_timeline_entries_stage_changes
+        ON timeline_entries (opportunity_id, event_timestamp, id)
+        WHERE type = 'stage_change';
 
 CREATE TABLE attachments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

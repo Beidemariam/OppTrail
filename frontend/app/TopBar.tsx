@@ -56,6 +56,12 @@ export function TopBar({ user }: { user: User }) {
         <Link className="ghost-button" to="/search">
           Search
         </Link>
+        {/* The six aggregations (milestone 6.2). Beside Search because both
+            are questions asked across every deal rather than about one, which
+            is what distinguishes them from everything on the board. */}
+        <Link className="ghost-button" to="/reports">
+          Reports
+        </Link>
         <NotificationMenu />
         <ThemeToggle />
         <span className="user-chip" title={user.email}>

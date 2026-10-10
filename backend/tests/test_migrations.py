@@ -33,7 +33,7 @@ CANONICAL = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 # The revision `alembic upgrade head` is expected to land on. Written down
 # rather than read from the script directory, for the same reason
 # `expected_schema.sql` is: a new revision should have to say so here.
-HEAD_REVISION = "0016_custom_fields"
+HEAD_REVISION = "0017_activity_indexes"
 
 
 @pytest.fixture
@@ -127,7 +127,16 @@ def build_mvp_database(url: str) -> None:
 
 
 def timestamps(connection: sqlite3.Connection, table: str, column: str) -> list[str]:
-    rows = connection.execute(f"SELECT {column} AS value FROM {table}").fetchall()
+    """The column's values, ordered by row id.
+
+    The `ORDER BY` is not decoration. Without it this read the rows in
+    whatever order the chosen plan produced, and milestone 6.2's
+    `idx_timeline_entries_activity` changed that plan -- so a test about
+    timestamp *formats* started failing over row order, on a migration it had
+    nothing to do with. An assertion on a list from an unordered query is an
+    assertion about the query planner.
+    """
+    rows = connection.execute(f"SELECT {column} AS value FROM {table} ORDER BY id").fetchall()
     return [row["value"] for row in rows if row["value"] is not None]
 
 

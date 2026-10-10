@@ -1196,6 +1196,59 @@ over 200 lines and each holding only its own form state: `AuthPanel`, `TopBar`,
 `TimelineFilterBar`, `TimelineEntryForm`, `TimelineEntryList`, `NoteBlock`,
 `AiSidebar`.
 
+### The six aggregations
+
+Milestone 6.2 is `docs/FEATURES.md` §10: what a sales manager needs to know
+"without opening twenty opportunities one at a time". `app/dashboard.py` holds
+all six, `routes_dashboard.py` answers them in one request, and
+`app/ReportsPage.tsx` draws them at **`/reports`** — not `/dashboard`, because
+this project's code has always called the board at `/` the dashboard and
+reusing the word would make every reference ambiguous.
+
+- **Computed live, and that is a constraint rather than a default.** §10 rules
+  out rollup tables, materialized views and a warehouse by name. Six indexed
+  aggregate queries is the whole implementation.
+- **Permissions are inside each query**, as in search — this is the second
+  read in the app that spans opportunities, so there is no role to resolve
+  first and two managers legitimately get different numbers.
+- **The 300 ms budget is asserted, and it is the only acceptance criterion in
+  this project that is a number** (`test_each_aggregate_answers_inside_the_
+  budget`, which builds §10's own 800,000-row corpus). It immediately found
+  three of the six over budget (**D-172**): the stalled list became one
+  grouped pass rather than a correlated `MAX` per deal, three covering indexes
+  make that pass index-only, a partial index on `type = 'stage_change'` turned
+  time-in-stage into a seek, and the activity union materializes the
+  accessible set once. Worst case 196 ms.
+- **Two queries name their index** (`INDEXED BY`), which is normally a smell.
+  SQLite chose wrong in both directions depending on whether `ANALYZE` had
+  run, and nothing here runs it — so the plan that matters is the one without
+  statistics, and a directive that goes stale fails loudly rather than
+  silently getting slow. Used only where measurement showed the planner
+  choosing wrong. **§10's own suggested index order is inverted** for the same
+  reason: it asks for `(created_by, created_at)` and the query filters on the
+  date, so revision `0017_activity_indexes` creates
+  `(created_at, created_by)`.
+- **A metric that cannot be computed says so.** Average time in stage is only
+  correct back to the first recorded stage change, so the response carries
+  `earliest_change` and an unmeasured stage answers `null` — §10 requires that
+  be "labelled as such rather than silently shown as zero", and the screen and
+  an e2e test both hold it to that. A win rate with nothing closed is `null`
+  rather than 0%, which is a different claim.
+- **`currency` is on the response, beyond §10.** Four of the six sum `value`
+  and a deal carries its own currency, so a mixed-currency deployment would
+  get a number rather than an amount. It names the currency when there is one
+  and is `null` when there is not; the screen then says "mixed currencies"
+  instead of stamping a symbol on it.
+- **Not paginated**, unlike every other collection read: six fixed summaries
+  rather than a list somebody walks. The two that could grow take explicit
+  caps, because a cursor over an aggregate is a cursor over something that
+  changes under it.
+- **The bars are CSS**, not a charting library (D-073's rule: a primitive
+  arrives with the milestone that has a caller for it). Each report is a named
+  landmark via `aria-labelledby` — a `<section>` is only a `region` once it
+  has an accessible name, and six unnamed ones are six things a screen-reader
+  user cannot tell apart.
+
 ### Custom fields
 
 Milestone 6.1 is ADR 0006 and `docs/FEATURES.md` §3: the two or three things

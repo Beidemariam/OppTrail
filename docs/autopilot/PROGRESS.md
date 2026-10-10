@@ -5414,10 +5414,53 @@ settled.
       through is reading it, and a panel left open covers the row it just sent
       the reader to.
 
-- [ ] 6.2 Six live-computed dashboard aggregations — no rollup tables
-      (pipeline, win/loss, time in stage, stalled, activity, forecast per
-      `FEATURES.md` §10); index on `(created_by, created_at)` for
-      activity-per-rep.
+- [x] 6.2 **Six live-computed dashboard aggregations** (`FEATURES.md` §10):
+      pipeline by stage, win/loss, average time in stage, stalled, activity
+      per rep, forecast. No rollup tables, no materialized views — §10 is
+      explicit, and `app/dashboard.py` plus one route is the whole backend.
+      The screen is `/reports` (`app/ReportsPage.tsx`); the name avoids
+      "dashboard", which is what this project's code has always called the
+      board at `/`.
+
+      **The acceptance criterion is a number, and three of the six failed it**
+      (**D-172**). Measured against the corpus §10 names — 400 opportunities,
+      ~800,000 activity rows spread over two years — the obvious formulations
+      gave activity-per-rep **1,533 ms**, the stalled list **408 ms** and
+      time-in-stage **352 ms** against a 300 ms budget. Four fixes, each
+      forced by a measurement: the stalled list became one grouped pass rather
+      than a correlated `MAX` per deal; three covering indexes make that pass
+      index-only; a partial index on `type = 'stage_change'` turned
+      time-in-stage into a seek; and the activity union materializes the
+      accessible set once instead of per branch. Worst case is now 196 ms,
+      inside §10's own measured 131 ms expectation.
+      `test_each_aggregate_answers_inside_the_budget` builds that corpus and
+      is the only test here that does.
+
+      Three things worth carrying forward:
+
+      - **§10's suggested index has the wrong column order.** It asks for
+        `(created_by, created_at)`; the query filters on the date and only
+        groups by the author, so `(created_at, created_by)` is what revision
+        `0017_activity_indexes` creates. First time a specified technical
+        detail in this project has been contradicted by measurement.
+      - **Two queries name their index** (`INDEXED BY`), because SQLite chose
+        wrong in both directions depending on whether `ANALYZE` had run — and
+        nothing here runs it. A directive that goes stale fails loudly rather
+        than silently getting slow.
+      - **Permissions are inside every query**, as in search: this is the
+        second read that spans opportunities, so there is no role to resolve
+        first and two managers legitimately see different numbers.
+
+      Added beyond §10: **`currency` on the response.** Four of the six sum
+      `value` and a deal carries its own currency, so a mixed-currency
+      deployment would get a total that is a number and not an amount. The
+      answer names the currency when there is one and `null` when there is
+      not, and the screen says "mixed currencies" rather than stamping a
+      symbol on it.
+
+      Deliberately **not** sortable or filterable by custom field: §10's six
+      are what it asks for, and a seventh aggregation is a milestone rather
+      than a parameter.
 - [ ] 6.3 Constrained rule builder: single-hop only (trigger → condition →
       action), dry-runnable, every automated write producing a traceable
       system entry naming the rule. Schema: `automation_rules`,
