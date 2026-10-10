@@ -3,10 +3,13 @@
 import { FormEvent, useState, type RefObject } from "react";
 
 import {
+  customFilterState,
+  customFilters,
   emptyOpportunityViewState,
   pinnedIds,
   sortFields,
   stages,
+  type CustomField,
   type OpportunityViewState,
 } from "../lib/domain";
 
@@ -30,11 +33,16 @@ export function OpportunityFilterBar({
   state,
   keywordRef,
   onApply,
+  fields = [],
 }: {
   state: OpportunityViewState;
   /** Where `/` puts the cursor (milestone 2.4a). */
   keywordRef?: RefObject<HTMLInputElement | null>;
   onApply: (state: OpportunityViewState) => void;
+  /** The live custom fields for opportunities (milestone 6.1). Each one
+   * becomes a control here, which is `docs/FEATURES.md` §3's "fields appear
+   * automatically in Table columns, filters, and the entry form". */
+  fields?: CustomField[];
 }) {
   const [appliedState, setAppliedState] = useState(state);
   const [draft, setDraft] = useState<OpportunityViewState>(state);
@@ -54,6 +62,18 @@ export function OpportunityFilterBar({
   }
 
   const pinned = pinnedIds(state.ids);
+  const customDraft = customFilters(draft.custom, fields);
+
+  /** One custom field's filter, written back into the flat `custom` string. */
+  function setCustom(key: string, value: string) {
+    const next = new Map(customDraft);
+    if (value) {
+      next.set(key, value);
+    } else {
+      next.delete(key);
+    }
+    setDraft({ ...draft, custom: customFilterState(next) });
+  }
 
   return (
     <form className="filter-bar" onSubmit={apply}>
@@ -101,6 +121,46 @@ export function OpportunityFilterBar({
           <option value="false">Not stalled</option>
         </select>
       </label>
+      {fields.map((field) => (
+        <label className="filter-field" key={field.key}>
+          {field.label}
+          {field.type === "select" || field.type === "multi_select" ? (
+            <select
+              aria-label={`Filter by ${field.label}`}
+              value={customDraft.get(field.key) ?? ""}
+              onChange={(event) => setCustom(field.key, event.target.value)}
+            >
+              <option value="">{`Any ${field.label.toLowerCase()}`}</option>
+              {field.options.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          ) : field.type === "checkbox" ? (
+            <select
+              aria-label={`Filter by ${field.label}`}
+              value={customDraft.get(field.key) ?? ""}
+              onChange={(event) => setCustom(field.key, event.target.value)}
+            >
+              <option value="">{`${field.label} or not`}</option>
+              <option value="true">Yes</option>
+              <option value="false">No</option>
+            </select>
+          ) : (
+            // Text, number, date and user all filter as text, matched as a
+            // substring like the keyword box: a person filtering a text field
+            // is looking for a fragment of it, and a date filters usefully by
+            // its year or month prefix because every date here is
+            // `YYYY-MM-DD` (`lib/time.ts`).
+            <input
+              aria-label={`Filter by ${field.label}`}
+              value={customDraft.get(field.key) ?? ""}
+              onChange={(event) => setCustom(field.key, event.target.value)}
+            />
+          )}
+        </label>
+      ))}
       <label className="filter-field">
         Sort by
         <select

@@ -2,14 +2,24 @@
 
 import { ChangeEvent, FormEvent, useState, type RefObject } from "react";
 
-import { entryTypes, type EntryType, type TimelineEntry } from "../lib/domain";
+import {
+  entryTypes,
+  type CustomValues,
+  type EntryType,
+  type TimelineEntry,
+} from "../lib/domain";
 import { submitFormOnModEnter } from "../lib/keyboard";
-import { useSaveTimelineEntry, useUploadAttachment } from "../lib/queries";
+import {
+  useCustomFields,
+  useSaveTimelineEntry,
+  useUploadAttachment,
+} from "../lib/queries";
 import {
   localInputToUtc,
   nowDateTimeInput,
   toDateTimeInput,
 } from "../lib/time";
+import { CustomFieldInputs } from "./CustomFieldInputs";
 import { RichTextEditor } from "./RichTextEditor";
 
 interface EntryFormState {
@@ -17,6 +27,9 @@ interface EntryFormState {
   title: string;
   body: string;
   event_timestamp: string;
+  /** The entry's custom field values (milestone 6.1). A whole set, posted
+   * with the entry -- see `app/CustomFieldInputs.tsx`. */
+  custom_values: CustomValues;
 }
 
 function formFor(entry: TimelineEntry | null): EntryFormState {
@@ -26,6 +39,7 @@ function formFor(entry: TimelineEntry | null): EntryFormState {
       title: "",
       body: "",
       event_timestamp: nowDateTimeInput(),
+      custom_values: {},
     };
   }
   return {
@@ -33,6 +47,7 @@ function formFor(entry: TimelineEntry | null): EntryFormState {
     title: entry.title,
     body: entry.body,
     event_timestamp: toDateTimeInput(entry.event_timestamp),
+    custom_values: (entry.custom_values ?? {}) as CustomValues,
   };
 }
 
@@ -68,6 +83,7 @@ export function TimelineEntryForm({
   // upload after it did not. Without it, pressing the button again would post
   // a second entry rather than retrying the file (milestone 4.3a).
   const [createdId, setCreatedId] = useState<number | null>(null);
+  const customFields = useCustomFields("entry");
   const save = useSaveTimelineEntry(opportunityId);
   const upload = useUploadAttachment();
 
@@ -174,6 +190,15 @@ export function TimelineEntryForm({
           onChange={(body) => setForm({ ...form, body })}
         />
       </div>
+      {/* Whatever this team decided to track that nobody anticipated
+          (milestone 6.1, `docs/FEATURES.md` §3). Renders nothing when no entry
+          fields are defined, which is every deployment until somebody defines
+          one. */}
+      <CustomFieldInputs
+        fields={customFields.data ?? []}
+        values={form.custom_values}
+        onChange={(custom_values) => setForm({ ...form, custom_values })}
+      />
       {/* Attaching where a person writes (milestone 4.3a). 4.3 put the control
           on the posted card only, which is where a file is *read*; the human
           looked for it in this form twice -- "I can't find the attach button

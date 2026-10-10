@@ -2382,3 +2382,44 @@ Two things about how this was verified:
   and only then searches. The project's test rules already forbid depending
   on the wall clock; depending on the seed's wording is the same mistake with
   a different clock.
+
+---
+
+## Milestone 6.1 — custom fields
+
+ADR 0006 and `docs/FEATURES.md` §3. One revision (`0016_custom_fields`), one
+new table, one JSON column on each of two tables, five routes, and the three
+screens §3 names.
+
+```
+backend:  ruff, ruff format, mypy (45 source files)     all clean
+          602 passed, 1 skipped, 96.87% line+branch
+          app/custom_fields.py and app/routes_custom_fields.py
+          both at 100% branch
+          authorization matrix: 91 cases, 95 endpoints
+frontend: typecheck, lint (3 pre-existing warnings), prettier  clean
+          624 passed (38 files), 96.87% statements /
+          91.03% branch / 96.82% lines
+e2e:      82 passed, 1 skipped (26 specs)
+gate:     make check-fast -> MAKE_EXIT=0
+```
+
+New tests: 14 in `tests/test_custom_fields.py`, 5 matrix cases, 7 in
+`lib/domain.test.ts`, 10 in `app/CustomFieldInputs.test.tsx`, 13 in
+`app/CustomFields.test.tsx`, and 3 in `e2e/26-custom-fields.spec.ts` — the
+last of which walks the roadmap's acceptance criterion verbatim ("a new select
+field appears as a table column, a filter, and on the entry form") in a real
+browser, because the three places are three screens reading one definition
+list and no component test can watch them agree.
+
+**Branch coverage went under the threshold before it went over it.** The first
+green suite left the frontend at 89.19%, because `CustomFieldInputs` has a
+branch per field type and only two were exercised. Fixed by adding
+`app/CustomFieldInputs.test.tsx` — one test per type, asserting the *shape*
+each control reports, since a checkbox that reported `"true"` or a number that
+reported `"42"` would be a 422 the reader did not cause. The threshold was not
+touched, which is the rule.
+
+Four of the seven acceptance tests were confirmed failing against the unwired
+components first (the column picker and the filter bar with their custom-field
+branches removed).

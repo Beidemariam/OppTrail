@@ -22,6 +22,7 @@ import { useKeyboardShortcuts } from "../lib/keyboard";
 import {
   useBulkOpportunityAction,
   useEditOpportunity,
+  useCustomFields,
   useDeleteOpportunity,
   useTasksDueIn,
   useOpportunities,
@@ -32,6 +33,7 @@ import { paramsWithState, stateFromParams } from "../lib/viewState";
 import { AuthPanel } from "./AuthPanel";
 import { BulkActionBar } from "./BulkActionBar";
 import { ColumnPicker } from "./ColumnPicker";
+import { ManageCustomFields } from "./ManageCustomFields";
 import { useConfirm } from "./ConfirmDialog";
 import { DensityToggle } from "./Density";
 import { Modal } from "./Modal";
@@ -65,10 +67,19 @@ import { ViewSwitcher } from "./ViewSwitcher";
 export function DashboardPage() {
   const session = useSession();
   const opportunities = useOpportunities(Boolean(session.data));
+  // The live custom field definitions for opportunities (milestone 6.1), read
+  // once here: they decide which custom columns the table can draw, what the
+  // filter bar may offer, and which of a stale URL's filters still apply.
+  const customFields = useCustomFields("opportunity", Boolean(session.data));
+  const fields = customFields.data ?? [];
   // The create/edit form is a dialog (D-079): `editing` is which opportunity
   // it is editing, `composing` is that same dialog opened empty.
   const [editing, setEditing] = useState<Opportunity | null>(null);
   const [composing, setComposing] = useState(false);
+  // Where custom fields are defined (milestone 6.1). A dialog from the page
+  // header rather than a route, for the reason the create form is one (D-079):
+  // it is a rare, deliberate action and the board stays behind it.
+  const [managingFields, setManagingFields] = useState(false);
   // What a stage change just did, for a reader who cannot see the card move.
   const [announcement, setAnnouncement] = useState("");
   // The keyboard's cursor over the board (milestone 2.4a). Separate from
@@ -131,6 +142,7 @@ export function DashboardPage() {
   const visibleOpportunities = applyOpportunityView(
     opportunities.data ?? [],
     viewState,
+    fields,
   );
   // Which month the calendar draws: what the URL asked for, or the reader's
   // own month when it asked for nothing (`resolveMonth`). Resolved here so
@@ -567,10 +579,18 @@ export function DashboardPage() {
                   onChange={(columns: string) =>
                     setViewState({ ...viewState, columns })
                   }
+                  fields={fields}
                 />
                 <DensityToggle />
               </>
             )}
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setManagingFields(true)}
+            >
+              Fields
+            </button>
             <button
               type="button"
               className="primary-button"
@@ -612,6 +632,7 @@ export function DashboardPage() {
               state={viewState}
               keywordRef={keywordFilterRef}
               onApply={setViewState}
+              fields={fields}
             />
           )}
         </div>
@@ -672,7 +693,12 @@ export function DashboardPage() {
         ) : viewState.view === "list" ? (
           <OpportunityList {...viewProps} />
         ) : viewState.view === "table" ? (
-          <OpportunityTable {...viewProps} view={viewState} onSort={sortBy} />
+          <OpportunityTable
+            {...viewProps}
+            view={viewState}
+            onSort={sortBy}
+            fields={fields}
+          />
         ) : viewState.view === "calendar" ? (
           <OpportunityCalendar
             {...viewProps}
@@ -710,6 +736,10 @@ export function DashboardPage() {
             onDone={closeForm}
           />
         </Modal>
+      )}
+
+      {managingFields && (
+        <ManageCustomFields onClose={() => setManagingFields(false)} />
       )}
     </main>
   );

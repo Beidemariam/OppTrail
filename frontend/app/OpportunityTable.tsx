@@ -6,10 +6,13 @@ import {
   columnsFromState,
   editableField,
   opportunityCell,
-  opportunityColumns,
   sortFields,
   type Opportunity,
+  type CustomField,
   type OpportunityColumn,
+  type TableColumn,
+  columnLabel,
+  customColumnKey,
   type OpportunityEditableKey,
   type OpportunitySortField,
   type OpportunityViewState,
@@ -76,11 +79,16 @@ export function OpportunityTable({
   onToggleChecked,
   onRangeSelect,
   onSort,
+  fields,
 }: OpportunityViewProps & {
   view: OpportunityViewState;
   onSort: (field: OpportunitySortField) => void;
+  /** The live custom field definitions (milestone 6.1), read once by
+   * `DashboardPage` and passed down: they decide which custom columns exist,
+   * what each is labelled, and how a value reads. */
+  fields: CustomField[];
 }) {
-  const columns = columnsFromState(view.columns);
+  const columns = columnsFromState(view.columns, fields);
   // One per table rather than one per cell: fifty visible cells would
   // otherwise be fifty mutation observers over the same endpoint.
   const saveField = useOpportunityFieldSave();
@@ -100,15 +108,26 @@ export function OpportunityTable({
           view={view}
           onSort={onSort}
         />
-        {columns.map((column) => (
-          <SortHeader
-            key={column}
-            field={column}
-            label={columnLabel(column)}
-            view={view}
-            onSort={onSort}
-          />
-        ))}
+        {columns.map((column) =>
+          // A custom field is not a sort field (milestone 6.1): `sortFields`
+          // is a fixed list the filter bar's dropdown shares, and sorting by
+          // a JSON value is a comparator per type rather than a column swap.
+          // So a custom column is a heading, not a control -- which is also
+          // the honest affordance, since clicking it would do nothing.
+          customColumnKey(column) !== null ? (
+            <span className="table-heading" key={column}>
+              {columnLabel(column, fields)}
+            </span>
+          ) : (
+            <SortHeader
+              key={column}
+              field={column as OpportunitySortField}
+              label={columnLabel(column, fields)}
+              view={view}
+              onSort={onSort}
+            />
+          ),
+        )}
         <span />
       </div>
       <VirtualList
@@ -130,6 +149,7 @@ export function OpportunityTable({
           <TableRow
             opportunity={opportunity}
             columns={columns}
+            fields={fields}
             saveField={saveField}
             template={template}
             selected={selectedId === opportunity.id}
@@ -146,11 +166,6 @@ export function OpportunityTable({
       />
     </section>
   );
-}
-
-function columnLabel(column: OpportunityColumn): string {
-  return opportunityColumns.find((candidate) => candidate.key === column)!
-    .label;
 }
 
 function sortLabel(field: OpportunitySortField): string {
@@ -196,6 +211,7 @@ function SortHeader({
 function TableRow({
   opportunity,
   columns,
+  fields,
   saveField,
   template,
   selected,
@@ -209,7 +225,8 @@ function TableRow({
   onRangeSelect,
 }: {
   opportunity: Opportunity;
-  columns: OpportunityColumn[];
+  columns: TableColumn[];
+  fields: CustomField[];
   saveField: OpportunityFieldSave;
   template: string;
   selected: boolean;
@@ -242,10 +259,18 @@ function TableRow({
         {opportunity.stalled && <span className="stalled-badge">Stalled</span>}
       </p>
       {columns.map((column) => {
-        const editable = editableField(column);
+        // A custom value is read-only in the grid (milestone 6.1): editing one
+        // needs the field's own control -- a select, a checkbox, a date -- and
+        // `editableOpportunityFields` declares one editor per built-in field.
+        // The record's own form is where a value is set.
+        const editable =
+          customColumnKey(column) === null &&
+          editableField(column as OpportunityColumn);
         return (
           <p className="table-cell" key={column}>
-            <span className="visually-hidden">{columnLabel(column)}: </span>
+            <span className="visually-hidden">
+              {columnLabel(column, fields)}:{" "}
+            </span>
             {column === "stage" ? (
               // Already an editor, and a better one than a text box: the
               // stage list is fixed (`AGENTS.md` invariant 6) and this is the
@@ -262,10 +287,10 @@ function TableRow({
                 editable={owns}
                 save={saveField}
               >
-                {opportunityCell(opportunity, column)}
+                {opportunityCell(opportunity, column, fields)}
               </OpportunityField>
             ) : (
-              opportunityCell(opportunity, column)
+              opportunityCell(opportunity, column, fields)
             )}
           </p>
         );

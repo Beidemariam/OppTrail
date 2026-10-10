@@ -88,6 +88,13 @@ class World:
     # write.
     task_comment_id: int
     deleted_task_comment_id: int
+    # Milestone 6.1. A definition is not opportunity-scoped and not personal
+    # either, so neither `permissions.py` nor the saved views' creator-only
+    # rule applies: any authenticated caller may define, edit and archive a
+    # field (**D-171**). `archived_field_id` is there so the restore route is
+    # exercised against a row that is actually archived.
+    custom_field_id: int
+    archived_field_id: int
 
 
 @dataclass(frozen=True)
@@ -616,6 +623,49 @@ MATRIX: dict[Endpoint, Case] = {
         body=lambda world, actor: None,
         notes="Scoped by the query: marks only the caller's own rows.",
     ),
+    # Custom field definitions (milestone 6.1, **D-171**). Global metadata, not
+    # a record: `docs/FEATURES.md` §3 says "admin-defined" and this app has no
+    # admin role, so the rule is any authenticated caller. Every actor below is
+    # therefore identical except anonymous -- which is the point worth pinning,
+    # because it is the widest write surface in the app and a future ruling
+    # that narrows it should break this test loudly.
+    Endpoint("GET", "/api/v2/custom-fields"): Case(
+        expected=authenticated_only(200),
+        url=lambda world: "/api/v2/custom-fields",
+        notes="A reader has to know what the columns on their screen mean.",
+    ),
+    Endpoint("POST", "/api/v2/custom-fields"): Case(
+        expected=authenticated_only(201),
+        url=lambda world: "/api/v2/custom-fields",
+        body=lambda world, actor: {
+            "entity_type": "opportunity",
+            "key": f"matrix_{actor}_field",
+            "label": f"Matrix {actor}",
+            "type": "text",
+        },
+        notes=(
+            "Any signed-in user may define a field; the key is per-actor "
+            "so the runs do not collide."
+        ),
+    ),
+    Endpoint("PATCH", "/api/v2/custom-fields/{field_id}"): Case(
+        expected=authenticated_only(200),
+        url=lambda world: f"/api/v2/custom-fields/{world.custom_field_id}",
+        body=lambda world, actor: {"label": f"Renamed by {actor}", "required": False},
+        notes="Label, options, required and position. Never key or type (ADR 0006).",
+    ),
+    Endpoint("POST", "/api/v2/custom-fields/{field_id}/archive"): Case(
+        expected=authenticated_only(200),
+        url=lambda world: f"/api/v2/custom-fields/{world.custom_field_id}/archive",
+        body=lambda world, actor: None,
+        notes="Idempotent, so every actor in turn answers 200 rather than the first one winning.",
+    ),
+    Endpoint("POST", "/api/v2/custom-fields/{field_id}/restore"): Case(
+        expected=authenticated_only(200),
+        url=lambda world: f"/api/v2/custom-fields/{world.archived_field_id}/restore",
+        body=lambda world, actor: None,
+        notes="The undo of archive, against a field the fixture archived.",
+    ),
     Endpoint("POST", "/api/v2/saved-views"): Case(
         expected=authenticated_only(201),
         url=lambda world: "/api/v2/saved-views",
@@ -905,6 +955,23 @@ def world(tmp_path, monkeypatch) -> World:
         assert response.status_code == 201, response.json()
         return int(response.json()["id"])
 
+    def custom_field(key: str) -> int:
+        response = owner.post(
+            "/api/v2/custom-fields",
+            json={
+                "entity_type": "opportunity",
+                "key": key,
+                "label": key.replace("_", " ").title(),
+                "type": "text",
+            },
+        )
+        assert response.status_code == 201, response.json()
+        return int(response.json()["id"])
+
+    custom_field_id = custom_field("matrix_field")
+    archived_field_id = custom_field("matrix_archived_field")
+    assert owner.post(f"/api/v2/custom-fields/{archived_field_id}/archive").status_code == 200
+
     task_comment_id = task_comment("Matrix task comment")
     deleted_task_comment_id = task_comment("Matrix deleted task comment")
     assert owner.delete(f"/api/v2/task-comments/{deleted_task_comment_id}").status_code == 204
@@ -941,6 +1008,8 @@ def world(tmp_path, monkeypatch) -> World:
         deleted_attachment_id=deleted_attachment_id,
         task_comment_id=task_comment_id,
         deleted_task_comment_id=deleted_task_comment_id,
+        custom_field_id=custom_field_id,
+        archived_field_id=archived_field_id,
     )
 
     for client in clients.values():

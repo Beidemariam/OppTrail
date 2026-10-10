@@ -2,8 +2,9 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 
-import { stages, type Opportunity } from "../lib/domain";
-import { useSaveOpportunity } from "../lib/queries";
+import { stages, type CustomValues, type Opportunity } from "../lib/domain";
+import { useCustomFields, useSaveOpportunity } from "../lib/queries";
+import { CustomFieldInputs } from "./CustomFieldInputs";
 
 interface OpportunityFormState {
   name: string;
@@ -12,6 +13,11 @@ interface OpportunityFormState {
   currency: string;
   stage: string;
   expected_close_date: string;
+  /** The deal's custom field values (milestone 6.1). This form is where they
+   * are set: the table shows them as read-only cells, because a value's
+   * control is decided by its field's type and a grid cell has room for one
+   * text box. */
+  custom_values: CustomValues;
 }
 
 const emptyForm: OpportunityFormState = {
@@ -21,6 +27,7 @@ const emptyForm: OpportunityFormState = {
   currency: "USD",
   stage: "Prospecting",
   expected_close_date: "",
+  custom_values: {},
 };
 
 function formFor(opportunity: Opportunity | null): OpportunityFormState {
@@ -34,6 +41,7 @@ function formFor(opportunity: Opportunity | null): OpportunityFormState {
     currency: opportunity.currency,
     stage: opportunity.stage,
     expected_close_date: opportunity.expected_close_date ?? "",
+    custom_values: (opportunity.custom_values ?? {}) as CustomValues,
   };
 }
 
@@ -58,6 +66,7 @@ export function OpportunityForm({
   onDone: () => void;
 }) {
   const [form, setForm] = useState(() => formFor(editing));
+  const customFields = useCustomFields("opportunity");
   const save = useSaveOpportunity();
   const nameRef = useRef<HTMLInputElement>(null);
 
@@ -161,6 +170,15 @@ export function OpportunityForm({
           }
         />
       </label>
+
+      {/* Whatever this team tracks that the fixed fields above do not
+          (milestone 6.1). Renders nothing until somebody defines a field, so
+          this form is unchanged for a deployment that uses none. */}
+      <CustomFieldInputs
+        fields={customFields.data ?? []}
+        values={form.custom_values}
+        onChange={(custom_values) => setForm({ ...form, custom_values })}
+      />
 
       <div className="form-actions">
         <button className="primary-button" type="submit">

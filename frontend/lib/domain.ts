@@ -405,6 +405,19 @@ export type OpportunityViewState = {
    * which is every view that does not use the feature.
    */
   ids: string;
+  /**
+   * Custom field filters, as `key:value` pairs separated by commas
+   * (milestone 6.1). One flat string for the same reason `columns` and `ids`
+   * are: this shape is also the URL and a saved view's `filters`, both of
+   * which are flat string maps, so a new filter field here is a frontend
+   * change and not a migration (`CLAUDE.md`, "View state and saved views").
+   *
+   * A pair whose key has no live definition is ignored, which is the same
+   * tolerance `columnsFromState` and `pinnedIds` already have for a stale
+   * link -- and it is what makes archiving a field safe for every saved view
+   * that filtered on it.
+   */
+  custom: string;
 };
 
 /** The four renderers over one filtered list: board and list from milestone
@@ -477,6 +490,7 @@ export const emptyOpportunityViewState: OpportunityViewState = {
   columns: defaultOpportunityColumns.join(","),
   month: "",
   ids: "",
+  custom: "",
 };
 
 /**
@@ -484,12 +498,22 @@ export const emptyOpportunityViewState: OpportunityViewState = {
  * a column — a hand-edited or stale link should draw a table, not nothing.
  * An empty selection falls back to the default set for the same reason.
  */
-export function columnsFromState(value: string): OpportunityColumn[] {
+export function columnsFromState(
+  value: string,
+  fields: CustomField[] = [],
+): TableColumn[] {
   const known = new Set<string>(opportunityColumns.map((column) => column.key));
+  // A custom column survives only while its field is live (milestone 6.1), so
+  // archiving a field removes its column from every saved view and every
+  // bookmarked URL without touching either -- the same tolerance this
+  // function already had for a column name that no longer exists.
+  for (const field of fields) {
+    known.add(customColumn(field.key));
+  }
   const chosen = value
     .split(",")
     .map((key) => key.trim())
-    .filter((key): key is OpportunityColumn => known.has(key));
+    .filter((key): key is TableColumn => known.has(key));
   return chosen.length > 0 ? chosen : [...defaultOpportunityColumns];
 }
 
@@ -497,9 +521,21 @@ export function columnsFromState(value: string): OpportunityColumn[] {
  * move-to-stage control the list does, for the owner who may change it. */
 export function opportunityCell(
   opportunity: Opportunity,
-  column: OpportunityColumn,
+  column: TableColumn,
+  fields: CustomField[] = [],
 ): string {
-  switch (column) {
+  const customKey = customColumnKey(column);
+  if (customKey !== null) {
+    const field = fields.find((candidate) => candidate.key === customKey);
+    return field
+      ? customFieldText(
+          field,
+          (opportunity.custom_values as CustomValues)[customKey],
+        )
+      : "";
+  }
+  const builtIn = column as OpportunityColumn;
+  switch (builtIn) {
     case "value":
       return formatMoney(opportunity.currency, opportunity.value);
     case "expected_close_date":
@@ -508,10 +544,25 @@ export function opportunityCell(
     case "created_at":
       // Date alone: a table row is one line, and the time of day is not what
       // anyone scans a column of dates for.
-      return opportunity[column].slice(0, 10);
+      return opportunity[builtIn].slice(0, 10);
     default:
-      return opportunity[column];
+      return opportunity[builtIn];
   }
+}
+
+/** A column's heading: a built-in's fixed label, or a field's own. */
+export function columnLabel(
+  column: TableColumn,
+  fields: CustomField[] = [],
+): string {
+  const customKey = customColumnKey(column);
+  if (customKey !== null) {
+    return fields.find((field) => field.key === customKey)?.label ?? customKey;
+  }
+  return (
+    opportunityColumns.find((candidate) => candidate.key === column)?.label ??
+    column
+  );
 }
 
 /* --- Editing where content is read (milestone 2.11) -----------------------
@@ -615,11 +666,23 @@ export function editableField(
 export function applyOpportunityView(
   opportunities: Opportunity[],
   state: OpportunityViewState,
+  fields: CustomField[] = [],
 ): Opportunity[] {
   const keyword = state.q.trim().toLowerCase();
   const pinned = pinnedIds(state.ids);
+  // Milestone 6.1. `fields` is the live definition set, used only to drop a
+  // filter whose field has been archived -- the default empty list means
+  // "accept whatever the URL names", which is what the unit tests and any
+  // caller that has not read the definitions want.
+  const custom = customFilters(state.custom, fields);
   const filtered = opportunities.filter((opportunity) => {
     if (pinned && !pinned.has(opportunity.id)) {
+      return false;
+    }
+    if (
+      custom.size > 0 &&
+      !matchesCustomFilters(opportunity.custom_values as CustomValues, custom)
+    ) {
       return false;
     }
     if (state.stage && opportunity.stage !== state.stage) {
@@ -1020,4 +1083,148 @@ export function isLinked(
   id: number,
 ): boolean {
   return target?.level === level && target.id === id;
+}
+
+// --- Custom fields (milestone 6.1, ADR 0006) -------------------------------
+
+/** One field somebody defined, with the typed metadata every reader of the
+ * JSON values needs: what to label it, how to edit it, what it may hold. */
+export type CustomField = components["schemas"]["CustomFieldPublic"];
+export type CustomFieldType = CustomField["type"];
+export type CustomFieldCreate = components["schemas"]["CustomFieldCreate"];
+export type CustomFieldUpdate = components["schemas"]["CustomFieldUpdate"];
+export type CustomFieldEntity = CustomField["entity_type"];
+
+/** The values a record carries, keyed by field key. Typed loosely on purpose:
+ * what a value may be depends on a definition, which the type system here
+ * cannot see -- the server validates against it (`app/custom_fields.py`) and
+ * `customFieldText` is the one place the client interprets it. */
+export type CustomValues = Record<string, unknown>;
+
+/** A table column that is a custom field rather than a built-in one.
+ *
+ * Prefixed rather than bare, because a field's key is chosen by a person and
+ * nothing stops somebody defining one called `stage`. The prefix keeps the
+ * two namespaces apart in the URL, in a saved view, and in the column picker.
+ */
+export const CUSTOM_COLUMN_PREFIX = "custom:";
+
+export type CustomColumn = `custom:${string}`;
+export type TableColumn = OpportunityColumn | CustomColumn;
+
+export function customColumn(key: string): CustomColumn {
+  return `${CUSTOM_COLUMN_PREFIX}${key}`;
+}
+
+/** The field key a custom column names, or `null` for a built-in column. */
+export function customColumnKey(column: TableColumn): string | null {
+  return column.startsWith(CUSTOM_COLUMN_PREFIX)
+    ? column.slice(CUSTOM_COLUMN_PREFIX.length)
+    : null;
+}
+
+/**
+ * One custom value as text, for a table cell or a chip.
+ *
+ * Every branch answers a string, including the ones for a value that does not
+ * match its definition: the server validates on write, but a definition can
+ * be archived and recreated with a different type (ADR 0006's answer to a type
+ * change), which leaves older rows holding a value of the previous shape. A
+ * cell is not the place to discover that, so an unreadable value reads as
+ * empty rather than as `[object Object]`.
+ */
+export function customFieldText(
+  field: CustomField,
+  value: unknown,
+  users: Map<number, string> = new Map(),
+): string {
+  if (value === null || value === undefined || value === "") {
+    return "";
+  }
+  switch (field.type) {
+    case "checkbox":
+      return value === true ? "Yes" : "No";
+    case "multi_select":
+      return Array.isArray(value) ? value.join(", ") : "";
+    case "user":
+      return typeof value === "number"
+        ? (users.get(value) ?? `User ${value}`)
+        : "";
+    case "number":
+      return typeof value === "number" ? String(value) : "";
+    default:
+      return typeof value === "string" ? value : "";
+  }
+}
+
+/**
+ * The custom field filters in force, as a map.
+ *
+ * Tolerant in the same way `pinnedIds` and `columnsFromState` are: a pair with
+ * no value, or a key with no live definition, is dropped rather than treated
+ * as a filter that matches nothing. A stale link should show a reader more
+ * than they expected, never an empty screen they cannot explain.
+ */
+export function customFilters(
+  value: string,
+  fields: CustomField[] = [],
+): Map<string, string> {
+  const live = new Set(fields.map((field) => field.key));
+  const filters = new Map<string, string>();
+  for (const pair of value.split(",")) {
+    const separator = pair.indexOf(":");
+    if (separator <= 0) {
+      continue;
+    }
+    const key = pair.slice(0, separator).trim();
+    const held = pair.slice(separator + 1).trim();
+    if (held && (fields.length === 0 || live.has(key))) {
+      filters.set(key, held);
+    }
+  }
+  return filters;
+}
+
+/** The serialized form of a filter map, for the URL and a saved view. */
+export function customFilterState(filters: Map<string, string>): string {
+  return [...filters]
+    .filter(([, value]) => value !== "")
+    .map(([key, value]) => `${key}:${value}`)
+    .join(",");
+}
+
+/**
+ * Whether one record passes the custom field filters.
+ *
+ * A `multi_select` matches when the value is *among* the chosen ones, and
+ * everything else matches on its text, case-insensitively -- the same
+ * substring rule the keyword box uses, because a text custom field is the
+ * kind of thing somebody filters by a fragment of.
+ */
+export function matchesCustomFilters(
+  values: CustomValues,
+  filters: Map<string, string>,
+): boolean {
+  for (const [key, wanted] of filters) {
+    const held = values[key];
+    if (Array.isArray(held)) {
+      if (!held.some((item) => String(item) === wanted)) {
+        return false;
+      }
+      continue;
+    }
+    if (typeof held === "boolean") {
+      if (String(held) !== wanted) {
+        return false;
+      }
+      continue;
+    }
+    if (held === null || held === undefined) {
+      return false;
+    }
+    if (!String(held).toLowerCase().includes(wanted.toLowerCase())) {
+      return false;
+    }
+  }
+  return true;
 }

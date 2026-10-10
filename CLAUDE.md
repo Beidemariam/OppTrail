@@ -1196,6 +1196,58 @@ over 200 lines and each holding only its own form state: `AuthPanel`, `TopBar`,
 `TimelineFilterBar`, `TimelineEntryForm`, `TimelineEntryList`, `NoteBlock`,
 `AiSidebar`.
 
+### Custom fields
+
+Milestone 6.1 is ADR 0006 and `docs/FEATURES.md` §3: the two or three things
+a sales team tracks that nobody anticipated, which otherwise live in body
+text where nothing can filter on them. Revision `0016_custom_fields` adds
+`custom_field_definitions` and a `custom_values` JSON column on both
+`opportunities` and `timeline_entries`.
+
+- **Who may define one is the widest write surface in the app** (**D-171**).
+  §3 says "admin-defined" and there is no admin role here, so the rule is
+  *any authenticated caller* — not the saved views' creator-only rule, because
+  a field is shared by construction rather than personal (a typo in a label
+  everyone reads should not be fixable only by whoever typed it). The creator
+  is recorded, so narrowing this later is a route change rather than a
+  migration, and every actor row in `test_authorization_matrix.py` pins the
+  rule so a change to it cannot be silent.
+- **Validated on write, never trusted on read** — the ADR's two rules, and
+  both are load bearing. `custom_fields.validated_values` checks a submitted
+  set against the live definitions; `visible_values` drops any key with no
+  live definition, which is what lets a field be **archived without rewriting
+  a single row** and restored with its values intact. That property is why
+  there is no DELETE route and why a type change is archive-and-recreate.
+- **A 422 that names the field.** `custom_values_or_422` raises a
+  `RequestValidationError` rather than an `HTTPException`, so `errors.py`'s
+  existing handler produces `fields: {"custom_values.region": ...}` — the half
+  of a 422 a form can act on (`docs/REVIEW.md` M4). It is the one validation
+  that runs inside a route and still answers like a schema failure, because a
+  value is only wrong relative to a definition and Pydantic cannot see one.
+- **A value set is written whole.** `null` and an absent key both mean "leave
+  what is there", because a JSON column has no partial update and a quiet
+  default is what stops every `PATCH` of a name clearing a deal's fields. An
+  empty object is how a value is cleared. `required` is enforced when a set is
+  submitted rather than on every write, so making a field required does not
+  break screens that post without it.
+- **Definitions are read once per request and passed down**, not looked up per
+  row: `opportunity_from_row` and `entry_from_row` take a `definitions`
+  argument, the shape `attachments_by_entry_id` already uses for a page.
+- **The frontend reads one definition list per entity type**
+  (`useCustomFields`), and three screens draw from it — the column picker, the
+  filter bar and both forms, through `app/CustomFieldInputs.tsx`. A custom
+  column is keyed `custom:<key>` so a field called `stage` is still not the
+  stage; it is **read-only and not sortable**, because a value's editor
+  depends on its type and `sortFields` is a fixed list. `lib/domain.ts` holds
+  the pure half — `customFilters`, `matchesCustomFilters`, `customFieldText`,
+  `columnsFromState` — and every one of them ignores a key with no live
+  definition, so archiving a field quietly removes it from a saved view and a
+  bookmarked URL rather than emptying the screen.
+- **No expression index yet.** The ADR asks for one where a field is filtered
+  often; at 400 opportunities none is needed, and one per field would be the
+  user-triggered DDL the ADR rejected. That choice belongs with the field that
+  earns it.
+
 ### Four views over one list
 
 Milestones 2.7 and 2.8 gave the dashboard four renderers over one dataset, and

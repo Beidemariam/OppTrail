@@ -880,3 +880,34 @@ link at all, so "somebody mentioned you in a comment" leaves the reader to go
 and find it. That is a larger instance of the finding 6.0 fixes than 6.0's own
 case, and it now has the mechanism it would need — but it is not a search
 result, and this milestone's scope is search results.
+
+**D-171** | 2026-10-10 | Milestone 6.1 (custom fields, ADR 0006) has to answer a question neither the ADR nor `docs/FEATURES.md` §3 settles: **who may define a field.** §3 says "admin-defined"; this application has no admin role. Everywhere else `AGENTS.md`'s "owner or admin" resolves to the *opportunity* owner (`CLAUDE.md`, "Permissions"), and a definition has no opportunity to own — it is global metadata that changes the shape of every record of its entity type, for everybody. | (a) any authenticated user may define, edit and archive a field, (b) creator-only write, like a saved view, (c) introduce an admin role (a `users.is_admin` column and a gate), (d) defer custom fields until a role model exists | (a) | (b) reads plausible and is wrong about what the thing is: a saved view is *personal*, and D-060 already settled that this app has no teams, so creator-only write there means "your own view, nobody else's". A field is the opposite — it is shared by construction, so creator-only write would mean the only person who could fix a typo in a label everyone sees is whoever happened to type it first, and the only person who could retire a field is the one who added it. (c) invents an authorization tier this product has never had, for 20 known internal users, and `docs/adr/0010-authorization-boundary.md` is the record of deciding not to; it is also the one direction that is *hard* to reverse, since a role column has to be populated and every route taught about it. (d) defers a P1 feature on a question the brief tells me to answer rather than ask (§3.3: "no clarifying questions — nobody answers during a phase"). (a) is the honest reading of the system as it exists, and it is the **reversible** direction: adding a gate later is a route change plus a matrix row, while removing one means deciding who keeps the privilege. The creator is recorded on the row either way, so a future gate has the data it would need. | Y — `created_by` is recorded now, so a narrower rule later is a route change rather than a migration. | **Y — this is the widest write surface in the application.** Any signed-in person can add a required field to every opportunity, rename one everybody reads, or archive one a saved view filters on. Nothing is destroyed (archive is reversible, values are never rewritten) and the authorization matrix pins the rule so a change to it fails loudly — but if you want this narrowed to, say, the person who set up the workspace, that is a ruling I cannot make from §1–§2. |
+
+**What the matrix now pins, and why that is the useful part.** Every actor row
+for the five `/api/v2/custom-fields` endpoints is identical except `anonymous`,
+which looks like a test asserting nothing. It is the opposite: it is the one
+place the widest rule in the app is written down as an expectation, so a future
+milestone that narrows it cannot do so silently —
+`test_authorization_matrix.py` fails and names the endpoint.
+
+**Three smaller decisions inside the milestone**, none of them needing a
+ruling:
+
+- **A custom table column is read-only, and not sortable.** Editing a value
+  needs the field's own control — a select, a checkbox, a date — and
+  `editableOpportunityFields` declares exactly one editor per built-in field
+  (milestone 2.11); a grid cell has room for a text box and nothing else. The
+  record's own form is where a value is set. Sorting would mean a comparator
+  per type and an entry in the fixed `sortFields` list the filter bar shares,
+  which is more than §3 asks for — so a custom column renders a heading rather
+  than a sort button, which is also the honest affordance.
+- **A value set is written whole, never merged.** A JSON column is written
+  whole, so there is no partial update to express, and "leave them alone" has
+  to be the quiet default or every `PATCH` of a name would clear a deal's
+  fields. `null` and an absent key therefore mean the same thing, and an empty
+  object is how a value is cleared.
+- **`required` applies when a value set is submitted, not to every write.**
+  Otherwise making a field required would break every screen that posts
+  without it, including the ones that have no custom fields on them at all.
+  It is the same reasoning ADR 0006 applies to archiving: a definition change
+  must not invalidate rows already written.

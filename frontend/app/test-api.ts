@@ -33,6 +33,7 @@ export interface FakeApiOptions {
   activity?: ActivityEvent[];
   searchResults?: SearchResult[];
   savedViews?: SavedView[];
+  customFields?: CustomField[];
   /** Tasks (milestone 4.1). Seeded whole, like every other collection here. */
   tasks?: Task[];
   /** Paths that should fail, mapped to `[status, detail]`. */
@@ -341,6 +342,7 @@ export function aReply(
 }
 
 type SearchResult = components["schemas"]["SearchResultPublic"];
+type CustomField = components["schemas"]["CustomFieldPublic"];
 
 /**
  * Edit history (milestone 2.10). The fake writes these itself rather than
@@ -351,6 +353,28 @@ type SearchResult = components["schemas"]["SearchResultPublic"];
 type OpportunityVersion = components["schemas"]["OpportunityVersionPublic"];
 type TimelineEntryVersion = components["schemas"]["TimelineEntryVersionPublic"];
 type NoteVersion = components["schemas"]["NoteVersionPublic"];
+
+/** One custom field definition (milestone 6.1). Text on opportunities unless
+ * a test says otherwise, which is the cheapest field to assert against. */
+export function aCustomField(
+  overrides: Partial<CustomField> = {},
+): CustomField {
+  return {
+    id: 900,
+    entity_type: "opportunity",
+    key: "region",
+    label: "Region",
+    type: "text",
+    options: [],
+    required: false,
+    position: 0,
+    created_by: ALEX.id,
+    created_at: "2026-09-01T09:00:00Z",
+    updated_at: "2026-09-01T09:00:00Z",
+    archived_at: null,
+    ...overrides,
+  };
+}
 
 export function aSearchResult(
   overrides: Partial<SearchResult> = {},
@@ -405,6 +429,7 @@ export class FakeApi {
   activity: ActivityEvent[];
   searchResults: SearchResult[];
   savedViews: SavedView[];
+  customFields: CustomField[];
   tasks: Task[];
   failures: Record<string, [number, string]>;
   // The current `user`'s own watch set (milestone 3.3a), separate from
@@ -462,6 +487,7 @@ export class FakeApi {
     this.activity = options.activity ?? [];
     this.searchResults = options.searchResults ?? [];
     this.savedViews = options.savedViews ?? [];
+    this.customFields = options.customFields ?? [];
     this.tasks = options.tasks ?? [];
     this.failures = options.failures ?? {};
     this.pending = new Set(options.pending ?? []);
@@ -547,6 +573,98 @@ export class FakeApi {
       .replace(/^\/api\/v2/, "")
       .split("/")
       .filter(Boolean);
+
+    // Custom fields (milestone 6.1). Stateful like the rest of this fake:
+    // defining one has to make it appear as a column, a filter and a form
+    // input, which is the consequence the tests are about rather than the
+    // request.
+    if (bare === "/api/v2/custom-fields" && method === "GET") {
+      const params = new URLSearchParams(path.split("?")[1] ?? "");
+      const entity = params.get("entity_type");
+      const includeArchived = params.get("include_archived") === "true";
+      const items = this.customFields
+        .filter((field) => !entity || field.entity_type === entity)
+        .filter((field) => includeArchived || field.archived_at === null)
+        .sort((a, b) => a.position - b.position || a.id - b.id);
+      return this.json({ items, next_cursor: null });
+    }
+    if (bare === "/api/v2/custom-fields" && method === "POST") {
+      const payload = body ?? {};
+      if (
+        this.customFields.some(
+          (field) =>
+            field.archived_at === null &&
+            field.entity_type === payload.entity_type &&
+            field.key === payload.key,
+        )
+      ) {
+        return this.json(
+          {
+            error: {
+              code: "conflict",
+              message: "A field with that key already exists here",
+            },
+          },
+          409,
+        );
+      }
+      const now = "2026-10-01T09:00:00Z";
+      const created: CustomField = {
+        id: this.nextId++,
+        entity_type: payload.entity_type,
+        key: payload.key,
+        label: payload.label,
+        type: payload.type,
+        options: payload.options ?? [],
+        required: payload.required ?? false,
+        position: payload.position ?? 0,
+        created_by: this.user?.id ?? ALEX.id,
+        created_at: now,
+        updated_at: now,
+        archived_at: null,
+      };
+      this.customFields.push(created);
+      return this.json(created, 201);
+    }
+    if (
+      segments[0] === "custom-fields" &&
+      segments.length === 2 &&
+      method === "PATCH"
+    ) {
+      const field = this.customFields.find(
+        (candidate) => candidate.id === Number(segments[1]),
+      );
+      if (!field) {
+        return this.json(
+          { error: { code: "not_found", message: "Custom field not found" } },
+          404,
+        );
+      }
+      const payload = body ?? {};
+      field.label = payload.label ?? field.label;
+      field.required = payload.required ?? field.required;
+      field.position = payload.position ?? field.position;
+      field.options = payload.options ?? field.options;
+      return this.json(field);
+    }
+    if (
+      segments[0] === "custom-fields" &&
+      (segments[2] === "archive" || segments[2] === "restore") &&
+      method === "POST"
+    ) {
+      const field = this.customFields.find(
+        (candidate) => candidate.id === Number(segments[1]),
+      );
+      if (!field) {
+        return this.json(
+          { error: { code: "not_found", message: "Custom field not found" } },
+          404,
+        );
+      }
+      field.archived_at =
+        segments[2] === "archive" ? "2026-10-02T09:00:00Z" : null;
+      return this.json(field);
+    }
 
     if (segments[2] === "restore") {
       return this.restore(segments[0], Number(segments[1]));

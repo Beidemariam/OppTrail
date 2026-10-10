@@ -5329,10 +5329,61 @@ settled.
       instance of this same finding than the one 6.0 fixes, and outside a
       milestone scoped to search results.
 
-- [ ] 6.1 Custom fields: definition table + JSON value column + expression
-      indexes (ADR 0006); fields flow into table columns, filters, and the
-      entry form. Schema: `custom_field_definitions`; `custom_values` JSON on
-      opportunities and entries.
+- [x] 6.1 **Custom fields** (ADR 0006, `docs/FEATURES.md` §3): a definition
+      table plus a JSON value column, flowing into table columns, filters and
+      the entry form. Revision `0016_custom_fields` adds
+      `custom_field_definitions` and `custom_values` on both
+      `opportunities` and `timeline_entries`.
+
+      **Who may define a field is D-171**, and it is the one thing neither
+      the ADR nor §3 settles: §3 says "admin-defined" and this app has no
+      admin role. The rule is **any authenticated caller**, with the creator
+      recorded — the reversible direction, and flagged for human review
+      because it is the widest write surface in the application.
+
+      What carries the milestone is ADR 0006's two rules:
+
+      - **Validated on write, against the live definition set.** A value for
+        an undefined field, of the wrong type, or outside a select's options
+        is a 422 — and it names the field, because
+        `custom_values_or_422` raises a `RequestValidationError` rather than
+        an `HTTPException` so the envelope's `fields` map carries
+        `custom_values.<key>`. That is the half of a 422 a form can act on
+        (`docs/REVIEW.md` M4), and this is the one validation in the app that
+        runs inside a route and still answers like a schema failure — a value
+        is only wrong relative to a definition, which Pydantic cannot see.
+      - **Never trusted on read.** `visible_values` drops any key without a
+        live definition, so **archiving a field hides its values everywhere
+        without rewriting a single row**, and restoring the definition brings
+        them back. That is what makes archive-and-recreate the answer to a
+        type change rather than a data migration per field, and it is why
+        there is no DELETE route. The backend test for it reads the database
+        directly, because the API is deliberately hiding the thing being
+        asserted.
+
+      Three smaller shapes, all in D-171: a custom column is read-only and
+      not sortable (a value's editor depends on its type, and `sortFields` is
+      a fixed list); a value set is written whole rather than merged, so
+      `null` and an absent key both mean "leave them"; and `required` applies
+      when a value set is submitted rather than to every write, so making a
+      field required does not break screens that post without it.
+
+      No expression index is created. The ADR asks for one "where a field is
+      filtered or sorted often", and at 400 opportunities none is needed —
+      one per field would be the user-triggered DDL the ADR rejected, so that
+      choice belongs with the field that earns it.
+
+      Two things found while building it, both worth keeping:
+
+      - **A shared fixture object leaked between tests.** The fake API
+        mutates a definition in place when it is archived, as the real one
+        does, and `seeded()` passed the module-level `REGION` itself — so one
+        test's archive made an unrelated test fail, but only when run after
+        it. Copied now, and called out in the test's own comment.
+      - **`.check()` on the column checkbox failed** with "clicking the
+        checkbox did not change its state": ticking a column re-renders the
+        panel, and Playwright re-reads the element to confirm. `.click()`,
+        which is the trap `e2e/24-tasks.spec.ts` already records.
 - [ ] 6.2 Six live-computed dashboard aggregations — no rollup tables
       (pipeline, win/loss, time in stage, stalled, activity, forecast per
       `FEATURES.md` §10); index on `(created_by, created_at)` for

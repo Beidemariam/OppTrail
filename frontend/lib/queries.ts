@@ -22,6 +22,10 @@ import type { components } from "./api-types";
 import type {
   AiChatMessage,
   AppNotification,
+  CustomField,
+  CustomFieldCreate,
+  CustomFieldEntity,
+  CustomFieldUpdate,
   NoteVersion,
   Opportunity,
   OpportunityFieldPatch,
@@ -147,6 +151,12 @@ export const keys = {
   aiConversation: (opportunityId: number) =>
     ["ai-conversation", opportunityId] as const,
   savedViews: (entity: SavedViewEntity) => ["saved-views", entity] as const,
+  /** The custom field definitions for one entity type (milestone 6.1).
+   * Keyed by entity rather than read whole, because the two sets are drawn by
+   * different screens -- the table and the entry form -- and neither needs
+   * the other's. */
+  customFields: (entity: CustomFieldEntity) =>
+    ["custom-fields", entity] as const,
   /** Whether the caller is watching one opportunity (milestone 3.3a) --
    * separate from `shares` because it needs no access to read: watching is
    * available with no share at all (D-129). */
@@ -491,6 +501,88 @@ export function useDeleteSavedView(entity: SavedViewEntity) {
     mutationFn: (viewId: number) =>
       apiRequest(`/api/v2/saved-views/${viewId}`, { method: "DELETE" }),
     onSuccess: () => invalidate(client, keys.savedViews(entity)),
+  });
+}
+
+/**
+ * The live custom field definitions for one entity type (milestone 6.1,
+ * ADR 0006).
+ *
+ * Read whole through `fetchAll`, like the members list: a deployment has a
+ * handful of fields, every one of them is drawn at once as a column, a filter
+ * or a form input, and a window of them would mean a table whose columns
+ * depend on how far somebody scrolled. Archived definitions are excluded by
+ * the route, which is what makes archiving take effect everywhere at once.
+ */
+export function useCustomFields(entity: CustomFieldEntity, enabled = true) {
+  return useQuery<CustomField[]>({
+    queryKey: keys.customFields(entity),
+    enabled,
+    queryFn: () =>
+      fetchAll<CustomField>(`/api/v2/custom-fields?entity_type=${entity}`),
+  });
+}
+
+/**
+ * Every definition including the archived ones, for the screen that manages
+ * them -- which is the one place an archived field has to be visible, because
+ * it is where it gets restored.
+ */
+export function useAllCustomFields(enabled = true) {
+  return useQuery<CustomField[]>({
+    queryKey: [...keys.customFields("opportunity"), "all"],
+    enabled,
+    queryFn: () =>
+      fetchAll<CustomField>("/api/v2/custom-fields?include_archived=true"),
+  });
+}
+
+/** Invalidates both entity sets and the manage screen's list: a definition
+ * write changes what every column, filter and form may offer. */
+function invalidateCustomFields(client: ReturnType<typeof useQueryClient>) {
+  invalidate(client, ["custom-fields"]);
+  // A field's values appear on the records themselves, and `visible_values`
+  // decides which keys a read returns -- so archiving one changes every
+  // opportunity and timeline payload too, not just the definition list.
+  invalidate(client, keys.opportunities);
+  invalidate(client, keys.allTimelines);
+}
+
+export function useCreateCustomField() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: CustomFieldCreate) =>
+      apiRequest<CustomField>("/api/v2/custom-fields", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: () => invalidateCustomFields(client),
+  });
+}
+
+export function useUpdateCustomField() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...payload }: CustomFieldUpdate & { id: number }) =>
+      apiRequest<CustomField>(`/api/v2/custom-fields/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: () => invalidateCustomFields(client),
+  });
+}
+
+/** Archive, or put one back. Two routes, one hook: the manage screen offers
+ * whichever the row's state calls for, and both answer with the row. */
+export function useArchiveCustomField() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, archived }: { id: number; archived: boolean }) =>
+      apiRequest<CustomField>(
+        `/api/v2/custom-fields/${id}/${archived ? "restore" : "archive"}`,
+        { method: "POST" },
+      ),
+    onSuccess: () => invalidateCustomFields(client),
   });
 }
 

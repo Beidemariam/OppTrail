@@ -1561,6 +1561,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/custom-fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Custom Fields
+         * @description Every definition, or those for one entity type.
+         *
+         *     Open to any authenticated caller: a reader has to know what the columns
+         *     on their screen mean, and a definition carries no record's data.
+         *     Archived ones are available but not default, because the one screen that
+         *     needs them is the one that manages fields.
+         */
+        get: operations["list_custom_fields_api_v2_custom_fields_get"];
+        put?: never;
+        /** Create Custom Field */
+        post: operations["create_custom_field_api_v2_custom_fields_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/custom-fields/{field_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Custom Field
+         * @description Label, options, required and position. Never key or type (D-171).
+         *
+         *     Removing an option a record already uses is allowed and does not rewrite
+         *     anything: the stored value stops being offered and is dropped on read by
+         *     `visible_values`, the same way an archived field's values are. Rewriting
+         *     rows to match a definition edit is the data migration ADR 0006 exists to
+         *     avoid.
+         */
+        patch: operations["update_custom_field_api_v2_custom_fields__field_id__patch"];
+        trace?: never;
+    };
+    "/api/v2/custom-fields/{field_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive Custom Field
+         * @description Retire a field without touching a single stored value (ADR 0006).
+         *
+         *     Idempotent: archiving an archived field answers the row as it stands, so
+         *     the first archiver is the one recorded and a retry is safe -- the rule
+         *     `resolve`/`unresolve` already follow (milestone 3.3).
+         */
+        post: operations["archive_custom_field_api_v2_custom_fields__field_id__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/custom-fields/{field_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Custom Field
+         * @description Put an archived field back, values and all.
+         *
+         *     This is the undo of `archive`, and it is what makes archiving safe to try:
+         *     the values were never deleted, so restoring a definition makes them
+         *     visible again (`visible_values`). It can fail, unlike archive -- the key
+         *     may have been taken by a field created in the meantime, which is exactly
+         *     the reuse the partial unique index allows.
+         */
+        post: operations["restore_custom_field_api_v2_custom_fields__field_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -2052,6 +2154,98 @@ export interface components {
             /** Replies */
             replies: components["schemas"]["CommentPublic"][];
         };
+        /** CustomFieldCreate */
+        CustomFieldCreate: {
+            /** Label */
+            label: string;
+            /**
+             * Required
+             * @default false
+             */
+            required: boolean;
+            /**
+             * Position
+             * @default 0
+             */
+            position: number;
+            /** Options */
+            options?: string[];
+            /**
+             * Entity Type
+             * @enum {string}
+             */
+            entity_type: "opportunity" | "entry";
+            /** Key */
+            key: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "text" | "number" | "date" | "select" | "multi_select" | "checkbox" | "user";
+        };
+        /** CustomFieldPublic */
+        CustomFieldPublic: {
+            /** Id */
+            id: number;
+            /**
+             * Entity Type
+             * @enum {string}
+             */
+            entity_type: "opportunity" | "entry";
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "text" | "number" | "date" | "select" | "multi_select" | "checkbox" | "user";
+            /** Options */
+            options: string[];
+            /** Required */
+            required: boolean;
+            /** Position */
+            position: number;
+            /** Created By */
+            created_by: number;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+            /** Archived At */
+            archived_at: string | null;
+        };
+        /**
+         * CustomFieldUpdate
+         * @description What may change about a live field.
+         *
+         *     Not `key`, `entity_type` or `type`: a key is what the stored JSON is
+         *     filed under and a type is what every stored value already satisfies, so
+         *     changing either would mean a data migration per field. ADR 0006's last
+         *     consequence says the UI should archive and create instead, and refusing
+         *     them here is what makes that the only route.
+         *
+         *     Every field is required rather than optional -- unlike the `PATCH`
+         *     schemas elsewhere in this app -- because a definition is small, read
+         *     whole, and edited in one form.
+         */
+        CustomFieldUpdate: {
+            /** Label */
+            label: string;
+            /**
+             * Required
+             * @default false
+             */
+            required: boolean;
+            /**
+             * Position
+             * @default 0
+             */
+            position: number;
+            /** Options */
+            options?: string[];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -2335,6 +2529,10 @@ export interface components {
             stage: "Prospecting" | "Qualification" | "Needs Analysis" | "Proposal" | "Negotiation" | "Closed Won" | "Closed Lost";
             /** Expected Close Date */
             expected_close_date?: string | null;
+            /** Custom Values */
+            custom_values?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * OpportunityMemberPublic
@@ -2399,6 +2597,10 @@ export interface components {
              * @enum {string}
              */
             current_user_role: "owner" | "viewer" | "editor";
+            /** Custom Values */
+            custom_values?: {
+                [key: string]: unknown;
+            };
         };
         /** OpportunityUpdate */
         OpportunityUpdate: {
@@ -2414,6 +2616,10 @@ export interface components {
             stage?: ("Prospecting" | "Qualification" | "Needs Analysis" | "Proposal" | "Negotiation" | "Closed Won" | "Closed Lost") | null;
             /** Expected Close Date */
             expected_close_date?: string | null;
+            /** Custom Values */
+            custom_values?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** OpportunityVersionPublic */
         OpportunityVersionPublic: {
@@ -2456,6 +2662,13 @@ export interface components {
         Page_AuditLogEntryPublic_: {
             /** Items */
             items: components["schemas"]["AuditLogEntryPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[CustomFieldPublic] */
+        Page_CustomFieldPublic_: {
+            /** Items */
+            items: components["schemas"]["CustomFieldPublic"][];
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -2961,6 +3174,10 @@ export interface components {
             event_timestamp: string;
             /** Follow Up Date */
             follow_up_date?: string | null;
+            /** Custom Values */
+            custom_values?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** TimelineEntryPublic */
         TimelineEntryPublic: {
@@ -2991,6 +3208,10 @@ export interface components {
             created_at: string;
             /** Sequence */
             sequence: number;
+            /** Custom Values */
+            custom_values?: {
+                [key: string]: unknown;
+            };
             /** Notes */
             notes: components["schemas"]["NotePublic"][];
             /** Attachments */
@@ -3008,6 +3229,10 @@ export interface components {
             event_timestamp?: string | null;
             /** Follow Up Date */
             follow_up_date?: string | null;
+            /** Custom Values */
+            custom_values?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** TimelineEntryVersionPublic */
         TimelineEntryVersionPublic: {
@@ -5772,6 +5997,180 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_custom_fields_api_v2_custom_fields_get: {
+        parameters: {
+            query?: {
+                entity_type?: ("opportunity" | "entry") | null;
+                include_archived?: boolean;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_CustomFieldPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_custom_field_api_v2_custom_fields_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomFieldCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomFieldPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_custom_field_api_v2_custom_fields__field_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                field_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomFieldUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomFieldPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_custom_field_api_v2_custom_fields__field_id__archive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                field_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomFieldPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_custom_field_api_v2_custom_fields__field_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                field_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomFieldPublic"];
+                };
             };
             /** @description Validation Error */
             422: {

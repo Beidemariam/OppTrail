@@ -1,11 +1,12 @@
 import sqlite3
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from .attachment_utils import attachments_by_entry_id
 from .audit_utils import create_audit_log_entry
 from .auth import get_current_user
+from .custom_fields import custom_values_or_422, live_definitions, visible_values
 from .database import db_connection
 from .events import publish_timeline_changed
 from .notification_service import (
@@ -216,7 +217,12 @@ def entry_from_row(
     row: sqlite3.Row,
     notes: list[NotePublic],
     attachments: list[AttachmentPublic],
+    definitions: list[dict[str, Any]] | None = None,
 ) -> TimelineEntryPublic:
+    """`definitions` is the live custom field set for entries (milestone 6.1),
+    read once per request like `notes` and `attachments` are read once per
+    page. `None` answers an empty value set.
+    """
     return TimelineEntryPublic(
         id=row["id"],
         opportunity_id=row["opportunity_id"],
@@ -230,6 +236,7 @@ def entry_from_row(
         system_generated=bool(row["system_generated"]),
         created_at=row["created_at"],
         sequence=row["sequence"],
+        custom_values=visible_values(row["custom_values"], definitions or []),
         notes=notes,
         attachments=attachments,
     )
@@ -502,12 +509,14 @@ def entries_with_notes(
         )
 
     attachments_by_entry = attachments_by_entry_id(connection, entry_ids)
+    definitions = live_definitions(connection, "entry")
 
     return [
         entry_from_row(
             entry,
             notes_by_entry_id.get(entry["id"], []),
             attachments_by_entry.get(entry["id"], []),
+            definitions,
         )
         for entry in entries
     ]
@@ -596,10 +605,11 @@ def create_timeline_entry(
                 body,
                 event_timestamp,
                 follow_up_date,
+                custom_values,
                 created_by,
                 created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 opportunity_id,
@@ -608,6 +618,7 @@ def create_timeline_entry(
                 payload.body,
                 payload.event_timestamp,
                 payload.follow_up_date,
+                custom_values_or_422(connection, "entry", payload.custom_values),
                 user["id"],
                 created_at,
             ),
@@ -646,9 +657,10 @@ def create_timeline_entry(
             """,
             (entry_id,),
         ).fetchone()
+        definitions = live_definitions(connection, "entry")
 
     publish_timeline_changed(opportunity_id)
-    return entry_from_row(row, [], [])
+    return entry_from_row(row, [], [], definitions)
 
 
 @router.patch("/timeline/{entry_id}", response_model=TimelineEntryPublic)
@@ -658,6 +670,10 @@ def update_timeline_entry(
     user: sqlite3.Row = Depends(get_current_user),
 ) -> TimelineEntryPublic:
     updates = payload.model_dump(exclude_unset=True)
+    # One JSON column, validated against the live definition set rather than
+    # assigned like a scalar -- see the same handling in
+    # `routes_opportunities.update_opportunity` (milestone 6.1).
+    submitted_values = updates.pop("custom_values", None)
     changed = False
     with db_connection() as connection:
         entry = fetch_entry_context(connection, entry_id)
@@ -677,6 +693,11 @@ def update_timeline_entry(
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="System timeline entries cannot be changed",
+            )
+
+        if submitted_values is not None:
+            updates["custom_values"] = custom_values_or_422(
+                connection, "entry", submitted_values, entry["custom_values"]
             )
 
         if updates:
@@ -716,12 +737,13 @@ def update_timeline_entry(
             """,
             (entry_id,),
         ).fetchone()
+        definitions = live_definitions(connection, "entry")
 
     # An empty PATCH wrote nothing, so there is nothing for another reader to
     # go and see: the flag tracks the write rather than the request.
     if changed:
         publish_timeline_changed(entry["opportunity_id"])
-    return entry_from_row(row, [], [])
+    return entry_from_row(row, [], [], definitions)
 
 
 def timeline_entry_version_from_row(row: sqlite3.Row) -> TimelineEntryVersionPublic:
@@ -850,10 +872,11 @@ def restore_timeline_entry_version(
             """,
             (entry_id,),
         ).fetchone()
+        definitions = live_definitions(connection, "entry")
 
     if changed:
         publish_timeline_changed(entry["opportunity_id"])
-    return entry_from_row(row, [], [])
+    return entry_from_row(row, [], [], definitions)
 
 
 @router.delete("/timeline/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)

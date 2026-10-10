@@ -2071,6 +2071,73 @@ a.danger-button {
   outline-offset: 4px;
 }
 
+/* Custom fields (milestone 6.1). The inputs reuse the form's own field
+   styling; what needs declaring is the fieldset that groups them, the
+   definition list in the manage dialog, and the heading a custom table column
+   draws instead of a sort button. */
+.custom-field-inputs,
+.multi-select-field {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+
+.custom-field-inputs > legend,
+.multi-select-field > legend {
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  padding: 0 var(--space-1);
+}
+
+.custom-field-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.custom-field-row {
+  align-items: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  display: flex;
+  gap: var(--space-3);
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+}
+
+.custom-field-row > div:first-child {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.custom-field-row.is-archived {
+  opacity: 0.7;
+}
+
+.custom-field-meta {
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+}
+
+/* A custom column is not sortable, so its heading is text where the others
+   are buttons -- matched to them so the header row still reads as one row. */
+.table-heading {
+  color: var(--text-secondary);
+  font-size: var(--row-text);
+  font-weight: 600;
+  overflow: hidden;
+  padding: var(--cell-padding-y) var(--cell-padding-x);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* A marked note or comment sits inside a card that already has padding, so
    the outline needs room of its own not to collide with the text beside it.
    Milestone 6.0: the entry's own mark has the card's margin to breathe into

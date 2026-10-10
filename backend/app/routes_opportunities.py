@@ -1,11 +1,13 @@
 import sqlite3
 from decimal import Decimal
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from .activity import fetch_activity_page
 from .audit_utils import create_audit_log_entry
 from .auth import get_current_user
+from .custom_fields import custom_values_or_422, live_definitions, visible_values
 from .database import db_connection
 from .events import publish_opportunity_changed
 from .notification_service import create_notification
@@ -83,7 +85,20 @@ def is_opportunity_stalled(
     return bool(latest_activity < utc_days_ago(STALLED_AFTER_DAYS))
 
 
-def opportunity_from_row(row: sqlite3.Row, role: Role, stalled: bool = False) -> OpportunityPublic:
+def opportunity_from_row(
+    row: sqlite3.Row,
+    role: Role,
+    stalled: bool = False,
+    definitions: list[dict[str, Any]] | None = None,
+) -> OpportunityPublic:
+    """`definitions` is the live custom field set for opportunities, read once
+    per request and passed in rather than looked up per row -- the same reason
+    `attachments_by_entry_id` takes a whole page of ids (milestone 6.1).
+
+    `None` means no definitions were read, which answers an empty value set.
+    That is the honest answer for the one caller that cannot sensibly read
+    them, and it is why every route below passes the real set.
+    """
     return OpportunityPublic(
         id=row["id"],
         name=row["name"],
@@ -98,6 +113,7 @@ def opportunity_from_row(row: sqlite3.Row, role: Role, stalled: bool = False) ->
         updated_at=row["updated_at"],
         stalled=stalled,
         current_user_role=role,
+        custom_values=visible_values(row["custom_values"], definitions or []),
     )
 
 
@@ -168,9 +184,13 @@ def list_opportunities_page(
         ).fetchall()
 
         rows, next_cursor = split_page(rows, page.limit, lambda row: (row["updated_at"], row["id"]))
+        definitions = live_definitions(connection, "opportunity")
         items = [
             opportunity_from_row(
-                row, row["current_user_role"], is_opportunity_stalled(connection, row["id"])
+                row,
+                row["current_user_role"],
+                is_opportunity_stalled(connection, row["id"]),
+                definitions,
             )
             for row in rows
         ]
@@ -221,10 +241,11 @@ def create_opportunity(
                 stage,
                 owner_id,
                 expected_close_date,
+                custom_values,
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 payload.name,
@@ -234,6 +255,7 @@ def create_opportunity(
                 payload.stage,
                 user["id"],
                 payload.expected_close_date,
+                custom_values_or_422(connection, "opportunity", payload.custom_values),
                 created_at,
                 created_at,
             ),
@@ -263,8 +285,9 @@ def create_opportunity(
         )
         connection.commit()
         stalled = is_opportunity_stalled(connection, opportunity_id)
+        definitions = live_definitions(connection, "opportunity")
 
-    return opportunity_from_row(row, "owner", stalled)
+    return opportunity_from_row(row, "owner", stalled, definitions)
 
 
 @router.get("/opportunities/{opportunity_id}", response_model=OpportunityPublic)
@@ -276,9 +299,10 @@ def get_opportunity(
         role = require_opportunity_access(connection, opportunity_id, int(user["id"]))
         row = fetch_opportunity_row(connection, opportunity_id)
         stalled = is_opportunity_stalled(connection, opportunity_id)
+        definitions = live_definitions(connection, "opportunity")
 
     assert row is not None
-    return opportunity_from_row(row, role, stalled)
+    return opportunity_from_row(row, role, stalled, definitions)
 
 
 @router.patch("/opportunities/{opportunity_id}", response_model=OpportunityPublic)
@@ -288,23 +312,42 @@ def update_opportunity(
     user: sqlite3.Row = Depends(get_current_user),
 ) -> OpportunityPublic:
     updates = payload.model_dump(exclude_unset=True)
-    if not updates:
+    # Custom values are not a column assignment the loop below can build: they
+    # are one JSON column, validated against the live definition set inside
+    # this request's transaction (milestone 6.1, ADR 0006). Sending `null` is
+    # the same as not mentioning them -- a JSON column is written whole, so
+    # there is no partial merge to express and "leave them alone" has to be
+    # the quiet default or every `PATCH` of a name would clear them.
+    submitted_values = updates.pop("custom_values", None)
+
+    if not updates and submitted_values is None:
         with db_connection() as connection:
             require_opportunity_owner(connection, opportunity_id, int(user["id"]))
             row = fetch_opportunity_row(connection, opportunity_id)
             stalled = is_opportunity_stalled(connection, opportunity_id)
+            definitions = live_definitions(connection, "opportunity")
         assert row is not None
-        return opportunity_from_row(row, "owner", stalled)
+        return opportunity_from_row(row, "owner", stalled, definitions)
 
     assignments = [f"{field} = ?" for field in updates]
-    values = [str(value) if isinstance(value, Decimal) else value for value in updates.values()]
-    values.extend([opportunity_id, user["id"]])
+    values: list[object] = [
+        str(value) if isinstance(value, Decimal) else value for value in updates.values()
+    ]
 
     with db_connection() as connection:
         require_opportunity_owner(connection, opportunity_id, int(user["id"]))
         row = fetch_opportunity_row(connection, opportunity_id)
         assert row is not None
         previous_stage = row["stage"]
+
+        if submitted_values is not None:
+            assignments.append("custom_values = ?")
+            values.append(
+                custom_values_or_422(
+                    connection, "opportunity", submitted_values, row["custom_values"]
+                )
+            )
+        values.extend([opportunity_id, user["id"]])
 
         connection.execute(
             f"""
@@ -339,9 +382,10 @@ def update_opportunity(
         )
         connection.commit()
         stalled = is_opportunity_stalled(connection, opportunity_id)
+        definitions = live_definitions(connection, "opportunity")
 
     publish_opportunity_changed(opportunity_id)
-    return opportunity_from_row(updated, "owner", stalled)
+    return opportunity_from_row(updated, "owner", stalled, definitions)
 
 
 def opportunity_version_from_row(row: sqlite3.Row) -> OpportunityVersionPublic:
@@ -471,13 +515,14 @@ def restore_opportunity_version(
             changed = True
 
         stalled = is_opportunity_stalled(connection, opportunity_id)
+        definitions = live_definitions(connection, "opportunity")
 
     # Restoring the version that is already current writes nothing (D-120), so
     # it announces nothing: an invalidation with no write behind it would send
     # every other reader to fetch what they already hold.
     if changed:
         publish_opportunity_changed(opportunity_id)
-    return opportunity_from_row(row, "owner", stalled)
+    return opportunity_from_row(row, "owner", stalled, definitions)
 
 
 @router.get(

@@ -10,9 +10,17 @@ import {
   defaultOpportunityColumns,
   editableField,
   editableOpportunityFields,
+  columnLabel,
+  customColumn,
+  customColumnKey,
+  customFieldText,
+  customFilterState,
+  customFilters,
   isLinked,
   linkTargetFromParams,
+  matchesCustomFilters,
   searchResultHref,
+  type CustomField,
   emptyOpportunityViewState,
   emptyTimelineFilters,
   tasksDueOn,
@@ -641,5 +649,156 @@ describe("linking to one thing inside a timeline (milestone 6.0)", () => {
     expect(isLinked(target, "note", 8)).toBe(false);
     expect(isLinked(null, "note", 7)).toBe(false);
     expect(isLinked(undefined, "note", 7)).toBe(false);
+  });
+});
+
+describe("custom fields (milestone 6.1)", () => {
+  const field = (overrides: Partial<CustomField> = {}): CustomField => ({
+    id: 1,
+    entity_type: "opportunity",
+    key: "region",
+    label: "Region",
+    type: "text",
+    options: [],
+    required: false,
+    position: 0,
+    created_by: 1,
+    created_at: "2026-09-01T09:00:00Z",
+    updated_at: "2026-09-01T09:00:00Z",
+    archived_at: null,
+    ...overrides,
+  });
+
+  it("keeps a custom column in its own namespace", () => {
+    // A field's key is chosen by a person, and nothing stops somebody
+    // defining one called `stage`.
+    expect(customColumn("stage")).toBe("custom:stage");
+    expect(customColumnKey("custom:stage")).toBe("stage");
+    expect(customColumnKey("stage")).toBeNull();
+  });
+
+  it("offers a custom column only while its field is live", () => {
+    const fields = [field({ key: "region" })];
+    expect(columnsFromState("stage,custom:region", fields)).toEqual([
+      "stage",
+      "custom:region",
+    ]);
+    // Archived, so the definition list no longer holds it: the column drops
+    // out of a saved view and a bookmarked URL without either being edited.
+    expect(columnsFromState("stage,custom:region", [])).toEqual(["stage"]);
+    // And a column string that names nothing live falls back to the default
+    // set rather than rendering a table with no columns.
+    expect(columnsFromState("custom:region", [])).toEqual(
+      defaultOpportunityColumns,
+    );
+  });
+
+  it("reads each type as the text a cell shows", () => {
+    expect(customFieldText(field(), "EMEA")).toBe("EMEA");
+    expect(customFieldText(field({ type: "number" }), 42)).toBe("42");
+    expect(customFieldText(field({ type: "checkbox" }), true)).toBe("Yes");
+    expect(customFieldText(field({ type: "checkbox" }), false)).toBe("No");
+    expect(
+      customFieldText(field({ type: "multi_select" }), ["Core", "Addon"]),
+    ).toBe("Core, Addon");
+    expect(
+      customFieldText(field({ type: "user" }), 7, new Map([[7, "Alex"]])),
+    ).toBe("Alex");
+    // A value of the wrong shape reads as empty rather than as
+    // "[object Object]": a field can be archived and recreated with a
+    // different type (ADR 0006's answer to a type change), which leaves older
+    // rows holding the previous shape, and a table cell is not where a reader
+    // should discover that.
+    expect(customFieldText(field({ type: "number" }), "forty")).toBe("");
+    expect(customFieldText(field({ type: "multi_select" }), "Core")).toBe("");
+    expect(customFieldText(field(), null)).toBe("");
+    expect(customFieldText(field(), undefined)).toBe("");
+  });
+
+  it("round-trips the filters through the flat string the URL holds", () => {
+    const parsed = customFilters("region:EMEA,tier:Gold");
+    expect([...parsed]).toEqual([
+      ["region", "EMEA"],
+      ["tier", "Gold"],
+    ]);
+    expect(customFilterState(parsed)).toBe("region:EMEA,tier:Gold");
+  });
+
+  it("ignores a filter whose field is gone, rather than matching nothing", () => {
+    // The tolerance `pinnedIds` and `columnsFromState` already have: a stale
+    // link should show a reader more than they expected, never an empty
+    // screen they cannot explain.
+    const fields = [field({ key: "region" })];
+    expect([...customFilters("region:EMEA,gone:Yes", fields)]).toEqual([
+      ["region", "EMEA"],
+    ]);
+    expect([...customFilters("region:,:EMEA,nonsense", fields)]).toEqual([]);
+  });
+
+  it("matches a value by type", () => {
+    // A multi-select matches when the wanted option is among the chosen;
+    // everything else matches on its text, like the keyword box.
+    const filters = new Map([["products", "Core"]]);
+    expect(matchesCustomFilters({ products: ["Core", "Addon"] }, filters)).toBe(
+      true,
+    );
+    expect(matchesCustomFilters({ products: ["Addon"] }, filters)).toBe(false);
+    expect(
+      matchesCustomFilters(
+        { region: "EMEA-North" },
+        new Map([["region", "emea"]]),
+      ),
+    ).toBe(true);
+    expect(
+      matchesCustomFilters(
+        { strategic: true },
+        new Map([["strategic", "true"]]),
+      ),
+    ).toBe(true);
+    expect(
+      matchesCustomFilters(
+        { strategic: false },
+        new Map([["strategic", "true"]]),
+      ),
+    ).toBe(false);
+    // A record with no value for a filtered field is filtered out, which is
+    // what "show me the EMEA deals" means.
+    expect(matchesCustomFilters({}, filters)).toBe(false);
+  });
+
+  it("filters the dashboard list by a custom value", () => {
+    const fields = [field({ key: "region" })];
+    const deals = [
+      {
+        ...anOpportunity({ id: 1, name: "Acme" }),
+        custom_values: { region: "EMEA" },
+      },
+      {
+        ...anOpportunity({ id: 2, name: "Globex" }),
+        custom_values: { region: "APAC" },
+      },
+      { ...anOpportunity({ id: 3, name: "Initech" }), custom_values: {} },
+    ];
+    const shown = applyOpportunityView(
+      deals,
+      { ...emptyOpportunityViewState, custom: "region:EMEA" },
+      fields,
+    );
+    expect(shown.map((deal) => deal.name)).toEqual(["Acme"]);
+  });
+
+  it("labels a column from its field, and a cell from its value", () => {
+    const fields = [field({ key: "region", label: "Sales region" })];
+    expect(columnLabel("custom:region", fields)).toBe("Sales region");
+    expect(columnLabel("stage", fields)).toBe("Stage");
+    // A column whose field is gone still has to render something.
+    expect(columnLabel("custom:region", [])).toBe("region");
+
+    const deal = {
+      ...anOpportunity({ id: 1, name: "Acme" }),
+      custom_values: { region: "EMEA" },
+    };
+    expect(opportunityCell(deal, "custom:region", fields)).toBe("EMEA");
+    expect(opportunityCell(deal, "custom:region", [])).toBe("");
   });
 });

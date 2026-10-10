@@ -44,6 +44,34 @@ def canonical_date(value: str) -> str:
         raise ValueError("Enter a valid date as YYYY-MM-DD") from exc
 
 
+# --- Custom fields (milestone 6.1, ADR 0006) --------------------------------
+
+CustomFieldEntity = Literal["opportunity", "entry"]
+CustomFieldType = Literal[
+    "text",
+    "number",
+    "date",
+    "select",
+    "multi_select",
+    "checkbox",
+    "user",
+]
+
+# A key is what identifies a field inside the JSON column, so it has to be
+# usable as an object key, as a query parameter and as an expression index's
+# path (`json_extract(custom_values, '$.region')`) without quoting. The
+# pattern is deliberately narrower than JSON allows: lower-case, digits and
+# underscores, starting with a letter.
+CUSTOM_FIELD_KEY_PATTERN = r"^[a-z][a-z0-9_]*$"
+MAX_CUSTOM_FIELD_OPTIONS = 50
+
+# The value set a write may carry. Typed as `object` rather than a union,
+# because what a value is allowed to be depends on a definition this schema
+# cannot see -- `custom_fields.validated_values` is where that is decided,
+# against the live definition set and inside the request's transaction.
+CustomValues = dict[str, object]
+
+
 Stage = Literal[
     "Prospecting",
     "Qualification",
@@ -121,6 +149,10 @@ class OpportunityBase(BaseModel):
     currency: str = Field(default="USD", min_length=3, max_length=3)
     stage: Stage = "Prospecting"
     expected_close_date: str | None = None
+    # A whole value set, not a patch: see `custom_fields.validated_values`.
+    # `None` means the caller did not mention custom fields, which on a create
+    # is an empty set and on a `PATCH` is "leave what is there".
+    custom_values: CustomValues | None = None
 
     @field_validator("name", "account_name")
     @classmethod
@@ -149,6 +181,7 @@ class OpportunityUpdate(BaseModel):
     currency: str | None = Field(default=None, min_length=3, max_length=3)
     stage: Stage | None = None
     expected_close_date: str | None = None
+    custom_values: CustomValues | None = None
 
     @field_validator("name", "account_name")
     @classmethod
@@ -182,6 +215,9 @@ class OpportunityPublic(BaseModel):
     updated_at: str
     stalled: bool = False
     current_user_role: CurrentUserRole = "owner"
+    # Only keys with a live definition (ADR 0006: the JSON is never trusted on
+    # read), so archiving a field hides it without rewriting any row.
+    custom_values: CustomValues = Field(default_factory=dict)
 
     @field_serializer("value")
     def serialize_value(self, value: Decimal) -> str:
@@ -285,6 +321,9 @@ class TimelineEntryCreate(BaseModel):
     body: str = ""
     event_timestamp: str
     follow_up_date: str | None = None
+    # `docs/FEATURES.md` §3: a custom field appears "automatically in Table
+    # columns, filters, and the entry form", so the entry form posts one.
+    custom_values: CustomValues | None = None
 
     @field_validator("title")
     @classmethod
@@ -308,6 +347,7 @@ class TimelineEntryUpdate(BaseModel):
     body: str | None = None
     event_timestamp: str | None = None
     follow_up_date: str | None = None
+    custom_values: CustomValues | None = None
 
     @field_validator("title")
     @classmethod
@@ -445,6 +485,7 @@ class TimelineEntryPublic(BaseModel):
     # cannot disagree. It is a reading aid, not an identity: the id is what
     # `?entry=` links carry.
     sequence: int
+    custom_values: CustomValues = Field(default_factory=dict)
     notes: list[NotePublic]
     # The entry's files, read with it rather than through a list route of
     # their own (milestone 4.3) -- the shape a note's comments already have,
@@ -1300,6 +1341,79 @@ class SearchResultPublic(BaseModel):
     timestamp: str
     author_id: int | None
     author_name: str | None
+
+
+# --- Custom field definitions (milestone 6.1) -------------------------------
+
+
+class CustomFieldBase(BaseModel):
+    label: str = Field(min_length=1, max_length=80)
+    required: bool = False
+    position: int = 0
+    # Only meaningful for `select` and `multi_select`; validated as empty for
+    # every other type, because an option list on a checkbox is a definition
+    # that says two different things.
+    options: list[str] = Field(default_factory=list)
+
+    @field_validator("label")
+    @classmethod
+    def strip_label(cls, value: str) -> str:
+        return stripped(value)
+
+    @field_validator("options")
+    @classmethod
+    def clean_options(cls, value: list[str]) -> list[str]:
+        cleaned = [option.strip() for option in value if option.strip()]
+        if len(cleaned) > MAX_CUSTOM_FIELD_OPTIONS:
+            raise ValueError(f"A field may have at most {MAX_CUSTOM_FIELD_OPTIONS} options")
+        if len(set(cleaned)) != len(cleaned):
+            raise ValueError("Options must be distinct")
+        return cleaned
+
+
+class CustomFieldCreate(CustomFieldBase):
+    entity_type: CustomFieldEntity
+    key: str = Field(min_length=1, max_length=40, pattern=CUSTOM_FIELD_KEY_PATTERN)
+    type: CustomFieldType
+
+    @model_validator(mode="after")
+    def options_match_the_type(self) -> "CustomFieldCreate":
+        chooses = self.type in ("select", "multi_select")
+        if chooses and not self.options:
+            raise ValueError("A select field needs at least one option")
+        if not chooses and self.options:
+            raise ValueError("Only select fields carry options")
+        return self
+
+
+class CustomFieldUpdate(CustomFieldBase):
+    """What may change about a live field.
+
+    Not `key`, `entity_type` or `type`: a key is what the stored JSON is
+    filed under and a type is what every stored value already satisfies, so
+    changing either would mean a data migration per field. ADR 0006's last
+    consequence says the UI should archive and create instead, and refusing
+    them here is what makes that the only route.
+
+    Every field is required rather than optional -- unlike the `PATCH`
+    schemas elsewhere in this app -- because a definition is small, read
+    whole, and edited in one form.
+    """
+
+
+class CustomFieldPublic(BaseModel):
+    id: int
+    entity_type: CustomFieldEntity
+    key: str
+    label: str
+    type: CustomFieldType
+    options: list[str]
+    required: bool
+    position: int
+    created_by: int
+    created_at: str
+    updated_at: str
+    archived_at: str | None
 
 
 # --- Saved views (milestone 2.2) -------------------------------------------

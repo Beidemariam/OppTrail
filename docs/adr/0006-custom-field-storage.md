@@ -45,3 +45,34 @@ rendering a row needs no joins.
   Accepted; validated on write, tolerated on read.
 - Type changes on an existing field need a data migration; the UI should allow
   archiving and creating rather than mutating type.
+
+## Amendment (milestone 6.1, 2026-10-10)
+
+Built as specified. Four things the implementation settled that this ADR left
+open, recorded here rather than only in `DECISIONS.md`:
+
+- **Who may define a field** (**D-171**). The ADR says "user-defined" and
+  `FEATURES.md` §3 says "admin-defined"; this application has no admin role,
+  so the rule is any authenticated caller, with `created_by` recorded. Flagged
+  for human review as the widest write surface in the product.
+- **`archived_at`, and no delete route.** The ADR's "unknown keys are ignored,
+  so archiving a field does not require rewriting rows" is implemented as the
+  only retirement path. Restoring a definition makes its values visible again,
+  which is what makes archiving safe to try — and it is also the one way a
+  restore can fail, since the partial unique index lets the key be reused
+  while the field is archived.
+- **A key and a type cannot be edited.** `CustomFieldUpdate` carries neither,
+  so this ADR's "the UI should allow archiving and creating rather than
+  mutating type" is enforced by the API rather than left to the UI.
+- **No expression index is created.** The ADR asks for one "where a field is
+  filtered or sorted often". At the confirmed scale none is needed, and
+  creating one per field would be the user-triggered DDL option 3 was rejected
+  for. Filtering is done in the client over the already-fetched list (D-061,
+  D-093), so the first expression index should arrive with a measurement
+  rather than with the feature.
+
+One consequence worth naming for whoever adds the next searchable or
+reportable thing: values are **not** in the FTS5 index (ADR 0007), so a custom
+field's contents are filterable but not keyword-searchable. Nothing in §3 asks
+for that, and a fifth document kind would spend one of `DOCUMENT_BASE`'s free
+codes (D-167).
