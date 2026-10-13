@@ -52,6 +52,16 @@ export function notificationText(notification: AppNotification): string {
   if (notification.type === "owner_changed") {
     return "An opportunity was handed over to you.";
   }
+  if (notification.type === "automation") {
+    // The rule's name is the half the reader wrote themselves, and it is what
+    // makes an automated nudge distinguishable from a colleague's (milestone
+    // 6.3, §11's "traceable"). The title is the message they chose; the rule
+    // name says what decided to send it.
+    const payload = notification.payload;
+    return "rule_name" in payload
+      ? `${payload.title} (rule: ${payload.rule_name})`
+      : "An automation rule fired.";
+  }
   return "New notification.";
 }
 

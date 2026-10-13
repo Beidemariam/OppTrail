@@ -143,3 +143,62 @@ describe("apiRequest", () => {
     expect(headerOf("Content-Type")).toBe("text/plain");
   });
 });
+
+describe("a 422's per-field reasons (milestone 6.3a, D-180)", () => {
+  it("carries them off the envelope onto the error", async () => {
+    // The API has emitted these since the envelope existed; nothing read
+    // them, so every refused form in the app said only the generic sentence.
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse(
+        {
+          error: {
+            code: "validation_error",
+            message: "The request could not be validated",
+            fields: { "action.title": "Enter a value", _: "Wrong as a whole" },
+          },
+        },
+        422,
+      ),
+    );
+
+    await expect(apiRequest("/api/v2/automation-rules")).rejects.toMatchObject({
+      status: 422,
+      code: "validation_error",
+      fields: { "action.title": "Enter a value", _: "Wrong as a whole" },
+    });
+  });
+
+  it("is an empty map for a failure that names no field", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse(
+        { error: { code: "conflict", message: "Already there" } },
+        409,
+      ),
+    );
+
+    await expect(apiRequest("/api/v2/automation-rules")).rejects.toMatchObject({
+      code: "conflict",
+      fields: {},
+    });
+  });
+
+  it("drops anything in fields that is not a string", async () => {
+    // The envelope is the server's and a form is about to render these.
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse(
+        {
+          error: {
+            code: "validation_error",
+            message: "no",
+            fields: { ok: "a reason", bad: { nested: true }, worse: 7 },
+          },
+        },
+        422,
+      ),
+    );
+
+    await expect(apiRequest("/api/v2/automation-rules")).rejects.toMatchObject({
+      fields: { ok: "a reason" },
+    });
+  });
+});

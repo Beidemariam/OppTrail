@@ -10,10 +10,14 @@ from fastapi.staticfiles import StaticFiles
 from .backup import latest_backup_at
 from .database import db_connection, initialize_database
 from .errors import error_body, install_error_handlers
+from .jobs import job_run_from_row, latest_job_runs
 from .logging_utils import RequestLoggingMiddleware, configure_logging, logger
+from .routes_ai import filter_router as ai_filter_router
 from .routes_ai import router as ai_router
 from .routes_attachments import router as attachments_router
 from .routes_auth import router as auth_router
+from .routes_automations import jobs_router as job_runs_router
+from .routes_automations import router as automations_router
 from .routes_custom_fields import router as custom_fields_router
 from .routes_dashboard import router as dashboard_router
 from .routes_events import router as events_router
@@ -25,7 +29,8 @@ from .routes_search import router as search_router
 from .routes_sharing import router as sharing_router
 from .routes_tasks import router as tasks_router
 from .routes_timeline import router as timeline_router
-from .schemas import HealthStatus
+from .scheduler import start_scheduler, stop_scheduler
+from .schemas import HealthStatus, JobRunPublic
 from .security import CsrfMiddleware, SecurityHeadersMiddleware
 from .settings import settings
 
@@ -34,7 +39,14 @@ from .settings import settings
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     configure_logging()
     initialize_database()
-    yield
+    # ADR 0004's scheduler (milestone 6.5), started after the schema exists
+    # because its first job reads `automation_rules`. Switched off by
+    # `settings.scheduler_enabled`, which the test suite sets.
+    start_scheduler()
+    try:
+        yield
+    finally:
+        stop_scheduler()
 
 
 app = FastAPI(title="OppTrail API", version="0.1.0", lifespan=lifespan)
@@ -55,6 +67,7 @@ app.include_router(opportunities_router)
 app.include_router(sharing_router)
 app.include_router(timeline_router)
 app.include_router(ai_router)
+app.include_router(ai_filter_router)
 app.include_router(export_router)
 app.include_router(notifications_router)
 app.include_router(search_router)
@@ -64,6 +77,8 @@ app.include_router(tasks_router)
 app.include_router(attachments_router)
 app.include_router(custom_fields_router)
 app.include_router(dashboard_router)
+app.include_router(automations_router)
+app.include_router(job_runs_router)
 
 
 # Unversioned on purpose (D-094): this is an operations probe — the
@@ -78,6 +93,7 @@ def health_check() -> HealthStatus:
     # `database_writable: false` instead of a 500 from the liveness endpoint.
     schema_version = "unknown"
     database_writable = False
+    jobs: list[JobRunPublic] = []
     try:
         with db_connection() as connection:
             version_row = connection.execute("SELECT version_num FROM alembic_version").fetchone()
@@ -85,6 +101,10 @@ def health_check() -> HealthStatus:
             connection.execute("BEGIN IMMEDIATE")
             connection.rollback()
             database_writable = True
+            # Read inside the same `try` as everything else here: a probe
+            # reports what it could learn, and a database it cannot open has
+            # already been reported as unwritable above.
+            jobs = [job_run_from_row(row) for row in latest_job_runs(connection)]
     except sqlite3.OperationalError as exc:
         logger.warning("health_check_database_not_writable", exc_info=exc)
 
@@ -93,6 +113,7 @@ def health_check() -> HealthStatus:
         schema_version=schema_version,
         database_writable=database_writable,
         last_backup_at=latest_backup_at(),
+        jobs=jobs,
     )
 
 

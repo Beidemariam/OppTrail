@@ -108,12 +108,14 @@ Routers are split by domain and all mounted in `main.py`: `routes_auth`,
 mention autocomplete reads),
 `routes_timeline` (entries, notes, comment threads, note versions),
 `routes_tasks`, `routes_attachments`, `routes_ai`,
-`routes_export`, `routes_notifications`, `routes_search`, `routes_events` (the
+`routes_export`, `routes_notifications`, `routes_search`, `routes_automations`,
+`routes_events` (the
 one route that answers `text/event-stream` rather than JSON). Shared logic lives in small
 helper modules rather than a service layer: `permissions.py`, `time_utils.py`,
 `audit_utils.py`, `timeline_utils.py`, `notification_service.py`, `ai_service.py`,
 `export_service.py`, `search.py`, `versioning.py`, `activity.py`, `events.py`,
-`attachment_utils.py`.
+`attachment_utils.py`, `automations.py`, `jobs.py`, `scheduler.py`,
+`ai_filters.py`.
 
 ### One API surface
 
@@ -378,13 +380,61 @@ stays `None`. A revision that changes the schema must also update
 `tests/data/expected_schema.sql`, which the upgrade-from-empty test compares
 against.
 
+### The scheduler
+
+Milestone 6.5 is ADR 0004: APScheduler inside the FastAPI process, started
+from `main.py`'s `lifespan` and stopped with it. No broker, no worker
+container, no second deploy unit — the ADR's whole argument for a 20-user
+single-container app. Revision `0020_job_runs` is the record of what ran.
+
+- **`app/jobs.py` knows nothing about APScheduler** and `app/scheduler.py` is
+  the only file that imports it. That is ADR 0004's own instruction ("keep job
+  functions free of framework coupling so they stay directly testable") and it
+  is why `tests/test_scheduler.py` can call `run_automations` and `run_backup`
+  as plain functions — only two of its tests start a scheduler.
+- **Two jobs, which is all of v2's recurring work.** `automations` evaluates
+  the two of §11's five triggers the clock owns (`TIME_TRIGGERS`) through
+  `automations.run_rule` — the same function the manual run route calls, so a
+  tick cannot drift from a person pressing Run (D-175). `backup` is ADR 0011's
+  `VACUUM INTO`, which has had no schedule since milestone 1.6.
+- **Interval triggers, `max_instances=1`, `coalesce=True`.** An interval's
+  first firing is one interval away, which keeps a restart loop from taking a
+  snapshot per restart and keeps the e2e suite — which boots the real app —
+  from meeting a tick. One at a time because two copies would both walk the
+  same rules and both act; coalescing because a sleeping process must not wake
+  to a queue of missed ticks. Idempotence is what makes a skipped tick safe
+  (ADR 0004), not the assumption that missing one is free.
+- **`settings.scheduler_enabled` turns it off**, which `conftest.py` does for
+  the whole suite: a tick firing mid-test would evaluate a rule the test had
+  just written and the failure would land in whichever test ran next.
+- **A timer needed more than a schedule** (**D-182**). `no_activity` rate
+  limits itself — every action writes a system entry and that entry *is*
+  activity, so a nudged deal stops being a candidate until another full window
+  of silence has passed. `close_date_approaching` has no such feedback and
+  takes `_already_acted_in_window`, with the rule's own `days` as the unit.
+  Only applied, non-dry runs count: a preview must not suppress the run it
+  previews.
+- **Every run is recorded** (**D-183**), written on *start* and updated on
+  finish — so a row left at `started` is the signature of a process that died
+  mid-job, which a finished-only log cannot show. A failing job records and
+  does not raise: there is no caller to answer, and a tick that raised would
+  be swallowed by APScheduler's own logging. Read in two places:
+  `/api/health`'s `jobs` (the newest row per job, beside `last_backup_at`) and
+  `GET /api/v2/job-runs`, which `app/AutomationsPage.tsx` turns into one line
+  through `lib/jobs.ts` — because the only place a dead scheduler is *felt* is
+  the screen where somebody is wondering why their rule has not fired.
+- **One instance is assumed**, as ADR 0004 says explicitly: two would
+  double-run every periodic job, since nothing here claims a lock. The same
+  assumption ADR 0003's SSE makes, to be revisited together.
+
 ### Health and backups
 
 `GET /api/health` (`main.py`) reports substance, not just liveness (ADR 0011):
 `schema_version` (the `alembic_version` row), `database_writable` (a
 `BEGIN IMMEDIATE` that immediately rolls back — cheap, and the same lock a real
 write would need, so a read-only mount or a full disk is caught before it
-becomes a 500 somewhere else), and `last_backup_at`. Opening the connection at
+becomes a 500 somewhere else), `last_backup_at`, and — since milestone 6.5 —
+`jobs`, the newest run of each scheduled job (**D-183**). Opening the connection at
 all is inside the same `try`, because `get_connection()` asserts WAL mode,
 which is itself a write — a genuinely unwritable database can fail there
 before any query runs.
@@ -400,13 +450,14 @@ overwriting `app.db` in place. `tests/test_backup.py` exercises the full
 round trip, not just that a snapshot file gets created: ADR 0011 requires the
 restore to be "actually exercised," not assumed.
 
-There is no scheduler wired to `make backup` yet — ADR 0004's APScheduler
-lands in **Phase 6** (milestone 6.5), and standing up a second scheduling
-mechanism ahead of it would be scope this milestone doesn't own. Until then,
-run it by hand or from host cron. It was Phase 5's until email moved to v3
-(**D-141**); the scheduler followed Phase 6's automations, which are
-time-triggered, rather than following the email work out of the build — so this
-gap closes inside v2 rather than after it.
+**`make backup` has a schedule since milestone 6.5** — `jobs.run_backup`,
+every `backup_interval_hours` (default 24, which is what
+`backup_retention_count = 7` always assumed when it kept a week). The gap ADR
+0011 carried from milestone 1.6 is closed, and the Makefile target stays for
+running one by hand. It was Phase 5's until email moved to v3 (**D-141**); the
+scheduler followed Phase 6's automations, which are time-triggered, rather
+than following the email work out of the build — so this closed inside v2
+rather than after it.
 
 ### Timestamps
 
@@ -1135,6 +1186,33 @@ pinned by `test_invariant_*` tests. Viewers may ask
 questions; the endpoint uses `require_opportunity_access`, not
 `require_timeline_write`.
 
+**Three things were added in milestone 6.4**, all of them reads:
+
+- **The answer streams.** `POST .../ai/ask/stream` answers
+  `text/event-stream` — a different shape from ADR 0003's live updates
+  (**D-187**), because that one is a GET carrying invalidations and this one
+  needs the question in a body and carries content. `delta` as the answer is
+  written, `done` with the citations, which are computed from the finished
+  text. A failure mid-stream is an `error` event, not a 502: the status line
+  is long gone. A refusal is still an ordinary 404, because the permission
+  check runs before the response starts. `lib/aiStream.ts` is the client
+  half and deliberately not `apiRequest`, which reads a JSON body and throws
+  on non-2xx.
+- **A summary can be scoped to dates**, and **the context says so**
+  (**D-185**). A model given only June will otherwise answer "pricing was
+  never discussed" when the truth is "not in June". The entry numbers do not
+  change — `ENTRY_SEQUENCE_SQL` counts the whole deal — so a scoped answer
+  still cites what is on screen.
+- **A sentence becomes a filter proposal** (**D-186**), `POST /api/v2/ai/filter`
+  on its own router because a filter is over the board rather than one deal.
+  No deal content is sent. `app/ai_filters.py` validates the model's JSON
+  against the vocabulary the board actually has and *names* what it dropped,
+  which is what makes §14's "a query the user can inspect" true rather than
+  said. Applying is the reader pressing a button, which writes the same URL
+  parameters the filter bar writes. The board gained `minValue`/`maxValue`
+  here, because §14's own example proposes a bound nothing could have
+  applied.
+
 **Latency is configuration, and it is sized by measurement** (**D-168**).
 A reasoning model has a floor of tens of seconds before it has thought
 about anything — `minimal` effort spends zero reasoning tokens and still
@@ -1180,7 +1258,9 @@ to read — which is also why the emitted `index.html` body is empty.
 `AppRoutes` is exported separately so the tests mount the real route table
 inside a `MemoryRouter` (`app/test-app.tsx`) rather than a copy of it.
 
-Three routes. `/search` is `app/SearchPage.tsx`; `/` is `app/DashboardPage.tsx`,
+Five routes. `/search` is `app/SearchPage.tsx`, `/tasks` is
+`app/TasksPage.tsx`, `/reports` is `app/ReportsPage.tsx`, `/automations` is
+`app/AutomationsPage.tsx`; `/` is `app/DashboardPage.tsx`,
 a **layout route** with two children — the index, which is the "select an
 opportunity" panel, and `opportunities/:opportunityId`
 (`app/OpportunityPanel.tsx`). The board therefore stays mounted while the child
@@ -1248,6 +1328,106 @@ reusing the word would make every reference ambiguous.
   landmark via `aria-labelledby` — a `<section>` is only a `region` once it
   has an accessible name, and six unnamed ones are six things a screen-reader
   user cannot tell apart.
+
+### Automations
+
+Milestone 6.3 is `docs/FEATURES.md` §11: *"if nothing has happened in two
+weeks, remind me" is a rule every rep keeps in their head and forgets under
+pressure.* Revision `0018_automation_rules` adds `automation_rules` and
+`automation_runs`; `app/automations.py` is the evaluator,
+`routes_automations.py` the API, `app/AutomationsPage.tsx` the screen at
+**`/automations`**.
+
+- **A constrained builder, not a workflow engine**, and the constraint is in
+  the schema: one trigger column, one flat ANDed condition list, one action.
+  A rule that branches cannot be stored. Parameters are JSON
+  (`trigger_config`, `action_config`) validated on write against the two
+  tables in `schemas.py` (`TRIGGER_*_KEYS`, `ACTION_*_KEYS`) — a key the
+  chosen kind does not take is a 422 rather than a silently ignored field,
+  because the stored rule has to mean what was on screen.
+- **A rule acts with its creator's authority** (**D-173**). Evaluated only
+  over the deals its creator can read, attributed to the creator, and the
+  role the action needs re-checked **per deal at run time** —
+  `ACTION_REQUIRES` is that table, and `change_stage` is owner-only there for
+  the same reason `PATCH /opportunities/{id}` is. A rule naming an action its
+  creator may not perform on a matched deal records `skipped` with the
+  reason. That is what makes creation open to any authenticated caller (D-171's
+  rule): a rule grants its author nothing they did not already have.
+  **Editing, archiving and running one is the creator's alone**, which is the
+  one place this departs from custom fields — a rule performs writes recorded
+  under its creator's name. Listing is open, so "which automations run here,
+  and whose" is answerable.
+- **One hop, structurally** (**D-174**). Nothing in `automations.py` calls
+  `fire_event` or `run_rule`, the evaluator is invoked only from the route
+  handlers that perform *human* writes, and every write a rule makes is
+  `system_generated`, which no trigger reads. The chain cannot exist, so
+  there is no loop detection — which is what §11 asks for.
+  `test_invariant_a_rule_cannot_trigger_a_rule` is a source scan, like
+  `test_soft_delete.py`'s.
+- **All five triggers, one evaluator** (**D-175**). The three event-driven
+  ones (`stage_changed`, `entry_created`, `field_changed`) fire from
+  `fire_event_after_commit` below the route's commit, where `publish_*` sits
+  and for the same ordering reason; the two time-driven ones (`no_activity`,
+  `close_date_approaching`) are evaluated by `run_rule`, which the manual
+  run/preview route calls now and milestone 6.5's scheduler will call on a
+  timer. `field_changed` is woken by the fields a `PATCH` actually moved,
+  custom values compared against their previous value — a JSON column is
+  written whole, so a form resending a value unchanged would otherwise look
+  like a change.
+- **Dry run is the same code path with the write turned off**, and `dry_run`
+  **defaults to true** — the one default in this API that decides whether
+  anything is written.
+- **Every applied action leaves a system entry naming the rule**, which is
+  §11's requirement and `AGENTS.md` standard 5's. There is **no `automation`
+  entry type** (**D-176**): `type` is CHECK-constrained, so a new value is a
+  full table rebuild, and `system_generated = 1` plus the rule's name in the
+  body is what §11 actually asks for. Since 6.3a the entry also travels with
+  `TimelineEntryPublic.automation_rule_id` — read per page from
+  `automation_rule_ids_by_entry_id`, indexed by revision `0019` — because the
+  card needs to tell an automation's entry from a person's. `change_stage` writes the ordinary
+  `stage_change` entry so 6.2's time-in-stage reads one type for one event,
+  and an `add_entry` action may **not** name `stage_change` — a rule writing
+  that type would feed the dashboard a move that never happened.
+- **An automated write records a version, like every other write**
+  (**D-178**). `AGENTS.md` invariant 8 says every user-editable field keeps
+  its previous value attributed to who changed it, and that "quietly
+  rewriting one must be [traceable] too" — which is precisely what an
+  unattended writer does. So `change_stage` records an
+  `opportunity_versions` row and a rule-created task gets version 1 at
+  creation, both attributed to the rule's creator, and the owner can restore
+  what a rule replaced. It does not double up in the activity feed:
+  `activity.py` already drops an opportunity version whose only changed field
+  is the stage. `_task_row` reads `routes_tasks.TASK_ROWS_SQL` rather than its
+  own query, because `assignee_ids` has to be the canonical string
+  `version_is_current` compares as text (4.6).
+- **An entry a rule wrote can be deleted; one a person caused cannot**
+  (**D-181**, the human's request at the 6.3 review). It is the single
+  exception to "a system entry cannot be deleted", and it needs neither a new
+  permission rule nor a new column: `require_delete_permission` is
+  author-or-owner (D-005) and an automated entry's `created_by` is the rule's
+  creator, so the existing check already means "the deal's owner, or whoever
+  wrote the rule"; and `automation_runs.entry_id` is the predicate for "did a
+  rule write this". **Editing one is still refused** — removing a mistake is
+  not rewriting what the record says. The delete is soft, audited and
+  undoable, and it does **not** undo the change: a stage a rule moved goes
+  back through the version history (D-178).
+- **The run log records matches, not evaluations** (**D-177**): applied,
+  skipped-with-a-reason, failed; dry runs too, with the outcome they would
+  have had; and nothing for a deal the conditions filtered out. The skip is
+  the half that matters — a rule that matched and declined leaves no trace
+  anywhere else.
+- **A rule with no live definition behind a condition stops matching.**
+  Conditions read custom values through `visible_values`, so archiving a
+  field disarms the rules that read it rather than leaving them acting on a
+  value nobody can see (ADR 0006's never-trust-the-column-on-read).
+- **The frontend draws a rule as a sentence** (`lib/domain.ts`'s
+  `automationSentence`), in the list and live above the controls that build
+  it: a column of selects says what the options are, not what was built,
+  which is §11's own objection to a workflow engine. `automationTriggers` and
+  `automationActions` declare what each kind is called and which parameters
+  it takes, mirroring the server's two tables, so the form cannot offer what
+  the API refuses. An archived rule is reachable behind a toggle, because its
+  run log is the reason the row is kept and there is no DELETE route.
 
 ### Custom fields
 
@@ -1419,9 +1599,12 @@ The units worth testing directly, each in its own module:
 
 - `lib/api.ts` — `apiRequest<T>()`, the only fetch wrapper
   (`credentials: "include"`, echoes the CSRF cookie on unsafe methods, throws
-  `ApiError` on non-2xx carrying the envelope's `error.message` *and* its
-  `error.code` — the one shape the API answers with since v1 went. `isConflict`
-  is the first caller to branch on the code, for the note edit guard).
+  `ApiError` on non-2xx carrying the envelope's `error.message`, its
+  `error.code` and — since 6.3a (**D-180**) — its `error.fields`, the
+  per-field reasons a 422 names. `isConflict` is the first caller to branch on
+  the code, for the note edit guard; `AutomationRuleForm` is the first to read
+  `fields`, and until it did, every refused form in this app said only "The
+  request could not be validated" however precisely the API had answered).
 - `lib/query.ts` — `createQueryClient()`, the single TanStack Query
   configuration (no retries: `apiRequest` throws on 401 and 422 too).
 - `lib/snippet.ts` — turns a search snippet's match offsets into runs to
@@ -1431,6 +1614,19 @@ The units worth testing directly, each in its own module:
   `canChangeItem`, the client mirror of `backend/app/permissions.py`. They decide
   which buttons are offered, never who is allowed to do what.
 - `lib/notifications.ts` — the sentence shown for each notification type.
+- `lib/aiStream.ts` — reading a streamed answer: `fetch` plus a reader, SSE
+  framing, and the two event types the reply has (6.4, D-187). Not
+  `apiRequest`, which reads a body whole.
+- `lib/formErrors.ts` — `invalidFields`, what the *browser* refused, keyed by
+  each control's `name` and therefore by the API's own field path (6.5a,
+  **D-184**). A form that leaves validation to the browser gets a submit
+  cancelled before its code runs and a tooltip that vanishes, which is how a
+  number field holding `e` came to be silent; `AutomationRuleForm` is the
+  first caller and sets `noValidate` so it can ask the question itself. The
+  rest of the forms can adopt it.
+- `lib/jobs.ts` — the one line the automations screen says about the
+  scheduler: when the rules were last checked, or that nothing has checked
+  them, or that a check started and did not finish (6.5, D-183).
 - `lib/activity.ts` — the same job for the activity log's three kinds of
   event, and `versionFieldLabel`, which reads a changed column's name off the
   history screen's own declaration rather than a second list.

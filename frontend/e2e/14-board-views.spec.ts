@@ -39,7 +39,16 @@ test("dragging a card to another stage column logs a system entry", async ({
   await expect(
     column(page, "Prospecting").getByRole("link", { name: opportunity }),
   ).toBeVisible();
-  await card(page, opportunity).dragTo(column(page, "Proposal"));
+  // Dropped near the top of the column rather than at its centre. A
+  // column is as tall as the board, so its centre can sit below the fold --
+  // and Playwright scrolls a target into view *during* the drag, which is
+  // where HTML5 drag emulation comes apart. Milestone 6.4 made that real by
+  // adding two controls to the filter bar (79px to 119px), which is also a
+  // note for Phase R: this bar grows a row per custom field and nothing
+  // bounds its height.
+  await card(page, opportunity).dragTo(column(page, "Proposal"), {
+    targetPosition: { x: 40, y: 40 },
+  });
 
   // The card is in its new column, and the stage change is on the timeline as
   // an entry nobody can edit.

@@ -24,13 +24,27 @@ class CsrfClient(TestClient):
     """
 
     def request(self, method: str, url: Any, **kwargs: Any) -> Any:
-        if method.upper() not in SAFE_METHODS:
-            if CSRF_COOKIE_NAME not in self.cookies:
-                super().request("GET", "/api/health")
-            headers = dict(kwargs.pop("headers", None) or {})
-            headers.setdefault("X-CSRF-Token", self.cookies[CSRF_COOKIE_NAME])
-            kwargs["headers"] = headers
-        return super().request(method, url, **kwargs)
+        return super().request(method, url, **self._with_csrf(method, kwargs))
+
+    def stream(self, method: str, url: Any, **kwargs: Any) -> Any:
+        """The same pair on a streamed request (milestone 6.4).
+
+        `request` and `stream` are separate entry points in httpx, so
+        overriding one left the other going through the middleware without a
+        token -- which the first streaming test met as a 403 that had nothing
+        to do with what it was testing. The app gained its first streamed
+        **POST** here; until then every stream was a GET and therefore safe.
+        """
+        return super().stream(method, url, **self._with_csrf(method, kwargs))
+
+    def _with_csrf(self, method: str, kwargs: dict[str, Any]) -> dict[str, Any]:
+        if method.upper() in SAFE_METHODS:
+            return kwargs
+        if CSRF_COOKIE_NAME not in self.cookies:
+            super().request("GET", "/api/health")
+        headers = dict(kwargs.pop("headers", None) or {})
+        headers.setdefault("X-CSRF-Token", self.cookies[CSRF_COOKIE_NAME])
+        return {**kwargs, "headers": headers}
 
 
 # Loopback stays reachable because that is where the tests' own machinery
@@ -98,6 +112,13 @@ def client(tmp_path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     # without going through this fixture could see whichever tmp path the last
     # test that used it left behind.
     monkeypatch.setattr(settings, "database_url", f"sqlite:///{tmp_path / 'test.db'}")
+    # `with CsrfClient(app)` runs the real `lifespan`, which starts ADR 0004's
+    # scheduler (milestone 6.5). Off here, and not because it is slow: a tick
+    # firing mid-test would evaluate a rule the test had just written and act
+    # on its deals, so the failure would surface in whichever test ran next.
+    # `tests/test_scheduler.py` turns it back on for the two tests that are
+    # about the scheduler itself.
+    monkeypatch.setattr(settings, "scheduler_enabled", False)
     initialize_database()
     with CsrfClient(app) as test_client:
         yield test_client

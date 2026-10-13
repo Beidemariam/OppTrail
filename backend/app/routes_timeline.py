@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from .attachment_utils import attachments_by_entry_id
 from .audit_utils import create_audit_log_entry
 from .auth import get_current_user
+from .automations import automation_rule_ids_by_entry_id, fire_event_after_commit
 from .custom_fields import custom_values_or_422, live_definitions, visible_values
 from .database import db_connection
 from .events import publish_timeline_changed
@@ -218,10 +219,16 @@ def entry_from_row(
     notes: list[NotePublic],
     attachments: list[AttachmentPublic],
     definitions: list[dict[str, Any]] | None = None,
+    automation_rule_id: int | None = None,
 ) -> TimelineEntryPublic:
     """`definitions` is the live custom field set for entries (milestone 6.1),
     read once per request like `notes` and `attachments` are read once per
     page. `None` answers an empty value set.
+
+    `automation_rule_id` is the rule that wrote this entry (6.3a), read the
+    same way and `None` for everything a person wrote -- which is every entry
+    the four writes below answer with, since a rule's own entry is never the
+    thing a request just created.
     """
     return TimelineEntryPublic(
         id=row["id"],
@@ -236,6 +243,7 @@ def entry_from_row(
         system_generated=bool(row["system_generated"]),
         created_at=row["created_at"],
         sequence=row["sequence"],
+        automation_rule_id=automation_rule_id,
         custom_values=visible_values(row["custom_values"], definitions or []),
         notes=notes,
         attachments=attachments,
@@ -510,6 +518,9 @@ def entries_with_notes(
 
     attachments_by_entry = attachments_by_entry_id(connection, entry_ids)
     definitions = live_definitions(connection, "entry")
+    # Which of these entries a rule wrote (6.3a), one query for the page like
+    # the attachments above: it decides whether the card offers Delete.
+    rules_by_entry = automation_rule_ids_by_entry_id(connection, entry_ids)
 
     return [
         entry_from_row(
@@ -517,6 +528,7 @@ def entries_with_notes(
             notes_by_entry_id.get(entry["id"], []),
             attachments_by_entry.get(entry["id"], []),
             definitions,
+            rules_by_entry.get(entry["id"]),
         )
         for entry in entries
     ]
@@ -660,6 +672,16 @@ def create_timeline_entry(
         definitions = live_definitions(connection, "entry")
 
     publish_timeline_changed(opportunity_id)
+    # Milestone 6.3: the third event trigger, fired below the commit like the
+    # two on the opportunity. A *system* entry never reaches here -- those are
+    # written by `create_system_timeline_entry`, which no route calls on a
+    # person's behalf -- which is the structural half of §11's one-hop rule
+    # (D-174): a rule's own entry cannot wake a rule.
+    fire_event_after_commit(
+        "entry_created",
+        opportunity_id,
+        {"entry_type": payload.type},
+    )
     return entry_from_row(row, [], [], definitions)
 
 
@@ -891,7 +913,27 @@ def delete_timeline_entry(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Timeline entry not found",
             )
-        if entry["system_generated"]:
+        # A system entry is the record of something that happened and cannot
+        # be deleted -- with one exception since milestone 6.3a (**D-181**):
+        # an entry an **automation** wrote. The deal's owner asked for it, and
+        # the case is real: a mistaken rule leaves entries on deals that are
+        # not its author's, and before this nobody at all could remove them.
+        # It is one exception and not a loosening -- "Opportunity created", a
+        # stage a person moved and a sharing change stay immutable, because
+        # those are things a person did rather than things a rule did to them.
+        #
+        # Who may: `require_delete_permission` below is author-or-owner
+        # (D-005), and an automated entry's `created_by` is the rule's
+        # creator -- whose authority the rule ran with -- so the existing rule
+        # already means "the deal's owner, or whoever wrote the rule". No
+        # second permission shape.
+        #
+        # Editing one is still refused (`update_timeline_entry`): removing a
+        # mistake is not the same as rewriting what the record says, and §11's
+        # traceability is the entry *naming its rule*.
+        if entry["system_generated"] and not automation_rule_ids_by_entry_id(
+            connection, [entry_id]
+        ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="System timeline entries cannot be deleted",

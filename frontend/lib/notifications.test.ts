@@ -176,3 +176,42 @@ describe("where a notification leads (milestone 6.1a)", () => {
     }
   });
 });
+
+describe("an automation's notification (milestone 6.3)", () => {
+  it("names the rule as well as the message", () => {
+    // The rule's name is what makes an automated nudge distinguishable from a
+    // colleague's, which is `docs/FEATURES.md` §11's "traceable" read from the
+    // inbox rather than from the timeline.
+    expect(
+      notificationText(
+        notification("automation", {
+          opportunity_id: 3,
+          rule_id: 7,
+          rule_name: "Nudge the quiet ones",
+          title: "This deal has gone quiet",
+          body: null,
+        }),
+      ),
+    ).toBe("This deal has gone quiet (rule: Nudge the quiet ones)");
+  });
+
+  it("falls back when the payload is not the shape this version writes", () => {
+    expect(notificationText(notification("automation", {}))).toBe(
+      "An automation rule fired.",
+    );
+  });
+
+  it("opens the deal it is about", () => {
+    expect(
+      notificationHref(
+        notification("automation", {
+          opportunity_id: 3,
+          rule_id: 7,
+          rule_name: "Nudge",
+          title: "Quiet",
+          body: null,
+        }),
+      ),
+    ).toBe("/opportunities/3");
+  });
+});

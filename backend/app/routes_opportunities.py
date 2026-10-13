@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from .activity import fetch_activity_page
 from .audit_utils import create_audit_log_entry
 from .auth import get_current_user
-from .custom_fields import custom_values_or_422, live_definitions, visible_values
+from .automations import fire_event_after_commit
+from .custom_fields import custom_values_or_422, live_definitions, stored_values, visible_values
 from .database import db_connection
 from .events import publish_opportunity_changed
 from .notification_service import create_notification
@@ -339,6 +340,11 @@ def update_opportunity(
         row = fetch_opportunity_row(connection, opportunity_id)
         assert row is not None
         previous_stage = row["stage"]
+        # Which custom values this PATCH actually moved, read before the write
+        # (milestone 6.3). A JSON column is written whole, so a form resending
+        # a value unchanged would otherwise look like a change to a rule
+        # watching that field.
+        previous_values = stored_values(row["custom_values"])
 
         if submitted_values is not None:
             assignments.append("custom_values = ?")
@@ -385,6 +391,27 @@ def update_opportunity(
         definitions = live_definitions(connection, "opportunity")
 
     publish_opportunity_changed(opportunity_id)
+    # A human write is the only thing that wakes a rule (milestone 6.3,
+    # D-174), and it wakes it below the commit and below the invalidation,
+    # like every other consequence of this write.
+    if updates.get("stage") and updates["stage"] != previous_stage:
+        fire_event_after_commit(
+            "stage_changed",
+            opportunity_id,
+            {"from_stage": previous_stage, "to_stage": updates["stage"]},
+        )
+    # `fields` carries every field this PATCH moved, `stage` included: a rule
+    # watching `field_changed` on the stage is a blunter form of the trigger
+    # above and both fire, which is one hop each and not a chain.
+    moved = [field for field in updates if field != "custom_values"]
+    if submitted_values is not None:
+        moved.extend(
+            f"custom:{key}"
+            for key, value in submitted_values.items()
+            if previous_values.get(key) != value
+        )
+    if moved:
+        fire_event_after_commit("field_changed", opportunity_id, {"fields": moved})
     return opportunity_from_row(updated, "owner", stalled, definitions)
 
 
@@ -472,6 +499,10 @@ def restore_opportunity_version(
     because the timeline must not disagree with the record.
     """
     changed = False
+    # The stage this restore moved, if it moved one: captured here because
+    # `row` is replaced by the restored row below and both halves of the move
+    # are needed after the commit (milestone 6.3).
+    moved_stage: tuple[str, str] | None = None
     with db_connection() as connection:
         require_opportunity_owner(connection, opportunity_id, int(user["id"]))
         version = fetch_version(connection, OPPORTUNITY_VERSIONS, opportunity_id, version_number)
@@ -500,6 +531,7 @@ def restore_opportunity_version(
                     title=f"Stage changed to {version['stage']}",
                     body=f"Stage changed from {row['stage']} to {version['stage']}.",
                 )
+                moved_stage = (row["stage"], version["stage"])
             restored = fetch_opportunity_row(connection, opportunity_id)
             assert restored is not None
             record_version(
@@ -522,6 +554,12 @@ def restore_opportunity_version(
     # every other reader to fetch what they already hold.
     if changed:
         publish_opportunity_changed(opportunity_id)
+    if moved_stage is not None:
+        fire_event_after_commit(
+            "stage_changed",
+            opportunity_id,
+            {"from_stage": moved_stage[0], "to_stage": moved_stage[1]},
+        )
     return opportunity_from_row(row, "owner", stalled, definitions)
 
 
@@ -764,6 +802,10 @@ def bulk_opportunity_action(
     # caller's own saved view, not to the opportunity (D-106), so nobody
     # watching the deal has gone stale.
     touched: list[int] = []
+    # The stage moves this request actually performed, for the rules that
+    # watch one (milestone 6.3). A stage set in bulk is the same edit as one
+    # set on its own, so it wakes the same rules.
+    staged: list[tuple[int, str]] = []
 
     with db_connection() as connection:
         # `is not None` rather than truthiness: the validator has already
@@ -800,6 +842,8 @@ def bulk_opportunity_action(
                 bulk_delete(connection, opportunity_id, row, actor_id)
             elif payload.action == "set_stage":
                 assert payload.stage is not None
+                if row["stage"] != payload.stage:
+                    staged.append((opportunity_id, row["stage"]))
                 bulk_set_stage(connection, opportunity_id, row, actor_id, payload.stage)
             elif payload.action == "assign_owner":
                 assert new_owner is not None
@@ -827,6 +871,13 @@ def bulk_opportunity_action(
 
     for opportunity_id in touched:
         publish_opportunity_changed(opportunity_id)
+
+    for opportunity_id, previous_stage in staged:
+        fire_event_after_commit(
+            "stage_changed",
+            opportunity_id,
+            {"from_stage": previous_stage, "to_stage": payload.stage},
+        )
 
     return BulkActionResponse(results=results)
 

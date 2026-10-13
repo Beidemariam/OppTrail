@@ -386,6 +386,13 @@ export type OpportunityViewState = {
   q: string;
   stage: string;
   stalled: "" | "true" | "false";
+  /** Value bounds, as the strings the URL carries (milestone 6.4). The board
+   * had no way to filter on money until the AI's own example asked for it —
+   * `docs/FEATURES.md` §14's "deals stuck in negotiation over 50k" — and a
+   * proposal this board could not apply would have made the inspection
+   * pointless (**D-186**). Empty means unbounded on that side. */
+  minValue: string;
+  maxValue: string;
   sortField: OpportunitySortField;
   sortDirection: "asc" | "desc";
   view: OpportunityView;
@@ -484,6 +491,8 @@ export const emptyOpportunityViewState: OpportunityViewState = {
   q: "",
   stage: "",
   stalled: "",
+  minValue: "",
+  maxValue: "",
   sortField: "updated_at",
   sortDirection: "desc",
   view: "board",
@@ -663,6 +672,32 @@ export function editableField(
  * is also not only a filter — the keyboard cursor, the bulk selection and
  * the calendar's month are all derived from this result.
  */
+/**
+ * Whether a deal's value sits inside the bounds (milestone 6.4).
+ *
+ * Compared as numbers, not as the strings the URL holds: `"900" > "50000"`
+ * is true as text and false as money, which is the same trap
+ * `app/automations.py` has to avoid on the server. A bound that is not a
+ * number is ignored rather than excluding everything — a hand-edited or
+ * stale link should draw a board, not nothing, which is the rule
+ * `columnsFromState` already follows.
+ */
+export function withinValue(value: string, min: string, max: string): boolean {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) {
+    return true;
+  }
+  const lower = Number(min);
+  if (min !== "" && Number.isFinite(lower) && amount < lower) {
+    return false;
+  }
+  const upper = Number(max);
+  if (max !== "" && Number.isFinite(upper) && amount > upper) {
+    return false;
+  }
+  return true;
+}
+
 export function applyOpportunityView(
   opportunities: Opportunity[],
   state: OpportunityViewState,
@@ -692,6 +727,9 @@ export function applyOpportunityView(
       return false;
     }
     if (state.stalled === "false" && opportunity.stalled) {
+      return false;
+    }
+    if (!withinValue(opportunity.value, state.minValue, state.maxValue)) {
       return false;
     }
     if (keyword) {
@@ -828,6 +866,10 @@ export interface AiChatMessage {
   role: "user" | "assistant";
   body: string;
   referenced_entry_numbers?: number[];
+  /** Still arriving (milestone 6.4). An answer is appended empty and grows,
+   * so the screen can show it being written rather than a spinner for the
+   * ~29s this deployment's model takes to say anything at all (D-168). */
+  streaming?: boolean;
 }
 
 /**
@@ -1339,3 +1381,266 @@ export function cardCustomValues(
     }))
     .filter((entry) => entry.text !== "");
 }
+
+// --- Automations (milestone 6.3, `docs/FEATURES.md` §11) -------------------
+
+/** One rule: a trigger, an ANDed condition list, an action. */
+export type AutomationRule = components["schemas"]["AutomationRulePublic"];
+export type AutomationRuleCreate =
+  components["schemas"]["AutomationRuleCreate"];
+export type AutomationTrigger = AutomationRule["trigger_type"];
+export type AutomationAction = AutomationRule["action_type"];
+export type AutomationCondition = components["schemas"]["AutomationCondition"];
+export type ConditionOperator = AutomationCondition["op"];
+export type AutomationRun = components["schemas"]["AutomationRunPublic"];
+export type AutomationRunResponse =
+  components["schemas"]["AutomationRunResponse"];
+
+/**
+ * What each trigger and each action is called on screen, and which parameters
+ * it takes.
+ *
+ * Declared as data for the reason `editableOpportunityFields` and
+ * `shortcutGroups` are: the builder's form, the sentence a rule reads as, and
+ * the validation that refuses a parameter the chosen kind does not take are
+ * three views of one list. The `fields` arrays mirror
+ * `schemas.py`'s `TRIGGER_*_KEYS` / `ACTION_*_KEYS` tables, which is the
+ * server's half of the same rule — a form offering a field the API refuses is
+ * the mismatch this pairing exists to prevent.
+ */
+export type TriggerParameter =
+  | "to_stage"
+  | "from_stage"
+  | "entry_type"
+  | "field"
+  | "days";
+
+export type ActionParameter =
+  | "title"
+  | "body"
+  | "recipient"
+  | "due_in_days"
+  | "entry_type"
+  | "stage";
+
+export const automationTriggers: {
+  value: AutomationTrigger;
+  label: string;
+  fields: TriggerParameter[];
+  required: TriggerParameter[];
+  /** Whether the clock fires it, which is what milestone 6.5 schedules. */
+  scheduled: boolean;
+}[] = [
+  {
+    value: "stage_changed",
+    label: "A deal's stage changes",
+    fields: ["to_stage", "from_stage"],
+    required: [],
+    scheduled: false,
+  },
+  {
+    value: "entry_created",
+    label: "An entry is added",
+    fields: ["entry_type"],
+    required: [],
+    scheduled: false,
+  },
+  {
+    value: "field_changed",
+    label: "A field changes",
+    fields: ["field"],
+    required: ["field"],
+    scheduled: false,
+  },
+  {
+    value: "no_activity",
+    label: "Nothing has happened for a while",
+    fields: ["days"],
+    required: ["days"],
+    scheduled: true,
+  },
+  {
+    value: "close_date_approaching",
+    label: "A close date is approaching",
+    fields: ["days"],
+    required: ["days"],
+    scheduled: true,
+  },
+];
+
+export const automationActions: {
+  value: AutomationAction;
+  label: string;
+  fields: ActionParameter[];
+  required: ActionParameter[];
+}[] = [
+  {
+    value: "create_task",
+    label: "Create a task",
+    fields: ["title", "body", "recipient", "due_in_days"],
+    required: ["title"],
+  },
+  {
+    value: "notify_user",
+    label: "Notify somebody",
+    fields: ["title", "body", "recipient"],
+    required: ["title"],
+  },
+  {
+    value: "add_entry",
+    label: "Add a timeline entry",
+    fields: ["title", "body", "entry_type"],
+    required: ["title"],
+  },
+  {
+    value: "change_stage",
+    label: "Change the stage",
+    fields: ["stage"],
+    required: ["stage"],
+  },
+];
+
+export const conditionOperators: {
+  value: ConditionOperator;
+  label: string;
+}[] = [
+  { value: "eq", label: "is" },
+  { value: "ne", label: "is not" },
+  { value: "gt", label: "is more than" },
+  { value: "gte", label: "is at least" },
+  { value: "lt", label: "is less than" },
+  { value: "lte", label: "is at most" },
+  { value: "contains", label: "contains" },
+];
+
+/** The opportunity fields a condition may compare, mirroring
+ * `schemas.CONDITION_FIELDS`. Custom fields are appended from the live
+ * definitions, so an archived one stops being offered. */
+export const conditionFields: { value: string; label: string }[] = [
+  { value: "stage", label: "Stage" },
+  { value: "value", label: "Value" },
+  { value: "currency", label: "Currency" },
+  { value: "name", label: "Name" },
+  { value: "account_name", label: "Account" },
+  { value: "expected_close_date", label: "Expected close date" },
+];
+
+export function conditionFieldOptions(
+  fields: CustomField[],
+): { value: string; label: string }[] {
+  return [
+    ...conditionFields,
+    ...fields.map((field) => ({
+      value: customColumn(field.key),
+      label: field.label,
+    })),
+  ];
+}
+
+function parameterLabel(value: string | null | undefined): string {
+  return value === null || value === undefined || value === ""
+    ? "anything"
+    : String(value);
+}
+
+/**
+ * A rule as one sentence.
+ *
+ * The builder is a form of selects, and a form of selects does not tell
+ * somebody what they just built — so the sentence is rendered above the
+ * controls and updates as they change. Same job `lib/activity.ts` does for an
+ * activity row and `lib/notifications.ts` for an inbox line: one place that
+ * turns a record into a thing a person reads.
+ */
+export function automationSentence(
+  rule: Pick<
+    AutomationRule,
+    "trigger_type" | "trigger" | "conditions" | "action_type" | "action"
+  >,
+): string {
+  const when = automationWhen(rule);
+  const conditions = rule.conditions
+    .map((condition) => automationConditionText(condition))
+    .join(" and ");
+  const then = automationThen(rule);
+  const unless = conditions === "" ? "" : `, if ${conditions}`;
+  return `${when}${unless}, ${then}.`;
+}
+
+function automationWhen(
+  rule: Pick<AutomationRule, "trigger_type" | "trigger">,
+): string {
+  const { trigger } = rule;
+  switch (rule.trigger_type) {
+    case "stage_changed":
+      if (trigger.to_stage && trigger.from_stage)
+        return `When a deal moves from ${trigger.from_stage} to ${trigger.to_stage}`;
+      if (trigger.to_stage) return `When a deal moves to ${trigger.to_stage}`;
+      if (trigger.from_stage) return `When a deal leaves ${trigger.from_stage}`;
+      return "When a deal's stage changes";
+    case "entry_created":
+      return trigger.entry_type
+        ? `When a ${entryTypeLabel(trigger.entry_type)} entry is added`
+        : "When an entry is added";
+    case "field_changed":
+      return `When ${parameterLabel(trigger.field)} changes`;
+    case "no_activity":
+      return `When nothing has happened for ${trigger.days} days`;
+    case "close_date_approaching":
+      return `When a close date is ${trigger.days} days away`;
+  }
+}
+
+function automationThen(
+  rule: Pick<AutomationRule, "action_type" | "action">,
+): string {
+  const { action } = rule;
+  const who = action.recipient === "rule_creator" ? "me" : "the deal's owner";
+  switch (rule.action_type) {
+    case "create_task":
+      return `create a task for ${who}: "${action.title}"`;
+    case "notify_user":
+      return `notify ${who}: "${action.title}"`;
+    case "add_entry":
+      return `add a timeline entry: "${action.title}"`;
+    case "change_stage":
+      return `move it to ${action.stage}`;
+  }
+}
+
+export function automationConditionText(
+  condition: AutomationCondition,
+): string {
+  const operator =
+    conditionOperators.find((item) => item.value === condition.op)?.label ??
+    condition.op;
+  const key = customColumnKey(condition.field as TableColumn);
+  const field =
+    conditionFields.find((item) => item.value === condition.field)?.label ??
+    key ??
+    condition.field;
+  return `${field} ${operator} ${condition.value}`;
+}
+
+/**
+ * The entry types an automation may name, which is every type except
+ * `stage_change`.
+ *
+ * A rule writing a `stage_change` entry would feed the dashboard's
+ * time-in-stage aggregation (milestone 6.2 reads exactly that type) with a
+ * stage change that never happened. The API refuses it too — this list is
+ * what keeps the form from offering what would 422. It is also the right set
+ * for the trigger side: a `stage_change` entry is always system-generated, so
+ * a rule watching for one would never fire.
+ */
+export const automationEntryTypes = entryTypes.filter(
+  (type) => type.value !== "stage_change",
+);
+
+/** One execution of a periodic job (milestone 6.5, ADR 0004). */
+export type JobRun = components["schemas"]["JobRunPublic"];
+
+/** What the AI proposed as a filter, after the server validated it against
+ * the vocabulary this board actually has (milestone 6.4, D-186). */
+export type AiFilterResponse = components["schemas"]["AiFilterResponse"];
+export type AiFilterProposal = components["schemas"]["AiFilterProposal"];

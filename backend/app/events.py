@@ -61,6 +61,25 @@ READY_FRAME = "event: ready\ndata: {}\n\n"
 HEARTBEAT_FRAME = ": keepalive\n\n"
 
 
+def sse_frame(event: str, data: str) -> str:
+    """One SSE message carrying arbitrary text (milestone 6.4).
+
+    `Event.frame` below formats this module's own invalidations, whose data
+    is a single line of JSON by construction. The AI stream carries an
+    answer, and an answer has newlines in it -- so each line needs its own
+    `data:` prefix, which is how the spec says a multi-line payload travels
+    and how the browser rejoins it with `\n`. A frame that forgot this would
+    end the message at the first paragraph break and silently truncate every
+    answer longer than one.
+
+    An empty payload still emits one `data:` line: a frame with none is a
+    comment, not an event.
+    """
+    lines = data.split("\n") or [""]
+    body = "".join(f"data: {line}\n" for line in lines)
+    return f"event: {event}\n{body}\n"
+
+
 def retry_frame(seconds: float) -> str:
     """The reconnect delay `EventSource` should use when this stream ends.
 

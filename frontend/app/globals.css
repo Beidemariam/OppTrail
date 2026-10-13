@@ -1485,26 +1485,58 @@ a.danger-button {
   margin: 3px 0 0;
 }
 
+/* The panel is capped to the viewport, which is the fix for a defect the
+   human met at the 6.4 review: *"the AI window was so filled from the
+   previous answer, it took me scrolling the timeline all the way to the
+   beginning before I got the AI window to type this question. Also all the
+   tasks have disappeared."*
+
+   Measured before and after, because this is geometry (D-138's rule). On a
+   900px viewport with one long answer the panel was **781px** tall starting
+   at y=279, which put its own ask box at **y=915 — 15px below the fold** —
+   and because the panel is `sticky`, an element taller than its scrollport
+   does not move until the reader has scrolled past all of it. The chat's
+   520px cap was not the problem: nothing capped the panel around it.
+
+   Flex rather than grid so the cap has something to give: the chat is the
+   only child that shrinks (`min-height: 0`, which a flex item needs before
+   it will go below its content), so the composer is always on screen and
+   the panel never exceeds the space it is sticking in. */
 .ai-sidebar {
   background: var(--bg-app);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
+  max-height: calc(100vh - 36px);
   padding: 14px;
   position: sticky;
   top: 18px;
 }
 
-.ai-chat,
 .ai-form {
   display: grid;
   gap: 10px;
 }
 
 .ai-chat {
-  max-height: 520px;
+  display: grid;
+  gap: 10px;
+  /* Content size while it fits, shrinking only when the panel's cap bites.
+     `min-height: 0` is what allows that at all; without it a flex item
+     refuses to go below its content and the cap would clip the composer
+     instead of the transcript. */
+  flex: 0 1 auto;
+  min-height: 0;
   overflow: auto;
+}
+
+/* The two rows that must never be the ones that give way: the composer is
+   how a question is asked, and the scope is what the question means. */
+.ai-form,
+.ai-scope {
+  flex: 0 0 auto;
 }
 
 .ai-message {
@@ -3232,6 +3264,16 @@ kbd {
   font-size: var(--text-xs);
   gap: var(--space-1);
   line-height: var(--line-xs);
+  /* A chip must not be wider than the day it sits in. The grid's columns are
+     `minmax(0, 1fr)` and the name already truncates, but the value did not --
+     `white-space: nowrap` with the flex default `min-width: auto` means a
+     flex item refuses to shrink below its text, so an amount pushed the chip
+     past its cell. In six of seven columns that overlaps the next day and is
+     merely ugly; in the last one it widens the page, which is what
+     `e2e/23-responsive.spec.ts` measures. Found by that spec on a day when a
+     seeded close date happened to fall on a Saturday -- the same defect was
+     there on every other day, just not at the page edge. */
+  overflow: hidden;
   padding: var(--space-0-5) var(--space-1);
 }
 
@@ -3250,6 +3292,14 @@ kbd {
 
 .chip-value {
   color: var(--text-secondary);
+  /* Truncates rather than forcing the chip wider (see above). The name has
+     `flex: 1` so it gives way first; at the narrowest widths both end in an
+     ellipsis, which is the honest rendering of a seven-column month grid on a
+     phone -- a narrower layout for the calendar is a design question, not a
+     geometry bug. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -3494,4 +3544,203 @@ kbd {
 
 .task-comment .meta-row {
   margin: 0;
+}
+
+/* --- Automations (milestone 6.3) ----------------------------------------- */
+
+.automation-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  list-style: none;
+  margin: var(--space-4) 0 0;
+  padding: 0;
+}
+
+.automation-rule {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+/* The rule as a sentence, which is how §11's "legible" is satisfied: a
+   column of selects says what the options are, not what was built. Set in
+   the body face rather than as code, because it is prose. */
+.automation-sentence {
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+  margin: var(--space-2) 0;
+  max-width: 68ch;
+}
+
+.automation-preview {
+  background: var(--bg-sunken);
+  border-radius: var(--radius-sm);
+  margin: var(--space-2) 0;
+  padding: var(--space-3);
+}
+
+.automation-preview p {
+  margin: 0 0 var(--space-2);
+}
+
+.automation-runs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+}
+
+.automation-runs li {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.875rem;
+  gap: var(--space-2);
+}
+
+/* An outcome reads as a word, coloured by what it means. The three roles are
+   the ones the token set already carries -- there is no success colour here,
+   and an applied run is the ordinary case rather than a celebration, so it
+   takes the primary text colour and the two exceptions are marked. */
+.automation-outcome {
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.automation-outcome.is-skipped {
+  color: var(--text-warning);
+}
+
+.automation-outcome.is-failed {
+  color: var(--text-danger);
+}
+
+.condition-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0 0 var(--space-2);
+  padding: 0;
+}
+
+.condition-list li {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* "and" is printed between the rows rather than being a control: the
+   conditions are ANDed and cannot be nested (§11), so there is nothing to
+   choose. */
+.condition-joiner {
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+}
+
+/* One input's reason for being refused, under the input (milestone 6.3a).
+   Narrower than `.error`, which is the whole form's summary line. */
+.field-error {
+  color: var(--text-danger);
+  font-size: 0.8125rem;
+  margin: calc(-1 * var(--space-1)) 0 var(--space-2);
+}
+
+[aria-invalid="true"] {
+  border-color: var(--text-danger);
+}
+
+/* --- The AI's expansion (milestone 6.4) --------------------------------- */
+
+/* The caret that says an answer is still arriving. Animated, because the
+   point is motion where a spinner used to be -- and stilled under
+   `prefers-reduced-motion`, where the reader has asked for no motion and the
+   streaming text itself is the signal. */
+.ai-cursor {
+  animation: ai-cursor-blink 1s step-end infinite;
+  background: var(--text-secondary);
+  display: inline-block;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  width: 2px;
+}
+
+@keyframes ai-cursor-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-cursor {
+    animation: none;
+  }
+}
+
+.ai-scope {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--space-2);
+}
+
+.ai-scope-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.ai-scope-fields label {
+  display: flex;
+  flex-direction: column;
+  font-size: var(--text-xs);
+  gap: var(--space-1);
+}
+
+.ai-filter {
+  position: relative;
+}
+
+.ai-filter-panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-top: var(--space-2);
+  max-width: 420px;
+  padding: var(--space-3);
+}
+
+.ai-filter-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.ai-filter-form label {
+  display: flex;
+  flex: 1 1 220px;
+  flex-direction: column;
+  font-size: var(--text-xs);
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.ai-filter-proposal {
+  border-top: 1px solid var(--border-subtle);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+}
+
+.ai-filter-proposal ul {
+  margin: 0 0 var(--space-2);
+  padding-left: var(--space-4);
+}
+
+.ai-filter-proposal p {
+  margin: 0 0 var(--space-2);
 }

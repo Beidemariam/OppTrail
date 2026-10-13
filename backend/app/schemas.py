@@ -1,6 +1,7 @@
 import json
+import re
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, field_serializer, field_validator, model_validator
@@ -485,6 +486,14 @@ class TimelineEntryPublic(BaseModel):
     # cannot disagree. It is a reading aid, not an identity: the id is what
     # `?entry=` links carry.
     sequence: int
+    # The rule that wrote this entry, or `None` for everything a person wrote
+    # (milestone 6.3a, **D-181**). It is the one fact the client cannot infer:
+    # every automated entry is `system_generated`, and a system entry a person
+    # caused -- "Opportunity created", a stage somebody moved, a share -- stays
+    # undeletable, while this one can be deleted by the deal's owner or the
+    # rule's creator. A button offered on the wrong one would be a button the
+    # API refuses, so the distinction travels with the row.
+    automation_rule_id: int | None = None
     custom_values: CustomValues = Field(default_factory=dict)
     notes: list[NotePublic]
     # The entry's files, read with it rather than through a list route of
@@ -1117,11 +1126,29 @@ class ActivityEventPublic(BaseModel):
 
 class AiAskRequest(BaseModel):
     question: str = Field(min_length=1)
+    # Date-scoped summaries (milestone 6.4, `docs/FEATURES.md` §14). Dates
+    # rather than timestamps because the control is a date range and because
+    # `until` means the whole of that day -- `ai_service.build_timeline_context`
+    # is where that is turned into a bound. Both optional and independent:
+    # "since March" and "before the demo" are both real questions.
+    since: str | None = None
+    until: str | None = None
 
     @field_validator("question")
     @classmethod
     def strip_question(cls, value: str) -> str:
         return value.strip()
+
+    @field_validator("since", "until")
+    @classmethod
+    def canonical_bound(cls, value: str | None) -> str | None:
+        return canonical_date(value) if value else None
+
+    @model_validator(mode="after")
+    def range_runs_forwards(self) -> "AiAskRequest":
+        if self.since and self.until and self.since > self.until:
+            raise ValueError("The range ends before it starts")
+        return self
 
 
 class AiAskResponse(BaseModel):
@@ -1134,11 +1161,38 @@ class AiAskResponse(BaseModel):
     referenced_entry_numbers: list[int]
 
 
+JobName = Literal["automations", "backup"]
+JobStatus = Literal["started", "succeeded", "failed"]
+
+
+class JobRunPublic(BaseModel):
+    """One execution of a periodic job (milestone 6.5, ADR 0004).
+
+    `status` left at `started` with no `finished_at` is not a missing value:
+    it is the signature of a process that died mid-job, which is the failure a
+    finished-only log cannot show.
+    """
+
+    id: int
+    job: JobName
+    status: JobStatus
+    detail: str | None
+    started_at: str
+    finished_at: str | None
+
+
 class HealthStatus(BaseModel):
     status: Literal["ok"]
     schema_version: str
     database_writable: bool
     last_backup_at: str | None
+    # The newest run of each job (milestone 6.5). On the probe rather than
+    # only on an authenticated read because `docs/ARCHITECTURE.md`'s
+    # Observability section names the failure this answers: "a silently dead
+    # scheduler is the most likely v2 production failure", and whatever is
+    # watching this endpoint is what would notice. It leaks nothing -- a job
+    # name, a status and a time (**D-183**).
+    jobs: list[JobRunPublic] = Field(default_factory=list)
 
 
 NotificationType = Literal[
@@ -1159,6 +1213,11 @@ NotificationType = Literal[
     # the two people the task is about rather than to everyone on the deal, and
     # an inbox line that cannot say which is which is a worse inbox.
     "task_comment",
+    # A rule did something, or wants somebody told (milestone 6.3). Its own
+    # type because the actor is not a person: the inbox sentence has to name
+    # the rule, which is the only thing that makes an automated nudge
+    # distinguishable from a colleague's (`docs/FEATURES.md` §11's "traceable").
+    "automation",
 ]
 
 # What a notification is about. "attachment" since milestone 4.3: a file
@@ -1258,6 +1317,23 @@ class NotificationPayloadTaskComment(BaseModel):
     title: str
 
 
+class NotificationPayloadAutomation(BaseModel):
+    """What a rule wants this reader to know (milestone 6.3).
+
+    `rule_name` rides along for the reason every other payload here carries a
+    title: an inbox line that says only "an automation fired" sends the reader
+    hunting for which one, and the rule's name is the only part of it they
+    wrote themselves. `rule_id` is beside it so the sentence can link to the
+    rule rather than only to the deal.
+    """
+
+    opportunity_id: int
+    rule_id: int
+    rule_name: str
+    title: str
+    body: str | None
+
+
 NotificationPayload = (
     NotificationPayloadShareAdded
     | NotificationPayloadShareRoleChanged
@@ -1268,6 +1344,7 @@ NotificationPayload = (
     | NotificationPayloadTaskComment
     | NotificationPayloadSharedActivity
     | NotificationPayloadComment
+    | NotificationPayloadAutomation
 )
 
 NOTIFICATION_PAYLOAD_MODELS: dict[str, type[BaseModel]] = {
@@ -1280,6 +1357,7 @@ NOTIFICATION_PAYLOAD_MODELS: dict[str, type[BaseModel]] = {
     "comment": NotificationPayloadComment,
     "task_assigned": NotificationPayloadTaskAssigned,
     "task_comment": NotificationPayloadTaskComment,
+    "automation": NotificationPayloadAutomation,
 }
 
 
@@ -1574,3 +1652,416 @@ class SavedViewPublic(BaseModel):
     is_default: bool
     created_at: str
     updated_at: str
+
+
+# --- Automations (milestone 6.3) --------------------------------------------
+#
+# `docs/FEATURES.md` §11's constraint is the shape, not a limit bolted onto a
+# general engine: one trigger, a flat ANDed condition list, one action. There
+# is no rule-to-rule edge anywhere in these models, which is what removes loop
+# detection from the design entirely.
+
+AutomationTrigger = Literal[
+    # Fired by a human write, inline after the commit that caused it.
+    "stage_changed",
+    "entry_created",
+    "field_changed",
+    # Fired by the clock. Evaluated by `POST /automation-rules/{id}/run` today
+    # and by milestone 6.5's scheduler against the same function.
+    "no_activity",
+    "close_date_approaching",
+]
+
+AutomationAction = Literal["create_task", "notify_user", "add_entry", "change_stage"]
+
+# `failed` is in the vocabulary and nothing writes it yet -- the same shape
+# `notifications.grouped_key` has carried since milestone 1.7 (**D-095**), and
+# for the same reason: it belongs to a caller one milestone away. A firing that
+# raises today rolls back whole and is logged by `fire_event_after_commit` or
+# answered as a 500; milestone 6.5's scheduler is the caller that needs the
+# *outcome* recorded instead, because "a silently dead scheduler is the
+# likeliest production failure". Writing it there is a query change rather than
+# a migration.
+AutomationOutcome = Literal["applied", "skipped", "failed"]
+
+# Who an action lands on. Two answers, because a rule is written by one person
+# about deals that may be owned by another: `owner` is the deal's owner (the
+# "remind me" of §11's own example, when a rep writes a rule over their own
+# pipeline), and `rule_creator` is whoever wrote the rule (a manager watching
+# a team's deals wants their own task list to grow, not everybody else's).
+AutomationRecipient = Literal["owner", "rule_creator"]
+
+ConditionOperator = Literal["eq", "ne", "gt", "gte", "lt", "lte", "contains"]
+
+# The opportunity fields a condition may compare and a `field_changed` trigger
+# may watch. Deliberately not every column: `id`, `owner_id` and the
+# timestamps are identity and bookkeeping rather than things a rule is about,
+# and offering them would invite rules that read as data joins.
+CONDITION_FIELDS: tuple[str, ...] = (
+    "stage",
+    "value",
+    "currency",
+    "name",
+    "account_name",
+    "expected_close_date",
+)
+
+# Compared as a number rather than as text. Everything else compares as a
+# string, which is correct for the dates here only because they are canonical
+# `YYYY-MM-DD` (`time_utils`) and therefore sort lexicographically.
+NUMERIC_CONDITION_FIELDS: tuple[str, ...] = ("value",)
+
+# A condition may also name a custom field, as `custom:<key>` -- the same
+# prefix the frontend's column and filter keys use (milestone 6.1), so a field
+# called `stage` is still not the stage.
+CUSTOM_CONDITION_PREFIX = "custom:"
+
+MAX_AUTOMATION_CONDITIONS = 5
+
+# §11: rules are "capped in number". Per creator rather than globally, because
+# a rule acts with its creator's authority (**D-173**) -- a global cap would
+# let one person's twenty rules lock everybody else out of writing one.
+MAX_ENABLED_RULES_PER_CREATOR = 20
+
+# `no_activity` and `close_date_approaching` both count in days, and a window
+# longer than a year is a rule that will never be understood by the person who
+# reads it next.
+MAX_TRIGGER_DAYS = 365
+
+
+def _condition_field(value: str) -> str:
+    if value.startswith(CUSTOM_CONDITION_PREFIX):
+        key = value[len(CUSTOM_CONDITION_PREFIX) :]
+        if not re.fullmatch(CUSTOM_FIELD_KEY_PATTERN, key):
+            raise ValueError(f"'{value}' is not a custom field key")
+        return value
+    if value not in CONDITION_FIELDS:
+        allowed = ", ".join(CONDITION_FIELDS)
+        raise ValueError(f"'{value}' cannot be compared; use one of {allowed} or custom:<key>")
+    return value
+
+
+class AutomationCondition(BaseModel):
+    """One comparison. ANDed with its siblings and never ORed (§11).
+
+    The value arrives as a string whatever the field's type, because the
+    condition list is stored as JSON and read back by a Python evaluator that
+    knows which fields are numeric (`NUMERIC_CONDITION_FIELDS`). A typed union
+    per field would be the more precise model and would buy nothing: the
+    comparison still has to cope with a custom field whose type lives in a
+    definition row rather than in this schema.
+    """
+
+    field: str = Field(min_length=1, max_length=60)
+    op: ConditionOperator
+    value: str = Field(max_length=200)
+
+    @field_validator("field")
+    @classmethod
+    def known_field(cls, value: str) -> str:
+        return _condition_field(value.strip())
+
+    @model_validator(mode="after")
+    def comparison_is_meaningful(self) -> "AutomationCondition":
+        if self.op == "contains" and self.field in NUMERIC_CONDITION_FIELDS:
+            raise ValueError(f"'{self.field}' is a number; 'contains' does not apply to it")
+        if self.field in NUMERIC_CONDITION_FIELDS:
+            try:
+                Decimal(self.value)
+            except InvalidOperation:
+                raise ValueError(f"'{self.value}' is not a number") from None
+        return self
+
+
+class AutomationTriggerConfig(BaseModel):
+    """Every trigger's parameters in one model, each optional.
+
+    One model rather than a discriminated union per trigger (the shape D-010
+    weighed for notification payloads and declined for the same reason): the
+    whole set is five keys, the builder renders one form with the fields the
+    chosen trigger uses, and `AutomationRuleBase` is where the cross-field
+    rule lives -- which keys this trigger *requires* and which it refuses.
+    """
+
+    # stage_changed
+    to_stage: str | None = None
+    from_stage: str | None = None
+    # entry_created
+    entry_type: EntryType | None = None
+    # field_changed
+    field: str | None = None
+    # no_activity, close_date_approaching
+    days: int | None = Field(default=None, ge=1, le=MAX_TRIGGER_DAYS)
+
+    @field_validator("to_stage", "from_stage")
+    @classmethod
+    def known_stage(cls, value: str | None) -> str | None:
+        if value is not None and value not in STAGES:
+            raise ValueError(f"'{value}' is not a stage")
+        return value
+
+    @field_validator("field")
+    @classmethod
+    def watchable_field(cls, value: str | None) -> str | None:
+        return _condition_field(value.strip()) if value is not None else value
+
+
+class AutomationActionConfig(BaseModel):
+    """Every action's parameters, the same way, with the same cross-field
+    validation in `AutomationRuleBase`."""
+
+    # create_task, notify_user, add_entry
+    title: str | None = Field(default=None, max_length=200)
+    body: str | None = Field(default=None, max_length=2000)
+    # create_task, notify_user
+    recipient: AutomationRecipient = "owner"
+    # create_task -- relative, because a rule fires on a day nobody picked.
+    due_in_days: int | None = Field(default=None, ge=0, le=MAX_TRIGGER_DAYS)
+    # add_entry
+    entry_type: EntryType | None = None
+    # change_stage
+    stage: str | None = None
+
+    @field_validator("title", "body")
+    @classmethod
+    def strip_text(cls, value: str | None) -> str | None:
+        return stripped(value) if value is not None else value
+
+    @field_validator("stage")
+    @classmethod
+    def known_stage(cls, value: str | None) -> str | None:
+        if value is not None and value not in STAGES:
+            raise ValueError(f"'{value}' is not a stage")
+        return value
+
+
+# Which `trigger_config` key each trigger needs, and which each action needs.
+# Written as data because the check is the same in both directions -- required
+# keys present, and nothing else set -- and because the builder's form reads
+# the same two tables through the generated schema.
+TRIGGER_REQUIRED_KEYS: dict[str, tuple[str, ...]] = {
+    "stage_changed": (),
+    "entry_created": (),
+    "field_changed": ("field",),
+    "no_activity": ("days",),
+    "close_date_approaching": ("days",),
+}
+
+TRIGGER_OPTIONAL_KEYS: dict[str, tuple[str, ...]] = {
+    "stage_changed": ("to_stage", "from_stage"),
+    "entry_created": ("entry_type",),
+    "field_changed": (),
+    "no_activity": (),
+    "close_date_approaching": (),
+}
+
+ACTION_REQUIRED_KEYS: dict[str, tuple[str, ...]] = {
+    "create_task": ("title",),
+    "notify_user": ("title",),
+    "add_entry": ("title",),
+    "change_stage": ("stage",),
+}
+
+ACTION_OPTIONAL_KEYS: dict[str, tuple[str, ...]] = {
+    "create_task": ("body", "recipient", "due_in_days"),
+    "notify_user": ("body", "recipient"),
+    "add_entry": ("body", "entry_type"),
+    "change_stage": (),
+}
+
+
+class AutomationRuleBase(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    trigger_type: AutomationTrigger
+    trigger: AutomationTriggerConfig = Field(default_factory=AutomationTriggerConfig)
+    conditions: list[AutomationCondition] = Field(default_factory=list)
+    action_type: AutomationAction
+    action: AutomationActionConfig = Field(default_factory=AutomationActionConfig)
+    enabled: bool = True
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, value: str) -> str:
+        return stripped(value)
+
+    @field_validator("conditions")
+    @classmethod
+    def bounded_conditions(cls, value: list[AutomationCondition]) -> list[AutomationCondition]:
+        if len(value) > MAX_AUTOMATION_CONDITIONS:
+            raise ValueError(f"A rule may have at most {MAX_AUTOMATION_CONDITIONS} conditions")
+        return value
+
+    @model_validator(mode="after")
+    def config_matches_the_kind(self) -> "AutomationRuleBase":
+        """A parameter set that does not belong to the chosen kind is a 422,
+        not a silently ignored key.
+
+        This is the same judgement `CustomFieldCreate.options_match_the_type`
+        makes: a definition carrying options for a checkbox says two different
+        things, and so does a `no_activity` rule carrying a stage to match.
+        The alternative -- accepting and ignoring the extra key -- produces a
+        rule whose stored form does not mean what the person who wrote it
+        read on screen.
+        """
+        self._check("trigger", self.trigger, TRIGGER_REQUIRED_KEYS, TRIGGER_OPTIONAL_KEYS)
+        self._check("action", self.action, ACTION_REQUIRED_KEYS, ACTION_OPTIONAL_KEYS)
+        if self.action_type == "add_entry" and self.action.entry_type == "stage_change":
+            # A rule writing a `stage_change` entry would feed milestone 6.2's
+            # time-in-stage aggregation -- which reads exactly that type -- with
+            # a stage change that never happened. The `change_stage` action
+            # writes one properly, having actually moved the deal.
+            raise ValueError(
+                "A rule cannot write a stage change entry; use the change stage action"
+            )
+        return self
+
+    def _check(
+        self,
+        label: str,
+        config: BaseModel,
+        required: dict[str, tuple[str, ...]],
+        optional: dict[str, tuple[str, ...]],
+    ) -> None:
+        kind = self.trigger_type if label == "trigger" else self.action_type
+        allowed = set(required[kind]) | set(optional[kind])
+        defaults = type(config)()
+        for key in required[kind]:
+            if getattr(config, key) is None:
+                raise ValueError(f"A '{kind}' {label} needs '{key}'")
+        for key in type(config).model_fields:
+            if key in allowed:
+                continue
+            if getattr(config, key) != getattr(defaults, key):
+                raise ValueError(f"A '{kind}' {label} does not take '{key}'")
+
+
+class AutomationRuleCreate(AutomationRuleBase):
+    pass
+
+
+class AutomationRuleUpdate(AutomationRuleBase):
+    """Read whole, edited in one form, written whole -- like a custom field
+    definition and unlike the `PATCH` schemas over content. A rule is small
+    and its parts constrain each other, so a partial update would have to
+    re-validate against the stored half anyway."""
+
+
+class AutomationRulePublic(BaseModel):
+    id: int
+    name: str
+    trigger_type: AutomationTrigger
+    trigger: AutomationTriggerConfig
+    conditions: list[AutomationCondition]
+    action_type: AutomationAction
+    action: AutomationActionConfig
+    enabled: bool
+    created_by: int
+    creator_name: str
+    created_at: str
+    updated_at: str
+    archived_at: str | None
+
+
+class AutomationRunPublic(BaseModel):
+    """What a rule did, or would have done.
+
+    `dry_run` is the mode and `outcome` is the answer, so a preview row still
+    says whether it would have applied. `entry_id` is the system entry §11
+    requires every automated write to leave, and is NULL on a skip and on
+    every dry run -- nothing was written to point at.
+    """
+
+    id: int
+    rule_id: int
+    rule_name: str
+    opportunity_id: int
+    opportunity_name: str
+    outcome: AutomationOutcome
+    reason: str | None
+    entry_id: int | None
+    dry_run: bool
+    created_at: str
+
+
+class AutomationRunResponse(BaseModel):
+    """The answer to running a rule by hand, in either mode.
+
+    Not paginated, unlike the run log: this is the result of one action the
+    caller just took, capped by `AUTOMATION_RUN_LIMIT` deals rather than by a
+    cursor over something that is still changing (the choice milestone 6.2
+    made for an aggregate, for the same reason).
+    """
+
+    dry_run: bool
+    considered: int
+    runs: list[AutomationRunPublic]
+
+
+# --- The AI's filter proposal (milestone 6.4) -------------------------------
+
+# The sort fields the board offers, mirroring `lib/domain.ts`'s `sortFields`.
+# Written out rather than derived because the model is told this list and the
+# answer is checked against it: a value the board cannot sort by would be a
+# filter that silently does nothing.
+FILTER_SORT_FIELDS: tuple[str, ...] = (
+    "updated_at",
+    "name",
+    "account_name",
+    "stage",
+    "value",
+    "expected_close_date",
+    "owner_name",
+    "created_at",
+)
+
+
+class AiFilterRequest(BaseModel):
+    request: str = Field(min_length=1, max_length=300)
+
+    @field_validator("request")
+    @classmethod
+    def strip_request(cls, value: str) -> str:
+        return stripped(value)
+
+
+class AiFilterProposal(BaseModel):
+    """A filter the model suggested, after validation (**D-186**).
+
+    `docs/FEATURES.md` §14 calls this "the safest high-value AI feature here,
+    because its output is a query the user can inspect" -- and the inspection
+    only means anything if what is shown is what would be applied. So every
+    field here is one the board already has, parsed out of the model's JSON
+    and dropped if it is not: an unknown stage, a sort field that does not
+    exist, a value that is not a number. The same rule ADR 0006 applies to a
+    custom value read from a JSON column, for the same reason.
+
+    `ignored` is what was dropped, and it is shown. A proposal that quietly
+    discards half of what somebody asked for is a proposal they would accept
+    believing it did more.
+    """
+
+    # Exactly the filters the board has, and no more. An earlier draft of
+    # this carried `owner`, `closing_before` and `closing_after` as well --
+    # fields the filter bar does not offer -- which would have made a
+    # proposal that cannot be applied, inspectable and useless. That is
+    # D-179's mistake in the other direction: inventing a capability rather
+    # than a constraint. A request for one of them is reported in `ignored`.
+    q: str | None = None
+    stage: str | None = None
+    min_value: str | None = None
+    max_value: str | None = None
+    stalled: bool | None = None
+    sort: str | None = None
+    direction: Literal["asc", "desc"] | None = None
+
+
+class AiFilterResponse(BaseModel):
+    proposal: AiFilterProposal
+    # Keys the model answered with that this app does not have, or could not
+    # read. Named rather than counted: "I ignored `region`" is actionable and
+    # "I ignored one thing" is not.
+    ignored: list[str]
+    # True when nothing survived validation, which is a different answer from
+    # a filter that happens to be empty -- the screen says so rather than
+    # offering an Apply that would do nothing.
+    empty: bool

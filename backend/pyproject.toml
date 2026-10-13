@@ -5,6 +5,13 @@ description = "FastAPI backend for OppTrail"
 requires-python = ">=3.13"
 dependencies = [
     "alembic>=1.20.0",
+    # ADR 0004 is this dependency's justification (`AGENTS.md` standard 8): a
+    # broker is unjustifiable for a 20-user single-container app, and host cron
+    # splits the logic across the container boundary. Milestone 6.5 is the
+    # first caller -- Phase 6's rules are time-triggered and `make backup` had
+    # no schedule. 3.x rather than 4.x: 3.x's `AsyncIOScheduler` is what the
+    # FastAPI `lifespan` needs and is the stable line.
+    "apscheduler>=3.11.3",
     "bcrypt>=4.0",
     "fastapi>=0.116.0",
     "markdown-it-py>=4.2.0",
@@ -58,4 +65,12 @@ files = ["app", "tools"]
 
 [[tool.mypy.overrides]]
 module = ["weasyprint.*"]
+ignore_missing_imports = true
+
+# APScheduler 3.x ships no `py.typed` (milestone 6.5). Scoped to the two
+# modules `app/scheduler.py` imports rather than silencing the whole package's
+# surface, and `scheduler.py` is deliberately the only file that imports it --
+# every job is in `jobs.py`, which stays fully typed.
+[[tool.mypy.overrides]]
+module = ["apscheduler.schedulers.asyncio", "apscheduler.triggers.interval"]
 ignore_missing_imports = true

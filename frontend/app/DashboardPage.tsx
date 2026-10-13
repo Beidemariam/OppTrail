@@ -38,6 +38,7 @@ import { useConfirm } from "./ConfirmDialog";
 import { DensityToggle } from "./Density";
 import { Modal } from "./Modal";
 import { OpportunityCalendar } from "./OpportunityCalendar";
+import { AiFilterBuilder } from "./AiFilterBuilder";
 import { OpportunityFilterBar } from "./OpportunityFilterBar";
 import { OpportunityForm } from "./OpportunityForm";
 import { OpportunityList } from "./OpportunityList";
@@ -628,12 +629,19 @@ export function DashboardPage() {
               pending={bulkAction.isPending}
             />
           ) : (
-            <OpportunityFilterBar
-              state={viewState}
-              keywordRef={keywordFilterRef}
-              onApply={setViewState}
-              fields={fields}
-            />
+            <>
+              <OpportunityFilterBar
+                state={viewState}
+                keywordRef={keywordFilterRef}
+                onApply={setViewState}
+                fields={fields}
+              />
+              {/* The same filters, described rather than set (milestone 6.4).
+                  Beside the bar and not inside it: it is a shortcut to the
+                  bar's own controls, and the bar stays the thing that says
+                  what is in force. */}
+              <AiFilterBuilder state={viewState} onApply={setViewState} />
+            </>
           )}
         </div>
 

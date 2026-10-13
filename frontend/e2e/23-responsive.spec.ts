@@ -42,6 +42,12 @@ const SCREENS: [string, string][] = [
   ["the calendar", "/?opportunities.view=calendar"],
   ["a timeline", null as unknown as string],
   ["search", "/search?q=pricing"],
+  // The two cross-deal screens. `/automations` arrives with milestone 6.3 and
+  // `/reports` is 6.2's, added in the same breath: a screen that is not in
+  // this list is a screen where D-138's defect can come back unnoticed, which
+  // is the whole reason this spec exists.
+  ["reports", "/reports"],
+  ["automations", "/automations"],
 ];
 
 interface Squashed {

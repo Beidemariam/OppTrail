@@ -16,12 +16,21 @@ import {
   type UseMutationResult,
 } from "@tanstack/react-query";
 
+import { useCallback, useState } from "react";
+
 import type { ActivityEditTarget, ActivityEvent } from "./activity";
+import { streamAiAnswer } from "./aiStream";
 import { apiRequest } from "./api";
 import type { components } from "./api-types";
 import type {
   AiChatMessage,
   AppNotification,
+  AutomationRule,
+  AutomationRuleCreate,
+  AutomationRun,
+  AutomationRunResponse,
+  AiFilterResponse,
+  JobRun,
   CustomField,
   CustomFieldCreate,
   Dashboard,
@@ -176,6 +185,21 @@ export const keys = {
    * open. */
   myTasks: ["my-tasks"] as const,
   allTasks: ["tasks"] as const,
+  /** Every automation rule (milestone 6.3). One key rather than one per
+   * creator: the list is small, capped per creator by the API, and the
+   * screen draws everybody's so a reader can see whose rule moved their
+   * deal. */
+  /** The scheduler's log (milestone 6.5), read from the top: the screen
+   * shows the latest check and nothing pages through it. */
+  jobRuns: ["job-runs"] as const,
+  automationRules: (includeArchived = false) =>
+    ["automation-rules", includeArchived] as const,
+  /** Every listing of rules, for a write to invalidate: archiving one changes
+   * both the live list and the archived one. */
+  allAutomationRules: ["automation-rules"] as const,
+  /** What one rule has done. Keyed by rule, because the log is read on the
+   * rule and a run row names a deal the rule's creator can read. */
+  automationRuns: (ruleId: number) => ["automation-runs", ruleId] as const,
 };
 
 export function timelinePath(
@@ -1553,6 +1577,109 @@ export function useAskAi(opportunityId: number) {
   });
 }
 
+/**
+ * Ask, and show the answer as it is written (milestone 6.4).
+ *
+ * Not a `useMutation`: a mutation has one result and this has a sequence of
+ * them. The transcript is already cache state (D-055, so it outlives the
+ * route), so the stream writes straight into it — an assistant message is
+ * appended empty and `streaming`, each delta grows it, and `done` replaces
+ * the body with the server's normalized text and attaches the citations.
+ *
+ * The final replace is not cosmetic: `normalize_ai_answer` runs over the
+ * whole answer on the server, so the streamed concatenation and the stored
+ * message would otherwise differ by whatever it tidied.
+ */
+export function useStreamAi(opportunityId: number) {
+  const client = useQueryClient();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const ask = useCallback(
+    async (question: string, range?: { since?: string; until?: string }) => {
+      setError(null);
+      setPending(true);
+      append(client, opportunityId, { role: "user", body: question });
+      append(client, opportunityId, {
+        role: "assistant",
+        body: "",
+        streaming: true,
+      });
+
+      await streamAiAnswer(
+        opportunityId,
+        { question, ...range },
+        {
+          onDelta: (text) =>
+            replaceLast(client, opportunityId, (message) => ({
+              ...message,
+              body: message.body + text,
+            })),
+          onDone: (answer, numbers) =>
+            replaceLast(client, opportunityId, (message) => ({
+              ...message,
+              body: answer || message.body,
+              referenced_entry_numbers: numbers,
+              streaming: false,
+            })),
+          onError: (message) => {
+            setError(message);
+            // The half-written answer goes rather than being left on screen
+            // under an error: a truncated answer a reader might act on is
+            // worse than no answer.
+            dropLastIfStreaming(client, opportunityId);
+          },
+        },
+      );
+      setPending(false);
+    },
+    [client, opportunityId],
+  );
+
+  return { ask, pending, error };
+}
+
+function replaceLast(
+  client: QueryClient,
+  opportunityId: number,
+  change: (message: AiChatMessage) => AiChatMessage,
+) {
+  client.setQueryData<AiChatMessage[]>(
+    keys.aiConversation(opportunityId),
+    (current) =>
+      current && current.length > 0
+        ? [...current.slice(0, -1), change(current[current.length - 1])]
+        : current,
+  );
+}
+
+function dropLastIfStreaming(client: QueryClient, opportunityId: number) {
+  client.setQueryData<AiChatMessage[]>(
+    keys.aiConversation(opportunityId),
+    (current) =>
+      current && current.length > 0 && current[current.length - 1].streaming
+        ? current.slice(0, -1)
+        : current,
+  );
+}
+
+/**
+ * A sentence, as a filter proposal (milestone 6.4, **D-186**).
+ *
+ * Not optimistic and not applied: the answer is shown, and applying it is a
+ * separate act by the reader that writes the same URL parameters the filter
+ * bar writes.
+ */
+export function useProposeFilter() {
+  return useMutation({
+    mutationFn: (request: string) =>
+      apiRequest<AiFilterResponse>("/api/v2/ai/filter", {
+        method: "POST",
+        body: JSON.stringify({ request }),
+      }),
+  });
+}
+
 function append(
   client: QueryClient,
   opportunityId: number,
@@ -1562,4 +1689,129 @@ function append(
     keys.aiConversation(opportunityId),
     (current) => [...(current ?? []), message],
   );
+}
+
+/**
+ * Every automation rule (milestone 6.3, `docs/FEATURES.md` §11).
+ *
+ * Read whole through `fetchAll` like the custom field definitions and for the
+ * same reason: the API caps them per creator, the screen draws them all, and
+ * a window of rules would mean "which automations run here" has a scroll
+ * position for an answer. Everybody's rules are listed, with the creator
+ * named -- a reader who finds a stage changing under them should be able to
+ * see which rule did it (D-173).
+ */
+export function useAutomationRules(enabled = true, includeArchived = false) {
+  return useQuery<AutomationRule[]>({
+    queryKey: keys.automationRules(includeArchived),
+    enabled,
+    queryFn: () =>
+      fetchAll<AutomationRule>(
+        includeArchived
+          ? "/api/v2/automation-rules?include_archived=true"
+          : "/api/v2/automation-rules",
+      ),
+  });
+}
+
+/** What one rule has done, oldest first -- the order a log is read in. */
+export function useAutomationRuns(ruleId: number | null) {
+  return useQuery<AutomationRun[]>({
+    queryKey: keys.automationRuns(ruleId ?? 0),
+    enabled: ruleId !== null,
+    queryFn: () =>
+      fetchAll<AutomationRun>(`/api/v2/automation-rules/${ruleId}/runs`),
+  });
+}
+
+export function useCreateAutomationRule() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: AutomationRuleCreate) =>
+      apiRequest<AutomationRule>("/api/v2/automation-rules", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: () => invalidate(client, keys.allAutomationRules),
+  });
+}
+
+export function useUpdateAutomationRule() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...payload }: AutomationRuleCreate & { id: number }) =>
+      apiRequest<AutomationRule>(`/api/v2/automation-rules/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: () => invalidate(client, keys.allAutomationRules),
+  });
+}
+
+export function useArchiveAutomationRule() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) =>
+      apiRequest<AutomationRule>(`/api/v2/automation-rules/${id}/archive`, {
+        method: "POST",
+      }),
+    onSuccess: () => invalidate(client, keys.allAutomationRules),
+  });
+}
+
+/**
+ * Preview a rule, or run it for real (§11's "always dry-runnable").
+ *
+ * **Not optimistic, in either mode.** What a rule would do is the server's
+ * answer -- which deals match, which role check refuses, which action is
+ * already satisfied -- and there is nothing truthful the cache could render
+ * before it comes back (D-068's reasoning for a create).
+ *
+ * An applied run invalidates the world rather than one key: a rule may have
+ * created tasks on four deals, moved a fifth's stage and left a system entry
+ * on each, and the response says which deals but not which of its own reads
+ * that touched.
+ */
+export function useRunAutomationRule() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, dryRun }: { id: number; dryRun: boolean }) =>
+      apiRequest<AutomationRunResponse>(
+        `/api/v2/automation-rules/${id}/run?dry_run=${dryRun}`,
+        { method: "POST" },
+      ),
+    onSuccess: (result, { id }) => {
+      invalidate(client, keys.automationRuns(id));
+      if (result.dry_run) {
+        return;
+      }
+      invalidate(client, keys.opportunities);
+      invalidate(client, keys.allTimelines);
+      invalidate(client, keys.allTasks);
+      invalidate(client, keys.myTasks);
+      invalidate(client, keys.notifications);
+      invalidate(client, keys.allActivity);
+    },
+  });
+}
+
+/**
+ * The scheduler's latest runs (milestone 6.5, ADR 0004).
+ *
+ * One page with an explicit limit rather than `fetchAll`: this is read from
+ * the present backwards and the screen shows the newest run, so walking the
+ * whole log would be walking a log that only grows. The same exception the
+ * inbox and the saved-view menu make.
+ */
+export function useJobRuns(enabled = true) {
+  return useQuery<JobRun[]>({
+    queryKey: keys.jobRuns,
+    enabled,
+    queryFn: async () => {
+      const page = await apiRequest<PageOf<JobRun>>(
+        "/api/v2/job-runs?limit=10",
+      );
+      return page.items;
+    },
+  });
 }

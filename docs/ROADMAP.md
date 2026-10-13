@@ -231,7 +231,10 @@ filters; a pipeline dashboard; a rule that pings you when a deal goes quiet.
   cannot be met without a scheduler. Scope it to what the automations need; the
   durable outbox waits for v3, since nothing here sends anything. `make backup`
   gains its schedule from the same machinery, which is the gap ADR 0011 has
-  carried since Phase 1.
+  carried since Phase 1. **Shipped in 6.5**, with two jobs and a `job_runs`
+  table; the clock turned out to need one design decision of its own
+  (**D-182**), because a rule that is right to fire once is wrong to fire
+  ninety-six times a day.
 
 **Schema:** `custom_field_definitions`; `custom_values` JSON on opportunities and
 entries; `automation_rules`, `automation_runs`.

@@ -885,6 +885,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/opportunities/{opportunity_id}/ai/ask/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stream Ai Answer
+         * @description The same answer as `ask`, arriving as it is written (milestone 6.4).
+         *
+         *     §14 asks for streaming, and on this deployment it is what makes the
+         *     feature usable: D-168 measured a reasoning model's floor at ~29 seconds,
+         *     and forty seconds of spinner is indistinguishable from a broken button.
+         *
+         *     **A POST that answers `text/event-stream`**, which is a different shape
+         *     from ADR 0003's live updates and deliberately so. That stream is a GET
+         *     read by `EventSource`, carries invalidations and never content, and lives
+         *     as long as a screen does. This one carries content, is answered once, and
+         *     needs a request body -- the question -- which `EventSource` cannot send.
+         *     So the client reads it with `fetch` and a reader (`lib/aiStream.ts`), and
+         *     the framing is SSE only because the two halves of the answer have to be
+         *     told apart.
+         *
+         *     Two event types, for that reason:
+         *
+         *     - `delta`, a piece of the answer as plain text;
+         *     - `done`, carrying the entry numbers the finished answer cited, which is
+         *       computed from the whole text and so cannot be known until the end. The
+         *       client shows the same citations the non-streaming path returns rather
+         *       than reimplementing `extract_referenced_entry_numbers`.
+         *
+         *     A failure mid-stream cannot become a 502: the status line is long gone by
+         *     then. It is an `error` event, and the client shows it where the answer
+         *     was going to be.
+         */
+        post: operations["stream_ai_answer_api_v2_opportunities__opportunity_id__ai_ask_stream_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/ai/filter": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Propose Filter
+         * @description A sentence, as a filter the reader can look at before applying it.
+         *
+         *     `docs/FEATURES.md` §14: *"deals stuck in negotiation over 50k produces a
+         *     filter the user sees and applies. This is the safest high-value AI
+         *     feature here, because its output is a query the user can inspect."*
+         *
+         *     Three things make that true rather than merely said:
+         *
+         *     - **Nothing is applied here.** The answer is a proposal; applying it is
+         *       the reader pressing a button, which writes the same URL parameters the
+         *       filter bar writes. The AI is the actor in nothing (ADR 0012).
+         *     - **The model's JSON is never trusted** (**D-186**). `ai_filters.py`
+         *       parses it against the vocabulary this board actually has and reports
+         *       what it dropped, so what is shown is exactly what would be applied.
+         *     - **No deal content is sent.** This answers from the request sentence and
+         *       the stage and sort names alone -- a question about the shape of a list
+         *       needs nobody's timeline, so none goes.
+         *
+         *     Not opportunity-scoped, so it is on its own router: the filter is over
+         *     the board, and every signed-in caller has a board. The rows it later
+         *     selects are permission-filtered by the ordinary list read, as they are
+         *     for a saved view somebody shared (D-060).
+         */
+        post: operations["propose_filter_api_v2_ai_filter_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/opportunities/export/json": {
         parameters: {
             query?: never;
@@ -1680,6 +1766,169 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/automation-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Automation Rules
+         * @description Every rule, or only the caller's.
+         *
+         *     Open to any authenticated caller, and the creator is named on each row --
+         *     a reader who finds a stage changing under them should be able to see which
+         *     rule did it and whose it is. `mine_only` is what the builder's own screen
+         *     asks for, since those are the rules this caller can actually edit.
+         */
+        get: operations["list_automation_rules_api_v2_automation_rules_get"];
+        put?: never;
+        /** Create Automation Rule */
+        post: operations["create_automation_rule_api_v2_automation_rules_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/automation-rules/{rule_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Automation Rule
+         * @description Rewrite a rule whole. The creator's alone (D-173).
+         */
+        patch: operations["update_automation_rule_api_v2_automation_rules__rule_id__patch"];
+        trace?: never;
+    };
+    "/api/v2/automation-rules/{rule_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive Automation Rule
+         * @description Retire a rule without losing what it did.
+         *
+         *     There is no DELETE: `automation_runs.rule_id` points here, and a log
+         *     saying "rule 4 changed this deal's stage" is worthless if rule 4 can
+         *     vanish. Idempotent, like `archive_custom_field` -- the first archiver is
+         *     the one recorded and a retry is safe.
+         */
+        post: operations["archive_automation_rule_api_v2_automation_rules__rule_id__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/automation-rules/{rule_id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Automation Rule
+         * @description §11's "always dry-runnable", and the manual half of "run it now".
+         *
+         *     **`dry_run` defaults to true**, which is the one place in this API a
+         *     default decides whether anything is written. It is deliberate: a preview
+         *     is what somebody writing a rule wants nine times out of ten, and the
+         *     failure mode of the other default is a rule applied to two hundred deals
+         *     by somebody who meant to look first.
+         *
+         *     An archived rule can still be previewed and cannot be applied -- the
+         *     reason to keep the row at all is to answer questions about it.
+         *
+         *     This is also the route milestone 6.5's scheduler replaces for the two
+         *     time-driven triggers. It calls `run_rule`, not this handler: a scheduled
+         *     tick has no caller to authorize, and the authority it runs with is the
+         *     rule creator's either way.
+         */
+        post: operations["run_automation_rule_api_v2_automation_rules__rule_id__run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/automation-rules/{rule_id}/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Automation Runs
+         * @description What this rule has done, newest last.
+         *
+         *     Oldest-first and keyset-paginated, for the reason the audit log and the
+         *     activity feed are: a log is read in the order it happened. The creator's
+         *     alone, like every other read of a rule's behaviour -- a run row names a
+         *     deal, so this is the one place in these routes where the rows could carry
+         *     something the caller may not be able to read otherwise.
+         */
+        get: operations["list_automation_runs_api_v2_automation_rules__rule_id__runs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/job-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Job Runs
+         * @description The scheduler's own log, newest first (milestone 6.5, ADR 0004).
+         *
+         *     Read by the automations screen, which says when the rules were last
+         *     checked -- the question somebody wondering why a rule has not fired
+         *     actually has. The backup's runs are in the same log because they come from
+         *     the same scheduler, and a reader asking "is anything running at all"
+         *     wants both.
+         *
+         *     **Newest first**, unlike every other paginated read here. The others are
+         *     histories read forwards from a beginning; this one is read from the
+         *     present backwards, because "when did it last run" is the whole question.
+         *     Open to any authenticated caller: a job name, a status and a time say
+         *     nothing about anybody's deals (**D-183**).
+         */
+        get: operations["list_job_runs_api_v2_job_runs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -1785,6 +2034,10 @@ export interface components {
         AiAskRequest: {
             /** Question */
             question: string;
+            /** Since */
+            since?: string | null;
+            /** Until */
+            until?: string | null;
         };
         /** AiAskResponse */
         AiAskResponse: {
@@ -1792,6 +2045,51 @@ export interface components {
             answer: string;
             /** Referenced Entry Numbers */
             referenced_entry_numbers: number[];
+        };
+        /**
+         * AiFilterProposal
+         * @description A filter the model suggested, after validation (**D-186**).
+         *
+         *     `docs/FEATURES.md` §14 calls this "the safest high-value AI feature here,
+         *     because its output is a query the user can inspect" -- and the inspection
+         *     only means anything if what is shown is what would be applied. So every
+         *     field here is one the board already has, parsed out of the model's JSON
+         *     and dropped if it is not: an unknown stage, a sort field that does not
+         *     exist, a value that is not a number. The same rule ADR 0006 applies to a
+         *     custom value read from a JSON column, for the same reason.
+         *
+         *     `ignored` is what was dropped, and it is shown. A proposal that quietly
+         *     discards half of what somebody asked for is a proposal they would accept
+         *     believing it did more.
+         */
+        AiFilterProposal: {
+            /** Q */
+            q?: string | null;
+            /** Stage */
+            stage?: string | null;
+            /** Min Value */
+            min_value?: string | null;
+            /** Max Value */
+            max_value?: string | null;
+            /** Stalled */
+            stalled?: boolean | null;
+            /** Sort */
+            sort?: string | null;
+            /** Direction */
+            direction?: ("asc" | "desc") | null;
+        };
+        /** AiFilterRequest */
+        AiFilterRequest: {
+            /** Request */
+            request: string;
+        };
+        /** AiFilterResponse */
+        AiFilterResponse: {
+            proposal: components["schemas"]["AiFilterProposal"];
+            /** Ignored */
+            ignored: string[];
+            /** Empty */
+            empty: boolean;
         };
         /**
          * AttachmentPublic
@@ -2045,6 +2343,211 @@ export interface components {
         /** AuthResponse */
         AuthResponse: {
             user: components["schemas"]["UserPublic"];
+        };
+        /**
+         * AutomationActionConfig
+         * @description Every action's parameters, the same way, with the same cross-field
+         *     validation in `AutomationRuleBase`.
+         */
+        AutomationActionConfig: {
+            /** Title */
+            title?: string | null;
+            /** Body */
+            body?: string | null;
+            /**
+             * Recipient
+             * @default owner
+             * @enum {string}
+             */
+            recipient: "owner" | "rule_creator";
+            /** Due In Days */
+            due_in_days?: number | null;
+            /** Entry Type */
+            entry_type?: ("call" | "email" | "meeting" | "demo" | "proposal" | "contract" | "stage_change" | "other" | "site_visit" | "objection" | "competitor_intel") | null;
+            /** Stage */
+            stage?: string | null;
+        };
+        /**
+         * AutomationCondition
+         * @description One comparison. ANDed with its siblings and never ORed (§11).
+         *
+         *     The value arrives as a string whatever the field's type, because the
+         *     condition list is stored as JSON and read back by a Python evaluator that
+         *     knows which fields are numeric (`NUMERIC_CONDITION_FIELDS`). A typed union
+         *     per field would be the more precise model and would buy nothing: the
+         *     comparison still has to cope with a custom field whose type lives in a
+         *     definition row rather than in this schema.
+         */
+        AutomationCondition: {
+            /** Field */
+            field: string;
+            /**
+             * Op
+             * @enum {string}
+             */
+            op: "eq" | "ne" | "gt" | "gte" | "lt" | "lte" | "contains";
+            /** Value */
+            value: string;
+        };
+        /** AutomationRuleCreate */
+        AutomationRuleCreate: {
+            /** Name */
+            name: string;
+            /**
+             * Trigger Type
+             * @enum {string}
+             */
+            trigger_type: "stage_changed" | "entry_created" | "field_changed" | "no_activity" | "close_date_approaching";
+            trigger?: components["schemas"]["AutomationTriggerConfig"];
+            /** Conditions */
+            conditions?: components["schemas"]["AutomationCondition"][];
+            /**
+             * Action Type
+             * @enum {string}
+             */
+            action_type: "create_task" | "notify_user" | "add_entry" | "change_stage";
+            action?: components["schemas"]["AutomationActionConfig"];
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+        };
+        /** AutomationRulePublic */
+        AutomationRulePublic: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /**
+             * Trigger Type
+             * @enum {string}
+             */
+            trigger_type: "stage_changed" | "entry_created" | "field_changed" | "no_activity" | "close_date_approaching";
+            trigger: components["schemas"]["AutomationTriggerConfig"];
+            /** Conditions */
+            conditions: components["schemas"]["AutomationCondition"][];
+            /**
+             * Action Type
+             * @enum {string}
+             */
+            action_type: "create_task" | "notify_user" | "add_entry" | "change_stage";
+            action: components["schemas"]["AutomationActionConfig"];
+            /** Enabled */
+            enabled: boolean;
+            /** Created By */
+            created_by: number;
+            /** Creator Name */
+            creator_name: string;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+            /** Archived At */
+            archived_at: string | null;
+        };
+        /**
+         * AutomationRuleUpdate
+         * @description Read whole, edited in one form, written whole -- like a custom field
+         *     definition and unlike the `PATCH` schemas over content. A rule is small
+         *     and its parts constrain each other, so a partial update would have to
+         *     re-validate against the stored half anyway.
+         */
+        AutomationRuleUpdate: {
+            /** Name */
+            name: string;
+            /**
+             * Trigger Type
+             * @enum {string}
+             */
+            trigger_type: "stage_changed" | "entry_created" | "field_changed" | "no_activity" | "close_date_approaching";
+            trigger?: components["schemas"]["AutomationTriggerConfig"];
+            /** Conditions */
+            conditions?: components["schemas"]["AutomationCondition"][];
+            /**
+             * Action Type
+             * @enum {string}
+             */
+            action_type: "create_task" | "notify_user" | "add_entry" | "change_stage";
+            action?: components["schemas"]["AutomationActionConfig"];
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+        };
+        /**
+         * AutomationRunPublic
+         * @description What a rule did, or would have done.
+         *
+         *     `dry_run` is the mode and `outcome` is the answer, so a preview row still
+         *     says whether it would have applied. `entry_id` is the system entry §11
+         *     requires every automated write to leave, and is NULL on a skip and on
+         *     every dry run -- nothing was written to point at.
+         */
+        AutomationRunPublic: {
+            /** Id */
+            id: number;
+            /** Rule Id */
+            rule_id: number;
+            /** Rule Name */
+            rule_name: string;
+            /** Opportunity Id */
+            opportunity_id: number;
+            /** Opportunity Name */
+            opportunity_name: string;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "applied" | "skipped" | "failed";
+            /** Reason */
+            reason: string | null;
+            /** Entry Id */
+            entry_id: number | null;
+            /** Dry Run */
+            dry_run: boolean;
+            /** Created At */
+            created_at: string;
+        };
+        /**
+         * AutomationRunResponse
+         * @description The answer to running a rule by hand, in either mode.
+         *
+         *     Not paginated, unlike the run log: this is the result of one action the
+         *     caller just took, capped by `AUTOMATION_RUN_LIMIT` deals rather than by a
+         *     cursor over something that is still changing (the choice milestone 6.2
+         *     made for an aggregate, for the same reason).
+         */
+        AutomationRunResponse: {
+            /** Dry Run */
+            dry_run: boolean;
+            /** Considered */
+            considered: number;
+            /** Runs */
+            runs: components["schemas"]["AutomationRunPublic"][];
+        };
+        /**
+         * AutomationTriggerConfig
+         * @description Every trigger's parameters in one model, each optional.
+         *
+         *     One model rather than a discriminated union per trigger (the shape D-010
+         *     weighed for notification payloads and declined for the same reason): the
+         *     whole set is five keys, the builder renders one form with the fields the
+         *     chosen trigger uses, and `AutomationRuleBase` is where the cross-field
+         *     rule lives -- which keys this trigger *requires* and which it refuses.
+         */
+        AutomationTriggerConfig: {
+            /** To Stage */
+            to_stage?: string | null;
+            /** From Stage */
+            from_stage?: string | null;
+            /** Entry Type */
+            entry_type?: ("call" | "email" | "meeting" | "demo" | "proposal" | "contract" | "stage_change" | "other" | "site_visit" | "objection" | "competitor_intel") | null;
+            /** Field */
+            field?: string | null;
+            /** Days */
+            days?: number | null;
         };
         /** Body_upload_attachment_api_v2_timeline__entry_id__attachments_post */
         Body_upload_attachment_api_v2_timeline__entry_id__attachments_post: {
@@ -2324,6 +2827,36 @@ export interface components {
             database_writable: boolean;
             /** Last Backup At */
             last_backup_at: string | null;
+            /** Jobs */
+            jobs?: components["schemas"]["JobRunPublic"][];
+        };
+        /**
+         * JobRunPublic
+         * @description One execution of a periodic job (milestone 6.5, ADR 0004).
+         *
+         *     `status` left at `started` with no `finished_at` is not a missing value:
+         *     it is the signature of a process that died mid-job, which is the failure a
+         *     finished-only log cannot show.
+         */
+        JobRunPublic: {
+            /** Id */
+            id: number;
+            /**
+             * Job
+             * @enum {string}
+             */
+            job: "automations" | "backup";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "started" | "succeeded" | "failed";
+            /** Detail */
+            detail: string | null;
+            /** Started At */
+            started_at: string;
+            /** Finished At */
+            finished_at: string | null;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -2399,6 +2932,28 @@ export interface components {
         NotificationMarkAllReadResponse: {
             /** Marked */
             marked: number;
+        };
+        /**
+         * NotificationPayloadAutomation
+         * @description What a rule wants this reader to know (milestone 6.3).
+         *
+         *     `rule_name` rides along for the reason every other payload here carries a
+         *     title: an inbox line that says only "an automation fired" sends the reader
+         *     hunting for which one, and the rule's name is the only part of it they
+         *     wrote themselves. `rule_id` is beside it so the sentence can link to the
+         *     rule rather than only to the deal.
+         */
+        NotificationPayloadAutomation: {
+            /** Opportunity Id */
+            opportunity_id: number;
+            /** Rule Id */
+            rule_id: number;
+            /** Rule Name */
+            rule_name: string;
+            /** Title */
+            title: string;
+            /** Body */
+            body: string | null;
         };
         /** NotificationPayloadComment */
         NotificationPayloadComment: {
@@ -2555,9 +3110,9 @@ export interface components {
              * Type
              * @enum {string}
              */
-            type: "share_added" | "share_role_changed" | "share_removed" | "owner_changed" | "mention" | "shared_activity" | "comment" | "task_assigned" | "task_comment";
+            type: "share_added" | "share_role_changed" | "share_removed" | "owner_changed" | "mention" | "shared_activity" | "comment" | "task_assigned" | "task_comment" | "automation";
             /** Payload */
-            payload: components["schemas"]["NotificationPayloadShareAdded"] | components["schemas"]["NotificationPayloadShareRoleChanged"] | components["schemas"]["NotificationPayloadShareRemoved"] | components["schemas"]["NotificationPayloadOwnerChanged"] | components["schemas"]["NotificationPayloadMention"] | components["schemas"]["NotificationPayloadTaskAssigned"] | components["schemas"]["NotificationPayloadTaskComment"] | components["schemas"]["NotificationPayloadSharedActivity"] | components["schemas"]["NotificationPayloadComment"];
+            payload: components["schemas"]["NotificationPayloadShareAdded"] | components["schemas"]["NotificationPayloadShareRoleChanged"] | components["schemas"]["NotificationPayloadShareRemoved"] | components["schemas"]["NotificationPayloadOwnerChanged"] | components["schemas"]["NotificationPayloadMention"] | components["schemas"]["NotificationPayloadTaskAssigned"] | components["schemas"]["NotificationPayloadTaskComment"] | components["schemas"]["NotificationPayloadSharedActivity"] | components["schemas"]["NotificationPayloadComment"] | components["schemas"]["NotificationPayloadAutomation"];
             /** Read At */
             read_at: string | null;
             /** Grouped Key */
@@ -2725,10 +3280,31 @@ export interface components {
             /** Next Cursor */
             next_cursor?: string | null;
         };
+        /** Page[AutomationRulePublic] */
+        Page_AutomationRulePublic_: {
+            /** Items */
+            items: components["schemas"]["AutomationRulePublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[AutomationRunPublic] */
+        Page_AutomationRunPublic_: {
+            /** Items */
+            items: components["schemas"]["AutomationRunPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
         /** Page[CustomFieldPublic] */
         Page_CustomFieldPublic_: {
             /** Items */
             items: components["schemas"]["CustomFieldPublic"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** Page[JobRunPublic] */
+        Page_JobRunPublic_: {
+            /** Items */
+            items: components["schemas"]["JobRunPublic"][];
             /** Next Cursor */
             next_cursor?: string | null;
         };
@@ -3328,6 +3904,8 @@ export interface components {
             created_at: string;
             /** Sequence */
             sequence: number;
+            /** Automation Rule Id */
+            automation_rule_id?: number | null;
             /** Custom Values */
             custom_values?: {
                 [key: string]: unknown;
@@ -5079,6 +5657,78 @@ export interface operations {
             };
         };
     };
+    stream_ai_answer_api_v2_opportunities__opportunity_id__ai_ask_stream_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiAskRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    propose_filter_api_v2_ai_filter_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiFilterRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiFilterResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     export_selection_json_api_v2_opportunities_export_json_get: {
         parameters: {
             query: {
@@ -6337,6 +6987,252 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DashboardPublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_automation_rules_api_v2_automation_rules_get: {
+        parameters: {
+            query?: {
+                include_archived?: boolean;
+                mine_only?: boolean;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_AutomationRulePublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_automation_rule_api_v2_automation_rules_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutomationRuleCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationRulePublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_automation_rule_api_v2_automation_rules__rule_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutomationRuleUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationRulePublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_automation_rule_api_v2_automation_rules__rule_id__archive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationRulePublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_automation_rule_api_v2_automation_rules__rule_id__run_post: {
+        parameters: {
+            query?: {
+                dry_run?: boolean;
+            };
+            header?: never;
+            path: {
+                rule_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationRunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_automation_runs_api_v2_automation_rules__rule_id__runs_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                rule_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_AutomationRunPublic_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_job_runs_api_v2_job_runs_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_JobRunPublic_"];
                 };
             };
             /** @description Validation Error */

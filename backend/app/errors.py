@@ -98,8 +98,23 @@ def validation_fields(errors: list[Any]) -> dict[str, str]:
     for error in errors:
         location = [str(part) for part in error.get("loc", ())][1:]
         key = ".".join(location) if location else "_"
-        fields.setdefault(key, error.get("msg", "Invalid value"))
+        fields.setdefault(key, _reason(error.get("msg", "Invalid value")))
     return fields
+
+
+# Pydantic prefixes a custom `ValueError` with "Value error, " and an assert
+# with "Assertion failed, ". Both are about *how* the check was written and
+# say nothing to the person reading the form -- which is where these now land
+# (milestone 6.3a, **D-180**): "Value error, 'lots' is not a number" is the
+# same sentence with two words of noise in front of it.
+_MSG_PREFIXES = ("Value error, ", "Assertion failed, ")
+
+
+def _reason(message: str) -> str:
+    for prefix in _MSG_PREFIXES:
+        if message.startswith(prefix):
+            return message[len(prefix) :]
+    return message
 
 
 def install_error_handlers(app: FastAPI) -> None:

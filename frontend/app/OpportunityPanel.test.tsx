@@ -268,6 +268,50 @@ describe("the timeline", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("offers Delete but not Edit on an entry an automation wrote", async () => {
+    // Milestone 6.3a, **D-181**, the human's request at the 6.3 review: a
+    // mistaken rule leaves entries on a deal and somebody has to be able to
+    // clear them up. Delete and not Edit -- removing a mistake is not the
+    // same as rewriting what the record says.
+    const api = await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [
+        anEntry({
+          id: 102,
+          title: "Automated nudge",
+          system_generated: true,
+          automation_rule_id: 50,
+          created_by: ALEX.id,
+        }),
+      ],
+    });
+    await openTimeline("Northwind rollout");
+
+    const entry = (
+      await screen.findByRole("heading", { name: "Automated nudge" })
+    ).closest("article")!;
+    // Badged as an automation rather than as the system, because the two
+    // differ in exactly what a reader can do about them.
+    expect(within(entry).getByText("Automation")).toBeInTheDocument();
+    expect(
+      within(entry).queryByRole("button", { name: "Edit" }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(
+      within(entry).getByRole("button", { name: "Delete" }),
+    );
+    await waitFor(() =>
+      expect(
+        api.calls.some(
+          (call) =>
+            call.method === "DELETE" && call.path === "/api/v2/timeline/102",
+        ),
+      ).toBe(true),
+    );
+    // Undoable like every other delete (milestone 2.4b).
+    expect(await screen.findByRole("button", { name: "Undo" })).toBeVisible();
+  });
+
   it("sends the filter values, converting the date bounds to UTC", async () => {
     const api = await renderDashboard({
       opportunities: [anOpportunity()],
@@ -902,7 +946,12 @@ describe("the AI panel", () => {
       opportunities: [anOpportunity()],
       entries: [anEntry()],
       failures: {
-        "POST /api/v2/opportunities/10/ai/ask": [
+        // The sidebar streams since milestone 6.4, so this is the endpoint
+        // it calls. A refusal still arrives as an ordinary status with the
+        // ordinary envelope: the key check and the permission check both
+        // happen before the response starts, so there is no such thing as a
+        // 200 here that turns out to be a 503.
+        "POST /api/v2/opportunities/10/ai/ask/stream": [
           503,
           "OPENAI_API_KEY is not configured",
         ],

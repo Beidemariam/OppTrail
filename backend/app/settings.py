@@ -63,6 +63,20 @@ class Settings(BaseSettings):
     # container recreate without a second mount.
     backup_dir: str | None = None
     backup_retention_count: int = 7
+    # ADR 0004's in-process scheduler (milestone 6.5). Off in the test suite,
+    # which sets it directly: a scheduler ticking under a test would fire a
+    # rule the test just wrote and the failure would land somewhere else.
+    scheduler_enabled: bool = True
+    # How often the time-driven triggers are evaluated -- `no_activity` and
+    # `close_date_approaching`, which are the two of §11's five that the clock
+    # owns. Fifteen minutes rather than a minute because both are measured in
+    # days: a rule about fourteen days of silence does not become wrong
+    # fourteen minutes late, and a tick walks every enabled rule.
+    automation_interval_minutes: int = 15
+    # ADR 0011's snapshot, finally on a schedule rather than waiting for
+    # somebody to type `make backup`. Daily, which is what
+    # `backup_retention_count = 7` already assumed when it kept a week.
+    backup_interval_hours: int = 24
 
     model_config = SettingsConfigDict(env_file="../.env", extra="ignore", validate_assignment=True)
 

@@ -95,6 +95,11 @@ class World:
     # exercised against a row that is actually archived.
     custom_field_id: int
     archived_field_id: int
+    # Milestone 6.3. Written by the **owner** actor, so the creator-only rule
+    # (**D-173**) is read against a rule the other four did not write -- and
+    # creating one is open to all of them, which is the asymmetry this
+    # feature turns on: a rule grants nobody authority they did not have.
+    automation_rule_id: int
 
 
 @dataclass(frozen=True)
@@ -139,6 +144,23 @@ def authenticated_only(status: int) -> dict[Actor, int]:
     expected = all_actors(status)
     expected["anonymous"] = 401
     return expected
+
+
+def creator_only(status: int) -> dict[Actor, int]:
+    """Anybody signed in may read; only the row's creator may write it.
+
+    The shape the automation rules use (**D-173**). `owner` is the actor that
+    created the fixture's rule, so it is the only one that succeeds; the other
+    three signed-in actors get 403 rather than 404, because these rows are not
+    opportunity-scoped and their existence leaks nothing (D-007's reasoning).
+    """
+    return {
+        "anonymous": 401,
+        "unrelated": 403,
+        "viewer": 403,
+        "editor": 403,
+        "owner": status,
+    }
 
 
 def scoped(*, viewer: int, editor: int, owner: int) -> dict[Actor, int]:
@@ -487,6 +509,28 @@ MATRIX: dict[Endpoint, Case] = {
         body=lambda world, actor: {"question": "What happened?"},
         notes="Read-only, so viewers may ask: require_opportunity_access.",
     ),
+    Endpoint("POST", "/api/v2/opportunities/{opportunity_id}/ai/ask/stream"): Case(
+        expected=scoped(viewer=200, editor=200, owner=200),
+        url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/ai/ask/stream",
+        body=lambda world, actor: {"question": "What happened?"},
+        notes=(
+            "The same answer as `ask`, arriving sooner (milestone 6.4), so "
+            "the same rule: asking a question is a read. The permission is "
+            "resolved before the response starts, which is why an outsider "
+            "gets a 404 rather than a 200 whose first frame is an error."
+        ),
+    ),
+    Endpoint("POST", "/api/v2/ai/filter"): Case(
+        expected=authenticated_only(200),
+        url=lambda world: "/api/v2/ai/filter",
+        body=lambda world, actor: {"request": "deals in negotiation over 50k"},
+        notes=(
+            "Not opportunity-scoped: a filter is over the board and every "
+            "signed-in caller has one. No deal content is sent to the model, "
+            "and the rows the filter later selects are permission-filtered "
+            "by the ordinary list read (**D-186**)."
+        ),
+    ),
     # --- Export -----------------------------------------------------------
     Endpoint("GET", "/api/v2/opportunities/{opportunity_id}/export/json"): Case(
         expected=scoped(viewer=200, editor=200, owner=200),
@@ -676,6 +720,76 @@ MATRIX: dict[Endpoint, Case] = {
         body=lambda world, actor: None,
         notes="The undo of archive, against a field the fixture archived.",
     ),
+    # --- Automations (milestone 6.3) ------------------------------------
+    # Two rules rather than one, and every actor row pins the asymmetry:
+    # creating a rule is open to anybody signed in (D-173, the custom-field
+    # argument plus a stronger one -- a rule acts with its creator's
+    # authority), while changing, running or reading the behaviour of one is
+    # the creator's alone, because a rule performs writes attributed to them.
+    Endpoint("GET", "/api/v2/automation-rules"): Case(
+        expected=authenticated_only(200),
+        url=lambda world: "/api/v2/automation-rules",
+        notes=(
+            "Open: a reader who finds a stage changing under them should be "
+            "able to see which rule did it and whose it is."
+        ),
+    ),
+    Endpoint("POST", "/api/v2/automation-rules"): Case(
+        expected=authenticated_only(201),
+        url=lambda world: "/api/v2/automation-rules",
+        body=lambda world, actor: {
+            "name": f"Matrix rule for {actor}",
+            "trigger_type": "no_activity",
+            "trigger": {"days": 14},
+            "conditions": [],
+            "action_type": "create_task",
+            "action": {"title": "Matrix follow-up"},
+        },
+        notes="Any signed-in user may write a rule; it can only do what they could.",
+    ),
+    Endpoint("PATCH", "/api/v2/automation-rules/{rule_id}"): Case(
+        expected=creator_only(200),
+        url=lambda world: f"/api/v2/automation-rules/{world.automation_rule_id}",
+        body=lambda world, actor: {
+            "name": f"Renamed by {actor}",
+            "trigger_type": "no_activity",
+            "trigger": {"days": 21},
+            "conditions": [],
+            "action_type": "create_task",
+            "action": {"title": "Matrix follow-up"},
+        },
+        notes="Rewritten whole, and only by its creator.",
+    ),
+    Endpoint("POST", "/api/v2/automation-rules/{rule_id}/archive"): Case(
+        expected=creator_only(200),
+        url=lambda world: f"/api/v2/automation-rules/{world.automation_rule_id}/archive",
+        body=lambda world, actor: None,
+        notes="There is no DELETE: the run log points at the row (D-173).",
+    ),
+    Endpoint("POST", "/api/v2/automation-rules/{rule_id}/run"): Case(
+        expected=creator_only(200),
+        url=lambda world: f"/api/v2/automation-rules/{world.automation_rule_id}/run",
+        body=lambda world, actor: None,
+        notes=(
+            "Previews by default, and only for the creator -- the preview "
+            "names the deals the rule would touch, which are theirs."
+        ),
+    ),
+    Endpoint("GET", "/api/v2/automation-rules/{rule_id}/runs"): Case(
+        expected=creator_only(200),
+        url=lambda world: f"/api/v2/automation-rules/{world.automation_rule_id}/runs",
+        notes="A run row names a deal, so this is the creator's own read.",
+    ),
+    Endpoint("GET", "/api/v2/job-runs"): Case(
+        expected=authenticated_only(200),
+        url=lambda world: "/api/v2/job-runs",
+        notes=(
+            "The scheduler's log (milestone 6.5). Open to any signed-in "
+            "caller: a job name, a status and a time say nothing about "
+            "anybody's deals, and 'are the rules being checked at all' is a "
+            "question everybody with a rule has (**D-183**)."
+        ),
+    ),
     Endpoint("POST", "/api/v2/saved-views"): Case(
         expected=authenticated_only(201),
         url=lambda world: "/api/v2/saved-views",
@@ -832,6 +946,16 @@ def world(tmp_path, monkeypatch) -> World:
         "app.routes_ai.ask_openai",
         lambda **kwargs: "Answer assembled from the timeline.",
     )
+    # Milestone 6.4's two new calls, stubbed the same way: the matrix is about
+    # who may reach an endpoint, not about what the model says.
+    monkeypatch.setattr(
+        "app.routes_ai.stream_openai",
+        lambda **kwargs: iter(["Answer ", "in pieces."]),
+    )
+    monkeypatch.setattr(
+        "app.routes_ai.ask_openai_for_filter",
+        lambda **kwargs: '{"stage": "Negotiation"}',
+    )
 
     clients: dict[Actor, TestClient] = {}
     user_ids: dict[Actor, int] = {}
@@ -978,6 +1102,23 @@ def world(tmp_path, monkeypatch) -> World:
         assert response.status_code == 201, response.json()
         return int(response.json()["id"])
 
+    def automation_rule() -> int:
+        response = owner.post(
+            "/api/v2/automation-rules",
+            json={
+                "name": "Matrix fixture rule",
+                "trigger_type": "no_activity",
+                "trigger": {"days": 14},
+                "conditions": [],
+                "action_type": "create_task",
+                "action": {"title": "Matrix fixture follow-up"},
+            },
+        )
+        assert response.status_code == 201, response.json()
+        return int(response.json()["id"])
+
+    automation_rule_id = automation_rule()
+
     custom_field_id = custom_field("matrix_field")
     archived_field_id = custom_field("matrix_archived_field")
     assert owner.post(f"/api/v2/custom-fields/{archived_field_id}/archive").status_code == 200
@@ -1020,6 +1161,7 @@ def world(tmp_path, monkeypatch) -> World:
         deleted_task_comment_id=deleted_task_comment_id,
         custom_field_id=custom_field_id,
         archived_field_id=archived_field_id,
+        automation_rule_id=automation_rule_id,
     )
 
     for client in clients.values():

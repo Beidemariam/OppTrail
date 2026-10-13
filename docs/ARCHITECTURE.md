@@ -236,8 +236,15 @@ Minimum viable, no vendor:
 - **Job outcomes recorded** in the job table — a silently dead scheduler is
   the most likely v2 production failure, and the reason this is not deferred with
   the email work: Phase 6 schedules automations and backups, so v2 does have a
-  scheduler to lose track of. Lands with ADR 0004 in Phase 6. The durable
-  `outbox` is v3's, with the first thing that sends.
+  scheduler to lose track of. **Shipped in milestone 6.5** (ADR 0004):
+  `job_runs` holds one row per execution, written on *start* and updated on
+  finish, so a row left at `started` is a process that died mid-job. Read in
+  two places (**D-183**) — `/api/health`'s `jobs`, the newest run of each job,
+  for whatever watches the container; and `GET /api/v2/job-runs`, which the
+  automations screen turns into one line, because the only place a stopped
+  scheduler is *felt* is the screen where somebody is wondering why their rule
+  has not fired. The durable `outbox` is still v3's, with the first thing that
+  sends.
 - **Inbound email ingestion log**, including rejections — **v3**, with ADR 0009.
   Silent drops are unacceptable when a colleague believes they filed a note.
 

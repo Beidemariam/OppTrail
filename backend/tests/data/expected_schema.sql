@@ -13,6 +13,25 @@ CREATE INDEX idx_attachments_entry
 
 CREATE INDEX idx_audit_log_entries_opportunity_id ON audit_log_entries(opportunity_id);
 
+CREATE INDEX idx_automation_runs_entry
+        ON automation_runs (entry_id, rule_id)
+        WHERE entry_id IS NOT NULL
+        ;
+
+CREATE INDEX idx_automation_rules_armed
+        ON automation_rules (trigger_type, id)
+        WHERE archived_at IS NULL AND enabled = 1
+        ;
+
+CREATE INDEX idx_automation_rules_creator
+        ON automation_rules (created_by, id)
+        WHERE archived_at IS NULL
+        ;
+
+CREATE INDEX idx_automation_runs_rule
+        ON automation_runs (rule_id, id)
+        ;
+
 CREATE INDEX idx_comments_activity ON comments (note_id, created_at);
 
 CREATE INDEX idx_comments_created_author
@@ -29,6 +48,10 @@ CREATE INDEX idx_custom_field_definitions_live
 CREATE UNIQUE INDEX idx_custom_field_key_per_entity
         ON custom_field_definitions (entity_type, key)
         WHERE archived_at IS NULL;
+
+CREATE INDEX idx_job_runs_latest
+        ON job_runs (job, id DESC)
+        ;
 
 CREATE INDEX idx_notes_activity ON notes (entry_id, created_at);
 
@@ -97,6 +120,43 @@ CREATE TABLE audit_log_entries (
             created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
         );
 
+CREATE TABLE automation_rules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            trigger_type TEXT NOT NULL CHECK (trigger_type IN (
+                'stage_changed',
+                'entry_created',
+                'field_changed',
+                'no_activity',
+                'close_date_approaching'
+            )),
+            trigger_config TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(trigger_config)),
+            conditions TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(conditions)),
+            action_type TEXT NOT NULL CHECK (action_type IN (
+                'create_task',
+                'notify_user',
+                'add_entry',
+                'change_stage'
+            )),
+            action_config TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(action_config)),
+            enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+            created_by INTEGER NOT NULL REFERENCES users(id),
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+            updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+            archived_at TEXT
+        );
+
+CREATE TABLE automation_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            rule_id INTEGER NOT NULL REFERENCES automation_rules(id),
+            opportunity_id INTEGER NOT NULL REFERENCES opportunities(id),
+            outcome TEXT NOT NULL CHECK (outcome IN ('applied', 'skipped', 'failed')),
+            reason TEXT,
+            entry_id INTEGER REFERENCES timeline_entries(id),
+            dry_run INTEGER NOT NULL DEFAULT 0 CHECK (dry_run IN (0, 1)),
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+        );
+
 CREATE TABLE comments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             note_id INTEGER NOT NULL REFERENCES notes(id),
@@ -121,6 +181,15 @@ CREATE TABLE custom_field_definitions (
             created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
             updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
             archived_at TEXT
+        );
+
+CREATE TABLE job_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            job TEXT NOT NULL CHECK (job IN ('automations', 'backup')),
+            status TEXT NOT NULL CHECK (status IN ('started', 'succeeded', 'failed')),
+            detail TEXT,
+            started_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+            finished_at TEXT
         );
 
 CREATE TABLE note_versions (

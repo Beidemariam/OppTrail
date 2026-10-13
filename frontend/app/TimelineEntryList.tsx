@@ -131,7 +131,9 @@ function TimelineEntryCard({
               <span className="entry-number">#{entry.sequence}</span>
               <EntryTypeBadge type={entry.type} />
               {entry.system_generated && (
-                <span className="system-badge">System</span>
+                <span className="system-badge">
+                  {entry.automation_rule_id === null ? "System" : "Automation"}
+                </span>
               )}
               <span>{formatTimestamp(entry.event_timestamp)}</span>
             </div>
@@ -147,21 +149,32 @@ function TimelineEntryCard({
               <p className="timeline-copy">No details</p>
             )}
           </div>
-          {/* A system entry is history, not content: it cannot be edited or
-              deleted through the API (`AGENTS.md`, auditability). What an
+          {/* A system entry is history, not content: it cannot be edited
+              through the API at all (`AGENTS.md`, auditability). What an
               edit to an ordinary entry replaced is read in the opportunity's
-              own history rather than from a button here (3.1c, D-121). */}
+              own history rather than from a button here (3.1c, D-121).
+
+              **Deleting one is the exception an automation earns** (6.3a,
+              **D-181**, the human's request at the 6.3 review): a mistaken
+              rule leaves entries on a deal and somebody has to be able to
+              clear them up. So an automation's entry offers Delete and not
+              Edit — removing a mistake is not rewriting what the record says
+              — while a system entry a *person* caused offers neither. The
+              permission is unchanged: `canChangeItem` is author-or-owner, and
+              an automated entry's author is the rule's creator. */}
           {access.canChangeItem(entry.created_by) &&
-            !entry.system_generated && (
+            (!entry.system_generated || entry.automation_rule_id !== null) && (
               <div className="inline-actions">
-                <button
-                  ref={editTriggerRef}
-                  type="button"
-                  className="secondary-button"
-                  onClick={editor.open}
-                >
-                  Edit
-                </button>
+                {!entry.system_generated && (
+                  <button
+                    ref={editTriggerRef}
+                    type="button"
+                    className="secondary-button"
+                    onClick={editor.open}
+                  >
+                    Edit
+                  </button>
+                )}
                 {/* No confirmation: the entry goes, and the toast offers the
                     way back (`docs/UX.md`, milestone 2.4b). */}
                 <button

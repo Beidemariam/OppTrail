@@ -4,6 +4,7 @@ import { useState, useSyncExternalStore } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 
+import { AutomationsPage } from "./AutomationsPage";
 import { ConfirmProvider } from "./ConfirmDialog";
 import { DashboardPage, NoOpportunitySelected } from "./DashboardPage";
 import { DensityProvider } from "./Density";
@@ -58,6 +59,10 @@ export function AppRoutes() {
                     links here. */}
                 <Route path="/tasks" element={<TasksPage />} />
                 <Route path="/reports" element={<ReportsPage />} />
+                {/* Automations (milestone 6.3). Its own screen for the reason
+                    /reports and /tasks are: a rule is about every deal at
+                    once, so there is no one deal to hang it off. */}
+                <Route path="/automations" element={<AutomationsPage />} />
                 <Route path="/" element={<DashboardPage />}>
                   <Route index element={<NoOpportunitySelected />} />
                   <Route

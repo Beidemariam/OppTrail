@@ -1,4 +1,4 @@
-STATUS: IN_PROGRESS phase=6
+STATUS: AWAITING_REVIEW phase=6
 
 # Autopilot Progress
 
@@ -5506,18 +5506,214 @@ settled.
       test tried to set it. Both now carry it, with the hazard written down
       above them.
 
-- [ ] 6.3 Constrained rule builder: single-hop only (trigger → condition →
+- [x] 6.3 **Constrained rule builder**: single-hop only (trigger → condition →
       action), dry-runnable, every automated write producing a traceable
       system entry naming the rule. Schema: `automation_rules`,
       `automation_runs`. This is also the mechanism confirmed in D-006's
       cross-check to satisfy journey §6.3 #9 (stalled → reminder).
-- [ ] 6.4 AI expansion (safe subset): streaming, date-scoped summaries,
+
+      `docs/FEATURES.md` §11 is emphatic that this is **not a workflow
+      engine**, and most of that constraint is in the schema rather than in a
+      validator: one trigger column, one flat ANDed condition list, one
+      action. A rule that branches cannot be stored.
+
+      **A rule acts with its creator's authority** (**D-173**), and that one
+      sentence settles the permission question §11 does not mention. It is
+      evaluated only over the deals its creator can read, every write is
+      attributed to the creator, and the role the action needs is re-checked
+      **per deal at run time** — so a rule naming an owner-only action on a
+      deal its creator does not own records `skipped` with the reason rather
+      than performing a write nobody could have performed by hand. That is
+      what makes creating a rule safe to leave open to any authenticated
+      caller, as D-171 left a custom field: a rule grants its author nothing
+      they did not already have. Editing, archiving and running one is the
+      creator's alone, which *is* a departure from D-171 — a field's label is
+      read by everyone, while a rule performs writes recorded under its
+      creator's name.
+
+      **One hop is structural, not detected** (**D-174**). Nothing in
+      `app/automations.py` calls its own entry points, the evaluator is
+      invoked only from the route handlers that perform human writes, and
+      every write a rule makes is `system_generated`, which no trigger reads.
+      So the chain cannot exist to be detected, which is what §11 means by
+      "removes loop detection from the design entirely".
+      `test_invariant_a_rule_cannot_trigger_a_rule` is a source scan, the
+      shape `test_soft_delete.py`'s hard-delete guard already uses, confirmed
+      to fail against a planted call.
+
+      **All five triggers ship; the clock is 6.5's** (**D-175**). The three
+      event-driven ones fire inline below the commit, where `publish_*` sits;
+      the two time-driven ones are evaluated by `run_rule`, which the
+      manual run/preview route calls today and 6.5's scheduler will call on a
+      timer. There is no second evaluator to keep in agreement, and 6.5 adds
+      a schedule rather than a feature.
+
+      **Dry run is the same code path with the write turned off**, and
+      `dry_run` defaults to **true** — the one place in this API where a
+      default decides whether anything is written. The failure mode of the
+      other default is two hundred deals changed by somebody who meant to
+      look first.
+
+      **No new entry type** (**D-176**). `timeline_entries.type` is
+      CHECK-constrained, so a sixth value is a full table rebuild of the
+      most-depended-on table in the schema; §11 asks for an entry that
+      *names the rule*, which `system_generated = 1` plus the rule's name in
+      the body answers. Two consequences were built rather than accepted: a
+      `change_stage` action writes the ordinary `stage_change` entry, so
+      6.2's time-in-stage still reads one type for one event; and an
+      `add_entry` action may **not** name `stage_change`, because a rule
+      writing that type would feed the dashboard a stage move that never
+      happened.
+
+      **An automated write records a version** (**D-178**), which is
+      `AGENTS.md` invariant 8 read against a writer nobody is watching: a
+      stage a rule moved is recoverable from the history, and a rule-created
+      task opens its history with what it said rather than losing that to its
+      own first edit. Attributed to the rule's creator, who is who the rule
+      acts as. It does not double up in the activity feed — `activity.py`
+      already drops an opportunity version whose only changed field is the
+      stage.
+
+      **The run log records matches, not evaluations** (**D-177**): applied,
+      skipped-with-a-reason and failed, dry runs included, and nothing at all
+      for a deal the conditions filtered out. A rule asked about four hundred
+      deals would otherwise write four hundred rows a tick saying nothing
+      happened — and the half that matters is the skip, because a rule that
+      matched and declined leaves no trace anywhere else in the system.
+
+      **The screen is at `/automations`**, beside `/reports` and `/tasks` for
+      the reason they are screens: a rule is about every deal at once. The
+      rule is drawn **as a sentence** (`lib/domain.ts`'s
+      `automationSentence`), in the list and live above the controls that
+      build it, because a column of selects tells a reader what the options
+      are and not what they have built — which is §11's own objection to a
+      workflow engine. The form renders only the parameters the chosen
+      trigger and action take, from the same two tables the API validates
+      against, and an archived rule is reachable behind a toggle because its
+      run log is the reason the row is kept.
+
+      **Also closed a gap of the project's most repeated class.**
+      `e2e/23-responsive.spec.ts` walks six screens at eight widths and had
+      never included either cross-deal screen; `/automations` and `/reports`
+      are both in it now. A screen absent from that list is a screen where
+      D-138's defect can come back unnoticed.
+- [x] 6.3a **The 6.3 review's finding and its request.** The human ran all
+      seven checks, passed every one, ruled *"keep it open"* on D-173 (so rule
+      creation stays available to anybody signed in, carried by the per-deal
+      re-check) and marked **Go**. One check carried a note, and it held three
+      things.
+
+      **A prohibition I invented, surfaced as a message with no reason**
+      (**D-179**). Their words: *"the exact words of the message are 'this
+      rule can't be validated' ... But it doesn't allow it to be made
+      either."* Reproduced before changing anything: an editor's
+      `change_stage` rule is creatable for `no_activity` and `stage_changed`
+      and 422s for `close_date_approaching`, because 6.3's schema refused that
+      pair. §11 forbids no pairing — I added it — and the behaviour it feared
+      is already handled by `_would_change_nothing`. Removed. It was the only
+      combination the form offered that the API refused, so the class is gone
+      rather than the instance.
+
+      **No form in this app could render a 422's reason** (**D-180**). The
+      envelope has carried `fields` since it existed and 6.1 was careful to
+      make a custom field's 422 name its field; `lib/api.ts`'s `ApiError` kept
+      only `code` and `status`. It carries `fields` now, so the rule form
+      marks the input and prints the reason — and the summary line shows a
+      whole-rule failure, or a reason whose input is not drawn, and otherwise
+      nothing, because printing it twice is what the first attempt did. The
+      other forms can read it and do not yet: a Phase R consistency item.
+
+      **An entry a rule wrote can be deleted by the deal's owner**
+      (**D-181**), which is what they asked for: *"the owner of the deal
+      should have a delete power over rule entries, in case a mistaken rule
+      action had occured."* One exception and not a loosening — a system entry
+      a *person* caused stays immutable, because that is somebody's own action
+      in the record. It needs no new permission rule (`created_by` on an
+      automated entry is the rule's creator, so author-or-owner already means
+      "the owner or whoever wrote the rule") and no new column
+      (`automation_runs.entry_id` is the predicate; revision `0019` indexes
+      it). Editing is still refused, the delete is soft, audited and undoable,
+      and **it does not undo the change** — a wrongly moved stage goes back
+      through the version history, which is what D-178 was for.
+
+- [x] 6.5a **The 6.5 review's one failed check** (**D-184**). The human ran
+      four checks, passed three — including the one that mattered, a rule
+      firing unattended from the clock — and failed T2 with a precise report:
+      *"Doesn't take in words for number of days, except for some reason the
+      letter e, and it doesn't say what to fix."*
+
+      Reproduced in a real browser first, and both halves are true.
+      `<input type="number">` keeps `e` on screen (it is legal in `1e5`)
+      while reporting its value as the empty string with `validity.badInput`
+      set — so the field looks filled and reads as empty. And because it is
+      `required`, the **browser cancelled the submit before any of this
+      application's code ran**: no request, no change on screen, and a native
+      tooltip that vanishes. 6.3a had just fixed the server's refusals being
+      mute; this was the same silence arriving by the other path, which is
+      why the human met it immediately after.
+
+      The form stops deferring to the browser and asks it the same question
+      instead: `noValidate`, then `lib/formErrors.ts`'s `invalidFields` on
+      submit, whose answers go through the same per-field display a 422 uses.
+      The messages stay the platform's own — "Please enter a number." is
+      better than anything invented here and is already localized — and each
+      control's `name` is the API's field path, so one vocabulary covers both
+      kinds of refusal. The wording is asserted in the **e2e** suite, because
+      jsdom's validation messages are not Chrome's.
+
+      Every other form in the app has the same silence and can now adopt
+      `invalidFields`. That is a Phase R consistency item, beside D-180's
+      half.
+
+- [x] 6.4 **AI expansion (safe subset)**: streaming, date-scoped summaries,
       natural-language filter construction — output is a query the user
       inspects before applying, never an auto-applied write.
-- [ ] 6.5 APScheduler in-process (ADR 0004), inherited from the deferred email
-      phase (**D-141**). 6.3's rules are time-triggered, so the acceptance
+
+      **Nothing here gives the model a way to change anything.** A scoped
+      summary is a narrower read, a stream is the same answer arriving
+      sooner, and a filter proposal is a query somebody presses Apply on.
+      ADR 0012 is untouched and `test_invariant_ai_agent_has_no_write_tools`
+      still covers the call — both calls, now.
+
+      **Streaming is a POST answering `text/event-stream`** (**D-187**), not
+      ADR 0003's shape. That stream is a GET read by `EventSource`, carries
+      invalidations and never content, and lives as long as a screen; this
+      one carries the answer, is answered once, and needs the question in a
+      body. Two event types, because the reply has two parts: `delta` as it
+      is written, and `done` with the citations, which are computed from the
+      finished text. A failure mid-stream is an `error` event rather than a
+      502 — the status line is long gone — while a refusal is still an
+      ordinary 404, because the permission check happens before the response
+      starts. On this deployment it is the difference between a feature and
+      a broken one: D-168 measured a ~29s floor, and the human's Phase 4
+      report was that the AI "was not working" when it was working slowly.
+
+      **A scoped context says that it is scoped** (**D-185**). Asked about
+      June, a model given only June will answer "pricing was never
+      discussed" rather than "not in June" — a confident wrong answer, which
+      is this feature's worst failure. The entry numbers are unchanged, so a
+      scoped answer still cites what the reader can see.
+
+      **The filter proposal is validated before it is shown** (**D-186**),
+      which is what makes §14's own safety claim true: the inspection is
+      only worth something if what is on screen is what would be applied.
+      The server keeps a stage only if it is a stage, a sort field only if
+      the board sorts by it, a number only if it parses — and *names* what
+      it dropped. The vocabulary was wrong in the other direction first: the
+      draft proposed an owner and a close-date range that the filter bar
+      does not offer, which is D-179's mistake inverted. Narrowing the
+      prompt to what exists also meant **adding the one filter the example
+      needs** — the board could not filter on value at all, so "deals stuck
+      in negotiation over 50k" had nowhere to go. `minValue`/`maxValue` are
+      view state and two controls now.
+- [x] 6.5 **APScheduler in-process** (ADR 0004), inherited from the deferred
+      email phase (**D-141**). 6.3's rules are time-triggered, so the acceptance
       criterion below — a rule that fires after fourteen days of no activity —
-      cannot be met without a scheduler, and job outcomes must be recorded
+      cannot be met *by the clock* without a scheduler; 6.3 met it through
+      `POST /automation-rules/{id}/run` and left this milestone the schedule
+      alone (**D-175**): a tick calls `automations.run_rule`, the same
+      function the route calls, so there is no second evaluator. Job outcomes
+      must be recorded
       because a silently dead scheduler is the likeliest production failure
       (`docs/ARCHITECTURE.md`, Observability). `make backup` takes its schedule
       from the same machinery, closing the gap ADR 0011 has carried since
@@ -5525,6 +5721,49 @@ settled.
       work is that v2 now *has* a scheduler, so it has one to lose track of.
       The durable **outbox** is not built here: nothing in v2 sends anything,
       so it waits for v3 with the first thing that does.
+
+      **`jobs.py` knows nothing about APScheduler**, which is ADR 0004's own
+      instruction ("keep job functions free of framework coupling so they stay
+      directly testable") and is what makes the whole milestone testable
+      without a clock: `tests/test_scheduler.py` calls `run_automations` and
+      `run_backup` as functions, and exactly two of its sixteen tests start a
+      scheduler at all. `scheduler.py` is the wiring and the only file that
+      imports the library.
+
+      **Interval triggers, `max_instances=1`, `coalesce=True`.** An interval's
+      first firing is one interval away, which is what stops a restart loop
+      taking a snapshot per restart and what lets the e2e suite boot the real
+      app without a tick landing mid-run. One instance at a time because two
+      copies would both walk the same rules and both act; coalescing because a
+      process that was asleep must not wake to a queue of missed ticks it then
+      runs back to back.
+
+      **A timer needed more than a schedule** (**D-182**). Ninety-six ticks a
+      day against a quiet deal would be ninety-six tasks, and the answer is
+      per-trigger rather than general: `no_activity` rate limits itself,
+      because every action writes a system entry and that entry *is* activity
+      — so the deal stops being a candidate until another full window of
+      silence passes. `close_date_approaching` has no such feedback and takes
+      a suppression with its own `days` as the unit. The first attempt applied
+      one rule to both and would have made a no-activity rule fire once and
+      never again; the decision records why, because the mistake is the
+      instructive part.
+
+      **Job outcomes are recorded and read in two places** (**D-183**):
+      `job_runs` (revision `0020`), the newest row per job on `/api/health`
+      beside `last_backup_at`, and a line on the automations screen saying
+      when the rules were last checked. A scheduler that stops writes nothing
+      to the logs, so the absence of lines is the only signal — and nobody
+      watches for an absence. A row left at `started` reads as "did not
+      finish", which is the signature of a process that died mid-job and the
+      reason the row is written on start.
+
+      **Both of the phase's remaining acceptance criteria are met by the
+      clock now**: a no-activity-for-14-days rule fires once, creates a task
+      and leaves a system entry naming the rule; and a scheduled backup runs
+      unattended, prunes to its retention window, and its snapshot opens with
+      the data in it. The second is the first time ADR 0011's backups have
+      been exercised by anything other than a person typing `make backup`.
 
 ### Acceptance
 

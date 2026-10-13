@@ -62,6 +62,11 @@ export function TopBar({ user }: { user: User }) {
         <Link className="ghost-button" to="/reports">
           Reports
         </Link>
+        {/* The rule builder (milestone 6.3), beside Reports for the same
+            reason: it is a screen about every deal rather than about one. */}
+        <Link className="ghost-button" to="/automations">
+          Automations
+        </Link>
         <NotificationMenu />
         <ThemeToggle />
         <span className="user-chip" title={user.email}>

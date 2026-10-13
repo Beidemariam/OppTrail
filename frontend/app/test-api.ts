@@ -34,11 +34,29 @@ export interface FakeApiOptions {
   searchResults?: SearchResult[];
   savedViews?: SavedView[];
   customFields?: CustomField[];
+  /** Automation rules (milestone 6.3). Seeded whole like everything else; the
+   * runs are produced by this fake when a rule is previewed or run, because
+   * what a run *says* is the consequence the tests are about. */
+  automationRules?: AutomationRule[];
+  /** The scheduler's log (milestone 6.5). Seeded, because what the screen
+   * does with a dead scheduler is the thing worth testing. */
+  jobRuns?: JobRun[];
+  /** What `POST /api/v2/ai/filter` should answer (milestone 6.4). Seeded,
+   * because the interesting cases are a proposal with something dropped and
+   * one with nothing in it at all. */
+  filterProposal?: AiFilterResponse;
   dashboard?: Dashboard;
   /** Tasks (milestone 4.1). Seeded whole, like every other collection here. */
   tasks?: Task[];
   /** Paths that should fail, mapped to `[status, detail]`. */
-  failures?: Record<string, [number, string]>;
+  /** Paths that should fail, mapped to `[status, detail]` -- or
+   * `[status, detail, fields]` for a 422, since milestone 6.3a: the envelope's
+   * per-field reasons are what a form renders, so a fake that could not carry
+   * them could not test the rendering. */
+  failures?: Record<
+    string,
+    [number, string] | [number, string, Record<string, string>]
+  >;
   /**
    * `"METHOD /path"` entries whose response is held until `release()` is
    * called. An optimistic update is only observable while its request is still
@@ -155,6 +173,10 @@ interface TimelineEntry {
    * no component derives it -- the card prints what the API sent, which is
    * exactly the property worth keeping. */
   sequence: number;
+  /** The rule that wrote this entry, or `null` for everything a person wrote
+   * (milestone 6.3a). The card reads it to decide whether to offer Delete on
+   * a system entry, which is the one case where it does. */
+  automation_rule_id?: number | null;
   /** The entry's custom field values (milestone 6.1), read on the card since
    * 6.2a. */
   custom_values?: Record<string, unknown>;
@@ -246,6 +268,7 @@ export function anEntry(overrides: Partial<TimelineEntry> = {}): TimelineEntry {
     system_generated: false,
     created_at: "2026-09-02T14:00:00Z",
     sequence: 1,
+    automation_rule_id: null,
     notes: [],
     attachments: [],
     ...overrides,
@@ -361,6 +384,10 @@ export function aReply(
 
 type SearchResult = components["schemas"]["SearchResultPublic"];
 type CustomField = components["schemas"]["CustomFieldPublic"];
+type AutomationRule = components["schemas"]["AutomationRulePublic"];
+type AutomationRun = components["schemas"]["AutomationRunPublic"];
+type JobRun = components["schemas"]["JobRunPublic"];
+type AiFilterResponse = components["schemas"]["AiFilterResponse"];
 type Dashboard = components["schemas"]["DashboardPublic"];
 
 /**
@@ -539,9 +566,16 @@ export class FakeApi {
   searchResults: SearchResult[];
   savedViews: SavedView[];
   customFields: CustomField[];
+  automationRules: AutomationRule[];
+  automationRuns: AutomationRun[];
+  jobRuns: JobRun[];
+  filterProposal: AiFilterResponse | null;
   dashboard: Dashboard | null;
   tasks: Task[];
-  failures: Record<string, [number, string]>;
+  failures: Record<
+    string,
+    [number, string] | [number, string, Record<string, string>]
+  >;
   // The current `user`'s own watch set (milestone 3.3a), separate from
   // `watchers` above: watching needs no share at all (D-129), so it is not
   // derived from anything else this fake tracks.
@@ -598,6 +632,10 @@ export class FakeApi {
     this.searchResults = options.searchResults ?? [];
     this.savedViews = options.savedViews ?? [];
     this.customFields = options.customFields ?? [];
+    this.automationRules = options.automationRules ?? [];
+    this.automationRuns = [];
+    this.jobRuns = options.jobRuns ?? [];
+    this.filterProposal = options.filterProposal ?? null;
     this.dashboard = options.dashboard ?? null;
     this.tasks = options.tasks ?? [];
     this.failures = options.failures ?? {};
@@ -672,7 +710,13 @@ export class FakeApi {
       // has one too; a page that reads a different one fails here rather
       // than in production.
       return this.json(
-        { error: { code: "error", message: failure[1] } },
+        {
+          error: {
+            code: failure[0] === 422 ? "validation_error" : "error",
+            message: failure[1],
+            ...(failure[2] ? { fields: failure[2] } : {}),
+          },
+        },
         failure[0],
       );
     }
@@ -784,6 +828,86 @@ export class FakeApi {
       field.archived_at =
         segments[2] === "archive" ? "2026-10-02T09:00:00Z" : null;
       return this.json(field);
+    }
+
+    // Automation rules (milestone 6.3). Stateful for the reason the custom
+    // fields above are: what a rule *does* -- apply, skip with a reason, or
+    // match nothing -- is the consequence the tests are about, and a canned
+    // response would test the click instead.
+    if (bare === "/api/v2/ai/filter" && method === "POST") {
+      return this.json(
+        this.filterProposal ?? {
+          proposal: { stage: "Negotiation", min_value: "50000", stalled: true },
+          ignored: [],
+          empty: false,
+        },
+      );
+    }
+    if (bare === "/api/v2/job-runs" && method === "GET") {
+      return this.json({ items: this.jobRuns, next_cursor: null });
+    }
+    if (bare === "/api/v2/automation-rules" && method === "GET") {
+      const params = new URLSearchParams(path.split("?")[1] ?? "");
+      const includeArchived = params.get("include_archived") === "true";
+      const items = this.automationRules.filter(
+        (rule) => includeArchived || rule.archived_at === null,
+      );
+      return this.json({ items, next_cursor: null });
+    }
+    if (bare === "/api/v2/automation-rules" && method === "POST") {
+      const payload = body ?? {};
+      const now = "2026-10-10T09:00:00Z";
+      const created: AutomationRule = {
+        id: this.nextId++,
+        name: payload.name,
+        trigger_type: payload.trigger_type,
+        trigger: payload.trigger ?? {},
+        conditions: payload.conditions ?? [],
+        action_type: payload.action_type,
+        action: payload.action ?? {},
+        enabled: payload.enabled ?? true,
+        created_by: this.user?.id ?? ALEX.id,
+        creator_name: this.user?.name ?? ALEX.name,
+        created_at: now,
+        updated_at: now,
+        archived_at: null,
+      };
+      this.automationRules.push(created);
+      return this.json(created, 201);
+    }
+    if (segments[0] === "automation-rules" && segments.length >= 2) {
+      const rule = this.automationRules.find(
+        (candidate) => candidate.id === Number(segments[1]),
+      );
+      if (!rule) {
+        return this.json(
+          {
+            error: { code: "not_found", message: "Automation rule not found" },
+          },
+          404,
+        );
+      }
+      if (segments.length === 2 && method === "PATCH") {
+        const payload = body ?? {};
+        Object.assign(rule, payload, { updated_at: "2026-10-10T10:00:00Z" });
+        return this.json(rule);
+      }
+      if (segments[2] === "archive" && method === "POST") {
+        rule.archived_at = "2026-10-10T11:00:00Z";
+        rule.enabled = false;
+        return this.json(rule);
+      }
+      if (segments[2] === "run" && method === "POST") {
+        const params = new URLSearchParams(path.split("?")[1] ?? "");
+        const dryRun = params.get("dry_run") !== "false";
+        return this.json(this.runRule(rule, dryRun));
+      }
+      if (segments[2] === "runs" && method === "GET") {
+        const items = this.automationRuns.filter(
+          (run) => run.rule_id === rule.id,
+        );
+        return this.json({ items, next_cursor: null });
+      }
     }
 
     if (segments[2] === "restore") {
@@ -1183,6 +1307,36 @@ export class FakeApi {
       return this.page(this.watchers, path);
     }
     if (segments[2] === "ai") {
+      // The streamed answer (milestone 6.4), framed the way the server
+      // frames it: deltas and then a `done` carrying the citations, which
+      // are computed from the finished text and so cannot come earlier.
+      // Sent as one body rather than over time -- what the reader is
+      // testing is that the pieces are assembled and the citations land,
+      // not that they arrive apart.
+      if (segments[4] === "stream") {
+        const scope = [body.since, body.until].filter(Boolean).join("..");
+        const answer = scope
+          ? `Answer to: ${body.question} [${scope}]`
+          : `Answer to: ${body.question}`;
+        const frames = [
+          ...answer
+            .split(" ")
+            .map((word: string, index: number) =>
+              sseFrame("delta", index === 0 ? word : ` ${word}`),
+            ),
+          sseFrame(
+            "done",
+            JSON.stringify({
+              answer,
+              referenced_entry_numbers: [1],
+            }),
+          ),
+        ].join("");
+        return new Response(frames, {
+          status: 200,
+          headers: { "Content-Type": "text/event-stream" },
+        });
+      }
       return this.json({
         answer: `Answer to: ${body.question}`,
         referenced_entry_numbers: [1],
@@ -1602,6 +1756,59 @@ export class FakeApi {
   }
 
   /**
+   * One rule against every seeded opportunity, previewed or applied.
+   *
+   * A deliberately simplified evaluator: the conditions are applied in the
+   * same order and with the same comparison the real one uses, and the role
+   * check is "does this caller own the deal", which is what makes a skip
+   * reachable from a component test. What it is *not* is a second
+   * implementation of the triggers -- a component test is about what the
+   * screen does with an answer, and the answers themselves are
+   * `backend/tests/test_automations.py`.
+   */
+  private runRule(rule: AutomationRule, dryRun: boolean) {
+    const matched = this.opportunities.filter((opportunity) =>
+      rule.conditions.every((condition) => {
+        const actual = String(
+          (opportunity as unknown as Record<string, unknown>)[
+            condition.field
+          ] ?? "",
+        );
+        return condition.op === "ne"
+          ? actual !== condition.value
+          : actual === condition.value;
+      }),
+    );
+    const runs: AutomationRun[] = matched.map((opportunity) => {
+      const allowed =
+        rule.action_type !== "change_stage" ||
+        opportunity.owner_id === (this.user?.id ?? ALEX.id);
+      const run: AutomationRun = {
+        id: this.nextId++,
+        rule_id: rule.id,
+        rule_name: rule.name,
+        opportunity_id: opportunity.id,
+        opportunity_name: opportunity.name,
+        outcome: allowed ? "applied" : "skipped",
+        reason: allowed
+          ? dryRun
+            ? "preview only; nothing was written"
+            : `changed ${rule.action_type}`
+          : `${rule.creator_name} may not change stage here`,
+        entry_id: null,
+        dry_run: dryRun,
+        created_at: "2026-10-10T12:00:00Z",
+      };
+      if (!dryRun && allowed && rule.action_type === "change_stage") {
+        opportunity.stage = rule.action.stage ?? opportunity.stage;
+      }
+      return run;
+    });
+    this.automationRuns.push(...runs);
+    return { dry_run: dryRun, considered: this.opportunities.length, runs };
+  }
+
+  /**
    * `POST /api/v2/<kind>/{id}/restore`: the row comes back with its id and its
    * place, which is what makes undo an undo rather than a re-create. Restoring
    * something that is not deleted is a 404, as the API answers it.
@@ -1808,4 +2015,14 @@ export class FakeApi {
 
     return this.json({ items, next_cursor: null });
   }
+}
+
+/** One SSE frame, matching `app/events.py`'s `sse_frame`: a named event and
+ * one `data:` line per line of payload (milestone 6.4). */
+function sseFrame(event: string, data: string): string {
+  const body = data
+    .split("\n")
+    .map((line) => `data: ${line}\n`)
+    .join("");
+  return `event: ${event}\n${body}\n`;
 }

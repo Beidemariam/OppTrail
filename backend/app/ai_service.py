@@ -1,6 +1,7 @@
 import re
 import secrets
 import sqlite3
+from collections.abc import Iterator
 from typing import cast
 
 from openai import Omit, OpenAI, omit
@@ -63,10 +64,52 @@ def quote_user_text(text: str, token: str) -> str:
     return f"[BEGIN USER TEXT {token}]\n{text}\n[END USER TEXT {token}]"
 
 
+def scope_sentence(since: str | None, until: str | None) -> str | None:
+    """The line that stops a window reading as the whole deal (**D-185**).
+
+    `None` when there is no scope, so an unscoped context is byte-for-byte
+    what it was before milestone 6.4 -- the context tests assert on its exact
+    shape, and a blank line added for symmetry would be a change to every one
+    of them for no reader's benefit.
+    """
+    if not since and not until:
+        return None
+    if since and until:
+        window = f"between {since} and {until}"
+    elif since:
+        window = f"from {since} onwards"
+    else:
+        window = f"up to {until}"
+    return (
+        f"This timeline is SCOPED to entries {window}. It is part of the "
+        "deal's history, not all of it. Entry numbers are the deal's own, so "
+        "gaps in them are entries outside this range. If the answer depends "
+        "on something outside the range, say so.\n"
+    )
+
+
 def build_timeline_context(
     connection: sqlite3.Connection,
     opportunity_id: int,
+    since: str | None = None,
+    until: str | None = None,
 ) -> tuple[str, list[int]]:
+    """The deal as text for the model, optionally scoped to a date range.
+
+    **Scoping is milestone 6.4** (`docs/FEATURES.md` §14: "add streaming and
+    date-range scoping"), and two things about it are load bearing:
+
+    - **The entry numbers do not change.** `ENTRY_SEQUENCE_SQL` counts a deal's
+      whole timeline, so #7 is #7 whether or not #1-#6 are in this context --
+      which is the point of D-139's numbering being a property of the deal
+      rather than of a query. A scoped answer still cites numbers the reader
+      can find on screen.
+    - **The context says it is scoped** (**D-185**). Without that line the
+      model reads a window as the whole deal and answers "nothing was
+      discussed about pricing" when the truth is "not in October". The
+      system prompt already tells it to say what is missing; this is what
+      tells it that something is.
+    """
     opportunity = connection.execute(
         """
         SELECT opportunities.*, users.name AS owner_name
@@ -85,6 +128,20 @@ def build_timeline_context(
     # `(event_timestamp, id)` pair that numbering counts, rather than by
     # `created_at`, so the context reads in ascending number order and two
     # entries stamped in the same second cannot swap between the two.
+    # Lexicographic comparison on a canonical fixed-width timestamp, the way
+    # every date filter in this project works (`CLAUDE.md`, Timestamps). The
+    # bounds are dates, so `until` is extended to the end of its day --
+    # otherwise "until the 14th" would exclude everything that happened on
+    # the 14th, which is not what anybody means by it.
+    scope = []
+    scope_params: list[object] = []
+    if since:
+        scope.append("AND timeline_entries.event_timestamp >= ?")
+        scope_params.append(f"{since}T00:00:00Z")
+    if until:
+        scope.append("AND timeline_entries.event_timestamp <= ?")
+        scope_params.append(f"{until}T23:59:59Z")
+
     entries = connection.execute(
         f"""
         SELECT
@@ -95,9 +152,10 @@ def build_timeline_context(
         LEFT JOIN users ON users.id = timeline_entries.created_by
         WHERE timeline_entries.opportunity_id = ?
             AND timeline_entries.deleted_at IS NULL
+            {" ".join(scope)}
         ORDER BY timeline_entries.event_timestamp ASC, timeline_entries.id ASC
         """,
-        (opportunity_id,),
+        (opportunity_id, *scope_params),
     ).fetchall()
     # The numbers this context actually cites, which is what an answer's
     # citations are checked against (milestone 3.9, **D-140**). They are the
@@ -122,8 +180,11 @@ def build_timeline_context(
         f"- Owner: {one_line(opportunity['owner_name'])}",
         f"- Expected close: {opportunity['expected_close_date'] or 'Not set'}",
         "",
-        "Timeline:",
     ]
+    scope_line = scope_sentence(since, until)
+    if scope_line:
+        lines.append(scope_line)
+    lines.append("Timeline:")
 
     for entry in entries:
         lines.extend(
@@ -258,3 +319,130 @@ def ask_openai(
         store=False,
     )
     return normalize_ai_answer(response.output_text)
+
+
+# --- Streaming (milestone 6.4) ---------------------------------------------
+
+
+def stream_openai(
+    api_key: str,
+    model: str,
+    timeline_context: str,
+    question: str,
+    timeout: float,
+    max_retries: int,
+    reasoning_effort: str = "",
+) -> Iterator[str]:
+    """The same call as `ask_openai`, yielding the answer as it arrives.
+
+    `docs/FEATURES.md` §14 asks for streaming, and on this deployment it is
+    the difference between a feature and a broken one: D-168 measured a
+    reasoning model's floor at ~29s and a 41-entry deal at 40.1s, and a
+    reader watching a spinner for forty seconds has already decided the thing
+    does not work. Nothing about the *answer* changes -- same prompt, same
+    context, same absence of tools.
+
+    **Still no tool surface** (ADR 0012, `AGENTS.md` invariant 3): `stream=True`
+    is the only difference from the call above, and
+    `test_invariant_ai_agent_has_no_write_tools` covers both paths.
+
+    Yields text deltas. The caller is responsible for framing them; this
+    knows nothing about HTTP.
+    """
+    client = OpenAI(api_key=api_key, timeout=timeout, max_retries=max_retries)
+    reasoning: Reasoning | Omit = omit
+    if reasoning_effort:
+        reasoning = {"effort": cast(ReasoningEffort, reasoning_effort)}
+    stream = client.responses.create(
+        model=model,
+        instructions=SYSTEM_PROMPT,
+        input=f"Timeline context:\n{timeline_context}\n\nQuestion:\n{question}",
+        reasoning=reasoning,
+        store=False,
+        stream=True,
+    )
+    for event in stream:
+        # The Responses API emits several event types; the text arrives as
+        # `response.output_text.delta`. Anything else -- reasoning progress,
+        # lifecycle events -- is not the answer and is not forwarded, which
+        # is also what keeps a reasoning model's thinking out of the reader's
+        # view.
+        if getattr(event, "type", "") == "response.output_text.delta":
+            delta = getattr(event, "delta", "")
+            if delta:
+                yield str(delta)
+
+
+# --- Natural language to a filter (milestone 6.4) --------------------------
+
+FILTER_SYSTEM_PROMPT = """
+You turn a sales manager's question into a filter over a list of
+opportunities. Answer with JSON only - no prose, no code fence.
+
+The JSON object may contain only these keys, and every one is optional:
+  "q":         free text to match in the name or account
+  "stage":     one of the stage names given below
+  "min_value": a number, no currency symbol or thousands separators
+  "max_value": a number
+  "stalled":   true, for deals with no recent activity
+  "sort":      one of the sort field names given below
+  "direction": "asc" or "desc"
+  "unused":    a list of short phrases from the request that none of the
+               keys above can express
+
+These are the only filters this board has. If the request asks for something
+else - an owner, a close date, a region - leave it out of the filter and put
+it in "unused", quoting the person's own words. They are shown both, and
+being told "I could not express: closing before December" is useful, while a
+filter that quietly drops part of what they asked for is not.
+
+Omit a key you are not confident about rather than guessing. An empty object
+is a valid answer.
+
+Never invent a stage or a sort field that is not in the lists given.
+""".strip()
+
+
+def build_filter_prompt(stages: list[str], sort_fields: list[str], today: str) -> str:
+    return (
+        f"{FILTER_SYSTEM_PROMPT}\n\n"
+        f"Stages: {', '.join(stages)}\n"
+        f"Sort fields: {', '.join(sort_fields)}\n"
+        f"Today is {today}."
+    )
+
+
+def ask_openai_for_filter(
+    api_key: str,
+    model: str,
+    instructions: str,
+    request: str,
+    timeout: float,
+    max_retries: int,
+    reasoning_effort: str = "",
+) -> str:
+    """One call, answering JSON. Returns the raw text; parsing is the caller's.
+
+    Deliberately a separate function from `ask_openai` rather than a mode of
+    it: a different system prompt, a different kind of answer, and -- most of
+    all -- a different failure. A bad summary is a bad sentence; a bad filter
+    is a screen that silently hides a deal, which is why the result is
+    validated and shown before it is applied (`docs/FEATURES.md` §14's "a
+    query the user can inspect").
+
+    The timeline context is **not** sent. This answers from the request
+    sentence and the vocabulary alone, so no deal's content reaches the model
+    for a question that is about the shape of a list.
+    """
+    client = OpenAI(api_key=api_key, timeout=timeout, max_retries=max_retries)
+    reasoning: Reasoning | Omit = omit
+    if reasoning_effort:
+        reasoning = {"effort": cast(ReasoningEffort, reasoning_effort)}
+    response = client.responses.create(
+        model=model,
+        instructions=instructions,
+        input=request,
+        reasoning=reasoning,
+        store=False,
+    )
+    return str(response.output_text)

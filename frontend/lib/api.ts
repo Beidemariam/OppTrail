@@ -38,12 +38,31 @@ export class ApiError extends Error {
    * the code: a 401 means the session is gone, whatever the message says
    * (milestone 4.2a, **D-145**). */
   readonly status: number;
+  /**
+   * A 422's per-field reasons, keyed the way a form can use them — `"stage"`,
+   * `"action.title"` — or `"_"` for a failure about the whole request that no
+   * single input owns (`backend/app/errors.py`'s `validation_fields`).
+   *
+   * Carried since milestone 6.3a (**D-180**). The API has emitted this since
+   * the error envelope existed and milestone 6.1 was careful to make a custom
+   * field's 422 name its field, but nothing on the client ever read it — so
+   * every refused form in this app said only "The request could not be
+   * validated", which is the sentence that reached the human at the 6.3
+   * review. Empty for every failure that is not a validation error.
+   */
+  readonly fields: Record<string, string>;
 
-  constructor(message: string, code: string, status: number) {
+  constructor(
+    message: string,
+    code: string,
+    status: number,
+    fields: Record<string, string> = {},
+  ) {
     super(message);
     this.name = "ApiError";
     this.code = code;
     this.status = status;
+    this.fields = fields;
   }
 }
 
@@ -65,6 +84,19 @@ export function isUnauthenticated(error: unknown): boolean {
   return error instanceof ApiError && error.status === 401;
 }
 
+/** `error.fields` as a string map, dropping anything that is not one: the
+ * envelope is the server's, and a form is about to render these. */
+function validationFields(raw: unknown): Record<string, string> {
+  if (typeof raw !== "object" || raw === null) {
+    return {};
+  }
+  return Object.fromEntries(
+    Object.entries(raw as Record<string, unknown>).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ),
+  );
+}
+
 /**
  * The API's one error shape, `{"error": {"code", "message"}}`
  * (`backend/app/errors.py`), reduced to what a caller acts on. v1's
@@ -73,12 +105,15 @@ export function isUnauthenticated(error: unknown): boolean {
  */
 function apiError(body: unknown, status: number): ApiError {
   if (typeof body === "object" && body !== null) {
-    const { error } = body as { error?: { message?: unknown; code?: unknown } };
+    const { error } = body as {
+      error?: { message?: unknown; code?: unknown; fields?: unknown };
+    };
     if (typeof error?.message === "string") {
       return new ApiError(
         error.message,
         typeof error.code === "string" ? error.code : "unknown",
         status,
+        validationFields(error.fields),
       );
     }
   }

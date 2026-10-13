@@ -2461,3 +2461,219 @@ Two details about how it is written, both deliberate:
   nobody anything. What it catches is an order-of-magnitude regression, which
   is exactly what it caught twice while this was being written — confirmed
   afterwards by removing the two planner directives and watching it fail.
+
+---
+
+## Milestone 6.3 — the constrained rule builder
+
+`docs/FEATURES.md` §11. One module, one route module, one revision, one screen,
+and the first feature in this project that writes without a person in the
+request.
+
+```
+backend:  ruff, ruff format, mypy (51 source files)     all clean
+          659 passed, 1 skipped, 95.39% line+branch
+          app/automations.py 99% / routes_automations.py 100%
+          authorization matrix: 98 cases, 102 endpoints
+frontend: typecheck, lint (3 pre-existing warnings), prettier  clean
+          685 passed (40 files), 96.97% statements /
+          91.41% branch / 96.95% lines
+e2e:      88 passed (28 specs)
+gate:     make check-fast && make e2e -> exit 0
+```
+
+**The one-hop guard is a source scan, and that is the interesting choice.**
+§11 says "no rule may trigger another rule — one hop only, which removes loop
+detection from the design entirely". A behavioural test only covers the chains
+somebody thought to write, so `test_invariant_a_rule_cannot_trigger_a_rule`
+scans `app/automations.py` for a call to its own entry points — the shape
+`test_soft_delete.py`'s hard-delete scanner already has, for the same reason:
+this is a thing the code must not *contain*. Confirmed to fail against a
+planted call before being trusted (brief §6.5). A behavioural test sits beside
+it, over the pair that would chain if anything did.
+
+**Two defensive paths were covered rather than left to a comment**, because
+both are reachable states rather than impossible ones:
+
+- a `value` column holding text, which the API cannot write (`OpportunityUpdate`
+  parses a `Decimal`) and a hand-edited or imported database can — asserted by
+  writing it with raw SQL, the shape `test_custom_fields.py` already uses;
+- a rule failing mid-firing, asserted by monkeypatching `fire_event` to raise.
+  The property is that **the human's write still succeeds**: somebody renamed a
+  deal, and whether a colleague's automation managed to act on that is not
+  their problem.
+
+**The frontend's split is the usual one, with one addition.** What a rule *does*
+is the backend suite; what the screen does with an answer is
+`app/Automations.test.tsx`; and `app/test-api.ts` gained a deliberately
+simplified evaluator — same condition comparison, a role check reduced to "does
+this caller own the deal" — so a **skip with a reason** is reachable from a
+component test. It is explicitly not a second implementation of the triggers.
+
+**The e2e spec is where §11's traceability is read the way a person meets it**:
+a rule written through the real form, run, and then the task *and* the entry
+naming the rule read back off the deal's own screen by following the run log's
+link. `e2e/23-responsive.spec.ts` also gained the two cross-deal screens
+(`/automations` and `/reports`) — a screen absent from that list is a screen
+where D-138's defect can come back unnoticed.
+
+---
+
+## Milestone 6.3a — the 6.3 review's finding, and its request
+
+Three changes, each small and each for a different reason: a prohibition
+removed, a 422's reasons finally reaching a form, and one exception to "a
+system entry cannot be deleted".
+
+```
+backend:  ruff, ruff format, mypy        all clean
+          app/automations.py 99% / routes_automations.py 100%
+          authorization matrix: 98 cases, 102 endpoints
+frontend: typecheck, lint, prettier      clean
+          lib/api.ts 100% statements (3 new tests for `fields`)
+e2e:      2 new journeys in 28-automations
+```
+
+**Two of the three were found by reproduction rather than by a test**, which
+is worth recording because the reproduction is the whole content of the
+finding. The human reported a message; replaying the form's exact payloads
+showed that the rule they tried *was* permitted in two of its three trigger
+combinations, which located the fault in a constraint this agent had invented
+(D-179) rather than in the permission model they thought they were hitting.
+
+**And the e2e test for the new capability took three attempts**, all for the
+same class of reason — a test that depends on state it does not own:
+
+- triggered by silence, it depended on the seeded deals still being quiet,
+  which the test *above it* stops being true the moment it writes an entry on
+  them;
+- moved to a named stage, it depended on which stage the seed leaves Northwind
+  in (Qualification — so "move to Qualification" wrote nothing at all);
+- it now signs up its own account and creates its own deal, and asserts the
+  badge by class rather than by text, because the entry body contains the word
+  "Automation" too.
+
+**One pre-existing defect surfaced on the way**: `e2e/23-responsive.spec.ts`
+began failing on the calendar at 420px — a value chip, `white-space: nowrap`
+with the flex default `min-width: auto`, refusing to shrink and pushing its
+chip past the day cell. In six of seven columns that overlaps the next day and
+is merely ugly; in the last one it widens the page. It had been true every day
+and only reached the page edge when a seeded close date landed in the last
+column, which is to say **the date change exposed it** — the same wall-clock
+sensitivity `CLAUDE.md` warns about, here in a layout assertion rather than a
+data one.
+
+---
+
+## Milestone 6.5 — the scheduler
+
+ADR 0004, and the last milestone of Phase 6's build.
+
+```
+backend:  ruff, ruff format, mypy (53 source files)   all clean
+          16 new tests in tests/test_scheduler.py
+          app/jobs.py, app/scheduler.py
+          authorization matrix: 99 cases, 103 endpoints
+frontend: typecheck, lint, prettier      clean
+          5 new tests in lib/jobs.test.ts, 2 in app/Automations.test.tsx
+```
+
+**Fourteen of the sixteen new tests never start a scheduler**, which is ADR
+0004's instruction working as intended: `jobs.py` holds what runs and imports
+nothing from APScheduler, so a tick is a function call. The two that do start
+one assert the *wiring* and not the timing — an interval trigger's first
+firing is one interval away, so a test that waited for a tick would wait
+fifteen minutes.
+
+**The test that mattered most is the one that failed first.** A suppression
+written to stop a timer nudging the same quiet deal every fifteen minutes was
+wrong, and the assertion that caught it expected a *skip* and found no run row
+at all — because every action writes a system entry, that entry is activity on
+the deal, and the deal had therefore stopped being a candidate. The mechanism
+was already there; the code added on top of it would have made a no-activity
+rule fire once and never again (**D-182**). A test that had asserted only "one
+task, not ninety-six" would have passed over it.
+
+**Two wall-clock dependencies were caught while writing these**, both in the
+new tests and both before they could rot: a close date hardcoded as
+`2026-10-15` (three days out when written, overdue a week later) is now
+`closing_in(3)`. `CLAUDE.md`'s rule had been stated for timestamps; the
+calendar defect above is the same rule applying to layout, and these two are
+it applying to dates in the future rather than the past.
+
+---
+
+## Milestone 6.5a — the other path to a silent refusal
+
+```
+frontend: 5 new tests in lib/formErrors.test.ts
+          2 new in app/Automations.test.tsx, 1 new e2e journey
+```
+
+**The whole milestone is one lesson about where a test should live.** The
+defect was a browser cancelling a submit before any application code ran, and
+the fix renders the browser's own `validationMessage`. So:
+
+- **the mechanism** — field marked, reason drawn beside it, nothing sent — is
+  asserted in the component test, where it is cheap;
+- **the wording** is asserted only in the e2e suite, because **jsdom's
+  validation messages are not Chrome's**. A component test asserting "Please
+  enter a number." would have passed for the wrong reason on a platform that
+  says something else, which is the same class of mistake as 6.2's time-in-
+  stage e2e assertion passing because the seed happened to contain no sub-day
+  span.
+
+**And it was reproduced in a browser before anything was written**, which is
+what located it: `page.evaluate` on the field reported
+`{value: "", badInput: true, valid: false}` and the request log was empty.
+Reading the component would not have shown that — `type="number"` and
+`required` both look correct, and the silence is in what the platform does
+with them.
+
+---
+
+## Milestone 6.4 — the AI expansion
+
+`docs/FEATURES.md` §14's safe subset: streaming, date-scoped summaries, and
+natural-language filter construction. The last milestone of Phase 6's build.
+
+```
+backend:  23 new tests in tests/test_ai_expansion.py
+          app/ai_filters.py, the streaming call, the scoped context
+          authorization matrix: 101 cases, 105 endpoints
+frontend: 9 new tests in app/AiExpansion.test.tsx
+          lib/aiStream.ts, app/AiFilterBuilder.tsx
+e2e:      2 new journeys in 06-ai-agent.spec.ts
+```
+
+**Every test here stubs the SDK**, because `conftest.no_live_network` fails a
+run that reaches a paid API — which is the point of it. D-168's lesson is
+applied where a stub cannot see: the streaming test asserts `stream=True` on
+the **captured call**, and the filter test asserts that no deal content
+appears in the instructions or the input, which is a property of the bytes
+rather than of the stub.
+
+**The filter parser is where the tests earn their keep**, and they are mostly
+about shapes a model actually produces rather than shapes it should: a fenced
+answer, `50000` as a number and as a string, `"50k"` as neither, a stage that
+does not exist, a key this board has never heard of. Each is a line in
+`ai_filters.py` and each would otherwise be a filter that silently did
+something else.
+
+**Two defects were found by writing the tests rather than by running them:**
+
+- `CsrfClient` overrode `request` but not `stream`, so the suite's first
+  streamed POST met a 403 that had nothing to do with what it was testing.
+  Until 6.4 every stream in this app was a GET.
+- The fake API matched `segments[3] === "stream"` where the stream is
+  `segments[4]` — so the component test read a JSON answer as SSE frames and
+  sat at "Thinking..." forever. The symptom was indistinguishable from a
+  broken reader, which is worth remembering: a stub with the wrong route
+  fails like the code it stands in for.
+
+**And one design error corrected mid-build**, recorded in D-186: the filter
+vocabulary first contained `owner` and a close-date range, neither of which
+the board can filter by. That is D-179's mistake inverted — inventing a
+capability rather than a constraint — and it would have produced a proposal
+that was inspectable and unapplicable, which is worse than no proposal. The
+fix narrowed the prompt *and* added the value filter §14's own example needs.

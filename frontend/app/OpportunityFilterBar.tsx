@@ -121,6 +121,35 @@ export function OpportunityFilterBar({
           <option value="false">Not stalled</option>
         </select>
       </label>
+      {/* Value bounds (milestone 6.4). Two inputs rather than a range
+          control, because the common case is one side: "over 50k" has no
+          upper bound and "under 10k" has no lower. */}
+      <label className="filter-field">
+        Min value
+        <input
+          type="number"
+          min={0}
+          aria-label="Filter by minimum value"
+          value={draft.minValue}
+          placeholder="Any"
+          onChange={(event) =>
+            setDraft({ ...draft, minValue: event.target.value })
+          }
+        />
+      </label>
+      <label className="filter-field">
+        Max value
+        <input
+          type="number"
+          min={0}
+          aria-label="Filter by maximum value"
+          value={draft.maxValue}
+          placeholder="Any"
+          onChange={(event) =>
+            setDraft({ ...draft, maxValue: event.target.value })
+          }
+        />
+      </label>
       {fields.map((field) => (
         <label className="filter-field" key={field.key}>
           {field.label}
