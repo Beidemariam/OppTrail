@@ -22,7 +22,7 @@ import re
 import sqlite3
 
 from .pagination import PageRequest, cursor_clause, split_page
-from .permissions import ACCESSIBLE_OPPORTUNITY_IDS_SQL
+from .permissions import ACCESSIBLE_OPPORTUNITY_IDS_SQL, visible_entries_clause
 from .schemas import SearchKind, SearchResultPublic, SearchSnippet, SnippetMatch
 
 # Kind codes, and the base that separates them from the source row id.
@@ -126,6 +126,13 @@ def matches_pattern(tokens: list[str]) -> re.Pattern[str] | None:
 # and each filters `deleted_at IS NULL` at every level it joins through, like
 # every other read in the app -- the triggers already keep deleted rows out of
 # the index, and a read that depends on that is a read that trusts a cache.
+# `{{visible_entries}}` is the one predicate for a sealed entry (R.1b), pasted
+# into all four branches: an entry's own words, and the words of anything
+# hanging off it. Search is the read that spans deals, so it cannot resolve a
+# role first -- which is exactly why the entry-level rule has to be inside the
+# query here too, beside the opportunity-level one. Each occurrence takes the
+# reader's id, so the parameter order below is four of them, then the two the
+# accessible-opportunity subquery wants.
 SEARCH_DOCUMENTS_SQL = f"""
     WITH matches AS (
         SELECT rowid AS document_id, bm25(search_index) AS rank
@@ -151,6 +158,7 @@ SEARCH_DOCUMENTS_SQL = f"""
             ON timeline_entries.id = matches.document_id / {DOCUMENT_BASE}
             AND matches.document_id % {DOCUMENT_BASE} = 0
         WHERE timeline_entries.deleted_at IS NULL
+                AND {{visible_entries}}
 
         UNION ALL
 
@@ -174,6 +182,7 @@ SEARCH_DOCUMENTS_SQL = f"""
         JOIN timeline_entries ON timeline_entries.id = notes.entry_id
         WHERE notes.deleted_at IS NULL
             AND timeline_entries.deleted_at IS NULL
+                AND {{visible_entries}}
 
         UNION ALL
 
@@ -199,6 +208,7 @@ SEARCH_DOCUMENTS_SQL = f"""
         WHERE comments.deleted_at IS NULL
             AND notes.deleted_at IS NULL
             AND timeline_entries.deleted_at IS NULL
+                AND {{visible_entries}}
 
         UNION ALL
 
@@ -227,6 +237,7 @@ SEARCH_DOCUMENTS_SQL = f"""
         JOIN timeline_entries ON timeline_entries.id = attachments.entry_id
         WHERE attachments.deleted_at IS NULL
             AND timeline_entries.deleted_at IS NULL
+                AND {{visible_entries}}
     )
     SELECT
         documents.*,
@@ -292,7 +303,9 @@ def search(
         return [], None
 
     where = [f"documents.opportunity_id IN ({ACCESSIBLE_OPPORTUNITY_IDS_SQL})"]
-    params: list[object] = [expression, user_id, user_id]
+    # One per branch of the union, in the order they appear, then the two the
+    # accessible-opportunity subquery takes.
+    params: list[object] = [expression, *([user_id] * 4), user_id, user_id]
 
     if entry_type:
         # The type of the entry the result sits under, so a note on a call is
@@ -322,9 +335,12 @@ def search(
         params.extend(cursor_values)
     params.append(page.limit + 1)
 
+    documents_sql = SEARCH_DOCUMENTS_SQL.format(
+        visible_entries=visible_entries_clause("timeline_entries")
+    )
     rows = connection.execute(
         f"""
-        {SEARCH_DOCUMENTS_SQL}
+        {documents_sql}
         WHERE {" AND ".join(where)}
         ORDER BY documents.rank ASC, documents.document_id ASC
         LIMIT ?

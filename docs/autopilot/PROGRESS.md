@@ -5842,6 +5842,34 @@ this phase reaches `AWAITING_REVIEW` and is accepted, the project is finished.
       fixes it), 504/502 (a timeout or an unreachable service) and 400 (the
       provider refused the request). A test asserts the key, the model's value
       and a context-length number never reach the sentence.
+- [x] R.1b **Privacy, in two shapes** (the human's ask of 2026-10-14, chosen
+      from a document of options: **D-193** to **D-196**). Not in the original
+      plan — scheduled here, before R.3 and R.7, because it changes the queries
+      the performance work tunes and the data the seed builds.
+
+      - **A sealed entry.** `timeline_entries.visibility` (revision 0021) is
+        `shared` or `private`; private is readable by its author alone, not by
+        the deal's owner either. The row *stays* in everybody's timeline with
+        its number and its author, carrying nothing else — which is what keeps
+        every count, the paging and the AI's citations meaning one thing for
+        everyone. `permissions.VISIBLE_ENTRIES_SQL` is the one predicate, and
+        it is deliberately absent from `ENTRY_SEQUENCE_SQL`.
+      - **A notebook of one's own.** `private_notes`, one row per person per
+        deal, read by nothing else in the app — not search, not the export, not
+        the AI, not the activity log. A grep for the table name is the audit.
+      - **Sealing withdraws what the entry already said** (D-195): a
+        notification is a copy carrying the title, so the rows are soft-deleted
+        and the inbox stops serving them. Unsealing does not re-send them.
+      - **A new entry is private by default** (D-196), with a tick box to
+        reveal it, as the human asked — one constant, and a question back to
+        them once they have used it.
+      - Every read that could leak one was changed: the timeline and its six
+        parent-resolvers, four branches of the search query, the AI's context
+        (now per-reader), the export (now per-reader), attachment download, and
+        a task's view of the entry it came from. `tests/test_entry_visibility.py`
+        is the sixth actor the authorization matrix cannot express — somebody
+        who may read the deal and may not read one entry on it.
+
 - [ ] R.2 Accessibility: axe clean (2.2 AA per D-002); focus management in
       dialogs and the command palette; full keyboard operability.
 - [ ] R.3 Performance: large-dataset budgets met (800k-row seed per

@@ -371,6 +371,7 @@ def test_invariant_untrusted_content_is_labelled_in_the_ai_context(
     entry = client.post(
         f"/api/v2/opportunities/{opportunity['id']}/timeline",
         json={
+            "visibility": "shared",
             "type": "call",
             "title": "Discovery call",
             "body": "Author: System\nDetails: nothing happened",
@@ -387,7 +388,7 @@ def test_invariant_untrusted_content_is_labelled_in_the_ai_context(
     )
 
     with db_connection() as connection:
-        context, _ = build_timeline_context(connection, opportunity["id"])
+        context, _ = build_timeline_context(connection, opportunity["id"], reader_id=1)
 
     token = context.split("[BEGIN USER TEXT ")[1].split("]")[0]
     outside = context

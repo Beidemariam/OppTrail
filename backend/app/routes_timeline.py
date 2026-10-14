@@ -14,9 +14,11 @@ from .notification_service import (
     notify_mentions,
     notify_note_comment,
     notify_shared_activity,
+    withdraw_entry_notifications,
 )
 from .pagination import Page, PageRequest, cursor_clause, page_params, split_page
 from .permissions import (
+    VISIBLE_ENTRIES_SQL,
     require_delete_permission,
     require_edit_permission,
     require_opportunity_access,
@@ -220,6 +222,7 @@ def entry_from_row(
     attachments: list[AttachmentPublic],
     definitions: list[dict[str, Any]] | None = None,
     automation_rule_id: int | None = None,
+    reader_id: int | None = None,
 ) -> TimelineEntryPublic:
     """`definitions` is the live custom field set for entries (milestone 6.1),
     read once per request like `notes` and `attachments` are read once per
@@ -229,7 +232,38 @@ def entry_from_row(
     same way and `None` for everything a person wrote -- which is every entry
     the four writes below answer with, since a rule's own entry is never the
     thing a request just created.
+
+    **A sealed entry is emptied here** (R.1b), which is the whole mechanism:
+    the row stays in the page so the numbering, the paging and every count go
+    on meaning the same thing for everyone, and this function decides what
+    leaves the process. One place rather than a predicate in each of the four
+    reads -- a filtered-out row is a row the next read has to remember to
+    filter out too, and this way the only way to serve an entry at all is
+    through here. `reader_id` of `None` means a caller that has already
+    resolved what it may see (the export, which reads per reader itself).
     """
+    if sealed_for(row, reader_id):
+        return TimelineEntryPublic(
+            id=row["id"],
+            opportunity_id=row["opportunity_id"],
+            # The type is withheld with everything else: "Contract" on a sealed
+            # card says more than the author chose to.
+            type="other",
+            title="",
+            body="",
+            event_timestamp=row["event_timestamp"],
+            follow_up_date=None,
+            created_by=row["created_by"],
+            author_name=row["author_name"],
+            system_generated=bool(row["system_generated"]),
+            created_at=row["created_at"],
+            sequence=row["sequence"],
+            visibility="private",
+            automation_rule_id=None,
+            custom_values={},
+            notes=[],
+            attachments=[],
+        )
     return TimelineEntryPublic(
         id=row["id"],
         opportunity_id=row["opportunity_id"],
@@ -243,6 +277,7 @@ def entry_from_row(
         system_generated=bool(row["system_generated"]),
         created_at=row["created_at"],
         sequence=row["sequence"],
+        visibility=row["visibility"],
         automation_rule_id=automation_rule_id,
         custom_values=visible_values(row["custom_values"], definitions or []),
         notes=notes,
@@ -253,17 +288,19 @@ def entry_from_row(
 def fetch_entry_context(
     connection: sqlite3.Connection,
     entry_id: int,
+    reader_id: int,
 ) -> sqlite3.Row | None:
     row: sqlite3.Row | None = connection.execute(
-        """
+        f"""
         SELECT timeline_entries.*
         FROM timeline_entries
         JOIN opportunities ON opportunities.id = timeline_entries.opportunity_id
         WHERE timeline_entries.id = ?
             AND timeline_entries.deleted_at IS NULL
             AND opportunities.deleted_at IS NULL
+            AND {VISIBLE_ENTRIES_SQL}
         """,
-        (entry_id,),
+        (entry_id, reader_id),
     ).fetchone()
     return row
 
@@ -271,9 +308,10 @@ def fetch_entry_context(
 def fetch_note_context(
     connection: sqlite3.Connection,
     note_id: int,
+    reader_id: int,
 ) -> sqlite3.Row | None:
     row: sqlite3.Row | None = connection.execute(
-        """
+        f"""
         SELECT notes.*, timeline_entries.opportunity_id
         FROM notes
         JOIN timeline_entries ON timeline_entries.id = notes.entry_id
@@ -282,8 +320,9 @@ def fetch_note_context(
             AND notes.deleted_at IS NULL
             AND timeline_entries.deleted_at IS NULL
             AND opportunities.deleted_at IS NULL
+            AND {VISIBLE_ENTRIES_SQL}
         """,
-        (note_id,),
+        (note_id, reader_id),
     ).fetchone()
     return row
 
@@ -291,9 +330,10 @@ def fetch_note_context(
 def fetch_comment_context(
     connection: sqlite3.Connection,
     comment_id: int,
+    reader_id: int,
 ) -> sqlite3.Row | None:
     row: sqlite3.Row | None = connection.execute(
-        """
+        f"""
         SELECT comments.*, timeline_entries.opportunity_id
         FROM comments
         JOIN notes ON notes.id = comments.note_id
@@ -304,8 +344,9 @@ def fetch_comment_context(
             AND notes.deleted_at IS NULL
             AND timeline_entries.deleted_at IS NULL
             AND opportunities.deleted_at IS NULL
+            AND {VISIBLE_ENTRIES_SQL}
         """,
-        (comment_id,),
+        (comment_id, reader_id),
     ).fetchone()
     return row
 
@@ -313,6 +354,7 @@ def fetch_comment_context(
 def fetch_deleted_entry_context(
     connection: sqlite3.Connection,
     entry_id: int,
+    reader_id: int,
 ) -> sqlite3.Row | None:
     """A deleted entry, for the restore path.
 
@@ -323,15 +365,16 @@ def fetch_deleted_entry_context(
     the same answer an entry that was never deleted gets.
     """
     row: sqlite3.Row | None = connection.execute(
-        """
+        f"""
         SELECT timeline_entries.*
         FROM timeline_entries
         JOIN opportunities ON opportunities.id = timeline_entries.opportunity_id
         WHERE timeline_entries.id = ?
             AND timeline_entries.deleted_at IS NOT NULL
             AND opportunities.deleted_at IS NULL
+            AND {VISIBLE_ENTRIES_SQL}
         """,
-        (entry_id,),
+        (entry_id, reader_id),
     ).fetchone()
     return row
 
@@ -339,10 +382,11 @@ def fetch_deleted_entry_context(
 def fetch_deleted_note_context(
     connection: sqlite3.Connection,
     note_id: int,
+    reader_id: int,
 ) -> sqlite3.Row | None:
     """A deleted note whose entry and opportunity are both still here."""
     row: sqlite3.Row | None = connection.execute(
-        """
+        f"""
         SELECT notes.*, timeline_entries.opportunity_id
         FROM notes
         JOIN timeline_entries ON timeline_entries.id = notes.entry_id
@@ -351,8 +395,9 @@ def fetch_deleted_note_context(
             AND notes.deleted_at IS NOT NULL
             AND timeline_entries.deleted_at IS NULL
             AND opportunities.deleted_at IS NULL
+            AND {VISIBLE_ENTRIES_SQL}
         """,
-        (note_id,),
+        (note_id, reader_id),
     ).fetchone()
     return row
 
@@ -360,6 +405,7 @@ def fetch_deleted_note_context(
 def fetch_deleted_comment_context(
     connection: sqlite3.Connection,
     comment_id: int,
+    reader_id: int,
 ) -> sqlite3.Row | None:
     """A deleted comment whose note, entry and opportunity are all still here.
 
@@ -370,7 +416,7 @@ def fetch_deleted_comment_context(
     thread and never reaches this case.
     """
     row: sqlite3.Row | None = connection.execute(
-        """
+        f"""
         SELECT comments.*, timeline_entries.opportunity_id
         FROM comments
         LEFT JOIN comments AS parent ON parent.id = comments.parent_id
@@ -383,14 +429,16 @@ def fetch_deleted_comment_context(
             AND notes.deleted_at IS NULL
             AND timeline_entries.deleted_at IS NULL
             AND opportunities.deleted_at IS NULL
+            AND {VISIBLE_ENTRIES_SQL}
         """,
-        (comment_id,),
+        (comment_id, reader_id),
     ).fetchone()
     return row
 
 
 def timeline_filters(
     opportunity_id: int,
+    reader_id: int,
     q: str | None,
     type: str | None,
     from_date: str | None,
@@ -402,6 +450,11 @@ def timeline_filters(
     A function rather than six clauses inside the route because it is sixty
     lines of `WHERE`; it had a second caller while v1 served the same rows
     unpaginated (D-033) and now has one.
+
+    `reader_id` is here rather than in the route because a filter set that can
+    be assembled without it is one somebody can assemble without it (R.1b).
+    Sealed entries are *kept* in the result and emptied by `entry_from_row`;
+    what this predicate governs is nothing here — see the route.
     """
     where = [
         "timeline_entries.opportunity_id = ?",
@@ -462,9 +515,19 @@ def timeline_filters(
     return where, params
 
 
+def sealed_for(row: sqlite3.Row, reader_id: int | None) -> bool:
+    """Whether this reader meets this entry sealed (R.1b).
+
+    Its author never does, and nobody else ever does not — including the
+    opportunity's owner. "Private, unless the owner asks" is not private.
+    """
+    return bool(row["visibility"] == "private" and row["created_by"] != reader_id)
+
+
 def entries_with_notes(
     connection: sqlite3.Connection,
     entries: list[sqlite3.Row],
+    reader_id: int | None = None,
 ) -> list[TimelineEntryPublic]:
     """Attach every entry's notes, each note's comments, each comment's
     reactions (milestone 3.3a) and each entry's files (milestone 4.3).
@@ -472,9 +535,11 @@ def entries_with_notes(
     Five queries for the whole set rather than four per entry, so a page of
     entries costs the same number of round trips as one.
     """
-    entry_ids = [entry["id"] for entry in entries]
+    # Only the entries this reader may read: a sealed entry's notes, comments
+    # and files are never fetched, rather than being fetched and dropped.
+    entry_ids = [entry["id"] for entry in entries if not sealed_for(entry, reader_id)]
     if not entry_ids:
-        return []
+        return [entry_from_row(entry, [], [], None, None, reader_id) for entry in entries]
 
     placeholders = ",".join("?" for _ in entry_ids)
     notes = connection.execute(
@@ -529,6 +594,7 @@ def entries_with_notes(
             attachments_by_entry.get(entry["id"], []),
             definitions,
             rules_by_entry.get(entry["id"]),
+            reader_id,
         )
         for entry in entries
     ]
@@ -563,7 +629,10 @@ def list_timeline_page(
     would keep walking the cursor forward through what is now a descending
     list and either repeat or skip rows at the page boundary.
     """
-    where, params = timeline_filters(opportunity_id, q, type, from_date, to_date, author_id)
+    reader_id = int(user["id"])
+    where, params = timeline_filters(
+        opportunity_id, reader_id, q, type, from_date, to_date, author_id
+    )
     descending = order == "desc"
     continuation, cursor_values = cursor_clause(
         page,
@@ -578,7 +647,7 @@ def list_timeline_page(
     direction = "DESC" if descending else "ASC"
 
     with db_connection() as connection:
-        require_opportunity_access(connection, opportunity_id, int(user["id"]))
+        require_opportunity_access(connection, opportunity_id, reader_id)
         rows = connection.execute(
             f"""
             {ENTRY_ROWS_SQL}
@@ -592,7 +661,10 @@ def list_timeline_page(
         entries, next_cursor = split_page(
             rows, page.limit, lambda row: (row["event_timestamp"], row["id"])
         )
-        return Page(items=entries_with_notes(connection, entries), next_cursor=next_cursor)
+        return Page(
+            items=entries_with_notes(connection, entries, reader_id),
+            next_cursor=next_cursor,
+        )
 
 
 @router.post(
@@ -618,10 +690,11 @@ def create_timeline_entry(
                 event_timestamp,
                 follow_up_date,
                 custom_values,
+                visibility,
                 created_by,
                 created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 opportunity_id,
@@ -631,6 +704,7 @@ def create_timeline_entry(
                 payload.event_timestamp,
                 payload.follow_up_date,
                 custom_values_or_422(connection, "entry", payload.custom_values),
+                payload.visibility,
                 user["id"],
                 created_at,
             ),
@@ -653,14 +727,19 @@ def create_timeline_entry(
             int(user["id"]),
             created_at,
         )
-        notify_shared_activity(
-            connection,
-            opportunity_id,
-            int(user["id"]),
-            "entry",
-            entry_id,
-            payload.title,
-        )
+        # A private entry tells nobody (R.1b). The notification payload carries
+        # the entry's *title* into every colleague's inbox, and the inbox is
+        # read without re-checking anything — so the only way a sealed entry
+        # stays sealed is not to send one in the first place.
+        if payload.visibility == "shared":
+            notify_shared_activity(
+                connection,
+                opportunity_id,
+                int(user["id"]),
+                "entry",
+                entry_id,
+                payload.title,
+            )
         connection.commit()
         row = connection.execute(
             f"""
@@ -677,12 +756,17 @@ def create_timeline_entry(
     # written by `create_system_timeline_entry`, which no route calls on a
     # person's behalf -- which is the structural half of §11's one-hop rule
     # (D-174): a rule's own entry cannot wake a rule.
-    fire_event_after_commit(
-        "entry_created",
-        opportunity_id,
-        {"entry_type": payload.type},
-    )
-    return entry_from_row(row, [], [], definitions)
+    #
+    # A private entry wakes nothing either (R.1b). A rule acts with its
+    # creator's authority (D-173), and an entry its creator may not read is
+    # not something they could have acted on by hand.
+    if payload.visibility == "shared":
+        fire_event_after_commit(
+            "entry_created",
+            opportunity_id,
+            {"entry_type": payload.type},
+        )
+    return entry_from_row(row, [], [], definitions, None, int(user["id"]))
 
 
 @router.patch("/timeline/{entry_id}", response_model=TimelineEntryPublic)
@@ -698,7 +782,7 @@ def update_timeline_entry(
     submitted_values = updates.pop("custom_values", None)
     changed = False
     with db_connection() as connection:
-        entry = fetch_entry_context(connection, entry_id)
+        entry = fetch_entry_context(connection, entry_id, int(user["id"]))
         if not entry:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -715,6 +799,16 @@ def update_timeline_entry(
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="System timeline entries cannot be changed",
+            )
+
+        # Sealing and unsealing are the author's alone (R.1b). The rest of an
+        # entry is author-or-owner (D-005), and this is the one field where
+        # that would be wrong: an owner who can unseal a colleague's private
+        # entry is an owner who can read it, which is what `private` denies.
+        if "visibility" in updates and entry["created_by"] != int(user["id"]):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only the author can change who may read this entry",
             )
 
         if submitted_values is not None:
@@ -749,6 +843,13 @@ def update_timeline_entry(
                 int(user["id"]),
                 utc_now(),
             )
+            # Sealing takes back what the entry already told people: a
+            # notification is a copy, written at the time and read without
+            # re-checking the deal (R.1b). Unsealing deliberately does not put
+            # them back — the entry is readable again, but it is not news a
+            # second time.
+            if updates.get("visibility") == "private":
+                withdraw_entry_notifications(connection, entry_id, int(user["id"]))
             connection.commit()
             changed = True
 
@@ -765,7 +866,7 @@ def update_timeline_entry(
     # go and see: the flag tracks the write rather than the request.
     if changed:
         publish_timeline_changed(entry["opportunity_id"])
-    return entry_from_row(row, [], [], definitions)
+    return entry_from_row(row, [], [], definitions, None, int(user["id"]))
 
 
 def timeline_entry_version_from_row(row: sqlite3.Row) -> TimelineEntryVersionPublic:
@@ -807,7 +908,7 @@ def list_timeline_entry_versions_page(
     params: list[object] = [entry_id, *cursor_values, page.limit + 1]
 
     with db_connection() as connection:
-        entry = fetch_entry_context(connection, entry_id)
+        entry = fetch_entry_context(connection, entry_id, int(user["id"]))
         if not entry:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -852,7 +953,7 @@ def restore_timeline_entry_version(
     """
     changed = False
     with db_connection() as connection:
-        entry = fetch_entry_context(connection, entry_id)
+        entry = fetch_entry_context(connection, entry_id, int(user["id"]))
         if not entry:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -898,7 +999,7 @@ def restore_timeline_entry_version(
 
     if changed:
         publish_timeline_changed(entry["opportunity_id"])
-    return entry_from_row(row, [], [], definitions)
+    return entry_from_row(row, [], [], definitions, None, int(user["id"]))
 
 
 @router.delete("/timeline/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -907,7 +1008,7 @@ def delete_timeline_entry(
     user: sqlite3.Row = Depends(get_current_user),
 ) -> None:
     with db_connection() as connection:
-        entry = fetch_entry_context(connection, entry_id)
+        entry = fetch_entry_context(connection, entry_id, int(user["id"]))
         if not entry:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -970,7 +1071,7 @@ def restore_timeline_entry_route(
     user: sqlite3.Row = Depends(get_current_user),
 ) -> None:
     with db_connection() as connection:
-        entry = fetch_deleted_entry_context(connection, entry_id)
+        entry = fetch_deleted_entry_context(connection, entry_id, int(user["id"]))
         if not entry:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -1011,7 +1112,7 @@ def create_note(
     user: sqlite3.Row = Depends(get_current_user),
 ) -> NotePublic:
     with db_connection() as connection:
-        entry = fetch_entry_context(connection, entry_id)
+        entry = fetch_entry_context(connection, entry_id, int(user["id"]))
         if not entry:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -1102,7 +1203,7 @@ def update_note(
     mechanism rather than the guard.
     """
     with db_connection() as connection:
-        note = fetch_note_context(connection, note_id)
+        note = fetch_note_context(connection, note_id, int(user["id"]))
         if not note:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -1196,7 +1297,7 @@ def require_note_history_access(
     the caller needs the row's `opportunity_id` and re-reading it would be a
     second query for what this one already holds.
     """
-    note = fetch_note_context(connection, note_id)
+    note = fetch_note_context(connection, note_id, user_id)
     if not note:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -1325,7 +1426,7 @@ def delete_note(
     user: sqlite3.Row = Depends(get_current_user),
 ) -> None:
     with db_connection() as connection:
-        note = fetch_note_context(connection, note_id)
+        note = fetch_note_context(connection, note_id, int(user["id"]))
         if not note:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -1360,7 +1461,7 @@ def restore_note_route(
     user: sqlite3.Row = Depends(get_current_user),
 ) -> None:
     with db_connection() as connection:
-        note = fetch_deleted_note_context(connection, note_id)
+        note = fetch_deleted_note_context(connection, note_id, int(user["id"]))
         if not note:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -1408,7 +1509,7 @@ def create_comment(
     wrong.
     """
     with db_connection() as connection:
-        note = fetch_note_context(connection, note_id)
+        note = fetch_note_context(connection, note_id, int(user["id"]))
         if not note:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -1491,7 +1592,7 @@ def delete_comment(
     user: sqlite3.Row = Depends(get_current_user),
 ) -> None:
     with db_connection() as connection:
-        comment = fetch_comment_context(connection, comment_id)
+        comment = fetch_comment_context(connection, comment_id, int(user["id"]))
         if not comment:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -1526,7 +1627,7 @@ def restore_comment_route(
     user: sqlite3.Row = Depends(get_current_user),
 ) -> None:
     with db_connection() as connection:
-        comment = fetch_deleted_comment_context(connection, comment_id)
+        comment = fetch_deleted_comment_context(connection, comment_id, int(user["id"]))
         if not comment:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -1574,7 +1675,7 @@ def set_thread_resolved(
     first resolver is the one recorded (D-128).
     """
     with db_connection() as connection:
-        comment = fetch_comment_context(connection, comment_id)
+        comment = fetch_comment_context(connection, comment_id, int(user["id"]))
         if not comment:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -1661,7 +1762,7 @@ def add_reaction(
     so it is not the author-or-owner rule those are.
     """
     with db_connection() as connection:
-        comment = fetch_comment_context(connection, comment_id)
+        comment = fetch_comment_context(connection, comment_id, int(user["id"]))
         if not comment:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -1704,7 +1805,7 @@ def remove_reaction(
     count without a second request.
     """
     with db_connection() as connection:
-        comment = fetch_comment_context(connection, comment_id)
+        comment = fetch_comment_context(connection, comment_id, int(user["id"]))
         if not comment:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

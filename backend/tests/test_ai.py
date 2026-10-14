@@ -48,6 +48,7 @@ def create_entry(client: TestClient, opportunity_id: int) -> dict:
     response = client.post(
         f"/api/v2/opportunities/{opportunity_id}/timeline",
         json={
+            "visibility": "shared",
             "type": "call",
             "title": "Discovery call",
             "body": "Customer raised budget and legal objections.",
@@ -170,6 +171,7 @@ def test_viewer_can_ask_ai_but_cannot_write(client: TestClient, monkeypatch) -> 
     write_response = client.post(
         f"/api/v2/opportunities/{opportunity['id']}/timeline",
         json={
+            "visibility": "shared",
             "type": "call",
             "title": "Viewer write",
             "body": "Should fail",
@@ -240,7 +242,7 @@ def test_build_timeline_context_reports_a_missing_opportunity(client: TestClient
     # database an earlier test in the run happened to leave initialized at
     # that path, an order dependence brief §6.5 forbids.
     with db_connection() as connection:
-        context, entry_numbers = ai_service.build_timeline_context(connection, 999999)
+        context, entry_numbers = ai_service.build_timeline_context(connection, 999999, reader_id=1)
 
     assert context == "Opportunity not found."
     assert entry_numbers == []
@@ -261,7 +263,9 @@ def test_build_timeline_context_reports_no_entries_yet(client: TestClient) -> No
         assert cursor.lastrowid is not None
         opportunity_id = int(cursor.lastrowid)
 
-        context, entry_numbers = ai_service.build_timeline_context(connection, opportunity_id)
+        context, entry_numbers = ai_service.build_timeline_context(
+            connection, opportunity_id, reader_id=1
+        )
 
     assert "No timeline entries yet." in context
     assert entry_numbers == []
@@ -275,6 +279,7 @@ def test_build_timeline_context_includes_follow_up_dates_and_comments(
     entry = client.post(
         f"/api/v2/opportunities/{opportunity['id']}/timeline",
         json={
+            "visibility": "shared",
             "type": "call",
             "title": "Discovery call",
             "body": "Customer raised budget and legal objections.",
@@ -293,7 +298,9 @@ def test_build_timeline_context_includes_follow_up_dates_and_comments(
     assert comment.status_code == 201
 
     with db_connection() as connection:
-        context, entry_numbers = ai_service.build_timeline_context(connection, opportunity["id"])
+        context, entry_numbers = ai_service.build_timeline_context(
+            connection, opportunity["id"], reader_id=1
+        )
 
     assert "Follow up: 2026-09-11" in context
     assert "Comment by Owner" in context
@@ -368,6 +375,7 @@ def test_ai_context_never_includes_another_opportunitys_data(
     entry_b = client.post(
         f"/api/v2/opportunities/{opportunity_b['id']}/timeline",
         json={
+            "visibility": "shared",
             "type": "call",
             "title": "Globex kickoff",
             "body": "SECRET_GLOBEX_DETAIL should never leak into another opportunity's context.",
@@ -468,6 +476,7 @@ def test_the_context_cites_the_numbers_the_timeline_prints(client: TestClient) -
         client.post(
             f"/api/v2/opportunities/{opportunity['id']}/timeline",
             json={
+                "visibility": "shared",
                 "type": "call",
                 "title": title,
                 "body": "Body",
@@ -481,7 +490,7 @@ def test_the_context_cites_the_numbers_the_timeline_prints(client: TestClient) -
     assert printed != {entry["title"]: entry["id"] for entry in items}
 
     with db_connection() as connection:
-        context, _ = ai_service.build_timeline_context(connection, opportunity["id"])
+        context, _ = ai_service.build_timeline_context(connection, opportunity["id"], reader_id=1)
 
     for title, number in printed.items():
         assert f"[Entry #{number}, " in context
@@ -505,6 +514,7 @@ def write_entry(client: TestClient, opportunity_id: int, title: str, body: str) 
     response = client.post(
         f"/api/v2/opportunities/{opportunity_id}/timeline",
         json={
+            "visibility": "shared",
             "type": "call",
             "title": title,
             "body": body,
@@ -523,7 +533,7 @@ def prompt_text() -> str:
 
 def context_for(opportunity_id: int) -> str:
     with db_connection() as connection:
-        text, _ = ai_service.build_timeline_context(connection, opportunity_id)
+        text, _ = ai_service.build_timeline_context(connection, opportunity_id, reader_id=1)
     return text
 
 

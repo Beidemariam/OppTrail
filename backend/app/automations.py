@@ -477,7 +477,7 @@ def _apply_create_task(
         connection,
         TASK_VERSIONS,
         task_id,
-        _task_row(connection, task_id),
+        _task_row(connection, task_id, actor_id),
         actor_id,
         now,
     )
@@ -491,7 +491,7 @@ def _apply_create_task(
     return f"created task {task_id}", entry_id
 
 
-def _task_row(connection: sqlite3.Connection, task_id: int) -> sqlite3.Row:
+def _task_row(connection: sqlite3.Connection, task_id: int, creator_id: int) -> sqlite3.Row:
     """The task as `TASK_VERSIONS` needs to see it.
 
     `routes_tasks.TASK_ROWS_SQL` rather than a query written here, because
@@ -501,8 +501,10 @@ def _task_row(connection: sqlite3.Connection, task_id: int) -> sqlite3.Row:
     being a no-op, so there is one expression and this reads it.
     """
     row: sqlite3.Row = connection.execute(
+        # The rule's creator is the reader here, as everywhere else a rule
+        # reads (D-173): a rule sees what its author would see by hand.
         f"{TASK_ROWS_SQL} WHERE tasks.id = ?",
-        (task_id,),
+        (creator_id, task_id),
     ).fetchone()
     return row
 

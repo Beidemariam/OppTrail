@@ -88,7 +88,17 @@ TASK_ROWS_SQL = """
     SELECT
         tasks.*,
         opportunities.name AS opportunity_name,
-        timeline_entries.title AS entry_title,
+        -- Withheld when the entry is sealed and the reader is not its author
+        -- (R.1b, the human's ruling): a task carries its entry's title to
+        -- whoever it is assigned to, including on My Tasks, which spans deals.
+        -- The link itself survives -- following it answers 404, which is the
+        -- same answer the entry gives.
+        CASE
+            WHEN timeline_entries.visibility = 'private'
+                AND timeline_entries.created_by != ?
+            THEN NULL
+            ELSE timeline_entries.title
+        END AS entry_title,
         authors.name AS author_name,
         completers.name AS completed_by_name,
         (
@@ -233,7 +243,7 @@ def task_from_row(
     )
 
 
-def fetch_task(connection: sqlite3.Connection, task_id: int) -> sqlite3.Row:
+def fetch_task(connection: sqlite3.Connection, task_id: int, reader_id: int) -> sqlite3.Row:
     """One live task, or 404. The opportunity's own `deleted_at` is checked too:
     deleting a deal takes its tasks with it (`soft_delete.py`), so a task whose
     deal is gone is not reachable even if this row were somehow still live."""
@@ -247,7 +257,7 @@ def fetch_task(connection: sqlite3.Connection, task_id: int) -> sqlite3.Row:
             AND tasks.deleted_at IS NULL
             AND opportunities.deleted_at IS NULL
         """,
-        (task_id,),
+        (reader_id, task_id),
     ).fetchone()
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
@@ -452,7 +462,7 @@ def create_task(
             user_ids=assignee_ids,
         )
 
-        row = fetch_task(connection, task_id)
+        row = fetch_task(connection, task_id, int(user["id"]))
         # Version 1 at creation, so the history opens with what the task said on
         # day one rather than with its first edit (milestone 4.2a, the rule
         # `versioning.py` already applies to the other three).
@@ -507,7 +517,7 @@ def list_tasks(
             ORDER BY tasks.due_date IS NULL, tasks.due_date ASC, tasks.id ASC
             LIMIT ?
             """,
-            params,
+            [int(user["id"]), *params],
         ).fetchall()
 
     tasks, next_cursor = split_page(rows, page.limit, lambda row: (row["due_date"], row["id"]))
@@ -603,7 +613,7 @@ def list_tasks_across_opportunities(
             ORDER BY tasks.due_date IS NULL, tasks.due_date ASC, tasks.id ASC
             LIMIT ?
             """,
-            params,
+            [int(user["id"]), *params],
         ).fetchall()
 
     tasks, next_cursor = split_page(rows, page.limit, lambda row: (row["due_date"], row["id"]))
@@ -630,7 +640,7 @@ def update_task(
     nothing, the rule 3.4 applies to every write.
     """
     with db_connection() as connection:
-        task = fetch_task(connection, task_id)
+        task = fetch_task(connection, task_id, int(user["id"]))
         opportunity_id = int(task["opportunity_id"])
         require_edit_permission(
             connection,
@@ -691,7 +701,7 @@ def update_task(
                 (now, task_id),
             )
 
-        row = fetch_task(connection, task_id)
+        row = fetch_task(connection, task_id, int(user["id"]))
         # After the write, from the row read back, stamped with this write's own
         # time -- the rule every other versioned edit follows (milestone 2.10).
         record_version(connection, TASK_VERSIONS, task_id, row, int(user["id"]), now)
@@ -723,7 +733,7 @@ def complete_task(
     already uses (3.3).
     """
     with db_connection() as connection:
-        task = fetch_task(connection, task_id)
+        task = fetch_task(connection, task_id, int(user["id"]))
         opportunity_id = int(task["opportunity_id"])
         require_task_completion(connection, task, int(user["id"]))
 
@@ -738,7 +748,7 @@ def complete_task(
             """,
             (now, int(user["id"]), now, task_id),
         )
-        row = fetch_task(connection, task_id)
+        row = fetch_task(connection, task_id, int(user["id"]))
         connection.commit()
 
     publish_opportunity_changed(opportunity_id)
@@ -754,7 +764,7 @@ def reopen_task(
     same way: reopening an open task is a no-op rather than an error, so a
     client that lost track of the state cannot get stuck."""
     with db_connection() as connection:
-        task = fetch_task(connection, task_id)
+        task = fetch_task(connection, task_id, int(user["id"]))
         opportunity_id = int(task["opportunity_id"])
         require_task_completion(connection, task, int(user["id"]))
 
@@ -766,7 +776,7 @@ def reopen_task(
             """,
             (utc_now(), task_id),
         )
-        row = fetch_task(connection, task_id)
+        row = fetch_task(connection, task_id, int(user["id"]))
         connection.commit()
 
     publish_opportunity_changed(opportunity_id)
@@ -782,7 +792,7 @@ def delete_task(
     delete with an audit row so the log stays the sequence of what happened
     (invariant 7)."""
     with db_connection() as connection:
-        task = fetch_task(connection, task_id)
+        task = fetch_task(connection, task_id, int(user["id"]))
         opportunity_id = int(task["opportunity_id"])
         require_delete_permission(
             connection,
@@ -924,7 +934,7 @@ def create_task_comment(
     commenter is never told about their own comment.
     """
     with db_connection() as connection:
-        task = fetch_task(connection, task_id)
+        task = fetch_task(connection, task_id, int(user["id"]))
         opportunity_id = int(task["opportunity_id"])
         require_timeline_write(connection, opportunity_id, int(user["id"]))
 
@@ -1075,7 +1085,7 @@ def list_task_versions_page(
     params: list[object] = [task_id, *cursor_values, page.limit + 1]
 
     with db_connection() as connection:
-        task = fetch_task(connection, task_id)
+        task = fetch_task(connection, task_id, int(user["id"]))
         require_opportunity_owner(connection, int(task["opportunity_id"]), int(user["id"]))
         rows = connection.execute(
             f"""
@@ -1145,7 +1155,7 @@ def restore_task_version(
     """
     changed = False
     with db_connection() as connection:
-        task = fetch_task(connection, task_id)
+        task = fetch_task(connection, task_id, int(user["id"]))
         opportunity_id = int(task["opportunity_id"])
         require_opportunity_owner(connection, opportunity_id, int(user["id"]))
 
@@ -1172,11 +1182,11 @@ def restore_task_version(
                 task_id,
                 [int(value) for value in raw.split(",")] if raw else [],
             )
-            row = fetch_task(connection, task_id)
+            row = fetch_task(connection, task_id, int(user["id"]))
             record_version(connection, TASK_VERSIONS, task_id, row, int(user["id"]), now)
             connection.commit()
 
-        row = fetch_task(connection, task_id)
+        row = fetch_task(connection, task_id, int(user["id"]))
 
     if changed:
         publish_opportunity_changed(opportunity_id)

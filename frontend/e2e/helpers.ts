@@ -112,6 +112,22 @@ export async function openEntryForm(page: Page) {
   await page.getByRole("button", { name: "New entry", exact: true }).click();
   const form = entryForm(page).first();
   await expect(form).toBeVisible();
+  // An entry starts private since R.1b, and these journeys are about what a
+  // colleague can see — so the suite says `shared` out loud, exactly as the
+  // backend tests do. `revealEntryForm` is the opposite half, for the journeys
+  // that are about privacy itself.
+  await form.getByRole("checkbox", { name: /Reveal this entry/ }).check();
+  return form;
+}
+
+/** The same form, left private. */
+export async function openPrivateEntryForm(page: Page) {
+  await page.getByRole("button", { name: "New entry", exact: true }).click();
+  const form = entryForm(page).first();
+  await expect(form).toBeVisible();
+  await expect(
+    form.getByRole("checkbox", { name: /Reveal this entry/ }),
+  ).not.toBeChecked();
   return form;
 }
 

@@ -55,6 +55,7 @@ def create_entry(
     response = client.post(
         f"/api/v2/opportunities/{opportunity_id}/timeline",
         json={
+            "visibility": "shared",
             "type": entry_type,
             "title": title,
             "body": body,
@@ -242,6 +243,7 @@ def test_an_unrecognized_entry_type_is_rejected(client: TestClient) -> None:
     rejected = client.post(
         f"/api/v2/opportunities/{opportunity['id']}/timeline",
         json={
+            "visibility": "shared",
             "type": "carrier_pigeon",
             "title": "Not a real type",
             "event_timestamp": "2026-09-01T10:00:00",
@@ -343,6 +345,7 @@ def test_editor_can_write_and_viewer_is_read_only(client: TestClient) -> None:
     blocked_entry = client.post(
         f"/api/v2/opportunities/{opportunity['id']}/timeline",
         json={
+            "visibility": "shared",
             "type": "call",
             "title": "Viewer call",
             "body": "Should not save",
@@ -575,6 +578,7 @@ def test_invalid_timestamps_are_rejected_and_the_dashboard_stays_up(
     rejected_date = client.post(
         f"/api/v2/opportunities/{opportunity['id']}/timeline",
         json={
+            "visibility": "shared",
             "type": "call",
             "title": "Bad follow up",
             "event_timestamp": "2026-09-01T10:00:00Z",

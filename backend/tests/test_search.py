@@ -26,7 +26,7 @@ from test_migrations import build_mvp_database
 from test_timeline import edit_note
 
 from app.database import db_connection, initialize_database
-from app.permissions import ACCESSIBLE_OPPORTUNITY_IDS_SQL
+from app.permissions import ACCESSIBLE_OPPORTUNITY_IDS_SQL, visible_entries_clause
 from app.search import (
     SEARCH_DOCUMENTS_SQL,
     build_snippet,
@@ -83,6 +83,7 @@ def create_entry(
     response = client.post(
         f"/api/v2/opportunities/{opportunity_id}/timeline",
         json={
+            "visibility": "shared",
             "type": entry_type,
             "title": title,
             "body": body,
@@ -602,12 +603,17 @@ def test_search_reads_the_index_and_never_scans_a_source_table(client: TestClien
     opportunity = create_opportunity(client)
     create_entry(client, opportunity["id"])
 
+    # The entry-visibility predicate is filled in the same way `search()` fills
+    # it (R.1b), so the plan asserted here is the plan the route runs.
+    documents_sql = SEARCH_DOCUMENTS_SQL.format(
+        visible_entries=visible_entries_clause("timeline_entries")
+    )
     sql = (
-        f"{SEARCH_DOCUMENTS_SQL} "
+        f"{documents_sql} "
         f"WHERE documents.opportunity_id IN ({ACCESSIBLE_OPPORTUNITY_IDS_SQL}) "
         "ORDER BY documents.rank ASC, documents.document_id ASC LIMIT ?"
     )
-    plan = query_plan(sql, ('"procurement"*', 1, 1, 51))
+    plan = query_plan(sql, ('"procurement"*', 1, 1, 1, 1, 1, 1, 51))
 
     # The index drives the query: one MATCH scan per document kind, four of
     # them since milestone 4.8 added attachments.

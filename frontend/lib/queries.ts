@@ -23,6 +23,8 @@ import { streamAiAnswer } from "./aiStream";
 import { apiRequest } from "./api";
 import type { components } from "./api-types";
 import type {
+  EntryVisibility,
+  PrivateNote,
   AiChatMessage,
   AppNotification,
   AutomationRule,
@@ -125,6 +127,11 @@ export const keys = {
    * (3.0a) changes the owner row of each id it touched. */
   allMembers: ["members"] as const,
   notifications: ["notifications"] as const,
+  /** One reader's own notes on one deal (R.1b). Keyed by the deal alone: the
+   * reader is whoever the session says, and a second reader's copy is a
+   * different session. */
+  privateNote: (opportunityId: number) =>
+    ["private-note", opportunityId] as const,
   /**
    * One item's edit history (milestone 2.10), keyed by what kind of thing it
    * hangs off as well as by id: the three id spaces are separate tables.
@@ -1314,6 +1321,65 @@ export function useDeleteTimelineEntry() {
         keys.opportunities,
         keys.allActivity,
       ),
+  });
+}
+
+/**
+ * Seal an entry, or reveal it (milestone R.1b).
+ *
+ * An ordinary partial `PATCH` of the entry, not a route of its own: who may
+ * read it is a field of the record, versioned like the rest. Not optimistic —
+ * sealing withdraws the notifications the entry sent, and what comes back is
+ * a different row from the one on screen (an emptied one, for anybody but the
+ * author). The notification list is invalidated for the same reason.
+ */
+export function useSetEntryVisibility() {
+  const client = useQueryClient();
+  return useMutation<
+    unknown,
+    Error,
+    { entryId: number; opportunityId: number; visibility: EntryVisibility }
+  >({
+    mutationFn: ({ entryId, visibility }) =>
+      apiRequest(`/api/v2/timeline/${entryId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ visibility }),
+      }),
+    onSuccess: () =>
+      invalidate(
+        client,
+        keys.allTimelines,
+        keys.notifications,
+        keys.allActivity,
+      ),
+  });
+}
+
+/**
+ * This reader's own notebook on one deal (milestone R.1b), and the write that
+ * replaces it. Read per deal and per reader; nothing else in `lib/queries.ts`
+ * touches it, which is the client half of "no other query mentions the table".
+ */
+export function usePrivateNote(opportunityId: number) {
+  return useQuery({
+    queryKey: keys.privateNote(opportunityId),
+    queryFn: () =>
+      apiRequest<PrivateNote>(
+        `/api/v2/opportunities/${opportunityId}/private-note`,
+      ),
+  });
+}
+
+export function useSavePrivateNote(opportunityId: number) {
+  const client = useQueryClient();
+  return useMutation<PrivateNote, Error, string>({
+    mutationFn: (body: string) =>
+      apiRequest<PrivateNote>(
+        `/api/v2/opportunities/${opportunityId}/private-note`,
+        { method: "PUT", body: JSON.stringify({ body }) },
+      ),
+    onSuccess: (saved) =>
+      client.setQueryData(keys.privateNote(opportunityId), saved),
   });
 }
 

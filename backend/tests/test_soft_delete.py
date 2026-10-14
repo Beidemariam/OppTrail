@@ -92,6 +92,7 @@ def test_invariant_deleting_an_opportunity_retains_every_row(client: TestClient)
     entry_id = client.post(
         f"/api/v2/opportunities/{opportunity_id}/timeline",
         json={
+            "visibility": "shared",
             "type": "call",
             "title": "Discovery call",
             "body": "Budget discussed",

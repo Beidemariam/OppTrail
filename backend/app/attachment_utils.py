@@ -18,10 +18,16 @@ from .schemas import AttachmentPublic
 # Every read of an attachment carries the name it is displayed with and the
 # opportunity its permission is resolved against, the way every other row here
 # does.
+# `visibility` and the entry's author ride along since R.1b: a file hangs off
+# an entry (D-148), so "may this person read this file" is "may this person
+# read that entry" -- and the download route is the one place in the app where
+# bytes leave the volume.
 ATTACHMENT_ROWS_SQL = """
     SELECT
         attachments.*,
         timeline_entries.opportunity_id AS opportunity_id,
+        timeline_entries.visibility AS entry_visibility,
+        timeline_entries.created_by AS entry_author_id,
         users.name AS uploader_name
     FROM attachments
     JOIN timeline_entries ON timeline_entries.id = attachments.entry_id

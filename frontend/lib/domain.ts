@@ -76,6 +76,15 @@ export const entryTypes = [
 
 export type EntryType = (typeof entryTypes)[number]["value"];
 
+/** Who may read an entry (milestone R.1b). `private` is readable by its author
+ * alone — not by the opportunity's owner either, which is what makes it one
+ * rule rather than a role lookup. */
+export type EntryVisibility = TimelineEntry["visibility"];
+
+/** One reader's own notes on one deal (milestone R.1b) — the half of privacy
+ * that is not an entry at all. */
+export type PrivateNote = components["schemas"]["PrivateNotePublic"];
+
 export function entryTypeLabel(type: EntryType): string {
   return (
     entryTypes.find((candidate) => candidate.value === type)?.label ?? type

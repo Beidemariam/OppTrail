@@ -104,8 +104,15 @@ def create_opportunity(session: Session, **fields: Any) -> int:
 
 
 def add_entry(session: Session, opportunity_id: int, **fields: Any) -> int:
+    """The seeded timeline is a *shared* one: the tour is about what colleagues
+    can see on each other's deals, and an entry defaults to private since
+    R.1b. One seeded private entry is added deliberately below, so `make seed`
+    shows both states rather than only the one it happens to default to."""
     response = check(
-        session.client.post(f"/api/v2/opportunities/{opportunity_id}/timeline", json=fields),
+        session.client.post(
+            f"/api/v2/opportunities/{opportunity_id}/timeline",
+            json={"visibility": "shared", **fields},
+        ),
         f"adding an entry to opportunity {opportunity_id}",
     )
     return int(response.json()["id"])

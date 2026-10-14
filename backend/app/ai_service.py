@@ -8,6 +8,7 @@ from openai import Omit, OpenAI, omit
 from openai.types import ReasoningEffort
 from openai.types.shared_params import Reasoning
 
+from .permissions import VISIBLE_ENTRIES_SQL
 from .timeline_utils import ENTRY_SEQUENCE_SQL
 
 SYSTEM_PROMPT = """
@@ -91,6 +92,7 @@ def scope_sentence(since: str | None, until: str | None) -> str | None:
 def build_timeline_context(
     connection: sqlite3.Connection,
     opportunity_id: int,
+    reader_id: int,
     since: str | None = None,
     until: str | None = None,
 ) -> tuple[str, list[int]]:
@@ -152,10 +154,11 @@ def build_timeline_context(
         LEFT JOIN users ON users.id = timeline_entries.created_by
         WHERE timeline_entries.opportunity_id = ?
             AND timeline_entries.deleted_at IS NULL
+            AND {VISIBLE_ENTRIES_SQL}
             {" ".join(scope)}
         ORDER BY timeline_entries.event_timestamp ASC, timeline_entries.id ASC
         """,
-        (opportunity_id, *scope_params),
+        (opportunity_id, reader_id, *scope_params),
     ).fetchall()
     # The numbers this context actually cites, which is what an answer's
     # citations are checked against (milestone 3.9, **D-140**). They are the

@@ -316,6 +316,22 @@ EntryType = Literal[
 ]
 
 
+# Who may read an entry (milestone R.1b). Two values, CHECK-constrained in the
+# schema beside `type`: `shared` is the deal's history, `private` is readable
+# by its author alone.
+EntryVisibility = Literal["shared", "private"]
+
+# What a *new* entry is, when the client does not say — the human's ruling of
+# 2026-10-14: *"privacy is set upfront and let's make it by default with a tick
+# box to reveal it."* One constant, because the argument for the other default
+# is a real one and flipping it should be one edit and a test, not an audit.
+#
+# Existing rows are `shared` (revision 0021): nothing written before this
+# feature existed was authored with privacy in mind, and backfilling history as
+# private would hide what people have already read.
+DEFAULT_ENTRY_VISIBILITY: EntryVisibility = "private"
+
+
 class TimelineEntryCreate(BaseModel):
     type: EntryType = "other"
     title: str = Field(min_length=1)
@@ -325,6 +341,7 @@ class TimelineEntryCreate(BaseModel):
     # `docs/FEATURES.md` §3: a custom field appears "automatically in Table
     # columns, filters, and the entry form", so the entry form posts one.
     custom_values: CustomValues | None = None
+    visibility: EntryVisibility = DEFAULT_ENTRY_VISIBILITY
 
     @field_validator("title")
     @classmethod
@@ -349,6 +366,12 @@ class TimelineEntryUpdate(BaseModel):
     event_timestamp: str | None = None
     follow_up_date: str | None = None
     custom_values: CustomValues | None = None
+    # Sealing and unsealing are an ordinary partial edit of the entry, not a
+    # route of their own (R.1b): it is a field of the record, it is versioned
+    # like the others, and the rule for who may change it is the rule for who
+    # may change any of them. Sealing additionally withdraws the notifications
+    # the entry caused, which the route does.
+    visibility: EntryVisibility | None = None
 
     @field_validator("title")
     @classmethod
@@ -467,6 +490,28 @@ class NotePublic(BaseModel):
     comments: list[CommentThread]
 
 
+class PrivateNotePublic(BaseModel):
+    """One person's own notes on one deal (milestone R.1b).
+
+    Not a `NotePublic`: that hangs off an entry and is part of the deal's
+    history. This hangs off nothing and is never part of it — no entry, no
+    author field (there is only ever one reader), no comments, no versions.
+    """
+
+    opportunity_id: int
+    body: str
+    updated_at: str | None
+
+
+class PrivateNoteUpdate(BaseModel):
+    body: str
+
+    @field_validator("body")
+    @classmethod
+    def strip_body(cls, value: str) -> str:
+        return value.strip()
+
+
 class TimelineEntryPublic(BaseModel):
     id: int
     opportunity_id: int
@@ -486,6 +531,10 @@ class TimelineEntryPublic(BaseModel):
     # cannot disagree. It is a reading aid, not an identity: the id is what
     # `?entry=` links carry.
     sequence: int
+    # Who may read it (R.1b). A sealed entry still travels — with its number,
+    # its author and its time, and with everything else emptied — so that a
+    # count, a page and an entry number mean the same thing to everybody.
+    visibility: EntryVisibility = "shared"
     # The rule that wrote this entry, or `None` for everything a person wrote
     # (milestone 6.3a, **D-181**). It is the one fact the client cannot infer:
     # every automated entry is `system_generated`, and a system entry a person

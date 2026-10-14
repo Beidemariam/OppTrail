@@ -1095,6 +1095,54 @@ Four things about it are load bearing:
   (invariant 2) and a system entry has no editor (it cannot be edited through
   the API either).
 
+### Keeping something to yourself
+
+Milestone R.1b, the human's ask and their "build both" ruling (**D-193**).
+Two shapes, deliberately different in kind.
+
+**A sealed entry.** `timeline_entries.visibility` (revision
+`0021_entry_visibility`) is `shared` or `private`, and private is readable by
+its author alone — **not by the opportunity's owner** (**D-194**): "private
+unless the owner asks" is not private, and the symmetric rule is what makes
+this one predicate rather than a role lookup.
+
+- **The row stays; the content goes.** A colleague's timeline still holds the
+  entry, with its number, its author and its time, and nothing else.
+  `routes_timeline.entry_from_row` is where it is emptied — one function that
+  every read of an entry passes through, rather than a predicate each of the
+  four reads has to remember.
+- **`permissions.VISIBLE_ENTRIES_SQL` is the rule**, and it is deliberately
+  *not* inside `timeline_utils.ENTRY_SEQUENCE_SQL`. An entry's number is a
+  property of the deal: putting it there would renumber one reader's timeline
+  against another's, and the AI cites those numbers.
+  `test_a_sealed_entry_keeps_its_number_for_everyone` is what fails if anybody
+  moves it.
+- **Every read that could leak one was changed**: the timeline list, the six
+  context fetchers that resolve the parent of a note, a comment or a reaction
+  (so every write on a sealed entry answers 404), all four branches of the
+  search query, the AI's context — now per reader, which is the one place a
+  leak would be invisible — the export, the attachment download, and the title
+  a task shows for the entry it came from.
+- **Sealing afterwards withdraws what the entry already said** (**D-195**). A
+  notification is a copy carrying the title, written at the time and read
+  without re-checking the deal, so `notification_service.withdraw_entry_
+  notifications` soft-deletes those rows and the inbox stops serving them.
+  Unsealing does not put them back: readable again is not news again.
+- **A private entry notifies nobody and triggers no automation** when written.
+  A rule acts with its creator's authority (D-173), and an entry its creator
+  may not read is not something they could have done by hand.
+- **A new entry is private by default** (**D-196**), with a tick box to reveal
+  it, as asked — `schemas.DEFAULT_ENTRY_VISIBILITY` is the one constant, and
+  the test suites now say which visibility they mean rather than inheriting it.
+
+**A notebook of one's own.** `private_notes` is one row per person per deal:
+the running note that is not a record of anything that happened, so it is not
+in the deal's history at all. `routes_private_notes.py` is the only module that
+mentions the table — a grep for it is the whole audit — and both routes resolve
+the row by `(opportunity_id, user_id)`, so there is no id a caller could supply
+that reaches somebody else's. Any role may keep one, including a viewer: a note
+about a deal is a fact about its reader rather than a write to the record.
+
 ### Soft deletes and undo
 
 Nothing is hard-deleted. `soft_delete.py` is the only place user data is deleted:

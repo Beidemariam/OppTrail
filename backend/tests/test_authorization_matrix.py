@@ -307,6 +307,22 @@ MATRIX: dict[Endpoint, Case] = {
         expected=scoped(viewer=403, editor=403, owner=200),
         url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/watchers",
     ),
+    # --- A notebook of one's own (R.1b) -----------------------------------
+    #
+    # Any role may keep notes on a deal they can open, including a viewer: a
+    # private note is a fact about its reader rather than a write to the
+    # record. There is no id to address anybody else's, so "whose" is not a
+    # case this matrix can express -- `tests/test_entry_visibility.py` and
+    # `tests/test_private_notes.py` carry that.
+    Endpoint("GET", "/api/v2/opportunities/{opportunity_id}/private-note"): Case(
+        expected=scoped(viewer=200, editor=200, owner=200),
+        url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/private-note",
+    ),
+    Endpoint("PUT", "/api/v2/opportunities/{opportunity_id}/private-note"): Case(
+        expected=scoped(viewer=200, editor=200, owner=200),
+        url=lambda world: f"/api/v2/opportunities/{world.opportunity_id}/private-note",
+        body=lambda world, actor: {"body": f"{actor} was here"},
+    ),
     # --- Timeline ---------------------------------------------------------
     Endpoint("GET", "/api/v2/opportunities/{opportunity_id}/timeline"): Case(
         expected=scoped(viewer=200, editor=200, owner=200),
@@ -988,6 +1004,7 @@ def world(tmp_path, monkeypatch) -> World:
     entry_id = owner.post(
         f"/api/v2/opportunities/{opportunity_id}/timeline",
         json={
+            "visibility": "shared",
             "type": "call",
             "title": "Discovery call",
             "body": "",
@@ -1005,6 +1022,7 @@ def world(tmp_path, monkeypatch) -> World:
     clients["editor"].post(
         f"/api/v2/opportunities/{opportunity_id}/timeline",
         json={
+            "visibility": "shared",
             "type": "email",
             "title": "Editor follow-up",
             "body": "",
@@ -1026,6 +1044,7 @@ def world(tmp_path, monkeypatch) -> World:
     deleted_entry_id = owner.post(
         f"/api/v2/opportunities/{opportunity_id}/timeline",
         json={
+            "visibility": "shared",
             "type": "call",
             "title": "Deleted call",
             "body": "",

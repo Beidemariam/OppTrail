@@ -13,24 +13,20 @@ CREATE INDEX idx_attachments_entry
 
 CREATE INDEX idx_audit_log_entries_opportunity_id ON audit_log_entries(opportunity_id);
 
-CREATE INDEX idx_automation_runs_entry
-        ON automation_runs (entry_id, rule_id)
-        WHERE entry_id IS NOT NULL
-        ;
-
 CREATE INDEX idx_automation_rules_armed
         ON automation_rules (trigger_type, id)
-        WHERE archived_at IS NULL AND enabled = 1
-        ;
+        WHERE archived_at IS NULL AND enabled = 1;
 
 CREATE INDEX idx_automation_rules_creator
         ON automation_rules (created_by, id)
-        WHERE archived_at IS NULL
-        ;
+        WHERE archived_at IS NULL;
+
+CREATE INDEX idx_automation_runs_entry
+        ON automation_runs (entry_id, rule_id)
+        WHERE entry_id IS NOT NULL;
 
 CREATE INDEX idx_automation_runs_rule
-        ON automation_runs (rule_id, id)
-        ;
+        ON automation_runs (rule_id, id);
 
 CREATE INDEX idx_comments_activity ON comments (note_id, created_at);
 
@@ -50,8 +46,7 @@ CREATE UNIQUE INDEX idx_custom_field_key_per_entity
         WHERE archived_at IS NULL;
 
 CREATE INDEX idx_job_runs_latest
-        ON job_runs (job, id DESC)
-        ;
+        ON job_runs (job, id DESC);
 
 CREATE INDEX idx_notes_activity ON notes (entry_id, created_at);
 
@@ -65,6 +60,10 @@ CREATE INDEX idx_notifications_user_id ON notifications(user_id);
 CREATE INDEX idx_opportunities_owner_id ON opportunities(owner_id);
 
 CREATE INDEX idx_opportunity_shares_user_id ON opportunity_shares(user_id);
+
+CREATE UNIQUE INDEX idx_private_notes_owner
+        ON private_notes (opportunity_id, user_id)
+        WHERE deleted_at IS NULL;
 
 CREATE INDEX idx_saved_views_created_by ON saved_views(created_by);
 
@@ -220,7 +219,7 @@ CREATE TABLE notifications (
             payload TEXT NOT NULL DEFAULT '{}',
             read INTEGER NOT NULL DEFAULT 0 CHECK (read IN (0, 1)),
             created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
-        , read_at TEXT, grouped_key TEXT);
+        , read_at TEXT, grouped_key TEXT, deleted_at TEXT);
 
 CREATE TABLE opportunities (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -269,6 +268,16 @@ CREATE TABLE opportunity_versions (
             edited_by INTEGER NOT NULL REFERENCES users(id),
             created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
             UNIQUE (opportunity_id, version_number)
+        );
+
+CREATE TABLE private_notes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            opportunity_id INTEGER NOT NULL REFERENCES opportunities(id),
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            body TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+            updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+            deleted_at TEXT
         );
 
 CREATE TABLE reactions (
@@ -373,7 +382,8 @@ CREATE TABLE "timeline_entries" (
             system_generated INTEGER NOT NULL DEFAULT 0 CHECK (system_generated IN (0, 1)),
             created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
             deleted_at TEXT
-        , custom_values TEXT NOT NULL DEFAULT '{}');
+        , custom_values TEXT NOT NULL DEFAULT '{}', visibility TEXT NOT NULL DEFAULT 'shared'
+            CHECK (visibility IN ('shared', 'private')));
 
 CREATE TABLE timeline_entry_versions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

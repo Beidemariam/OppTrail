@@ -33,9 +33,14 @@ def get_export_data(
 ) -> dict[str, Any]:
     """`order` is the timeline's own reading order, passed through by the link
     the reader clicks (milestone 4.4b) -- so the document runs the way the
-    screen it was exported from does."""
+    screen it was exported from does.
+
+    The export is **per reader** since R.1b: a sealed entry is not in anybody
+    else's document, so two people exporting one deal get two documents. That
+    is correct and surprising, which is why `render_export_html` says on the
+    page that something was withheld rather than leaving a silent gap."""
     require_opportunity_access(connection, opportunity_id, user_id)
-    return fetch_export_data(connection, opportunity_id, order)
+    return fetch_export_data(connection, opportunity_id, user_id, order)
 
 
 # --- Exporting a selection (milestone 3.0a) ---------------------------------

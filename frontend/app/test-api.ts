@@ -180,6 +180,9 @@ interface TimelineEntry {
   /** The entry's custom field values (milestone 6.1), read on the card since
    * 6.2a. */
   custom_values?: Record<string, unknown>;
+  /** Who may read it (R.1b). The card draws a sealed entry from this plus the
+   * session, exactly as the real one does. */
+  visibility: "shared" | "private";
   notes: Note[];
   attachments: Attachment[];
 }
@@ -268,6 +271,9 @@ export function anEntry(overrides: Partial<TimelineEntry> = {}): TimelineEntry {
     system_generated: false,
     created_at: "2026-09-02T14:00:00Z",
     sequence: 1,
+    // Shared, because a fixture is the deal's history and every test that
+    // cares about privacy says so itself (R.1b).
+    visibility: "shared",
     automation_rule_id: null,
     notes: [],
     attachments: [],
@@ -580,6 +586,9 @@ export class FakeApi {
   // `watchers` above: watching needs no share at all (D-129), so it is not
   // derived from anything else this fake tracks.
   private watching = new Set<number>();
+  // And their own notebook per deal (R.1b), for the same reason: it belongs
+  // to the reader rather than to the deal.
+  private privateNotes = new Map<number, string>();
   /** Deleted tasks, so `POST .../restore` has something to put back
    * (milestone 4.1) -- the same shape `deleted` uses for the other kinds. */
   private deletedTasks = new Map<number, Task>();
@@ -1140,6 +1149,27 @@ export class FakeApi {
     }
     if (segments[2] === "activity") {
       return this.page(this.activity, path);
+    }
+    // A notebook of one's own (R.1b): one body per deal, per reader — and
+    // this fake has one reader, so one body per deal.
+    if (segments[2] === "private-note") {
+      const opportunityId = Number(segments[1]);
+      if (method === "GET") {
+        return this.json({
+          opportunity_id: opportunityId,
+          body: this.privateNotes.get(opportunityId) ?? "",
+          updated_at: this.privateNotes.has(opportunityId)
+            ? "2026-10-14T09:00:00Z"
+            : null,
+        });
+      }
+      const written = String((body as { body?: string })?.body ?? "");
+      this.privateNotes.set(opportunityId, written);
+      return this.json({
+        opportunity_id: opportunityId,
+        body: written,
+        updated_at: "2026-10-14T09:00:00Z",
+      });
     }
     // Tasks (milestone 4.1). One deal's list, and the writes the panel makes.
     if (segments[0] === "opportunities" && segments[2] === "tasks") {

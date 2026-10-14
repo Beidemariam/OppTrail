@@ -8,7 +8,7 @@ from typing import Any
 from markdown_it import MarkdownIt
 
 from .attachment_utils import attachments_by_entry_id
-from .permissions import ACCESSIBLE_OPPORTUNITY_IDS_SQL
+from .permissions import ACCESSIBLE_OPPORTUNITY_IDS_SQL, VISIBLE_ENTRIES_SQL
 from .sanitize import sanitize_html
 
 # Excel, LibreOffice and Google Sheets evaluate a cell that opens with one of
@@ -70,6 +70,7 @@ def safe_export_filename(name: str, extension: str) -> str:
 def fetch_export_data(
     connection: sqlite3.Connection,
     opportunity_id: int,
+    reader_id: int,
     order: str = "desc",
 ) -> dict[str, Any]:
     """Everything one deal is made of, in the order the reader asked for.
@@ -105,10 +106,14 @@ def fetch_export_data(
         LEFT JOIN users ON users.id = timeline_entries.created_by
         WHERE timeline_entries.opportunity_id = ?
             AND timeline_entries.deleted_at IS NULL
+            AND {VISIBLE_ENTRIES_SQL}
         ORDER BY timeline_entries.event_timestamp {direction},
                  timeline_entries.created_at {direction}
-        """.format(direction="ASC" if order == "asc" else "DESC"),
-        (opportunity_id,),
+        """.format(
+            direction="ASC" if order == "asc" else "DESC",
+            VISIBLE_ENTRIES_SQL=VISIBLE_ENTRIES_SQL,
+        ),
+        (opportunity_id, reader_id),
     ).fetchall()
 
     entry_ids = [entry["id"] for entry in entries]

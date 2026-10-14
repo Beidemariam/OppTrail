@@ -60,6 +60,7 @@ def test_a_field_appears_on_the_record_it_was_defined_for(client: TestClient) ->
     entry = client.post(
         f"/api/v2/opportunities/{opportunity['id']}/timeline",
         json={
+            "visibility": "shared",
             "type": "call",
             "title": "Call",
             "event_timestamp": "2026-09-01T10:00:00",
@@ -73,6 +74,7 @@ def test_a_field_appears_on_the_record_it_was_defined_for(client: TestClient) ->
     refused = client.post(
         f"/api/v2/opportunities/{opportunity['id']}/timeline",
         json={
+            "visibility": "shared",
             "type": "call",
             "title": "Wrong field",
             "event_timestamp": "2026-09-01T10:00:00",

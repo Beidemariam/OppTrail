@@ -153,6 +153,7 @@ def test_a_linked_entry_must_belong_to_the_same_opportunity(client: TestClient) 
     entry = client.post(
         f"/api/v2/opportunities/{second['id']}/timeline",
         json={
+            "visibility": "shared",
             "type": "call",
             "title": "Discovery",
             "body": "Body",
@@ -177,6 +178,7 @@ def test_a_task_outlives_the_entry_that_prompted_it(client: TestClient) -> None:
     entry = client.post(
         f"/api/v2/opportunities/{opportunity['id']}/timeline",
         json={
+            "visibility": "shared",
             "type": "call",
             "title": "Discovery",
             "body": "Body",

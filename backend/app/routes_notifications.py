@@ -42,7 +42,9 @@ def list_notifications_page(
     one read made it disappear. That surface is gone with the rest of v1;
     `read_at IS NULL` is the same set, and a reader keeps what they have read.
     """
-    where = ["user_id = ?"]
+    # `deleted_at IS NULL` since R.1b: sealing an entry withdraws what it told
+    # people, and a withdrawn notification is one this read no longer serves.
+    where = ["user_id = ?", "deleted_at IS NULL"]
     params: list[object] = [user["id"]]
 
     if type:

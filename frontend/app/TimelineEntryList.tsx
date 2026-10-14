@@ -12,6 +12,8 @@ import {
 } from "../lib/domain";
 import {
   useAddNote,
+  useSession,
+  useSetEntryVisibility,
   useCustomFields,
   useDeleteTimelineEntry,
   useRestoreTimelineEntry,
@@ -107,7 +109,43 @@ function TimelineEntryCard({
     useRestoreTimelineEntry(),
   );
 
-  const failure = [addNote, deleteEntry].find((mutation) => mutation.isError);
+  const setVisibility = useSetEntryVisibility();
+  const session = useSession();
+  // Sealing is the author's own (R.1b): the server refuses it for anybody
+  // else, and this is the client mirror that stops the button being offered.
+  const isAuthor = entry.created_by === session.data?.id;
+  // What a colleague meets: the row is here, its content is not.
+  const sealed = entry.visibility === "private" && !isAuthor;
+
+  const failure = [addNote, deleteEntry, setVisibility].find(
+    (mutation) => mutation.isError,
+  );
+
+  // A sealed entry (R.1b): somebody wrote something here and kept it to
+  // themselves. It keeps its place and its number — which is the whole reason
+  // this shape was chosen over hiding the row — and carries nothing else.
+  // Rendered before anything that would read a title, a body or an action,
+  // because there is none of either to read.
+  if (sealed) {
+    return (
+      <article
+        className={`timeline-entry is-sealed${linked ? " is-linked" : ""}`}
+        ref={cardRef}
+      >
+        <div className="timeline-marker other" />
+        <div className="timeline-entry-body">
+          <div className="meta-row">
+            <span className="entry-number">#{entry.sequence}</span>
+            <span className="system-badge">Private</span>
+            <span>{formatTimestamp(entry.event_timestamp)}</span>
+          </div>
+          <p className="timeline-copy">
+            {entry.author_name ?? "Somebody"} kept this entry to themselves.
+          </p>
+        </div>
+      </article>
+    );
+  }
 
   return (
     <article
@@ -173,6 +211,26 @@ function TimelineEntryCard({
                     onClick={editor.open}
                   >
                     Edit
+                  </button>
+                )}
+                {/* Sealing is the author's alone, so it sits here rather than
+                    with the author-or-owner controls beside it (R.1b). The
+                    label says what pressing it does, and the API refuses it
+                    for anybody else. */}
+                {!entry.system_generated && isAuthor && (
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() =>
+                      setVisibility.mutate({
+                        entryId: entry.id,
+                        opportunityId,
+                        visibility:
+                          entry.visibility === "private" ? "shared" : "private",
+                      })
+                    }
+                  >
+                    {entry.visibility === "private" ? "Reveal" : "Keep private"}
                   </button>
                 )}
                 {/* No confirmation: the entry goes, and the toast offers the

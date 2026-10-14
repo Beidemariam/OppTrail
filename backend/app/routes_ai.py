@@ -54,8 +54,11 @@ def ask_ai_agent(
     # connection refuses writes at the SQLite level.
     with read_only_connection() as connection:
         require_opportunity_access(connection, opportunity_id, int(user["id"]))
+        # The reader, not just the deal (R.1b): a sealed entry is not in the
+        # context of anyone but its author, so two people asking the same
+        # question of the same deal can legitimately get different answers.
         timeline_context, entry_numbers = build_timeline_context(
-            connection, opportunity_id, payload.since, payload.until
+            connection, opportunity_id, int(user["id"]), payload.since, payload.until
         )
 
     try:
@@ -129,8 +132,11 @@ def stream_ai_answer(
     # than a 200 whose first frame is an error.
     with read_only_connection() as connection:
         require_opportunity_access(connection, opportunity_id, int(user["id"]))
+        # The reader, not just the deal (R.1b): a sealed entry is not in the
+        # context of anyone but its author, so two people asking the same
+        # question of the same deal can legitimately get different answers.
         timeline_context, entry_numbers = build_timeline_context(
-            connection, opportunity_id, payload.since, payload.until
+            connection, opportunity_id, int(user["id"]), payload.since, payload.until
         )
 
     def frames() -> Iterator[str]:

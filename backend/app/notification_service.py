@@ -217,3 +217,44 @@ def notify_note_comment(
                 "actor_id": actor_id,
             },
         )
+
+
+def withdraw_entry_notifications(
+    connection: sqlite3.Connection,
+    entry_id: int,
+    keep_user_id: int,
+) -> int:
+    """Take back what a now-sealed entry already told people (milestone R.1b).
+
+    The human's ruling: *"even when sealed after the fact, withdraw any
+    notification related to it."* This is the half of privacy that is not a
+    read predicate — a notification is a *copy*, written into somebody's inbox
+    at the moment of the write, carrying the entry's title, and read back
+    without re-checking anything against the deal. Nothing a query does later
+    can unsay it.
+
+    So the rows are stamped `deleted_at` and stop being served. A soft delete,
+    not a hard one: `notifications` is in `soft_delete.USER_DATA_TABLES` and
+    `AGENTS.md` invariant 5 says nothing here is ever removed — a rule worth
+    more than the handful of bytes a withdrawn row costs. What the reader
+    loses is the notification; what the database keeps is the record that one
+    was sent, which is the same bargain every other delete in this app makes.
+
+    `keep_user_id` is the author: their own copy says they wrote it, which is
+    true, theirs, and about an entry they can still read.
+
+    Mentions ride on the same mechanism: `notify_mentions` writes one row per
+    mentioned person with the same `source_type`/`source_id`, so they go too.
+    """
+    cursor = connection.execute(
+        """
+        UPDATE notifications
+        SET deleted_at = ?
+        WHERE deleted_at IS NULL
+            AND user_id != ?
+            AND json_extract(payload, '$.source_type') = 'entry'
+            AND json_extract(payload, '$.source_id') = ?
+        """,
+        (utc_now(), keep_user_id, entry_id),
+    )
+    return int(cursor.rowcount)

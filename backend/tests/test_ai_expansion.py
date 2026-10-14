@@ -125,7 +125,7 @@ def test_a_scoped_context_holds_only_the_entries_in_range(client: TestClient) ->
 
     with db_connection() as connection:
         context, numbers = ai_service.build_timeline_context(
-            connection, opportunity["id"], since="2026-05-01", until="2026-07-01"
+            connection, opportunity["id"], 1, since="2026-05-01", until="2026-07-01"
         )
 
     assert "June call" in context
@@ -149,7 +149,7 @@ def test_the_bounds_include_the_whole_of_their_own_day(client: TestClient) -> No
 
     with db_connection() as connection:
         context, _ = ai_service.build_timeline_context(
-            connection, opportunity["id"], since="2026-06-01", until="2026-06-30"
+            connection, opportunity["id"], 1, since="2026-06-01", until="2026-06-30"
         )
 
     assert "Late on the last day" in context
@@ -165,9 +165,9 @@ def test_a_scoped_context_says_that_it_is_scoped(client: TestClient) -> None:
 
     with db_connection() as connection:
         scoped, _ = ai_service.build_timeline_context(
-            connection, opportunity["id"], since="2026-06-01", until="2026-06-30"
+            connection, opportunity["id"], 1, since="2026-06-01", until="2026-06-30"
         )
-        whole, _ = ai_service.build_timeline_context(connection, opportunity["id"])
+        whole, _ = ai_service.build_timeline_context(connection, opportunity["id"], reader_id=1)
 
     assert "SCOPED to entries between 2026-06-01 and 2026-06-30" in scoped
     assert "not all of it" in scoped
@@ -183,10 +183,10 @@ def test_each_half_of_the_range_reads_on_its_own(client: TestClient) -> None:
 
     with db_connection() as connection:
         after, _ = ai_service.build_timeline_context(
-            connection, opportunity["id"], since="2026-01-01"
+            connection, opportunity["id"], 1, since="2026-01-01"
         )
         before, _ = ai_service.build_timeline_context(
-            connection, opportunity["id"], until="2026-12-31"
+            connection, opportunity["id"], 1, until="2026-12-31"
         )
 
     assert "from 2026-01-01 onwards" in after

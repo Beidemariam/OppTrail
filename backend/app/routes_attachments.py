@@ -37,6 +37,7 @@ from .database import db_connection
 from .events import publish_timeline_changed
 from .notification_service import notify_shared_activity
 from .permissions import (
+    VISIBLE_ENTRIES_SQL,
     require_delete_permission,
     require_opportunity_access,
     require_timeline_write,
@@ -60,6 +61,7 @@ router = APIRouter(prefix="/api/v2", tags=["attachments"])
 def fetch_attachment(
     connection: sqlite3.Connection,
     attachment_id: int,
+    reader_id: int,
     *,
     deleted: bool = False,
 ) -> sqlite3.Row:
@@ -68,6 +70,11 @@ def fetch_attachment(
     `deleted=True` is the restore path's mirror image: the row itself must be
     deleted and everything above it must not be, so a file cannot come back
     under an entry that is gone -- the rule every other restore here follows.
+
+    A file on a sealed entry is 404 to everyone but its author (R.1b). This is
+    where that is enforced rather than in each of the four routes, for the
+    reason `fetch_entry_context` carries the same rule: a check in the resolver
+    cannot be forgotten by the next route to call it.
     """
     row: sqlite3.Row | None = connection.execute(
         f"""
@@ -76,8 +83,9 @@ def fetch_attachment(
             AND attachments.deleted_at IS {"NOT NULL" if deleted else "NULL"}
             AND timeline_entries.deleted_at IS NULL
             AND opportunities.deleted_at IS NULL
+            AND {VISIBLE_ENTRIES_SQL}
         """,
-        (attachment_id,),
+        (attachment_id, reader_id),
     ).fetchone()
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found")
@@ -176,7 +184,7 @@ def upload_attachment(
             f"New attachment: {filename}",
         )
 
-        row = fetch_attachment(connection, attachment_id)
+        row = fetch_attachment(connection, attachment_id, int(user["id"]))
         connection.commit()
 
     # On the timeline, so `timeline.changed` rather than the broader
@@ -215,7 +223,7 @@ def download_attachment(
     digest.
     """
     with db_connection() as connection:
-        attachment = fetch_attachment(connection, attachment_id)
+        attachment = fetch_attachment(connection, attachment_id, int(user["id"]))
         require_opportunity_access(connection, int(attachment["opportunity_id"]), int(user["id"]))
 
     path = resolve_stored_path(attachments_dir(), attachment["sha256"])
@@ -253,7 +261,7 @@ def delete_attachment(
     another entry's attachment as well.
     """
     with db_connection() as connection:
-        attachment = fetch_attachment(connection, attachment_id)
+        attachment = fetch_attachment(connection, attachment_id, int(user["id"]))
         opportunity_id = int(attachment["opportunity_id"])
         require_delete_permission(
             connection,
@@ -295,7 +303,7 @@ def restore_deleted_attachment(
     removing the delete's -- the log is the sequence of what happened.
     """
     with db_connection() as connection:
-        attachment = fetch_attachment(connection, attachment_id, deleted=True)
+        attachment = fetch_attachment(connection, attachment_id, int(user["id"]), deleted=True)
         opportunity_id = int(attachment["opportunity_id"])
         require_delete_permission(
             connection,

@@ -40,6 +40,7 @@ import {
   useOpportunityFieldSave,
 } from "./InlineEdit";
 import { SavedViewsMenu } from "./SavedViewsMenu";
+import { PrivateNotePanel } from "./PrivateNotePanel";
 import { SharingPanel } from "./SharingPanel";
 import { SuggestionSourceProvider } from "./Suggestions";
 import { TaskPanel } from "./TaskPanel";
@@ -310,6 +311,11 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
               access={access}
               linkTarget={linkTarget}
             />
+
+            {/* Beside the deal, not in it (R.1b): the second half of the
+              privacy ruling, for the running note that is not a record of
+              anything that happened. */}
+            <PrivateNotePanel opportunityId={opportunityId} />
 
             {access.canManage && <SharingPanel opportunityId={opportunityId} />}
           </div>

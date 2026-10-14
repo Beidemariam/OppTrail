@@ -124,6 +124,7 @@ def test_shared_user_dashboard_and_permissions_follow_role(
     blocked = client.post(
         f"/api/v2/opportunities/{opportunity['id']}/timeline",
         json={
+            "visibility": "shared",
             "type": "call",
             "title": "Viewer call",
             "body": "Blocked",
@@ -145,6 +146,7 @@ def test_shared_user_dashboard_and_permissions_follow_role(
     created = client.post(
         f"/api/v2/opportunities/{opportunity['id']}/timeline",
         json={
+            "visibility": "shared",
             "type": "call",
             "title": "Editor call",
             "body": "Allowed",

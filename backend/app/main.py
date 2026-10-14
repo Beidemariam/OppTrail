@@ -24,6 +24,7 @@ from .routes_events import router as events_router
 from .routes_export import router as export_router
 from .routes_notifications import router as notifications_router
 from .routes_opportunities import router as opportunities_router
+from .routes_private_notes import router as private_notes_router
 from .routes_saved_views import router as saved_views_router
 from .routes_search import router as search_router
 from .routes_sharing import router as sharing_router
@@ -75,6 +76,7 @@ app.include_router(events_router)
 app.include_router(saved_views_router)
 app.include_router(tasks_router)
 app.include_router(attachments_router)
+app.include_router(private_notes_router)
 app.include_router(custom_fields_router)
 app.include_router(dashboard_router)
 app.include_router(automations_router)

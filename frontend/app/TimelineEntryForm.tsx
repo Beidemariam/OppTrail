@@ -6,6 +6,7 @@ import {
   entryTypes,
   type CustomValues,
   type EntryType,
+  type EntryVisibility,
   type TimelineEntry,
 } from "../lib/domain";
 import { submitFormOnModEnter } from "../lib/keyboard";
@@ -30,6 +31,10 @@ interface EntryFormState {
   /** The entry's custom field values (milestone 6.1). A whole set, posted
    * with the entry -- see `app/CustomFieldInputs.tsx`. */
   custom_values: CustomValues;
+  /** Who may read it (R.1b). An entry starts private and is revealed
+   * deliberately: the human's ruling was that privacy is "set upfront ...
+   * with a tick box to reveal it". */
+  visibility: EntryVisibility;
 }
 
 function formFor(entry: TimelineEntry | null): EntryFormState {
@@ -40,6 +45,7 @@ function formFor(entry: TimelineEntry | null): EntryFormState {
       body: "",
       event_timestamp: nowDateTimeInput(),
       custom_values: {},
+      visibility: "private",
     };
   }
   return {
@@ -48,6 +54,7 @@ function formFor(entry: TimelineEntry | null): EntryFormState {
     body: entry.body,
     event_timestamp: toDateTimeInput(entry.event_timestamp),
     custom_values: (entry.custom_values ?? {}) as CustomValues,
+    visibility: entry.visibility ?? "private",
   };
 }
 
@@ -206,6 +213,30 @@ export function TimelineEntryForm({
           moment a proposal is actually to hand. The card keeps its own
           control, because a file that arrives later (the signed copy) should
           not require editing the entry to add. */}
+      {/* The tick box that reveals it (R.1b). Off is private, which is what a
+          new entry is: "privacy is set upfront ... with a tick box to reveal
+          it". Phrased as what ticking it *does* rather than as a state, so the
+          consequence is on the control rather than in a legend beside it. */}
+      <label className="checkbox-field entry-visibility">
+        <input
+          type="checkbox"
+          checked={form.visibility === "shared"}
+          onChange={(event) =>
+            setForm({
+              ...form,
+              visibility: event.target.checked ? "shared" : "private",
+            })
+          }
+        />
+        Reveal this entry to everyone on the deal
+      </label>
+      {form.visibility === "private" && (
+        <p className="field-hint">
+          Only you will see it. Nobody is notified, and it stays in the timeline
+          for others as a sealed entry with nothing in it.
+        </p>
+      )}
+
       <label className="entry-file">
         Attach a file (optional)
         <input type="file" onChange={chooseFile} />

@@ -1647,6 +1647,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/opportunities/{opportunity_id}/private-note": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Private Note
+         * @description This reader's notebook for this deal, empty if they have never written
+         *     one — an empty notebook and no notebook are the same thing to read, so
+         *     there is no 404 branch and no "create" route.
+         */
+        get: operations["read_private_note_api_v2_opportunities__opportunity_id__private_note_get"];
+        /**
+         * Write Private Note
+         * @description Write the whole notebook.
+         *
+         *     `PUT`, not `PATCH`: there is one field and the client holds all of it, so
+         *     a partial update would be a partial update of a single string. Clearing it
+         *     to empty is how a notebook is emptied — the row stays, which keeps the
+         *     unique index honest and costs nothing.
+         *
+         *     No version history and no audit row. Invariant 8 is about *a record
+         *     somebody else relies on* ("attributed to who changed it"); there is no
+         *     second reader here to be surprised by a change, and keeping every draft of
+         *     a private note would be the opposite of the feature.
+         */
+        put: operations["write_private_note_api_v2_opportunities__opportunity_id__private_note_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/custom-fields": {
         parameters: {
             query?: never;
@@ -3425,6 +3461,27 @@ export interface components {
             /** Value */
             value: string;
         };
+        /**
+         * PrivateNotePublic
+         * @description One person's own notes on one deal (milestone R.1b).
+         *
+         *     Not a `NotePublic`: that hangs off an entry and is part of the deal's
+         *     history. This hangs off nothing and is never part of it — no entry, no
+         *     author field (there is only ever one reader), no comments, no versions.
+         */
+        PrivateNotePublic: {
+            /** Opportunity Id */
+            opportunity_id: number;
+            /** Body */
+            body: string;
+            /** Updated At */
+            updated_at: string | null;
+        };
+        /** PrivateNoteUpdate */
+        PrivateNoteUpdate: {
+            /** Body */
+            body: string;
+        };
         /** ReactionCreate */
         ReactionCreate: {
             /**
@@ -3874,6 +3931,12 @@ export interface components {
             custom_values?: {
                 [key: string]: unknown;
             } | null;
+            /**
+             * Visibility
+             * @default private
+             * @enum {string}
+             */
+            visibility: "shared" | "private";
         };
         /** TimelineEntryPublic */
         TimelineEntryPublic: {
@@ -3904,6 +3967,12 @@ export interface components {
             created_at: string;
             /** Sequence */
             sequence: number;
+            /**
+             * Visibility
+             * @default shared
+             * @enum {string}
+             */
+            visibility: "shared" | "private";
             /** Automation Rule Id */
             automation_rule_id?: number | null;
             /** Custom Values */
@@ -3931,6 +4000,8 @@ export interface components {
             custom_values?: {
                 [key: string]: unknown;
             } | null;
+            /** Visibility */
+            visibility?: ("shared" | "private") | null;
         };
         /** TimelineEntryVersionPublic */
         TimelineEntryVersionPublic: {
@@ -6778,6 +6849,76 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_private_note_api_v2_opportunities__opportunity_id__private_note_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrivateNotePublic"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    write_private_note_api_v2_opportunities__opportunity_id__private_note_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                opportunity_id: number;
+            };
+            cookie?: {
+                opptrail_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrivateNoteUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrivateNotePublic"];
+                };
             };
             /** @description Validation Error */
             422: {

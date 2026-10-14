@@ -47,6 +47,7 @@ def create_entry(client: TestClient, opportunity_id: int) -> dict:
     response = client.post(
         f"/api/v2/opportunities/{opportunity_id}/timeline",
         json={
+            "visibility": "shared",
             "type": "call",
             "title": "Discovery call",
             "body": "Walked the procurement process.",

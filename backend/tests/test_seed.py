@@ -154,6 +154,7 @@ def test_seeded_permissions_match_the_printed_tour(tmp_path) -> None:
             blair.post(
                 f"/api/v2/opportunities/{northwind}/timeline",
                 json={
+                    "visibility": "shared",
                     "type": "call",
                     "title": "Editor can write",
                     "body": "",
@@ -167,6 +168,7 @@ def test_seeded_permissions_match_the_printed_tour(tmp_path) -> None:
             casey.post(
                 f"/api/v2/opportunities/{northwind}/timeline",
                 json={
+                    "visibility": "shared",
                     "type": "call",
                     "title": "Viewer cannot write",
                     "body": "",

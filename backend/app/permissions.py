@@ -25,6 +25,34 @@ ACCESSIBLE_OPPORTUNITY_IDS_SQL = """
 """
 
 
+# Which entries one person may read, as a predicate the entry-reading queries
+# paste into their own `WHERE` (milestone R.1b).
+#
+# **A private entry is readable by its author alone.** Not by the opportunity's
+# owner either: "private" that the owner can read is not private, and an owner
+# who needs the content can ask for it the way anybody else would. The rule is
+# symmetric, which is what makes it one predicate rather than a role lookup --
+# and `authorization is structural` (AGENTS.md invariant 2) means it belongs
+# here, beside the rule it extends, rather than being retyped per query.
+#
+# Deliberately *not* used inside `timeline_utils.ENTRY_SEQUENCE_SQL`. An entry's
+# number is a property of the deal, not of the reader: putting this there would
+# renumber one person's timeline relative to another's, and the AI cites those
+# numbers. A reader who may not see #36 sees #35 then #37, which is the honest
+# answer -- the entry is sealed, not erased.
+VISIBLE_ENTRIES_SQL = "(timeline_entries.visibility = 'shared' OR timeline_entries.created_by = ?)"
+
+
+def visible_entries_clause(alias: str = "timeline_entries") -> str:
+    """The same predicate against a different alias.
+
+    Search joins the entries table under its own name in three of its four
+    branches, and a string with `timeline_entries.` hard-coded would be wrong
+    there rather than merely ugly.
+    """
+    return f"({alias}.visibility = 'shared' OR {alias}.created_by = ?)"
+
+
 def get_opportunity_role(
     connection: sqlite3.Connection,
     opportunity_id: int,

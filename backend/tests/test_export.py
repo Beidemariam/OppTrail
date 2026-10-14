@@ -50,6 +50,7 @@ def create_entry(
     response = client.post(
         f"/api/v2/opportunities/{opportunity_id}/timeline",
         json={
+            "visibility": "shared",
             "type": "call",
             "title": title,
             "body": body if body is not None else f"{title} details",
@@ -265,7 +266,7 @@ def test_pdf_html_renders_timeline_in_the_readers_order_and_escapes_bodies(
     )
 
     with db_connection() as connection:
-        data = fetch_export_data(connection, opportunity["id"])
+        data = fetch_export_data(connection, opportunity["id"], 1)
     html = render_export_html(data)
 
     # Newest first, which is what the reader's timeline shows by default
@@ -304,7 +305,7 @@ def test_pdf_html_renders_markdown_instead_of_escaping_it(client: TestClient) ->
     )
 
     with db_connection() as connection:
-        data = fetch_export_data(connection, opportunity["id"])
+        data = fetch_export_data(connection, opportunity["id"], 1)
     html = render_export_html(data)
 
     # The entry body's bold and list render as markup, not literal syntax.
@@ -395,7 +396,7 @@ def test_the_pdf_lists_each_file_under_its_own_entry(client: TestClient) -> None
     attach(client, entry["id"], "quarterly proposal.pdf", contents)
 
     with db_connection() as connection:
-        data = fetch_export_data(connection, opportunity["id"])
+        data = fetch_export_data(connection, opportunity["id"], 1)
     html = render_export_html(data)
 
     # The file is inside its entry's own article, which is what "next to its
@@ -426,7 +427,7 @@ def test_the_manifest_is_absent_when_there_are_no_files(client: TestClient) -> N
     create_entry(client, opportunity["id"], "Discovery call", "2026-09-04T13:00:00")
 
     with db_connection() as connection:
-        data = fetch_export_data(connection, opportunity["id"])
+        data = fetch_export_data(connection, opportunity["id"], 1)
     html = render_export_html(data)
 
     assert '<ul class="files">' not in html
@@ -454,7 +455,7 @@ def test_a_filename_cannot_carry_markup_into_the_export(client: TestClient) -> N
     attach(client, entry["id"], "<img src=x onerror=alert(1)>.pdf", b"%PDF-1.7 payload")
 
     with db_connection() as connection:
-        data = fetch_export_data(connection, opportunity["id"])
+        data = fetch_export_data(connection, opportunity["id"], 1)
     html = render_export_html(data)
 
     assert "<img src=x" not in html
