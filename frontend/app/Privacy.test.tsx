@@ -101,6 +101,33 @@ describe("a sealed entry on somebody else's deal", () => {
 });
 
 describe("its author", () => {
+  it("is told which of their own entries is sealed", async () => {
+    await renderDeal({
+      user: ALEX,
+      opportunities: [anOpportunity()],
+      entries: [
+        anEntry({ id: 100, title: "Said out loud", visibility: "shared" }),
+        anEntry({
+          id: 101,
+          title: "Kept back",
+          sequence: 2,
+          visibility: "private",
+        }),
+      ],
+    });
+
+    const card = (await screen.findByText("Kept back")).closest(
+      "article",
+    ) as HTMLElement;
+
+    expect(within(card).getByText("Private")).toBeInTheDocument();
+    // And the one beside it, which everybody reads, is not marked.
+    const shared = (await screen.findByText("Said out loud")).closest(
+      "article",
+    ) as HTMLElement;
+    expect(within(shared).queryByText("Private")).toBeNull();
+  });
+
   it("reads it whole, and can reveal it", async () => {
     const api = await renderDeal({
       user: ALEX,

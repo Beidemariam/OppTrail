@@ -173,6 +173,13 @@ function TimelineEntryCard({
                   {entry.automation_rule_id === null ? "System" : "Automation"}
                 </span>
               )}
+              {/* The author's own sealed entry says so (R.1b). The sealed
+                  card a colleague sees carries this badge, and without it
+                  here the only thing telling the author which of their own
+                  entries is private is the verb on a button. */}
+              {entry.visibility === "private" && (
+                <span className="system-badge">Private</span>
+              )}
               <span>{formatTimestamp(entry.event_timestamp)}</span>
             </div>
             <h3>{entry.title}</h3>

@@ -91,11 +91,6 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
   // arriving from a link or a search result lands on the thing it referred to
   // rather than at the top of a timeline.
   const linkTarget = linkTargetFromParams(searchParams);
-  // A boolean, not the object: `linkTargetFromParams` builds a fresh one every
-  // render, so depending on it below would re-run the effect on every render
-  // and scroll a reader back to the top of the panel as they read. The effect
-  // only asks whether something else has claimed the scroll.
-  const hasLinkTarget = linkTarget !== null;
 
   // Until R.1 this panel scrolled itself into view, because it was appended
   // below a full screen of board (2.7). It is its own page now and the shell

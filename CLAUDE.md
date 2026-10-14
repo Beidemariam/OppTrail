@@ -1134,6 +1134,10 @@ this one predicate rather than a role lookup.
 - **A new entry is private by default** (**D-196**), with a tick box to reveal
   it, as asked — `schemas.DEFAULT_ENTRY_VISIBILITY` is the one constant, and
   the test suites now say which visibility they mean rather than inheriting it.
+  The author's own card carries the same `Private` badge the sealed card
+  shows a colleague: without it, the only thing telling the author which of
+  their entries is sealed is the verb on a button (`Reveal` against `Keep
+  private`), which is a difference nobody reads while scrolling.
 
 **A notebook of one's own.** `private_notes` is one row per person per deal:
 the running note that is not a record of anything that happened, so it is not
