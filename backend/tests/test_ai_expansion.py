@@ -325,7 +325,9 @@ def test_a_failure_mid_stream_is_an_event_rather_than_a_status(
         assert response.status_code == 200
         events = sse_events(b"".join(response.iter_bytes()).decode())
 
-    assert events == [("error", "AI service is unavailable")]
+    # The sentence names the failure class since R.1 (D-192); what this test is
+    # about is that it arrives as an event rather than as a status.
+    assert events == [("error", "The AI service is unavailable.")]
 
 
 def test_a_reader_with_no_access_is_refused_before_the_stream_opens(

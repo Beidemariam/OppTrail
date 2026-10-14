@@ -3,7 +3,12 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { aCustomField, anEntry, anOpportunity } from "./test-api";
-import { openTimeline, renderDashboard } from "./test-app";
+import {
+  openTimeline,
+  renderDashboard,
+  renderDeal,
+  openBoardFilters,
+} from "./test-app";
 
 /**
  * Custom fields on screen (milestone 6.1, ADR 0006).
@@ -82,6 +87,7 @@ describe("a select field appears in the three places §3 names", () => {
   it("is a filter, and the filter is in the URL", async () => {
     await renderDashboard(seeded());
 
+    await openBoardFilters();
     const filter = await screen.findByLabelText("Filter by Region");
     await userEvent.selectOptions(filter, "EMEA");
     await userEvent.click(screen.getByRole("button", { name: "Apply" }));
@@ -138,21 +144,18 @@ describe("where a value is read (milestone 6.2a)", () => {
     // The human's request at the 6.2 review: "please include Business field
     // as one of the things to show in the top line summary of the opportunity
     // in the right side next to value, close date etc."
-    await renderDashboard(
-      {
-        customFields: [
-          { ...REGION, type: "text", options: [], label: "Business" },
-        ],
-        opportunities: [
-          {
-            ...anOpportunity({ id: 10, name: "Northwind rollout" }),
-            custom_values: { region: "Public sector" },
-          },
-        ],
-        entries: [anEntry({ id: 100, title: "Discovery call" })],
-      },
-      "/opportunities/10",
-    );
+    await renderDeal({
+      customFields: [
+        { ...REGION, type: "text", options: [], label: "Business" },
+      ],
+      opportunities: [
+        {
+          ...anOpportunity({ id: 10, name: "Northwind rollout" }),
+          custom_values: { region: "Public sector" },
+        },
+      ],
+      entries: [anEntry({ id: 100, title: "Discovery call" })],
+    });
 
     const facts = await screen.findByText(/Business: Public sector/);
     expect(facts).toBeInTheDocument();
@@ -161,21 +164,18 @@ describe("where a value is read (milestone 6.2a)", () => {
   it("leaves an unset field off the summary line entirely", async () => {
     // A summary listing every defined field as empty is a longer line that
     // says less.
-    await renderDashboard(
-      {
-        customFields: [
-          { ...REGION, type: "text", options: [], label: "Business" },
-        ],
-        opportunities: [
-          {
-            ...anOpportunity({ id: 10, name: "Northwind rollout" }),
-            custom_values: {},
-          },
-        ],
-        entries: [anEntry({ id: 100, title: "Discovery call" })],
-      },
-      "/opportunities/10",
-    );
+    await renderDeal({
+      customFields: [
+        { ...REGION, type: "text", options: [], label: "Business" },
+      ],
+      opportunities: [
+        {
+          ...anOpportunity({ id: 10, name: "Northwind rollout" }),
+          custom_values: {},
+        },
+      ],
+      entries: [anEntry({ id: 100, title: "Discovery call" })],
+    });
 
     await screen.findByText("Discovery call");
     expect(screen.queryByText(/Business:/)).not.toBeInTheDocument();
@@ -191,23 +191,20 @@ describe("where a value is read (milestone 6.2a)", () => {
       label: "Follow up",
       type: "checkbox",
     });
-    await renderDashboard(
-      {
-        customFields: [followUp],
-        opportunities: [anOpportunity({ id: 10, name: "Northwind rollout" })],
-        entries: [
-          {
-            ...anEntry({ id: 100, title: "Needs chasing" }),
-            custom_values: { follow_up: true },
-          },
-          {
-            ...anEntry({ id: 101, title: "Nothing pending" }),
-            custom_values: { follow_up: false },
-          },
-        ],
-      },
-      "/opportunities/10",
-    );
+    await renderDeal({
+      customFields: [followUp],
+      opportunities: [anOpportunity({ id: 10, name: "Northwind rollout" })],
+      entries: [
+        {
+          ...anEntry({ id: 100, title: "Needs chasing" }),
+          custom_values: { follow_up: true },
+        },
+        {
+          ...anEntry({ id: 101, title: "Nothing pending" }),
+          custom_values: { follow_up: false },
+        },
+      ],
+    });
 
     const chased = (await screen.findByText("Needs chasing")).closest(
       ".timeline-entry",
@@ -227,6 +224,50 @@ describe("where a value is read (milestone 6.2a)", () => {
     expect(
       within(settled as HTMLElement).queryByText(/Follow up/),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("every field type is filterable from the board (R.1)", () => {
+  it("offers a text box for a text field and a yes/no for a checkbox", async () => {
+    await renderDashboard({
+      customFields: [
+        aCustomField({ key: "business", label: "Business", type: "text" }),
+        aCustomField({
+          id: 903,
+          key: "signed",
+          label: "Signed",
+          type: "checkbox",
+        }),
+      ],
+      opportunities: [
+        {
+          ...anOpportunity({ id: 10, name: "Northwind rollout" }),
+          custom_values: { business: "CTCS", signed: true },
+        },
+        {
+          ...anOpportunity({ id: 11, name: "Globex renewal" }),
+          custom_values: { business: "Secunet", signed: false },
+        },
+      ],
+    });
+    await openBoardFilters();
+
+    await userEvent.type(screen.getByLabelText("Filter by Business"), "ctcs");
+    await userEvent.selectOptions(
+      screen.getByLabelText("Filter by Signed"),
+      "true",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+    expect(await screen.findByText("Northwind rollout")).toBeInTheDocument();
+    expect(screen.queryByText("Globex renewal")).not.toBeInTheDocument();
+    // And both read back as chips, in the field's own words.
+    expect(
+      screen.getByRole("button", { name: /Business: ctcs/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Signed: true/ }),
+    ).toBeInTheDocument();
   });
 });
 
@@ -260,6 +301,10 @@ describe("defining and retiring a field", () => {
         screen.getByRole("dialog", { name: "Custom fields" }),
       ).findByText("Deal source"),
     ).toBeInTheDocument();
+    // And by the filter bar, once the dialog over it is out of the way: the
+    // definition read is what every screen draws from.
+    await userEvent.click(screen.getByRole("button", { name: "Close" }));
+    await openBoardFilters();
     expect(screen.getByLabelText("Filter by Deal source")).toBeInTheDocument();
   });
 
@@ -438,6 +483,7 @@ describe("defining and retiring a field", () => {
     // The consequence that matters: archiving takes effect on every screen
     // at once, because the definition read is what each of them draws from.
     const api = await renderDashboard(seeded());
+    await openBoardFilters();
     expect(
       await screen.findByLabelText("Filter by Region"),
     ).toBeInTheDocument();

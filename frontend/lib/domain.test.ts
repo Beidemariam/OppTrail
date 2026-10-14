@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   adjacentStage,
+  appliedOpportunityFilters,
   applyOpportunityView,
   calendarRange,
   calendarWeeks,
@@ -899,5 +900,103 @@ describe("which custom values a card shows (milestone 6.2a)", () => {
     expect(cardCustomValues([], { follow_up: true, region: "EMEA" })).toEqual(
       [],
     );
+  });
+});
+
+describe("what is filtering the board, as chips (R.1, decision 3A)", () => {
+  const field = {
+    id: 1,
+    entity_type: "opportunity" as const,
+    key: "business",
+    label: "Business",
+    type: "select" as const,
+    options: ["CTCS", "PW"],
+    required: false,
+    archived_at: null,
+    created_by: 1,
+    created_at: "2026-10-01T09:00:00Z",
+    updated_at: "2026-10-01T09:00:00Z",
+    position: 0,
+  };
+
+  it("says nothing when nothing is filtering", () => {
+    expect(appliedOpportunityFilters(emptyOpportunityViewState)).toEqual([]);
+  });
+
+  it("names each filter in the control's own words", () => {
+    const chips = appliedOpportunityFilters({
+      ...emptyOpportunityViewState,
+      q: "northwind",
+      stage: "Negotiation",
+      stalled: "true",
+      minValue: "50000",
+    });
+
+    expect(chips.map((chip) => chip.label)).toEqual([
+      "Keyword: northwind",
+      "Stage: Negotiation",
+      "Stalled only",
+      "Min value: 50000",
+    ]);
+  });
+
+  it("removes its own filter and leaves the rest alone", () => {
+    const state = {
+      ...emptyOpportunityViewState,
+      q: "northwind",
+      stage: "Negotiation",
+      view: "table" as const,
+    };
+
+    const stage = appliedOpportunityFilters(state).find(
+      (chip) => chip.key === "stage",
+    );
+
+    expect(stage?.without).toEqual({ ...state, stage: "" });
+  });
+
+  it("leaves the sort and the chosen view out: they draw the set, they do not choose it", () => {
+    expect(
+      appliedOpportunityFilters({
+        ...emptyOpportunityViewState,
+        sortField: "value",
+        sortDirection: "asc",
+        view: "calendar",
+        columns: "name,value",
+        month: "2026-11",
+      }),
+    ).toEqual([]);
+  });
+
+  it("counts a pinned selection as one filter", () => {
+    const chips = appliedOpportunityFilters({
+      ...emptyOpportunityViewState,
+      ids: "3,7",
+    });
+
+    expect(chips).toHaveLength(1);
+    expect(chips[0].label).toBe("2 pinned");
+    expect(chips[0].without.ids).toBe("");
+  });
+
+  it("names a custom filter by its field's label", () => {
+    const chips = appliedOpportunityFilters(
+      { ...emptyOpportunityViewState, custom: "business:CTCS" },
+      [field],
+    );
+
+    expect(chips.map((chip) => chip.label)).toEqual(["Business: CTCS"]);
+    expect(chips[0].without.custom).toBe("");
+  });
+
+  it("drops a filter whose field has been archived, like every other read", () => {
+    // ADR 0006: a value with no live definition is not read, which is what
+    // lets a field be archived without rewriting a row.
+    expect(
+      appliedOpportunityFilters(
+        { ...emptyOpportunityViewState, custom: "business:CTCS" },
+        [],
+      ),
+    ).toEqual([]);
   });
 });

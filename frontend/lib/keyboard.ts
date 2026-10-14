@@ -67,7 +67,7 @@ export const shortcutGroups = [
       {
         chord: "/",
         keys: "/",
-        description: "Focus the board's keyword filter",
+        description: "Focus this screen's keyword filter",
       },
       { chord: "j", keys: "j", description: "Focus the next opportunity" },
       { chord: "k", keys: "k", description: "Focus the previous opportunity" },

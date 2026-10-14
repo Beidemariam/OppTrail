@@ -24,7 +24,20 @@ import { useInlineEditor } from "./InlineEdit";
  * (D-110): most questions are about the deal, and the range is for the ones
  * that are about a quarter.
  */
-export function AiSidebar({ opportunityId }: { opportunityId: number }) {
+export function AiSidebar({
+  opportunityId,
+  onClose,
+}: {
+  opportunityId: number;
+  /**
+   * Given when the panel is the drawer rather than a column (R.1, decision
+   * 2A): the AI overlays the rail on request and is dismissed, so it needs a
+   * control that puts it away. Salesforce's own design system states the rule
+   * this follows — an assistant panel keeps its history when closed, and
+   * nothing but the reader opens or closes it.
+   */
+  onClose?: () => void;
+}) {
   const [question, setQuestion] = useState("");
   const [since, setSince] = useState("");
   const [until, setUntil] = useState("");
@@ -60,10 +73,16 @@ export function AiSidebar({ opportunityId }: { opportunityId: number }) {
   }
 
   return (
-    <aside className="ai-sidebar">
+    <aside className={onClose ? "ai-sidebar ai-drawer" : "ai-sidebar"}>
       <div className="section-heading">
-        <h3>AI Agent</h3>
-        <span>Read-only</span>
+        <h3>Ask</h3>
+        {onClose ? (
+          <button type="button" className="secondary-button" onClick={onClose}>
+            Close
+          </button>
+        ) : (
+          <span>Read-only</span>
+        )}
       </div>
 
       <div className="ai-chat" ref={chatRef}>

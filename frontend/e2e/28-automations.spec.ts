@@ -2,7 +2,6 @@ import { expect, test } from "@playwright/test";
 
 import {
   ALEX,
-  NORTHWIND,
   card,
   createOpportunity,
   expectNoAccessibilityViolations,

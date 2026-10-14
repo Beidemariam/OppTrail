@@ -3,7 +3,12 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { aNote, anEntry, anOpportunity, BLAIR } from "./test-api";
-import { openTimeline, renderDashboard } from "./test-app";
+import {
+  backToBoard,
+  openTimeline,
+  renderDashboard,
+  renderDeal,
+} from "./test-app";
 import { stubEventSource } from "./test-live-updates";
 import { writeInEditor } from "./test-editor";
 
@@ -99,20 +104,19 @@ it("follows the reader from one opportunity to the next", async () => {
   // a connection left open on a deal nobody is looking at holds a worker slot
   // for nothing (ADR 0003's consequences).
   const streams = stubEventSource();
-  await renderDashboard(
-    {
-      opportunities: [
-        anOpportunity(),
-        anOpportunity({ id: 11, name: "Initech" }),
-      ],
-      entries: [anEntry()],
-    },
-    "/opportunities/10",
-  );
+  await renderDeal({
+    opportunities: [
+      anOpportunity(),
+      anOpportunity({ id: 11, name: "Initech" }),
+    ],
+    entries: [anEntry()],
+  });
 
   await screen.findByRole("heading", { name: "Discovery call" });
   await waitFor(() => expect(streams).toHaveLength(1));
 
+  // By way of the board, since a deal is its own page (R.1, decision 1A).
+  await backToBoard();
   await openTimeline("Initech");
 
   await waitFor(() => expect(streams).toHaveLength(2));

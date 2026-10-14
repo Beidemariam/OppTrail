@@ -50,6 +50,15 @@ ERROR_CODES = {
     415: "unsupported_media_type",
     422: "validation_error",
     429: "rate_limited",
+    # The AI agent's three failure classes (R.1, D-052). Before this, a
+    # misconfigured model and an outage both answered `code: "internal_error"`
+    # with one sentence between them, which is what made a thirty-second
+    # operator fix read as "the vendor is down". The message names what to
+    # check; these are what a client branches on.
+    500: "internal_error",
+    502: "upstream_unavailable",
+    503: "service_unavailable",
+    504: "upstream_timeout",
 }
 FALLBACK_ERROR_CODE = "internal_error"
 

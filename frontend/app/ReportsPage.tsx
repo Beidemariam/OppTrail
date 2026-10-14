@@ -12,7 +12,8 @@ import {
   winRatePercent,
   type Dashboard,
 } from "../lib/domain";
-import { useDashboard, useSession } from "../lib/queries";
+import { useDashboard } from "../lib/queries";
+import { PageHeader } from "./AppShell";
 import { formatTimestamp } from "../lib/time";
 
 /**
@@ -77,57 +78,24 @@ function sinceFor(days: number | null): string {
 }
 
 export function ReportsPage() {
-  const session = useSession();
   const [periodDays, setPeriodDays] = useState<number | null>(null);
   const period =
     PERIODS.find((candidate) => candidate.days === periodDays) ?? PERIODS[0];
-  const dashboard = useDashboard(
-    sinceFor(periodDays),
-    period.weeks,
-    Boolean(session.data),
-  );
-
-  if (session.isPending) {
-    return (
-      <main className="app-shell">
-        <p className="status">Loading...</p>
-      </main>
-    );
-  }
-
-  if (!session.data) {
-    return (
-      <main className="app-shell">
-        <header className="topbar">
-          <div>
-            <p className="eyebrow">OppTrail</p>
-            <h1>Reports</h1>
-          </div>
-        </header>
-        <p className="empty-state">
-          <Link to="/">Sign in</Link> to see your pipeline.
-        </p>
-      </main>
-    );
-  }
+  // The shell has already refused to render a screen without a session, so
+  // there is no longer a signed-out pass to hold this query back from.
+  const dashboard = useDashboard(sinceFor(periodDays), period.weeks, true);
 
   return (
     <main className="app-shell">
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">OppTrail</p>
-          <h1>Reports</h1>
-        </div>
-        <div className="user-block">
-          <span>{session.data.name}</span>
-          <Link className="secondary-button" to="/">
-            Opportunities
-          </Link>
-        </div>
-      </header>
-
       <section className="workspace">
-        <div className="page-actions">
+        <PageHeader
+          title="Reports"
+          subtitle={
+            <p className="page-subtitle">
+              Computed live, across the opportunities you can see.
+            </p>
+          }
+        >
           <label className="filter-field">
             Period
             <select
@@ -149,7 +117,7 @@ export function ReportsPage() {
               ))}
             </select>
           </label>
-        </div>
+        </PageHeader>
 
         <p className="report-note">
           The period applies to <strong>Win and loss</strong> and{" "}

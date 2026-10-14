@@ -132,6 +132,7 @@
      inside it, and how tightly a cell is padded. Anything that varies with
      density reads these rather than declaring its own value, which is what
      makes Compact one block rather than a per-component variant. */
+  --control-height: 34px;
   --row-height: 40px;
   --row-text: var(--text-sm);
   --row-line: var(--line-sm);
@@ -354,6 +355,9 @@ kbd {
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
   gap: var(--space-4);
+  /* Fixed, because the record header below it sticks to the bottom of this
+     bar and a sticky offset cannot read a neighbour's height (R.1). */
+  min-height: 56px;
   padding: var(--space-2) var(--space-6);
   position: sticky;
   top: 0;
@@ -388,7 +392,7 @@ kbd {
 .topbar select,
 .topbar .notification-button {
   font-size: var(--text-sm);
-  min-height: 32px;
+  min-height: var(--control-height);
 }
 
 .user-chip {
@@ -466,7 +470,7 @@ kbd {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
-  min-height: 42px;
+  min-height: var(--control-height);
   padding: 9px 11px;
 }
 
@@ -503,7 +507,7 @@ textarea {
   border: 0;
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
-  min-height: 38px;
+  min-height: var(--control-height);
 }
 
 .segmented button.active {
@@ -536,8 +540,8 @@ textarea {
   font-weight: 700;
   justify-content: center;
   line-height: 1.15;
-  min-height: 44px;
-  padding: 9px 14px;
+  min-height: var(--control-height);
+  padding: 6px 14px;
   text-align: center;
   white-space: nowrap;
 }
@@ -691,7 +695,7 @@ a.danger-button {
 
 .compact-button {
   font-size: var(--text-sm);
-  min-height: 34px;
+  min-height: var(--control-height);
   padding: 7px 10px;
 }
 
@@ -745,7 +749,7 @@ a.danger-button {
 }
 
 .page-actions .segmented button {
-  min-height: 34px;
+  min-height: var(--control-height);
   padding: 0 var(--space-3);
 }
 
@@ -1019,7 +1023,7 @@ a.danger-button {
   font-size: var(--text-xs);
   font-weight: 700;
   justify-content: center;
-  min-height: 30px;
+  min-height: var(--control-height);
   padding: 0 var(--space-2);
   text-decoration: none;
   white-space: nowrap;
@@ -1044,7 +1048,7 @@ a.danger-button {
   font-size: var(--text-xs);
   font-weight: 700;
   max-width: 112px;
-  min-height: 30px;
+  min-height: var(--control-height);
   padding: 0 var(--space-1);
 }
 
@@ -1232,7 +1236,7 @@ a.danger-button {
 .sidebar-column select,
 .sidebar-column input {
   font-size: var(--text-sm);
-  min-height: 34px;
+  min-height: var(--control-height);
   padding: var(--space-1) var(--space-2);
 }
 
@@ -1272,9 +1276,7 @@ a.danger-button {
 }
 
 .export-actions .secondary-button {
-  min-height: 40px;
   min-width: 64px;
-  padding: 8px 12px;
 }
 
 /* A heading beside its controls. `wrap` is what the buttons' `flex-shrink: 0`
@@ -1405,9 +1407,11 @@ a.danger-button {
   border-left: 3px solid var(--border-accent);
 }
 
+/* The box and the title, side by side. Not a `label` since R.1: the title is
+   its own control — a link to the task on a cross-deal list — and a label
+   would hand its clicks to the checkbox. */
 .task-check {
   align-items: start;
-  cursor: pointer;
   display: flex;
   gap: var(--space-2);
 }
@@ -1420,11 +1424,31 @@ a.danger-button {
   font-weight: 600;
 }
 
+/* A title that happens to be clickable, not a link in a sentence: the colour
+   and the underline are what a reader scans past, and the row is full of
+   links already (the deal, the entry it came from). */
+a.task-title {
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+a.task-title:hover {
+  text-decoration: underline;
+}
+
 /* A completed task stays readable -- "we already did that" is what a shared
    record is for -- and says so without a second badge. */
-.task-check input:checked + .task-title {
+.task-check input:checked + .task-title,
+.task-check input:checked + a.task-title {
   color: var(--text-secondary);
   text-decoration: line-through;
+}
+
+/* The task a link named (R.1), marked the way a linked entry, note or comment
+   is: enough to say "this one", not enough to shout. */
+.task-row.is-linked {
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 2px var(--bg-selected);
 }
 
 .task-meta {
@@ -1617,14 +1641,14 @@ a.danger-button {
 .saved-views select,
 .saved-views input {
   font-size: var(--text-sm);
-  min-height: 34px;
+  min-height: var(--control-height);
   padding: var(--space-1) var(--space-2);
 }
 
 .filter-bar .primary-button,
 .filter-bar .secondary-button {
   font-size: var(--text-sm);
-  min-height: 34px;
+  min-height: var(--control-height);
   padding: var(--space-1) var(--space-3);
 }
 
@@ -1770,7 +1794,7 @@ a.danger-button {
 }
 
 .bulk-action-bar select {
-  min-height: 36px;
+  min-height: var(--control-height);
 }
 
 .bulk-action-bar p {
@@ -1958,8 +1982,9 @@ a.danger-button {
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
   font-size: var(--text-sm);
-  min-height: 42px;
-  padding: 9px 11px;
+  line-height: 1.3;
+  min-height: var(--control-height);
+  padding: 6px 11px;
   text-align: left;
   width: 100%;
 }
@@ -2265,6 +2290,45 @@ a.danger-button {
    styling; what needs declaring is the fieldset that groups them, the
    definition list in the manage dialog, and the heading a custom table column
    draws instead of a sort button. */
+/* A tick box is not a text field. Without this it inherits the form's control
+   height and padding, which is how a single "Follow up action" checkbox came
+   to render as a 42px box centred in its own panel — reported from a
+   screenshot (R.1). */
+.form input[type="checkbox"],
+.form input[type="radio"],
+.filter-bar input[type="checkbox"],
+.timeline-form input[type="checkbox"],
+.stacked-form input[type="checkbox"],
+.sidebar-column input[type="checkbox"] {
+  accent-color: var(--teal-600);
+  block-size: 16px;
+  inline-size: 16px;
+  min-height: 0;
+  padding: 0;
+  width: auto;
+}
+
+/* The row a tick box sits in: the control, then its label, on one line.
+
+   The selector carries the form class because `.timeline-form label` and its
+   siblings stack a label above its control in a column — right for a text
+   field, and what left a lone checkbox centred above the words "Follow up
+   action" in a panel of its own (R.1). */
+.checkbox-field,
+.form .checkbox-field,
+.timeline-form .checkbox-field,
+.stacked-form .checkbox-field,
+.sidebar-column .checkbox-field {
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  font-size: var(--text-sm);
+  font-weight: 400;
+  gap: var(--space-2);
+  justify-content: flex-start;
+  min-height: var(--control-height);
+}
+
 .custom-field-inputs,
 .multi-select-field {
   border: 1px solid var(--border-subtle);
@@ -2272,7 +2336,8 @@ a.danger-button {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-3);
+  /* Tight: this is a group of fields, not a panel of its own (R.1). */
+  padding: var(--space-2) var(--space-3) var(--space-3);
 }
 
 .custom-field-inputs > legend,
@@ -2424,7 +2489,7 @@ a.danger-button {
 }
 
 .compact {
-  min-height: 32px;
+  min-height: var(--control-height);
   padding: 5px 8px;
 }
 
@@ -2607,7 +2672,7 @@ a.danger-button {
   gap: var(--space-3);
   justify-content: space-between;
   max-width: 420px;
-  min-height: 36px;
+  min-height: var(--control-height);
   padding: var(--space-1) var(--space-2) var(--space-1) var(--space-4);
 }
 
@@ -2688,7 +2753,7 @@ kbd {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
-  min-height: 42px;
+  min-height: var(--control-height);
   padding: 9px 11px;
 }
 
@@ -2792,7 +2857,7 @@ kbd {
   font: inherit;
   font-size: var(--text-sm);
   gap: var(--space-1);
-  min-height: 34px;
+  min-height: var(--control-height);
   padding: var(--space-1) var(--space-3);
 }
 
@@ -2826,7 +2891,7 @@ kbd {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
-  min-height: 44px;
+  min-height: var(--control-height);
   padding: 9px 11px;
 }
 
@@ -3164,7 +3229,7 @@ kbd {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
-  min-height: 34px;
+  min-height: var(--control-height);
   padding: 0 var(--space-2);
 }
 
@@ -3419,7 +3484,7 @@ kbd {
 .inline-editor select {
   font-size: var(--text-sm);
   max-width: 220px;
-  min-height: 30px;
+  min-height: var(--control-height);
   padding: 2px var(--space-2);
 }
 
@@ -3743,4 +3808,418 @@ kbd {
 
 .ai-filter-proposal p {
   margin: 0 0 var(--space-2);
+}
+
+/* ============================================================
+   R.1 — one shell, and a deal of its own
+   ============================================================ */
+
+/* The shell (decision 4A): a rail of destinations and everything else.
+   Before this the app had no navigation region at all -- three links lived in
+   the account block of the top bar, and four of the five screens hand-rolled a
+   header without them, so Reports had no way to reach Automations. */
+.app-frame {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.app-frame.is-collapsed {
+  grid-template-columns: 56px minmax(0, 1fr);
+}
+
+.app-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.nav-rail {
+  background: var(--bg-sunken);
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-2);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+
+.nav-brand {
+  align-items: center;
+  color: var(--text-primary);
+  display: flex;
+  font-weight: 600;
+  gap: var(--space-2);
+  padding: 0 var(--space-2) var(--space-3);
+  text-decoration: none;
+}
+
+.nav-list {
+  display: grid;
+  gap: 2px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.nav-item {
+  align-items: center;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  display: flex;
+  gap: var(--space-2);
+  justify-content: space-between;
+  min-height: var(--control-height);
+  padding: var(--space-1) var(--space-2);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.nav-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* The current section, which is what a rail is for. `aria-current="page"`
+   carries the same fact to a screen reader, so this is decoration over an
+   announcement rather than the only signal. */
+.nav-item.is-active {
+  background: var(--bg-selected);
+  color: var(--text-link);
+  font-weight: 600;
+}
+
+.nav-count {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  padding: 0 var(--space-2);
+}
+
+.nav-toggle {
+  background: none;
+  border: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  margin-top: auto;
+  min-height: var(--control-height);
+  padding: var(--space-1) var(--space-2);
+  text-align: left;
+}
+
+.nav-toggle:hover {
+  color: var(--text-primary);
+}
+
+/* Collapsed keeps the icons' worth of width and drops the words. The label is
+   still in the DOM for the accessible name; `title` on the link is what a
+   sighted reader gets instead of the text. */
+.app-frame.is-collapsed .nav-brand-name,
+.app-frame.is-collapsed .nav-label,
+.app-frame.is-collapsed .nav-count {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.app-frame.is-collapsed .nav-toggle {
+  overflow: hidden;
+  text-indent: -9999px;
+}
+
+.app-frame.is-collapsed .nav-toggle::after {
+  content: ">>";
+  float: left;
+  text-indent: 0;
+}
+
+/* A screen's own title and controls, now on all five (R.1). */
+.page-title {
+  min-width: 0;
+}
+
+/* The deal as its own page (decision 1A). It is a `main` like every other
+   screen in the shell, with the workspace's own padding — the panel used to
+   inherit both from the dashboard it hung under. */
+.deal-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0 auto;
+  max-width: 1600px;
+  min-width: 0;
+  padding: 0 var(--space-4);
+  width: 100%;
+}
+
+.empty-panel.app-shell {
+  padding: var(--space-6) var(--space-4);
+}
+
+/* The record, pinned (decision 2A). `top` clears the application bar, which is
+   itself sticky at 0 -- two sticky bands, the outer one first. */
+.record-header {
+  align-items: flex-start;
+  /* Two rows of facts, not four. A band that never leaves the window is a band
+     the timeline pays for, so it carries the identity, the facts and the
+     actions and nothing else (R.1). */
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  position: sticky;
+  /* The application bar sticks at 0 and is 56px tall; this band sits directly
+     under it. Both numbers are in one place: `.topbar`'s own `min-height`. */
+  top: 56px;
+  z-index: 4;
+}
+
+.record-main {
+  display: grid;
+  flex: 1 1 320px;
+  gap: 2px;
+  min-width: 0;
+}
+
+.record-crumb {
+  font-size: var(--text-sm);
+  margin: 0;
+}
+
+/* The deal's name, with its account beside it rather than above it.
+
+   `flex: 1 1 auto` on the heading is load bearing, and the reason is worth
+   recording because it is not obvious. The heading holds an `InlineEdit`
+   button (2.11), an inline-block with `max-width: 100%` — and a flex item
+   whose content is that resolves its automatic base size to roughly the
+   button's own intrinsic width rather than to the text's max-content. The
+   measured result: the name wrapped onto two lines inside a 280px box with
+   460px of the row standing empty beside it, and the account beside it was
+   squeezed to "E…". Reported from a screenshot, which is the only way this
+   was ever going to be found. */
+.record-identity {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  min-width: 0;
+}
+
+.record-identity h2 {
+  flex: 0 1 auto;
+  /* `width: max-content` rather than leaving it to flex's automatic base size.
+     That base resolves against the inline edit button inside the heading and
+     lands a few pixels short of the text, which `text-overflow` then turns
+     into an ellipsis — the name truncating with 400px of the row standing
+     empty beside it (R.1, reported from a screenshot). `max-width` is what
+     keeps a very long name inside the band. */
+  max-width: 100%;
+  width: max-content;
+  /* A fixed step, not a `vw` clamp: Chrome resolves a viewport-relative font
+     size differently while computing intrinsic widths, so the heading's
+     max-content came out ~20px narrower than it rendered and the name
+     ellipsized with 450px of the row standing empty (R.1). */
+  font-size: var(--text-xl);
+  line-height: 1.2;
+  margin: 0;
+  min-width: 0;
+}
+
+/* The account: one line beside the name, truncated rather than wrapped into a
+   column of single words. It is a fact about the deal, not a second title. */
+.record-identity .eyebrow {
+  flex: 0 1 auto;
+  margin: 0;
+  max-width: 32ch;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.record-identity .eyebrow .inline-edit {
+  display: block;
+  /* The same 8px as the heading above: the account was reading
+     "Northwind Tra…" for want of its own padding. */
+  margin-inline: 0;
+  max-width: 100%;
+  padding-inline: 0;
+}
+
+/* The one that made the name wrap. `InlineEdit`'s trigger is an inline-block
+   with `max-width: 100%`, and a flex item whose content is that resolves its
+   automatic base size to roughly the button's own width rather than to the
+   text's — so the name folded into a 280px box with 400px of the row empty
+   beside it. A block-level child contributes its real max-content, and
+   `nowrap` keeps the name on one line, ellipsized only if it genuinely cannot
+   fit (its full text stays in the control's `title`). */
+.record-identity h2 .inline-edit,
+.record-identity h2 .inline-edit-static {
+  display: block;
+  /* `InlineEdit`'s trigger insets itself by 4px and pulls the same 4px back as
+     negative margin, so its border box is 8px wider than the width it
+     contributes to the heading around it — and `text-overflow` turned those 8
+     pixels into an ellipsis on a name with 400px of empty row beside it. The
+     heading is the one place that inset buys nothing, so it goes. */
+  margin-inline: 0;
+  max-width: 100%;
+  padding-inline: 0;
+  white-space: nowrap;
+}
+
+.record-count {
+  color: var(--text-link);
+}
+
+/* The timeline and the rail. Same two tracks the panel had; what changed is
+   what is in them and what sits above them. */
+.deal-body {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+}
+
+/* Asking narrows the timeline and leaves the rail alone (decision 2A). The
+   reader's own rule: the AI may be given room, and may never take it from the
+   deal's tasks. Salesforce's design system documents the same arrangement --
+   a docked panel is in the document flow, so the record narrows rather than
+   being covered. */
+.deal-body.is-asking {
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 300px) minmax(
+      320px,
+      380px
+    );
+}
+
+/* The drawer stays put under the two bands above it (the application bar at
+   55px and the record header at ~126px), so its ask box is on screen wherever
+   the reader has scrolled to — which is the half of the 6.4 complaint the
+   panel's own cap did not answer. */
+.ai-drawer {
+  align-self: start;
+  grid-column: 3;
+  max-height: calc(100vh - 200px);
+  position: sticky;
+  top: 190px;
+}
+
+@media (max-width: 1280px) {
+  /* Below this there is not room for three columns, so the drawer takes the
+     rail's place rather than squeezing both. The rail is below the timeline at
+     this width anyway. */
+  .deal-body.is-asking {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  }
+
+  .deal-body.is-asking .sidebar-column {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  .ai-drawer {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+}
+
+/* The board's applied filters, when its controls are shut (R.1, decision 3A).
+   Chips rather than Salesforce's labelled rows: there are at most a handful
+   here and they sit in a strip above the board rather than inside a panel. */
+/* The open bar's own way to shut it. `flex-basis: 100%` so it takes a line of
+   its own above the controls, like `.filter-note` below it. */
+.filter-collapse {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.filter-chips {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.filter-chip {
+  background: var(--bg-accent-soft);
+  border: 1px solid var(--border-accent);
+  border-radius: 12px;
+  color: var(--text-link);
+  display: inline-flex;
+  font-size: var(--text-sm);
+  gap: var(--space-2);
+  min-height: 28px;
+  padding: 0 var(--space-3);
+}
+
+.filter-chip:hover {
+  background: var(--bg-selected);
+}
+
+/* The narrow-width answer for everything R.1 added. It sits at the end of the
+   file on purpose: these selectors have the same specificity as the base rules
+   above, so a media block placed before them loses the cascade — which is
+   exactly what happened the first time, and what `e2e/23-responsive.spec.ts`
+   measured as 92px of horizontal overflow at 420. */
+@media (max-width: 900px) {
+  /* The rail becomes a strip across the top: a 190px column on a 420px screen
+     is half the window. Collapsed or not it is the same strip here — the
+     preference governs the wide layout only. */
+  .app-frame,
+  .app-frame.is-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .nav-rail {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    height: auto;
+    position: static;
+  }
+
+  .nav-rail .nav-brand {
+    padding-bottom: 0;
+  }
+
+  .nav-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+  }
+
+  .nav-toggle {
+    display: none;
+  }
+
+  /* One column, and the record stops sticking: on a short screen a pinned
+     header is a third of the window. */
+  .deal-body,
+  .deal-body.is-asking {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .deal-body.is-asking .sidebar-column,
+  .ai-drawer {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .record-header {
+    position: static;
+  }
 }

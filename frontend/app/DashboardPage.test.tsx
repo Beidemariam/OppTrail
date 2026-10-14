@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  aCustomField,
   ALEX,
   BLAIR,
   aComment,
@@ -12,12 +13,16 @@ import {
 } from "./test-api";
 import {
   acceptConfirmation,
+  backToBoard,
   cancelConfirmation,
   findCard,
   openOpportunityForm,
   openTimeline,
   renderApp,
   renderDashboard,
+  renderDeal,
+  renderDealAt,
+  openBoardFilters,
 } from "./test-app";
 
 function checkboxFor(name: string) {
@@ -249,18 +254,22 @@ describe("the dashboard", () => {
     );
   });
 
-  it("closes the timeline of an opportunity it just deleted", async () => {
+  it("leaves no readable timeline behind an opportunity it deleted", async () => {
+    // R.1 (decision 1A) separated the two screens, so this is the journey:
+    // read a deal, go back, delete it, and the page it was on is gone with it
+    // rather than still rendering a deal nobody can reach.
     await renderDashboard({ opportunities: [anOpportunity()] });
     await openTimeline("Northwind rollout");
     await screen.findByText("Your role: owner");
-    const card = await findCard("Northwind rollout");
 
+    await backToBoard();
+    const card = await findCard("Northwind rollout");
     await userEvent.click(within(card).getByRole("button", { name: "Delete" }));
     await acceptConfirmation("Northwind rollout");
 
-    expect(
-      await screen.findByText("Select an opportunity to open its timeline."),
-    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByText("Northwind rollout")).not.toBeInTheDocument(),
+    );
   });
 
   it("loads the edit dialog from the card and saves a stage change", async () => {
@@ -403,25 +412,170 @@ describe("reading a paginated collection (milestone 2.9)", () => {
   });
 });
 
+describe("the board's filters, behind a trigger (R.1, decision 3A)", () => {
+  it("is shut until it is asked for, and says so", async () => {
+    await renderDashboard({ opportunities: [anOpportunity()] });
+
+    expect(
+      screen.queryByLabelText("Filter opportunities by keyword"),
+    ).toBeNull();
+    expect(
+      screen.getByText("Showing everything you can see"),
+    ).toBeInTheDocument();
+  });
+
+  it("says what a shared link is filtering by, without opening anything", async () => {
+    // The chips are the signal, so the panel stays shut. An earlier version
+    // opened it whenever a filter was in force, mirroring the timeline bar's
+    // rule (D-137) — which handed a filtered board the whole panel again and
+    // meant the chips were never reached.
+    await renderDashboard(
+      { opportunities: [anOpportunity()] },
+      "/?opportunities.stage=Negotiation",
+    );
+
+    expect(
+      await screen.findByRole("button", { name: /Stage: Negotiation/ }),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Filter by stage")).toBeNull();
+  });
+
+  it("puts the controls away when they have been used", async () => {
+    // Reported from a screenshot: the panel stayed open over the board it had
+    // just filtered, so the chips below it never appeared and the disclosure
+    // bought nothing.
+    await renderDashboard({ opportunities: [anOpportunity()] });
+    await openBoardFilters();
+
+    await userEvent.selectOptions(
+      screen.getByLabelText("Filter by stage"),
+      "Negotiation",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+    await waitFor(() =>
+      expect(screen.queryByLabelText("Filter by stage")).toBeNull(),
+    );
+    expect(
+      screen.getByRole("button", { name: /Stage: Negotiation/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("draws what is in force as a chip each, and each one removes itself", async () => {
+    await renderDashboard(
+      {
+        opportunities: [
+          anOpportunity({ id: 10, name: "Northwind rollout" }),
+          anOpportunity({
+            id: 11,
+            name: "Globex renewal",
+            account_name: "Globex",
+            stage: "Proposal",
+          }),
+        ],
+      },
+      "/?opportunities.q=globex&opportunities.stage=Proposal",
+    );
+
+    expect(
+      screen.getByRole("button", { name: /Keyword: globex/ }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /Stage: Proposal/ }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: /Stage: Proposal/ }),
+      ).toBeNull(),
+    );
+    // And only that one: the keyword is still filtering.
+    expect(
+      screen.getByRole("button", { name: /Keyword: globex/ }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Northwind rollout")).not.toBeInTheDocument();
+  });
+
+  it("shuts again from its own control, without changing anything", async () => {
+    await renderDashboard({ opportunities: [anOpportunity()] });
+    await openBoardFilters();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Filter and sort" }),
+    );
+
+    expect(screen.queryByLabelText("Filter by stage")).toBeNull();
+    expect(
+      screen.getByText("Showing everything you can see"),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("Northwind rollout")).toBeInTheDocument();
+  });
+
+  it("says how many are pinned, and the chip is how you unpin them", async () => {
+    // A pinned selection is a filter like any other since R.1 (D-106 wrote it
+    // as one), so it reads as a chip rather than as a sentence with its own
+    // control inside the panel.
+    await renderDashboard(
+      {
+        opportunities: [
+          anOpportunity({ id: 10, name: "Northwind rollout" }),
+          anOpportunity({ id: 11, name: "Globex renewal" }),
+          anOpportunity({ id: 12, name: "Initech expansion" }),
+        ],
+      },
+      "/?opportunities.ids=10,11",
+    );
+    expect(await screen.findByText("Northwind rollout")).toBeInTheDocument();
+    expect(screen.queryByText("Initech expansion")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /2 pinned/ }));
+
+    expect(await screen.findByText("Initech expansion")).toBeInTheDocument();
+  });
+
+  it("clears everything at once from the same strip", async () => {
+    await renderDashboard(
+      { opportunities: [anOpportunity()] },
+      "/?opportunities.q=nothingmatchesthis",
+    );
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Clear all" }),
+    );
+
+    expect(
+      await screen.findByText("Showing everything you can see"),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("Northwind rollout")).toBeInTheDocument();
+  });
+});
+
 describe("bulk actions (milestone 2.4c)", () => {
   it("replaces the filter bar with the action bar once a card is checked", async () => {
     await renderDashboard({ opportunities: [anOpportunity()] });
     await findCard("Northwind rollout");
 
-    expect(screen.getByRole("button", { name: "Apply" })).toBeInTheDocument();
+    // The filter controls are a disclosure since R.1 (decision 3A), so what
+    // the action bar replaces is the trigger rather than eight open controls.
+    expect(
+      screen.getByRole("button", { name: "+ Filter and sort" }),
+    ).toBeInTheDocument();
 
     await userEvent.click(checkboxFor("Northwind rollout"));
 
     expect(screen.getByText("1 selected")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Apply" }),
+      screen.queryByRole("button", { name: "+ Filter and sort" }),
     ).not.toBeInTheDocument();
 
     await userEvent.click(
       screen.getByRole("button", { name: "Clear selection" }),
     );
 
-    expect(screen.getByRole("button", { name: "Apply" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "+ Filter and sort" }),
+    ).toBeInTheDocument();
     expect(screen.queryByText("1 selected")).not.toBeInTheDocument();
   });
 
@@ -682,10 +836,11 @@ describe("bulk actions (milestone 2.4c)", () => {
     );
     expect(screen.queryByText("Second")).not.toBeInTheDocument();
     expect(
-      screen.getByText(/Showing 1 pinned opportunity from a saved view/),
+      screen.getByRole("button", { name: /1 pinned/ }),
     ).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Show all" }));
+    // The chip removes it, the way every other applied filter is removed.
+    await userEvent.click(screen.getByRole("button", { name: /1 pinned/ }));
     expect(await screen.findByText("Second")).toBeInTheDocument();
   });
 
@@ -952,6 +1107,7 @@ describe("the list view (milestone 2.7)", () => {
     await renderDashboard({ opportunities: twoDeals });
     await screen.findByText("Northwind rollout");
 
+    await openBoardFilters();
     await userEvent.type(
       screen.getByLabelText("Filter opportunities by keyword"),
       "globex",
@@ -1135,6 +1291,7 @@ describe("the table view (milestone 2.8)", () => {
     );
 
     // One setting asked two ways: the dropdown shows what the header did.
+    await openBoardFilters();
     expect(screen.getByLabelText("Sort by")).toHaveValue("value");
     expect(screen.getByLabelText("Sort direction")).toHaveValue("asc");
   });
@@ -1589,6 +1746,7 @@ describe("what the dashboard shows when it has nothing to show", () => {
     await renderDashboard({ opportunities: [anOpportunity()] });
     await screen.findByText("Northwind rollout");
 
+    await openBoardFilters();
     await userEvent.type(
       screen.getByLabelText("Filter opportunities by keyword"),
       "nothing matches this",
@@ -1624,6 +1782,7 @@ describe("what the dashboard shows when it has nothing to show", () => {
   it("says that the set being filtered is only what this reader may see", async () => {
     await renderDashboard({ opportunities: [anOpportunity()] });
     await screen.findByText("Northwind rollout");
+    await openBoardFilters();
     await userEvent.type(
       screen.getByLabelText("Filter opportunities by keyword"),
       "nothing matches this",
@@ -1649,6 +1808,7 @@ describe("filtering, sorting and saved views (milestone 2.2)", () => {
     });
     await screen.findByText("Northwind rollout");
 
+    await openBoardFilters();
     await userEvent.type(
       screen.getByLabelText("Filter opportunities by keyword"),
       "globex",
@@ -1684,6 +1844,7 @@ describe("filtering, sorting and saved views (milestone 2.2)", () => {
     });
     await screen.findByText("Northwind rollout");
 
+    await openBoardFilters();
     await userEvent.selectOptions(
       screen.getByLabelText("Filter by stage"),
       "Negotiation",
@@ -1702,8 +1863,14 @@ describe("filtering, sorting and saved views (milestone 2.2)", () => {
     expect(screen.queryByText("Northwind rollout")).not.toBeInTheDocument();
     expect(screen.getByText("Globex renewal")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Clear" }));
+    // Applying put the controls away (R.1), so clearing is the chip strip's
+    // own control.
+    await userEvent.click(screen.getByRole("button", { name: "Clear all" }));
     expect(screen.getByText("Northwind rollout")).toBeInTheDocument();
+    expect(
+      screen.getByText("Showing everything you can see"),
+    ).toBeInTheDocument();
+    await openBoardFilters();
     expect(screen.getByLabelText("Filter by stage")).toHaveValue("");
   });
 
@@ -1723,6 +1890,7 @@ describe("filtering, sorting and saved views (milestone 2.2)", () => {
     );
     await screen.findByText("Northwind rollout");
 
+    await openBoardFilters();
     expect(screen.getByLabelText("Filter by stage")).toHaveValue("Negotiation");
     expect(screen.queryByText("Globex renewal")).not.toBeInTheDocument();
   });
@@ -1797,35 +1965,52 @@ describe("filtering, sorting and saved views (milestone 2.2)", () => {
 });
 
 describe("two view states in one URL (milestone 2.2)", () => {
-  it("keeps the board's keyword filter out of the open timeline's query", async () => {
-    // The board and the open timeline are mounted together (D-054) and share
-    // one query string, so each has to own its own parameter names: a board
-    // keyword is not a timeline keyword.
-    const api = await renderDashboard(
-      {
-        opportunities: [anOpportunity({ id: 10, name: "Northwind rollout" })],
-        entries: [anEntry()],
-      },
-      "/opportunities/10",
-    );
-    await screen.findByRole("heading", { name: "Discovery call" });
-    const before = api.callsTo("GET", "/timeline").length;
+  it("carries the board's view state into a deal and hands it back", async () => {
+    // Each state owns its own parameter names, which is what lets both live in
+    // one query string. R.1 made that load bearing in a second way: a deal is
+    // its own page now, so it *carries* the board's half and the way back
+    // restores it — without which opening a deal silently cleared the filters.
+    await renderDashboard({
+      opportunities: [
+        anOpportunity({ id: 10, name: "Northwind rollout" }),
+        anOpportunity({
+          id: 11,
+          name: "Globex renewal",
+          account_name: "Globex",
+        }),
+      ],
+      entries: [anEntry()],
+    });
 
+    await openBoardFilters();
     await userEvent.type(
       screen.getByLabelText("Filter opportunities by keyword"),
       "northwind",
     );
     await userEvent.click(screen.getByRole("button", { name: "Apply" }));
-
     await waitFor(() =>
       expect(screen.queryByText("Globex renewal")).not.toBeInTheDocument(),
     );
-    expect(api.callsTo("GET", "q=northwind")).toHaveLength(0);
-    expect(api.callsTo("GET", "/timeline")).toHaveLength(before);
+
+    await openTimeline("Northwind rollout");
+
+    expect(
+      screen.getByRole("link", { name: "\u2190 Opportunities" }),
+    ).toHaveAttribute("href", "/?opportunities.q=northwind");
+
+    await backToBoard();
+    // The chips say what came back with it; the controls agree once opened.
+    expect(
+      await screen.findByRole("button", { name: /Keyword: northwind/ }),
+    ).toBeInTheDocument();
+    await openBoardFilters();
+    expect(
+      screen.getByLabelText("Filter opportunities by keyword"),
+    ).toHaveValue("northwind");
   });
 
-  it("keeps the timeline's reading order when the board is filtered", async () => {
-    const api = await renderDashboard(
+  it("keeps the timeline's reading order out of the board's half", async () => {
+    const api = await renderDealAt(
       {
         opportunities: [
           anOpportunity({ id: 10, name: "Northwind rollout" }),
@@ -1833,29 +2018,22 @@ describe("two view states in one URL (milestone 2.2)", () => {
         ],
         entries: [anEntry()],
       },
-      "/opportunities/10?timeline.order=desc",
+      "/opportunities/10?timeline.order=desc&opportunities.q=northwind",
     );
     await screen.findByRole("heading", { name: "Discovery call" });
-    // The timeline's bar is collapsed unless a filter is applied (milestone
-    // 3.7) and `order=desc` is the default, so it is opened here to read the
-    // control the assertion below is about.
+
+    // The timeline read its own parameter and nothing else read it.
     await userEvent.click(
       screen.getByRole("button", { name: "Filter and order" }),
     );
-
-    await userEvent.selectOptions(
-      screen.getByLabelText("Filter by stage"),
-      "Negotiation",
-    );
-    await userEvent.click(screen.getByRole("button", { name: "Apply" }));
-
-    // Writing one state into the URL must not drop the other's parameters.
-    await waitFor(() =>
-      expect(screen.getByLabelText("Timeline reading order")).toHaveValue(
-        "desc",
-      ),
-    );
+    expect(screen.getByLabelText("Timeline reading order")).toHaveValue("desc");
     expect(api.callsTo("GET", "order=asc")).toHaveLength(0);
+
+    // And the way back carries the board's half alone: a timeline parameter
+    // handed to the board is a parameter the board would ignore and keep.
+    expect(
+      screen.getByRole("link", { name: "\u2190 Opportunities" }),
+    ).toHaveAttribute("href", "/?opportunities.q=northwind");
   });
 });
 

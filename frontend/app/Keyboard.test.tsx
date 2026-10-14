@@ -3,7 +3,13 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ALEX, anEntry, anOpportunity } from "./test-api";
-import { findCard, renderApp, renderDashboard } from "./test-app";
+import {
+  findCard,
+  renderApp,
+  renderDashboard,
+  renderDeal,
+  openBoardFilters,
+} from "./test-app";
 import { writeInEditor } from "./test-editor";
 
 const northwind = anOpportunity();
@@ -418,10 +424,12 @@ describe("the board under the keyboard", () => {
   it("focuses the keyword filter with /", async () => {
     await renderDashboard({ opportunities: [northwind] });
 
+    // `/` opens the controls and lands in the keyword box: they are a
+    // disclosure since R.1, so the chord has to do both.
     await userEvent.keyboard("/");
 
     expect(
-      screen.getByLabelText("Filter opportunities by keyword"),
+      await screen.findByLabelText("Filter opportunities by keyword"),
     ).toHaveFocus();
   });
 
@@ -435,11 +443,35 @@ describe("the board under the keyboard", () => {
 });
 
 describe("with a timeline open", () => {
+  it("gives / to the timeline's own filter, which is what is on this screen", async () => {
+    // The board is not mounted behind a deal since R.1 (decision 1A), so the
+    // chord means "filter what is on this screen" — and the timeline's bar is
+    // a disclosure, so the key has to open it before it can focus anything.
+    await renderDeal({ opportunities: [northwind], entries: [anEntry()] });
+    await screen.findByRole("heading", { level: 2, name: "Northwind rollout" });
+
+    await userEvent.keyboard("/");
+
+    expect(
+      await screen.findByLabelText("Filter the timeline by keyword"),
+    ).toHaveFocus();
+  });
+
+  it("puts the AI drawer away on Escape", async () => {
+    await renderDeal({ opportunities: [northwind], entries: [anEntry()] });
+    await screen.findByRole("heading", { level: 2, name: "Northwind rollout" });
+    await userEvent.click(screen.getByRole("button", { name: "Ask" }));
+    expect(
+      await screen.findByLabelText(/Ask the read-only AI agent/),
+    ).toBeInTheDocument();
+
+    await userEvent.keyboard("{Escape}");
+
+    expect(screen.queryByLabelText(/Ask the read-only AI agent/)).toBeNull();
+  });
+
   it("gives c to the entry composer instead of the board", async () => {
-    await renderDashboard(
-      { opportunities: [northwind], entries: [anEntry()] },
-      "/opportunities/10",
-    );
+    await renderDeal({ opportunities: [northwind], entries: [anEntry()] });
     await screen.findByRole("heading", {
       level: 2,
       name: "Northwind rollout",
@@ -452,10 +484,10 @@ describe("with a timeline open", () => {
   });
 
   it("submits the entry composer on Ctrl Enter", async () => {
-    const api = await renderDashboard(
-      { opportunities: [northwind], entries: [anEntry()] },
-      "/opportunities/10",
-    );
+    const api = await renderDeal({
+      opportunities: [northwind],
+      entries: [anEntry()],
+    });
     await screen.findByRole("heading", {
       level: 2,
       name: "Northwind rollout",
@@ -474,10 +506,10 @@ describe("with a timeline open", () => {
   });
 
   it("posts a note on Ctrl Enter without reaching for the button", async () => {
-    const api = await renderDashboard(
-      { opportunities: [northwind], entries: [anEntry()] },
-      "/opportunities/10",
-    );
+    const api = await renderDeal({
+      opportunities: [northwind],
+      entries: [anEntry()],
+    });
     await screen.findByRole("heading", {
       level: 2,
       name: "Northwind rollout",
@@ -503,10 +535,7 @@ describe("shortcuts and text", () => {
    * form, "j" and "k" move the board's cursor, and the note never gets typed.
    */
   it("does not treat what the reader types as commands", async () => {
-    await renderDashboard(
-      { opportunities: [northwind], entries: [anEntry()] },
-      "/opportunities/10",
-    );
+    await renderDeal({ opportunities: [northwind], entries: [anEntry()] });
     await screen.findByRole("heading", {
       level: 2,
       name: "Northwind rollout",

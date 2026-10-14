@@ -67,17 +67,29 @@ def _prune_old_backups(target_dir: Path) -> None:
 
 
 def latest_backup_at(destination_dir: Path | None = None) -> str | None:
+    """The newest snapshot's own timestamp, read from its filename.
+
+    A file in this directory that *looks* like a snapshot but carries
+    something else where the timestamp goes is skipped rather than raised on.
+    `/api/health` reads this, and a hand-named copy left beside the real
+    snapshots — which is a thing an operator does — used to take the probe out
+    with a 500 (found by doing exactly that: `app-pre-R1-<stamp>.db`). A
+    health endpoint that reports a disk problem must not itself be the
+    problem.
+    """
     target_dir = destination_dir or backup_dir()
     if not target_dir.is_dir():
         return None
-    backups = _backup_files(target_dir)
-    if not backups:
-        return None
-    stamp_text = (
-        backups[-1].name.removeprefix(BACKUP_FILENAME_PREFIX).removesuffix(BACKUP_FILENAME_SUFFIX)
-    )
-    parsed = datetime.strptime(stamp_text, FILENAME_TIMESTAMP_FORMAT).replace(tzinfo=UTC)
-    return to_canonical(parsed)
+    for candidate in reversed(_backup_files(target_dir)):
+        stamp_text = candidate.name.removeprefix(BACKUP_FILENAME_PREFIX).removesuffix(
+            BACKUP_FILENAME_SUFFIX
+        )
+        try:
+            parsed = datetime.strptime(stamp_text, FILENAME_TIMESTAMP_FORMAT)
+        except ValueError:
+            continue
+        return to_canonical(parsed.replace(tzinfo=UTC))
+    return None
 
 
 def restore_backup(backup_path: Path) -> Path:

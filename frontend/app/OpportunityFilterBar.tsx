@@ -3,6 +3,7 @@
 import { FormEvent, useState, type RefObject } from "react";
 
 import {
+  appliedOpportunityFilters,
   customFilterState,
   customFilters,
   emptyOpportunityViewState,
@@ -21,6 +22,18 @@ import {
  * from the URL, the back button or a saved view updates the form without an
  * effect or a remount.
  *
+ * **Collapsed until it is asked for** (R.1, decision 3A), the way the
+ * timeline's bar has been since 3.7 and for the same measured reason: eight
+ * always-visible controls were 77px at 1440, 144px at 1024 and 320px at 420,
+ * and they grew by a row for every custom field anybody defined — unbounded,
+ * above the board the screen is about. A shut panel is not a silent one: what
+ * is in force is drawn as a chip each, and every chip removes its own filter
+ * (`appliedOpportunityFilters`). Whether it is open is the screen's state
+ * rather than this component's: a filter arriving from a URL or a saved view
+ * opens it, so a shared link shows its own filters rather than hiding them
+ * behind a summary — while removing a chip leaves the reader in the strip they
+ * were working in. `DashboardPage` is where those two cases are told apart.
+ *
  * Every control carries a visible name as well as its `aria-label` (milestone
  * 2.13, **D-082**). The reviewer's note was that "the filter and sort windows
  * are just a series of windows and you wouldn't know which one is which by
@@ -33,17 +46,25 @@ export function OpportunityFilterBar({
   state,
   keywordRef,
   onApply,
+  open,
+  onOpenChange,
   fields = [],
 }: {
   state: OpportunityViewState;
   /** Where `/` puts the cursor (milestone 2.4a). */
   keywordRef?: RefObject<HTMLInputElement | null>;
   onApply: (state: OpportunityViewState) => void;
+  /** Whether the controls are showing. Owned by the screen rather than by this
+   * component since R.1, because `/` has to be able to open them before it can
+   * put the cursor in the keyword box. */
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   /** The live custom fields for opportunities (milestone 6.1). Each one
    * becomes a control here, which is `docs/FEATURES.md` §3's "fields appear
    * automatically in Table columns, filters, and the entry form". */
   fields?: CustomField[];
 }) {
+  const applied = appliedOpportunityFilters(state, fields);
   const [appliedState, setAppliedState] = useState(state);
   const [draft, setDraft] = useState<OpportunityViewState>(state);
   if (state !== appliedState) {
@@ -54,11 +75,18 @@ export function OpportunityFilterBar({
   function apply(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     onApply(draft);
+    // Applying puts the controls away. Without this the panel stayed open over
+    // the board it had just filtered, the chips below it never appeared, and
+    // the whole disclosure bought nothing — reported from a screenshot of
+    // exactly that (R.1). A popover that stays open after it has been used is
+    // not a popover.
+    onOpenChange(false);
   }
 
   function clear() {
     setDraft(emptyOpportunityViewState);
     onApply(emptyOpportunityViewState);
+    onOpenChange(false);
   }
 
   const pinned = pinnedIds(state.ids);
@@ -75,8 +103,61 @@ export function OpportunityFilterBar({
     setDraft({ ...draft, custom: customFilterState(next) });
   }
 
+  if (!open) {
+    return (
+      <div className="filter-summary">
+        <button
+          type="button"
+          className="disclosure-button"
+          aria-expanded={false}
+          onClick={() => onOpenChange(true)}
+        >
+          + Filter and sort
+        </button>
+        {applied.length === 0 ? (
+          <span className="meta-row">Showing everything you can see</span>
+        ) : (
+          <ul className="filter-chips">
+            {applied.map((chip) => (
+              <li key={chip.key}>
+                <button
+                  type="button"
+                  className="filter-chip"
+                  onClick={() => onApply(chip.without)}
+                >
+                  {chip.label}
+                  <span aria-hidden="true">&times;</span>
+                  <span className="visually-hidden">, remove this filter</span>
+                </button>
+              </li>
+            ))}
+            <li>
+              <button
+                type="button"
+                className="secondary-button compact-button"
+                onClick={clear}
+              >
+                Clear all
+              </button>
+            </li>
+          </ul>
+        )}
+      </div>
+    );
+  }
+
   return (
     <form className="filter-bar" onSubmit={apply}>
+      <p className="filter-collapse">
+        <button
+          type="button"
+          className="disclosure-button"
+          aria-expanded
+          onClick={() => onOpenChange(false)}
+        >
+          Filter and sort
+        </button>
+      </p>
       <label className="filter-field grow">
         Keyword
         <input

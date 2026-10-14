@@ -503,6 +503,77 @@ export const emptyOpportunityViewState: OpportunityViewState = {
 };
 
 /**
+ * What is filtering the board, as one chip each (R.1, decision 3A).
+ *
+ * The filter controls are collapsed now, which is the whole point — eight of
+ * them standing permanently open cost 77px at 1440 and 320px at 420, and grew
+ * by a row for every custom field defined. A shut panel may not be a silent
+ * one, though: this is what the strip above the board says instead, and every
+ * chip removes just its own filter.
+ *
+ * `sortField`, `sortDirection` and `view` are deliberately not here. They
+ * decide how the same set is drawn rather than which deals are in it, and the
+ * view switcher already says which renderer is on screen.
+ */
+export type AppliedFilter = {
+  /** Stable across renders, so a chip is not re-created as it is read. */
+  readonly key: string;
+  /** What the chip says: the control's own word, then the value. */
+  readonly label: string;
+  /** The state with this one filter removed, and nothing else changed. */
+  readonly without: OpportunityViewState;
+};
+
+export function appliedOpportunityFilters(
+  state: OpportunityViewState,
+  fields: CustomField[] = [],
+): AppliedFilter[] {
+  const applied: AppliedFilter[] = [];
+  const add = (
+    key: string,
+    label: string,
+    patch: Partial<OpportunityViewState>,
+  ) => applied.push({ key, label, without: { ...state, ...patch } });
+
+  if (state.q) {
+    add("q", `Keyword: ${state.q}`, { q: "" });
+  }
+  if (state.stage) {
+    add("stage", `Stage: ${state.stage}`, { stage: "" });
+  }
+  if (state.stalled) {
+    add("stalled", state.stalled === "true" ? "Stalled only" : "Not stalled", {
+      stalled: "",
+    });
+  }
+  if (state.minValue) {
+    add("minValue", `Min value: ${state.minValue}`, { minValue: "" });
+  }
+  if (state.maxValue) {
+    add("maxValue", `Max value: ${state.maxValue}`, { maxValue: "" });
+  }
+  const pinned = pinnedIds(state.ids);
+  if (pinned !== null && pinned.size > 0) {
+    add("ids", `${pinned.size} pinned`, { ids: "" });
+  }
+  // A custom filter whose field has been archived is not shown and not
+  // clearable, for the reason `customFilters` drops it: ADR 0006's rule that a
+  // value with no live definition is not read.
+  for (const [key, value] of customFilters(state.custom, fields)) {
+    const field = fields.find((candidate) => candidate.key === key);
+    if (!field) {
+      continue;
+    }
+    const next = new Map(customFilters(state.custom, fields));
+    next.delete(key);
+    add(`custom:${key}`, `${field.label}: ${value}`, {
+      custom: customFilterState(next),
+    });
+  }
+  return applied;
+}
+
+/**
  * The chosen columns as a list, ignoring anything the URL carries that is not
  * a column — a hand-edited or stale link should draw a table, not nothing.
  * An empty selection falls back to the default set for the same reason.
@@ -1078,7 +1149,10 @@ export type SearchResult = components["schemas"]["SearchResultPublic"];
  * as absence".
  */
 export type LinkTarget = {
-  level: "entry" | "note" | "comment";
+  /** `task` joined the three timeline levels in R.1: My Tasks lists work from
+   * every deal, and the row had no way to reach the task it names — clicking
+   * its title ticked it off instead, which is the opposite of opening it. */
+  level: "entry" | "note" | "comment" | "task";
   id: number;
 };
 
@@ -1097,7 +1171,7 @@ export type LinkTarget = {
 export function linkTargetFromParams(
   params: URLSearchParams,
 ): LinkTarget | null {
-  for (const level of ["comment", "note", "entry"] as const) {
+  for (const level of ["comment", "note", "entry", "task"] as const) {
     const id = Number(params.get(level));
     if (id > 0) {
       return { level, id };

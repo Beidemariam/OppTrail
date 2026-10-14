@@ -1186,6 +1186,26 @@ pinned by `test_invariant_*` tests. Viewers may ask
 questions; the endpoint uses `require_opportunity_access`, not
 `require_timeline_write`.
 
+**Where it lives on screen changed in R.1** (**D-189**): the panel was the
+first thing in the deal's right-hand rail, so one long answer pushed the
+record and the deal's tasks two screens down — the 6.4 review's report. It is
+a **drawer now**, opened from the record header's *Ask* and closed from its
+own, and it opens into a third column that narrows the timeline and never the
+rail. `AiSidebar` takes an `onClose` and is the same component either way.
+6.5a's cap on the panel's height stays: it is what keeps the ask box on screen
+once the panel is tall, and it was never the answer to what the rail beneath
+it was doing.
+
+**A failure says which kind it is** (R.1, **D-192**, closing D-052).
+`classify_ai_failure` matches the SDK exception's class *name* — so it
+survives an SDK reorganization and a test can raise a stand-in rather than
+construct an `httpx` response — and answers 503 for anything an operator
+fixes (rejected credentials, an unknown model, a missing permission), 504 or
+502 for a timeout or an unreachable service, and 400 for a request the
+provider refused. The sentence names `OPENAI_MODEL` or `OPENAI_API_KEY` and
+never their values, the provider's own wording or the model it tried; that
+goes to the log.
+
 **Three things were added in milestone 6.4**, all of them reads:
 
 - **The answer streams.** `POST .../ai/ask/stream` answers
@@ -1258,16 +1278,32 @@ to read — which is also why the emitted `index.html` body is empty.
 `AppRoutes` is exported separately so the tests mount the real route table
 inside a `MemoryRouter` (`app/test-app.tsx`) rather than a copy of it.
 
-Five routes. `/search` is `app/SearchPage.tsx`, `/tasks` is
-`app/TasksPage.tsx`, `/reports` is `app/ReportsPage.tsx`, `/automations` is
-`app/AutomationsPage.tsx`; `/` is `app/DashboardPage.tsx`,
-a **layout route** with two children — the index, which is the "select an
-opportunity" panel, and `opportunities/:opportunityId`
-(`app/OpportunityPanel.tsx`). The board therefore stays mounted while the child
-route swaps the panel beside it, which is what gives an opportunity its own URL
-without reloading the list behind it (D-054). Anything else redirects to `/`.
-`OpportunityPanel` re-keys its body on the id, so filters and a half-finished
-entry edit cannot leak from one opportunity into the next.
+**Six routes inside one shell** (milestone R.1). `app/AppShell.tsx` is the
+layout route every screen sits in: a collapsible rail of destinations down the
+left (`lib/nav.ts`), the application bar above whatever the route renders, and
+the session resolved **once** — so a signed-out reader meets the sign-in panel
+on all of them rather than five different answers (**D-191**). Before it, four
+of the five screens hand-rolled their own `header.topbar` with no navigation in
+it, and Reports had no way to reach Automations.
+
+`/` is `app/DashboardPage.tsx`, `/opportunities/:opportunityId` is
+`app/OpportunityPanel.tsx`, and `/search`, `/tasks`, `/reports` and
+`/automations` are their own pages. Anything else redirects to `/`.
+
+**A deal is a page, not a panel under the board** (**D-188**, decision 1A of
+the layout pass). It used to be a child route of the dashboard, which appended
+it *below* a full screen of board: the first pixel of the thing the reader had
+just clicked sat at y 888 on a 900px screen, under two filter bars and two
+saved-view strips acting on a list they were no longer looking at. Two
+consequences to keep:
+
+- **The board's view state travels with the link.** `lib/viewState.ts`'s
+  `opportunityHref` carries every `opportunities.*` parameter into the deal's
+  URL and `boardHref` hands them back, so the filters, the sort, the chosen
+  view and the month survive the round trip. Without it, opening a deal
+  silently cleared the list the reader had built.
+- **`OpportunityPanel` re-keys its body on the id**, so filters and a
+  half-finished entry edit cannot leak from one opportunity into the next.
 
 Milestone 2.1 decomposed the former `app/Home.tsx` — 1,863 lines, 28 `useState`
 hooks, every read copied into component state — into these components, none
@@ -1486,6 +1522,14 @@ text where nothing can filter on them. Revision `0016_custom_fields` adds
 Milestones 2.7 and 2.8 gave the dashboard four renderers over one dataset, and
 the shape of that is worth knowing before adding a fifth:
 
+- **The filter controls are a disclosure** (R.1, **D-190**): a trigger, and
+  what is in force as a removable chip each (`appliedOpportunityFilters` in
+  `lib/domain.ts`). Eight permanently open controls were 77px at 1440 and
+  320px at 420, and grew by a row for every custom field anybody defined. The
+  open state belongs to `DashboardPage` rather than to the bar, for two
+  reasons: `/` has to open it before it can put the cursor in the keyword box,
+  and a filter arriving from a saved view or the AI's proposal opens it while
+  the bar's own writes — a chip removed, Apply, Clear — deliberately do not.
 - **`DashboardPage` filters and sorts once** (`applyOpportunityView`) and hands
   the result to `StageBoard`, `OpportunityList`, `OpportunityTable` or
   `OpportunityCalendar`. Which one is a field on the URL-serialized view state

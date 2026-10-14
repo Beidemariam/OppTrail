@@ -650,8 +650,11 @@ describe("every parameter the form can render", () => {
 describe("the screen's other answers", () => {
   it("asks an anonymous reader to sign in", async () => {
     renderApp({ user: null }, "/automations");
+    // The shell's answer, the same on all five screens since R.1.
     expect(
-      await screen.findByRole("link", { name: "Sign in" }),
+      await screen.findByRole("heading", {
+        name: /Track every sales opportunity/,
+      }),
     ).toBeInTheDocument();
   });
 

@@ -196,11 +196,11 @@ test("pins a selection into a view, exports it, and hands it to a colleague", as
   // By value: an option reads "<name> - <visibility>" since 2.13, so the
   // name alone is not the label.
   await page.getByLabel("Saved opportunity views").selectOption(viewOption!);
-  await expect(page.locator(".filter-note")).toContainText(
-    "Showing 2 pinned opportunities",
-  );
+  // The pinned selection is a filter like any other since R.1, so it says so
+  // as a chip and the chip is what removes it.
+  await expect(page.getByRole("button", { name: /2 pinned/ })).toBeVisible();
   await expect(card(page, `Unpinned ${suffix}`)).toHaveCount(0);
-  await page.getByRole("button", { name: "Show all" }).click();
+  await page.getByRole("button", { name: /2 pinned/ }).click();
   await expect(card(page, `Unpinned ${suffix}`)).toBeVisible();
 
   // And the handover itself: owner-only, and the previous owner stays on as

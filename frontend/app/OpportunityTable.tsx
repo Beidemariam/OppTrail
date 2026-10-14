@@ -1,6 +1,6 @@
 "use client";
 
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 
 import {
   columnsFromState,
@@ -18,6 +18,7 @@ import {
   type OpportunityViewState,
   type Stage,
 } from "../lib/domain";
+import { opportunityHref } from "../lib/viewState";
 import {
   OpportunityField,
   useOpportunityFieldSave,
@@ -239,6 +240,9 @@ function TableRow({
   onToggleChecked: (opportunity: Opportunity) => void;
   onRangeSelect: (opportunity: Opportunity) => void;
 }) {
+  // The board's view state travels with the link (R.1): a deal is its own
+  // page now, so the way back has to be able to restore the list.
+  const [params] = useSearchParams();
   const owns = opportunity.current_user_role === "owner";
   const { itemProps, checkboxProps } = useOpportunityItem({
     className: "opportunity-table-row",
@@ -255,7 +259,9 @@ function TableRow({
     <article {...itemProps} style={{ gridTemplateColumns: template }}>
       <input className="card-checkbox" {...checkboxProps} />
       <p className="table-cell table-name">
-        <Link to={`/opportunities/${opportunity.id}`}>{opportunity.name}</Link>
+        <Link to={opportunityHref(opportunity.id, params)}>
+          {opportunity.name}
+        </Link>
         {opportunity.stalled && <span className="stalled-badge">Stalled</span>}
       </p>
       {columns.map((column) => {

@@ -11,7 +11,15 @@ import {
   anEntry,
   anOpportunity,
 } from "./test-api";
-import { acceptConfirmation, openTimeline, renderDashboard } from "./test-app";
+import {
+  acceptConfirmation,
+  backToBoard,
+  openAi,
+  openTimeline,
+  renderDashboard,
+  renderDeal,
+  renderDealAt,
+} from "./test-app";
 import { clearEditor, writeInEditor } from "./test-editor";
 
 beforeEach(() => {
@@ -84,10 +92,10 @@ describe("the timeline", () => {
   });
 
   it("opens the timeline a deep link arrived with", async () => {
-    await renderDashboard(
-      { opportunities: [anOpportunity()], entries: [anEntry()] },
-      "/opportunities/10",
-    );
+    await renderDeal({
+      opportunities: [anOpportunity()],
+      entries: [anEntry()],
+    });
 
     expect(
       await screen.findByRole("heading", { name: "Discovery call" }),
@@ -96,10 +104,7 @@ describe("the timeline", () => {
   });
 
   it("says so when the link names an opportunity the reader cannot see", async () => {
-    await renderDashboard(
-      { opportunities: [anOpportunity()] },
-      "/opportunities/99",
-    );
+    await renderDeal({ opportunities: [anOpportunity()] }, 99);
 
     expect(
       await screen.findByRole("heading", {
@@ -142,7 +147,7 @@ describe("the timeline", () => {
     // old tab silently reversed the timeline, and nothing on screen said so
     // (D-136 finding 5, D-137). The default stands; what changed is that the
     // bar opens on the filter that is overriding it.
-    await renderDashboard(
+    await renderDealAt(
       { opportunities: [anOpportunity()], entries: [anEntry()] },
       "/opportunities/10?timeline.order=asc",
     );
@@ -368,7 +373,7 @@ describe("the timeline", () => {
     // The applied filter set lives in the URL (milestone 2.2), so a fresh
     // mount at that URL is what a reload does — no separate persistence
     // mechanism to test.
-    const api = await renderDashboard(
+    const api = await renderDealAt(
       { opportunities: [anOpportunity()], entries: [anEntry()] },
       "/opportunities/10?timeline.order=desc",
     );
@@ -889,9 +894,10 @@ describe("the AI panel", () => {
     });
     await openTimeline("Northwind rollout");
 
-    const sidebar = (
-      await screen.findByRole("heading", { name: "AI Agent" })
-    ).closest("aside") as HTMLElement;
+    // Closed until it is asked for (R.1, decision 2A): the panel used to
+    // stand open at the top of the rail, where a long answer pushed the deal's
+    // record and its tasks two screens down.
+    const sidebar = await openAi();
     expect(
       within(sidebar).getByText("Ask a timeline question."),
     ).toBeInTheDocument();
@@ -923,19 +929,28 @@ describe("the AI panel", () => {
     });
     await openTimeline("Northwind rollout");
 
+    const sidebar = await openAi();
     await userEvent.type(
-      await screen.findByLabelText(/Ask the read-only AI agent/),
+      within(sidebar).getByLabelText(/Ask the read-only AI agent/),
       "Where do we stand?",
     );
-    await userEvent.click(screen.getByRole("button", { name: "Ask" }));
+    await userEvent.click(within(sidebar).getByRole("button", { name: "Ask" }));
     await screen.findByText("Answer to: Where do we stand?");
 
+    // Another deal, by way of the board — a deal is its own page since R.1,
+    // so this is the journey rather than a click on a card beside the panel.
+    await backToBoard();
     await openTimeline("Globex renewal");
+    await openAi();
     expect(
       await screen.findByText("Ask a timeline question."),
     ).toBeInTheDocument();
 
+    await backToBoard();
     await openTimeline("Northwind rollout");
+    await openAi();
+    // The transcript is cache state (D-055), so it outlived both the route
+    // and the drawer being closed on the way past.
     expect(
       await screen.findByText("Answer to: Where do we stand?"),
     ).toBeInTheDocument();
@@ -959,9 +974,10 @@ describe("the AI panel", () => {
     });
     await openTimeline("Northwind rollout");
 
-    const sidebar = (
-      await screen.findByRole("heading", { name: "AI Agent" })
-    ).closest("aside") as HTMLElement;
+    // Closed until it is asked for (R.1, decision 2A): the panel used to
+    // stand open at the top of the rail, where a long answer pushed the deal's
+    // record and its tasks two screens down.
+    const sidebar = await openAi();
     await userEvent.type(
       within(sidebar).getByLabelText(/Ask the read-only AI agent/),
       "Where do we stand?",
@@ -983,7 +999,7 @@ describe("editing where the reader is (milestone 2.11)", () => {
    */
   async function heading() {
     await screen.findByRole("heading", { name: "Discovery call" });
-    return document.querySelector(".timeline-heading") as HTMLElement;
+    return document.querySelector(".record-header") as HTMLElement;
   }
 
   /**
@@ -1589,7 +1605,7 @@ describe("a link lands on the match, not on the deal (milestone 6.0)", () => {
   });
 
   it("marks the note a link named, and nothing else", async () => {
-    await renderDashboard(seeded(), "/opportunities/10?note=200");
+    await renderDealAt(seeded(), "/opportunities/10?note=200");
 
     await waitFor(() =>
       expect(document.querySelector(".note-block.is-linked")).toHaveTextContent(
@@ -1604,7 +1620,7 @@ describe("a link lands on the match, not on the deal (milestone 6.0)", () => {
   });
 
   it("marks the comment a link named", async () => {
-    await renderDashboard(seeded(), "/opportunities/10?comment=300");
+    await renderDealAt(seeded(), "/opportunities/10?comment=300");
 
     await waitFor(() =>
       expect(
@@ -1616,7 +1632,7 @@ describe("a link lands on the match, not on the deal (milestone 6.0)", () => {
 
   it("marks a reply a link named, not the thread it answers", async () => {
     const thread = aComment({ id: 300, body: "Agreed." });
-    await renderDashboard(
+    await renderDealAt(
       {
         opportunities: [anOpportunity({ id: 10, name: "Northwind rollout" })],
         entries: [
@@ -1653,7 +1669,7 @@ describe("a link lands on the match, not on the deal (milestone 6.0)", () => {
     // A resolved thread collapses to one line, so without this the reader
     // arrives at a comment they cannot see -- "depth reads as absence"
     // (D-136) one level further down than milestone 3.7 found it.
-    await renderDashboard(
+    await renderDealAt(
       seeded({
         resolved_at: "2026-09-03T09:00:00Z",
         resolved_by: ALEX.id,
@@ -1673,7 +1689,7 @@ describe("a link lands on the match, not on the deal (milestone 6.0)", () => {
   });
 
   it("leaves a resolved thread collapsed when the link is elsewhere", async () => {
-    await renderDashboard(
+    await renderDealAt(
       seeded({
         resolved_at: "2026-09-03T09:00:00Z",
         resolved_by: ALEX.id,
@@ -1690,7 +1706,7 @@ describe("a link lands on the match, not on the deal (milestone 6.0)", () => {
   });
 
   it("ignores a stale parameter rather than breaking the screen", async () => {
-    await renderDashboard(seeded(), "/opportunities/10?note=999999");
+    await renderDealAt(seeded(), "/opportunities/10?note=999999");
 
     // The note was deleted, or the URL was hand-edited. The deal still opens.
     await openTimelineBody();

@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  openBoardFilters,
   createOpportunity,
   openEntryForm,
   openTimeline,
@@ -45,8 +46,10 @@ test("a new select field becomes a column, a filter and a form input", async ({
   await form.getByLabel("Account").fill("Initech");
   await form.getByLabel(label).selectOption("APAC");
   await form.getByRole("button", { name: "Create opportunity" }).click();
+  await expect(form).toBeHidden();
 
-  // --- a filter ---
+  // --- a filter --- (behind its trigger since R.1, decision 3A)
+  await openBoardFilters(page);
   await page
     .getByRole("combobox", { name: `Filter by ${label}` })
     .selectOption("APAC");
@@ -145,6 +148,8 @@ test("archiving a field hides it everywhere without losing the value", async ({
   await form.getByLabel("Account").fill("Initech");
   await form.getByLabel(label).selectOption("Gold");
   await form.getByRole("button", { name: "Create opportunity" }).click();
+  await expect(form).toBeHidden();
+  await openBoardFilters(page);
   await expect(
     page.getByRole("combobox", { name: `Filter by ${label}` }),
   ).toBeVisible();

@@ -1,4 +1,4 @@
-STATUS: AWAITING_REVIEW phase=6
+STATUS: IN_PROGRESS phase=R
 
 # Autopilot Progress
 
@@ -5787,8 +5787,29 @@ this phase reaches `AWAITING_REVIEW` and is accepted, the project is finished.
 
 ### Milestones
 
-- [ ] R.1 UX consistency: loading/empty/error states everywhere; responsive to
+- [x] R.1 UX consistency: loading/empty/error states everywhere; responsive to
       tablet; timeline usable on mobile; design tokens applied consistently.
+      **The layout pass the human chose from four drawn options** (2026-10-13,
+      **D-188** to **D-191**). The options and what was measured against the
+      app as it stood are in the layout document that went to the review; the
+      four chosen were 1A, 2A, 3A and 4A.
+
+      - **1A — a deal is its own page.** It used to be a panel appended under
+        the board, so the first pixel of the thing just clicked sat at y 888 on
+        a 900px screen. The board's view state travels with the link and the
+        way back restores it (`lib/viewState.ts`).
+      - **2A — the record is pinned and the AI is a drawer.** The rail holds
+        tasks first and nothing above them that can grow; the AI opens into a
+        third column that narrows the timeline and never the rail. The record
+        header is 126px at 1440, down from the 201px the first attempt had.
+      - **3A — the board's filters are a disclosure with chips.** Eight
+        permanently open controls were 77px at 1440 and 320px at 420, growing
+        by a row per custom field. `appliedOpportunityFilters` is what the shut
+        strip says.
+      - **4A — one shell with a left rail.** Four of the five screens
+        hand-rolled their own header, so Reports could not reach Automations.
+        The shell is a layout route, which is what lets it resolve the session
+        once for all five.
       **Carries the deliberate refinement pass against `AGENTS.md`'s Design
       bar** (D-082). The 2.7 review read: *"It has improved significantly but
       my expectation is UI at the level of ClickUp. Sleek, minimalistic, and
@@ -5816,6 +5837,11 @@ this phase reaches `AWAITING_REVIEW` and is accepted, the project is finished.
       no test ever sends a real model name and no test can catch this class of
       defect. Assert the *classification* of a simulated provider error rather
       than trying to make a real call.
+      Done (**D-192**): `ai_service.classify_ai_failure` matches on the SDK
+      exception's class *name*, and the three classes answer 503 (an operator
+      fixes it), 504/502 (a timeout or an unreachable service) and 400 (the
+      provider refused the request). A test asserts the key, the model's value
+      and a context-length number never reach the sentence.
 - [ ] R.2 Accessibility: axe clean (2.2 AA per D-002); focus management in
       dialogs and the command palette; full keyboard operability.
 - [ ] R.3 Performance: large-dataset budgets met (800k-row seed per

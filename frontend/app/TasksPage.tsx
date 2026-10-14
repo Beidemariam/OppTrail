@@ -1,14 +1,13 @@
 "use client";
 
-import { Link } from "react-router";
-
 import {
   taskStanding,
   todayIsoDate,
   type Task,
   type TaskStanding,
 } from "../lib/domain";
-import { useMyTasks, useSession, useSetTaskDone } from "../lib/queries";
+import { useMyTasks, useSetTaskDone } from "../lib/queries";
+import { PageHeader } from "./AppShell";
 import { TaskRow } from "./TaskRow";
 
 /**
@@ -37,36 +36,11 @@ const groupLabels: Record<TaskStanding, string> = {
 };
 
 export function TasksPage() {
-  const session = useSession();
   const tasks = useMyTasks();
   // One hook for the whole page: the route takes a task id, so nothing here
   // needs one per deal.
   const setDone = useSetTaskDone();
   const today = todayIsoDate();
-
-  if (session.isPending) {
-    return (
-      <main className="app-shell">
-        <p className="status">Loading...</p>
-      </main>
-    );
-  }
-
-  if (!session.data) {
-    return (
-      <main className="app-shell">
-        <header className="topbar">
-          <div>
-            <p className="eyebrow">OppTrail</p>
-            <h1>My tasks</h1>
-          </div>
-        </header>
-        <p className="empty-state">
-          <Link to="/">Sign in</Link> to see what is assigned to you.
-        </p>
-      </main>
-    );
-  }
 
   const grouped = new Map<TaskStanding, Task[]>();
   for (const task of tasks.data ?? []) {
@@ -76,20 +50,15 @@ export function TasksPage() {
 
   return (
     <main className="app-shell">
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">OppTrail</p>
-          <h1>My tasks</h1>
-        </div>
-        <div className="user-block">
-          <span>{session.data.name}</span>
-          <Link className="secondary-button" to="/">
-            Opportunities
-          </Link>
-        </div>
-      </header>
-
       <section className="workspace">
+        <PageHeader
+          title="My tasks"
+          subtitle={
+            <p className="page-subtitle">
+              Everything assigned to you, across every deal you can see.
+            </p>
+          }
+        />
         {tasks.isError && <p className="error">{tasks.error.message}</p>}
         {tasks.isPending && <p className="status">Loading your tasks...</p>}
         {tasks.data && tasks.data.length === 0 && (

@@ -1,6 +1,6 @@
 "use client";
 
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 
 import {
   calendarWeeks,
@@ -14,6 +14,7 @@ import {
   type Task,
   type Opportunity,
 } from "../lib/domain";
+import { opportunityHref } from "../lib/viewState";
 import type { OpportunityViewProps } from "./StageBoard";
 import { useOpportunityItem } from "./useOpportunityItem";
 
@@ -203,6 +204,9 @@ function CalendarChip({
   onToggleChecked: (opportunity: Opportunity) => void;
   onRangeSelect: (opportunity: Opportunity) => void;
 }) {
+  // The board's view state travels with the link (R.1): a deal is its own
+  // page now, so the way back has to be able to restore the list.
+  const [params] = useSearchParams();
   const { itemProps, checkboxProps } = useOpportunityItem({
     className: "opportunity-chip",
     opportunity,
@@ -217,7 +221,9 @@ function CalendarChip({
   return (
     <article {...itemProps}>
       <input className="card-checkbox" {...checkboxProps} />
-      <Link to={`/opportunities/${opportunity.id}`}>{opportunity.name}</Link>
+      <Link to={opportunityHref(opportunity.id, params)}>
+        {opportunity.name}
+      </Link>
       <span className="chip-value">
         {formatMoney(opportunity.currency, opportunity.value)}
       </span>

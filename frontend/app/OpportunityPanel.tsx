@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useParams, useSearchParams } from "react-router";
+import { Link, useParams, useSearchParams } from "react-router";
 
 import {
   emptyTimelineFilters,
   formatMoney,
+  timelineFiltersApplied,
   type Access,
   type Opportunity,
   type TimelineFilters,
@@ -30,7 +31,7 @@ import {
   useWatchStatus,
 } from "../lib/queries";
 import type { SuggestionSources } from "../lib/suggestions";
-import { paramsWithState, stateFromParams } from "../lib/viewState";
+import { boardHref, paramsWithState, stateFromParams } from "../lib/viewState";
 import { ActivityButton } from "./ActivityDialog";
 import { AiSidebar } from "./AiSidebar";
 import {
@@ -58,9 +59,9 @@ export function OpportunityPanel() {
 
   if (!Number.isInteger(id) || id <= 0) {
     return (
-      <section className="timeline-panel empty-panel">
+      <main className="app-shell empty-panel">
         <h2>Select an opportunity to open its timeline.</h2>
-      </section>
+      </main>
     );
   }
 
@@ -95,23 +96,10 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
   // only asks whether something else has claimed the scroll.
   const hasLinkTarget = linkTarget !== null;
 
-  // The views above are a full screen of board or list, so an opportunity
-  // opened from the bottom of a column would otherwise land below the fold and
-  // leave the reader looking at the thing they just clicked away from
-  // (milestone 2.7). Bound to the id rather than to every render, so reading a
-  // timeline is never interrupted by its own refetch — and declared here,
-  // above the "not available" return, because a hook after a conditional
-  // return is a hook that sometimes does not run.
-  const panelRef = useRef<HTMLElement>(null);
-  useEffect(() => {
-    // Not when a link named an entry (milestone 3.2): that entry scrolls itself
-    // into view, and this would then scroll straight past it back to the top —
-    // child effects run before a parent's, so the last request would win.
-    if (hasLinkTarget) {
-      return;
-    }
-    panelRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
-  }, [opportunityId, hasLinkTarget]);
+  // Until R.1 this panel scrolled itself into view, because it was appended
+  // below a full screen of board (2.7). It is its own page now and the shell
+  // puts every navigation at the top, so the only scrolling left here is a
+  // link naming a row inside the timeline (`useLinkTarget`).
   const entryTitleRef = useRef<HTMLInputElement>(null);
   const session = useSession();
   const opportunities = useOpportunities(true);
@@ -153,6 +141,25 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
   // as every other editor that replaces its own trigger — including putting
   // focus back on the trigger when it closes, which is what makes Cancel
   // leave the reader where they started rather than at the top of the page.
+  // Whether the AI drawer is open (R.1, decision 2A). Component state rather
+  // than a URL parameter: it is not a reading of this deal that another person
+  // would want a link to, unlike a filter or an entry id.
+  const [asking, setAsking] = useState(false);
+  // The timeline's filter controls, and where `/` puts the cursor. The open
+  // state is the screen's for the reason the board's is (R.1): a shortcut has
+  // to be able to open the controls before it can focus one of them.
+  const [filtersOpen, setFiltersOpen] = useState(
+    () => timelineFiltersApplied(filters) > 0,
+  );
+  const keywordFilterRef = useRef<HTMLInputElement>(null);
+  const focusKeyword = useRef(false);
+  useEffect(() => {
+    if (filtersOpen && focusKeyword.current) {
+      focusKeyword.current = false;
+      keywordFilterRef.current?.focus();
+    }
+  }, [filtersOpen]);
+
   const composeRef = useRef<HTMLButtonElement>(null);
   const composer = useInlineEditor(composeRef, entryTitleRef);
 
@@ -167,6 +174,18 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
       composer.open();
       entryTitleRef.current?.focus();
     },
+    // `/` means "filter what is on this screen" (R.1): the board's keyword box
+    // on the board, the timeline's here. The board is not mounted behind this
+    // page any more, so without this the chord did nothing at all.
+    "/": () => {
+      focusKeyword.current = true;
+      setFiltersOpen(true);
+      keywordFilterRef.current?.focus();
+    },
+    // Esc puts the drawer away, which is what Esc means everywhere else in
+    // this app. Bound only while it is open, so it does not swallow the key
+    // from anything else on the screen.
+    ...(asking ? { Escape: () => setAsking(false) } : {}),
   });
 
   const opportunity =
@@ -175,7 +194,7 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
 
   if (!opportunity) {
     return (
-      <section className="timeline-panel empty-panel">
+      <main className="app-shell empty-panel">
         {opportunities.isPending ? (
           <p className="status">Loading timeline...</p>
         ) : (
@@ -189,7 +208,7 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
             <WatchToggle opportunityId={opportunityId} />
           </>
         )}
-      </section>
+      </main>
     );
   }
 
@@ -205,78 +224,108 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
 
   return (
     <SuggestionSourceProvider sources={suggestions}>
-      <section className="timeline-panel" ref={panelRef}>
-        {/* The timeline itself, first (milestone 3.1a, D-115): the opportunity's
-          own record used to open this panel, so a reader scrolled past it to
-          reach what they came here for. That block now sits in the sidebar
-          column instead, beneath the AI panel. */}
-        <div className="timeline-column">
-          <SavedViewsMenu
-            entity="timeline"
-            state={filters}
-            defaults={emptyTimelineFilters}
-            onApply={setFilters}
-          />
+      {/* The screen's own landmark, like every other page in the shell: the
+          deal used to render inside the dashboard's `main`, and a route of its
+          own needs one of its own (R.1). */}
+      <main className="app-shell deal-page">
+        {/* The record, pinned (R.1, decision 2A). It used to sit inside the
+            right-hand column beneath the AI panel (3.1a, D-115), where a long
+            answer pushed it — and the deal's tasks under it — two screens
+            down. A deal's identity is the one thing that should never leave
+            the window, so it is a band of its own across the top and the rail
+            below holds only what hangs off it. */}
+        <RecordHeader
+          opportunity={opportunity}
+          canManage={access.canManage}
+          order={filters.order}
+          onRefresh={() => void timeline.refetch()}
+          entryCount={(linkable.data ?? []).length}
+          asking={asking}
+          onAsk={() => setAsking((open) => !open)}
+        />
 
-          <TimelineFilterBar filters={filters} onApply={setFilters} />
+        <div className={asking ? "deal-body is-asking" : "deal-body"}>
+          <div className="timeline-column">
+            <SavedViewsMenu
+              entity="timeline"
+              state={filters}
+              defaults={emptyTimelineFilters}
+              onApply={setFilters}
+            />
 
-          {/* The composer only, since milestone 2.11: editing an existing entry
+            <TimelineFilterBar
+              filters={filters}
+              onApply={setFilters}
+              open={filtersOpen}
+              onOpenChange={setFiltersOpen}
+              keywordRef={keywordFilterRef}
+            />
+
+            {/* The composer only, since milestone 2.11: editing an existing entry
             happens in that entry's own card, where the reader already is. */}
-          {access.canWriteTimeline &&
-            (composer.editing ? (
-              <TimelineEntryForm
-                opportunityId={opportunityId}
-                editing={null}
-                titleRef={entryTitleRef}
-                onDone={composer.close}
-              />
-            ) : (
-              <p className="compose-trigger">
-                <button
-                  type="button"
-                  ref={composeRef}
-                  className="primary-button"
-                  aria-expanded={false}
-                  onClick={composer.open}
-                >
-                  New entry
-                </button>
-              </p>
-            ))}
+            {access.canWriteTimeline &&
+              (composer.editing ? (
+                <TimelineEntryForm
+                  opportunityId={opportunityId}
+                  editing={null}
+                  titleRef={entryTitleRef}
+                  onDone={composer.close}
+                />
+              ) : (
+                <p className="compose-trigger">
+                  <button
+                    type="button"
+                    ref={composeRef}
+                    className="primary-button"
+                    aria-expanded={false}
+                    onClick={composer.open}
+                  >
+                    New entry
+                  </button>
+                </p>
+              ))}
 
-          {timeline.isError ? (
-            <p className="error">{timeline.error.message}</p>
-          ) : timeline.isPending ? (
-            <p className="status">Loading timeline...</p>
-          ) : (
-            <TimelineEntryList
-              entries={timeline.data}
+            {timeline.isError ? (
+              <p className="error">{timeline.error.message}</p>
+            ) : timeline.isPending ? (
+              <p className="status">Loading timeline...</p>
+            ) : (
+              <TimelineEntryList
+                entries={timeline.data}
+                opportunityId={opportunityId}
+                access={access}
+                linkTarget={linkTarget}
+              />
+            )}
+          </div>
+
+          {/* Tasks first in the rail, and nothing above them that can grow
+            (R.1, decision 2A). An action item is a fact about the deal rather
+            than an event on its timeline (4.1), so this is where it belongs —
+            and it is what the reader came looking for when they said the
+            tasks had disappeared. */}
+          <div className="sidebar-column">
+            <TaskPanel
               opportunityId={opportunityId}
               access={access}
               linkTarget={linkTarget}
             />
+
+            {access.canManage && <SharingPanel opportunityId={opportunityId} />}
+          </div>
+
+          {/* The AI overlays the rail and never the timeline, and only when
+            asked for. It is mounted while open and unmounted when closed;
+            the transcript is cache state (`["ai-conversation", id]`, D-055),
+            so closing it keeps the conversation. */}
+          {asking && (
+            <AiSidebar
+              opportunityId={opportunityId}
+              onClose={() => setAsking(false)}
+            />
           )}
         </div>
-
-        <div className="sidebar-column">
-          <AiSidebar opportunityId={opportunityId} />
-
-          <TimelineHeading
-            opportunity={opportunity}
-            canManage={access.canManage}
-            order={filters.order}
-            onRefresh={() => void timeline.refetch()}
-          />
-
-          {/* Tasks sit with the deal's own record rather than in its history
-              (milestone 4.1): an action item is a fact about the opportunity,
-              not an event on its timeline. Every role sees the list; writing
-              one needs `canWriteTimeline`, which the panel checks. */}
-          <TaskPanel opportunityId={opportunityId} access={access} />
-
-          {access.canManage && <SharingPanel opportunityId={opportunityId} />}
-        </div>
-      </section>
+      </main>
     </SuggestionSourceProvider>
   );
 }
@@ -293,11 +342,14 @@ function OpportunityTimeline({ opportunityId }: { opportunityId: number }) {
  * change to an opportunity's own fields — a viewer or an editor reads the
  * same line with no affordance on it.
  */
-function TimelineHeading({
+function RecordHeader({
   opportunity,
   canManage,
   order,
   onRefresh,
+  entryCount,
+  asking,
+  onAsk,
 }: {
   opportunity: Opportunity;
   canManage: boolean;
@@ -305,8 +357,15 @@ function TimelineHeading({
    * runs the way this screen does (milestone 4.4b). */
   order: TimelineFilters["order"];
   onRefresh: () => void;
+  /** Every entry on the deal, not the filtered page: a count that changed
+   * when a filter did would be reporting the filter rather than the deal. */
+  entryCount: number;
+  asking: boolean;
+  onAsk: () => void;
 }) {
   const save = useOpportunityFieldSave();
+  // The board's parameters, read here so the way back can hand them over.
+  const [params] = useSearchParams();
   const facts = ["value", "stage", "expected_close_date"] as const;
   // The deal's own custom fields, beside the three fixed facts (6.2a, the
   // human's request at the 6.2 review: "please include Business field as one
@@ -317,28 +376,39 @@ function TimelineHeading({
   const fields = useCustomFields("opportunity");
   const values = (opportunity.custom_values ?? {}) as CustomValues;
   return (
-    <div className="timeline-heading">
-      <div>
-        <p className="eyebrow">
-          <OpportunityField
-            opportunity={opportunity}
-            field="account_name"
-            editable={canManage}
-            save={save}
-          >
-            {opportunity.account_name}
-          </OpportunityField>
+    <header className="record-header">
+      <div className="record-main">
+        <p className="record-crumb">
+          {/* Back to the board, carrying its view state: the filters, the
+              sort, the chosen view and the month all live in the URL, so this
+              is what makes "the board as you left it" true rather than said
+              (R.1, decision 1A). */}
+          <Link to={boardHref(params)}>&larr; Opportunities</Link>
         </p>
-        <h2>
-          <OpportunityField
-            opportunity={opportunity}
-            field="name"
-            editable={canManage}
-            save={save}
-          >
-            {opportunity.name}
-          </OpportunityField>
-        </h2>
+        {/* The name and the account on one line: this band never leaves the
+            window, so every row it keeps is a row the timeline does not get. */}
+        <div className="record-identity">
+          <h2>
+            <OpportunityField
+              opportunity={opportunity}
+              field="name"
+              editable={canManage}
+              save={save}
+            >
+              {opportunity.name}
+            </OpportunityField>
+          </h2>
+          <p className="eyebrow">
+            <OpportunityField
+              opportunity={opportunity}
+              field="account_name"
+              editable={canManage}
+              save={save}
+            >
+              {opportunity.account_name}
+            </OpportunityField>
+          </p>
+        </div>
         <p className="meta-row opportunity-facts">
           {facts.map((field) => (
             <OpportunityField
@@ -361,9 +431,24 @@ function TimelineHeading({
               </span>
             ))}
           <span>Your role: {opportunity.current_user_role}</span>
+          {/* What is on this deal, as a count rather than as a section the
+              reader has to scroll to find (R.1). */}
+          <span className="record-count">
+            {entryCount} {entryCount === 1 ? "entry" : "entries"}
+          </span>
         </p>
       </div>
       <div className="export-actions">
+        {/* The AI is opened from here and from nowhere else: it is an action
+            on the deal, like exporting it or reading its history. */}
+        <button
+          type="button"
+          className={asking ? "primary-button" : "secondary-button"}
+          onClick={onAsk}
+          aria-expanded={asking}
+        >
+          Ask
+        </button>
         <ExportControl opportunityId={opportunity.id} order={order} />
         {/* One destination for what happened here, offered to every role:
             the log answers with the events the reader's role may see rather
@@ -374,7 +459,7 @@ function TimelineHeading({
           Refresh
         </button>
       </div>
-    </div>
+    </header>
   );
 }
 

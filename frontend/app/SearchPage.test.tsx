@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { SearchPage } from "./SearchPage";
+import { AppRoutes } from "./AppRoot";
 import { ALEX, FakeApi, aSearchResult } from "./test-api";
 import { createQueryClient } from "../lib/query";
 
@@ -19,7 +19,7 @@ function start(
   return render(
     <QueryClientProvider client={createQueryClient()}>
       <MemoryRouter initialEntries={[path]}>
-        <SearchPage />
+        <AppRoutes />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -221,8 +221,10 @@ describe("search page", () => {
     start({ user: null }, "/search?q=finance");
 
     expect(
-      await screen.findByRole("link", { name: "Sign in" }),
-    ).toHaveAttribute("href", "/");
+      await screen.findByRole("heading", {
+        name: /Track every sales opportunity/,
+      }),
+    ).toBeInTheDocument();
     await waitFor(() =>
       expect(api.callsTo("GET", "/api/v2/search")).toHaveLength(0),
     );

@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  backToBoard,
   addNote,
   entry,
   entryForm,
@@ -104,7 +105,11 @@ test("an opportunity's history keeps the value an edit replaced", async ({
   });
   await openTimeline(page, opportunity);
 
+  // The dialog on the board, which is a separate screen since R.1 (decision
+  // 1A). The same field is editable in place on the deal's own header (2.11);
+  // what this test needs is an edit that leaves nothing but a version row.
   const form = page.locator("form.opportunity-form");
+  await backToBoard(page);
   await page
     .locator("article.opportunity-card")
     .filter({ hasText: opportunity })
@@ -115,6 +120,7 @@ test("an opportunity's history keeps the value an edit replaced", async ({
   await form.getByRole("button", { name: "Save changes" }).click();
   await expect(form).toBeHidden();
 
+  await openTimeline(page, opportunity);
   const dialog = await openHistory(page);
   const edit = dialog
     .locator("li.activity-event")
@@ -165,6 +171,7 @@ test("the history merges what was recorded, edited and deleted", async ({
   // An edit to a field the timeline does not narrate: nothing but the version
   // row records this one, which is what made it invisible before 3.0.
   const form = page.locator("form.opportunity-form");
+  await backToBoard(page);
   await page
     .locator("article.opportunity-card")
     .filter({ hasText: opportunity })
@@ -174,6 +181,7 @@ test("the history merges what was recorded, edited and deleted", async ({
   await form.getByLabel("Value").fill("120000");
   await form.getByRole("button", { name: "Save changes" }).click();
   await expect(form).toBeHidden();
+  await openTimeline(page, opportunity);
 
   await kickoff.getByRole("button", { name: "Delete" }).first().click();
   await expect(page.getByRole("heading", { name: "Kickoff call" })).toHaveCount(

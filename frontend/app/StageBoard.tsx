@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type DragEvent } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 
 import {
   formatMoney,
@@ -9,6 +9,7 @@ import {
   type Opportunity,
   type Stage,
 } from "../lib/domain";
+import { opportunityHref } from "../lib/viewState";
 import { MoveToStage } from "./MoveToStage";
 import { useOpportunityItem } from "./useOpportunityItem";
 import { VirtualList } from "./VirtualList";
@@ -226,6 +227,9 @@ function OpportunityCard({
   onToggleChecked: (opportunity: Opportunity) => void;
   onRangeSelect: (opportunity: Opportunity) => void;
 }) {
+  // The board's view state travels with the link (R.1): a deal is its own
+  // page now, so the way back has to be able to restore the list.
+  const [params] = useSearchParams();
   const owns = opportunity.current_user_role === "owner";
   const { itemProps, checkboxProps } = useOpportunityItem({
     className: `opportunity-card${dragging ? " dragging" : ""}`,
@@ -257,7 +261,7 @@ function OpportunityCard({
         <h3>
           {/* Not natively draggable: an anchor drags its own URL, which would
               start a drag the board is not part of. */}
-          <Link draggable={false} to={`/opportunities/${opportunity.id}`}>
+          <Link draggable={false} to={opportunityHref(opportunity.id, params)}>
             {opportunity.name}
           </Link>
         </h3>

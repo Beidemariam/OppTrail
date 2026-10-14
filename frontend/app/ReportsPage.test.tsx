@@ -194,8 +194,13 @@ describe("the six aggregations on screen", () => {
 
   it("invites a sign-in rather than asking for numbers", async () => {
     renderApp({}, "/reports");
+    // One answer for every screen since R.1: the shell resolves the session,
+    // so a signed-out reader meets the sign-in panel here rather than a
+    // sentence with a link back to the board.
     expect(
-      await screen.findByRole("link", { name: "Sign in" }),
+      await screen.findByRole("heading", {
+        name: /Track every sales opportunity/,
+      }),
     ).toBeInTheDocument();
   });
 });

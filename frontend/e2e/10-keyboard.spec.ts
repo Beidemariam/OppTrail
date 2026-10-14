@@ -82,7 +82,7 @@ test("keyboard only: palette, opportunity, note", async ({ page }) => {
 
   await expect(page).toHaveURL(/\/opportunities\/\d+$/);
   await expect(
-    page.locator(".timeline-panel").getByRole("heading", { name: opportunity }),
+    page.locator(".record-header").getByRole("heading", { name: opportunity }),
   ).toBeVisible();
 
   // With a timeline open, `c` composes an entry instead, and Ctrl Enter

@@ -50,7 +50,7 @@ test("a colleague's entry appears without a reload", async ({
     // Alex's page has not been touched since the assertion above. If the
     // stream were not open, this would only pass on a reload.
     await expect(
-      page.locator(".timeline-panel").getByRole("heading", { name: title }),
+      page.locator(".timeline-column").getByRole("heading", { name: title }),
     ).toBeVisible();
   } finally {
     await second.close();

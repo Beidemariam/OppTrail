@@ -179,12 +179,39 @@ export function entry(page: Page, title: string) {
 
 export async function openTimeline(page: Page, name: string) {
   // The card's own name is the link: a real link, not a button, because an
-  // opportunity has its own URL from milestone 2.1 onwards and the board
-  // stays beside the panel it opens.
+  // opportunity has its own URL from milestone 2.1 onwards. Since R.1
+  // (decision 1A) that URL is a page of its own rather than a panel appended
+  // under the board, so this waits for the record header the deal opens with.
   await card(page, name).getByRole("link", { name }).click();
   await expect(
-    page.locator(".timeline-panel").getByRole("heading", { name }),
+    page.locator(".record-header").getByRole("heading", { name }),
   ).toBeVisible();
+}
+
+/** Back to the board from a deal's own page (R.1, decision 1A). */
+export async function backToBoard(page: Page) {
+  await page.getByRole("link", { name: "\u2190 Opportunities" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Opportunities" }),
+  ).toBeVisible();
+}
+
+/** The deal screen's AI drawer, which is closed until it is asked for
+ * (R.1, decision 2A). */
+export async function openAi(page: Page) {
+  await page.getByRole("button", { name: "Ask", exact: true }).click();
+  return page.locator(".ai-drawer");
+}
+
+/** The board's filter and sort controls, collapsed behind a trigger since R.1
+ * (decision 3A). A no-op when a filter is already applied, since the screen
+ * opens them then. */
+export async function openBoardFilters(page: Page) {
+  const trigger = page.getByRole("button", { name: "+ Filter and sort" });
+  if (await trigger.count()) {
+    await trigger.click();
+  }
+  await expect(page.locator("form.filter-bar")).toBeVisible();
 }
 
 /**
@@ -199,7 +226,7 @@ export async function openTimeline(page: Page, name: string) {
  */
 export async function openHistory(page: Page) {
   await page
-    .locator(".timeline-heading")
+    .locator(".record-header")
     // "Activity" since milestone 3.7: the button was called History, which is
     // what the per-item dialogs D-121 removed were called (D-136 finding 1).
     .getByRole("button", { name: "Activity", exact: true })

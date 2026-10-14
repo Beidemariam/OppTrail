@@ -16,10 +16,10 @@ import {
   useCustomFields,
   useJobRuns,
   useRunAutomationRule,
-  useSession,
 } from "../lib/queries";
 import { schedulerLine } from "../lib/jobs";
 import { formatTimestamp } from "../lib/time";
+import { PageHeader, useShellUser } from "./AppShell";
 import { AutomationRuleForm } from "./AutomationRuleForm";
 import { useConfirm } from "./ConfirmDialog";
 
@@ -49,64 +49,37 @@ import { useConfirm } from "./ConfirmDialog";
  *   nothing.
  */
 export function AutomationsPage() {
-  const session = useSession();
-  const signedIn = Boolean(session.data);
+  // The shell resolves the session, so every query on this screen is enabled.
+  const viewer = useShellUser();
   // Archived rules are off by default and reachable, because the reason the
   // row is kept at all is its run log: "rule 4 moved this deal" needs rule 4
   // to still be readable. Listing them beside the live ones would make the
   // screen a history instead of a list of what runs.
   const [showArchived, setShowArchived] = useState(false);
-  const rules = useAutomationRules(signedIn, showArchived);
-  const customFields = useCustomFields("opportunity", signedIn);
-  const jobRuns = useJobRuns(signedIn);
+  const rules = useAutomationRules(true, showArchived);
+  const customFields = useCustomFields("opportunity", true);
+  const jobRuns = useJobRuns(true);
   const [editing, setEditing] = useState<AutomationRule | null>(null);
   const [composing, setComposing] = useState(false);
 
-  if (session.isPending) {
-    return (
-      <main className="app-shell">
-        <p className="status">Loading...</p>
-      </main>
-    );
-  }
-
-  if (!session.data) {
-    return (
-      <main className="app-shell">
-        <header className="topbar">
-          <div>
-            <p className="eyebrow">OppTrail</p>
-            <h1>Automations</h1>
-          </div>
-        </header>
-        <p className="empty-state">
-          <Link to="/">Sign in</Link> to see your automation rules.
-        </p>
-      </main>
-    );
-  }
-
-  const viewer = session.data;
   const listed = rules.data ?? [];
 
   return (
     <main className="app-shell">
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">OppTrail</p>
-          <h1>Automations</h1>
-        </div>
-        <div className="user-block">
-          <span>{viewer.name}</span>
-          <Link className="secondary-button" to="/">
-            Opportunities
-          </Link>
-        </div>
-      </header>
-
       <section className="workspace">
-        <div className="page-actions">
-          <button type="button" onClick={() => setComposing(true)}>
+        <PageHeader
+          title="Automations"
+          subtitle={
+            <p className="page-subtitle">
+              Rules that watch for one thing and do one thing.
+            </p>
+          }
+        >
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => setComposing(true)}
+          >
             New rule
           </button>
           <label className="checkbox-field">
@@ -117,7 +90,7 @@ export function AutomationsPage() {
             />
             Show archived rules
           </label>
-        </div>
+        </PageHeader>
 
         <p className="report-note">
           A rule watches for one thing, checks your conditions, and does one

@@ -6,10 +6,10 @@ import { Link, useSearchParams } from "react-router";
 
 import type { components } from "../lib/api-types";
 import { apiRequest } from "../lib/api";
-import { useSession } from "../lib/queries";
 import { searchResultHref } from "../lib/domain";
 import { snippetSegments } from "../lib/snippet";
 import { formatTimestamp } from "../lib/time";
+import { PageHeader } from "./AppShell";
 
 type SearchResult = components["schemas"]["SearchResultPublic"];
 type SearchResultPage = components["schemas"]["Page_SearchResultPublic_"];
@@ -44,11 +44,9 @@ export function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const query = (searchParams.get("q") ?? "").trim();
 
-  const session = useSession();
-
   const results = useInfiniteQuery({
     queryKey: ["search", query],
-    enabled: query !== "" && Boolean(session.data),
+    enabled: query !== "",
     initialPageParam: null as string | null,
     queryFn: ({ pageParam }) =>
       apiRequest<SearchResultPage>(searchPath(query, pageParam)),
@@ -62,46 +60,21 @@ export function SearchPage() {
     setSearchParams(typed.trim() ? { q: typed.trim() } : {});
   }
 
-  if (session.isPending) {
-    return (
-      <main className="app-shell">
-        <p className="status">Loading...</p>
-      </main>
-    );
-  }
-
-  if (!session.data) {
-    return (
-      <main className="app-shell">
-        <header className="topbar">
-          <div>
-            <p className="eyebrow">OppTrail</p>
-            <h1>Search</h1>
-          </div>
-        </header>
-        <p className="empty-state">
-          <Link to="/">Sign in</Link> to search your opportunities.
-        </p>
-      </main>
-    );
-  }
-
   const matches = results.data?.pages.flatMap((page) => page.items) ?? [];
 
   return (
     <main className="app-shell">
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">OppTrail</p>
-          <h1>Search</h1>
-        </div>
-        <div className="user-block">
-          <span>{session.data.name}</span>
-          <Link className="secondary-button" to="/">
-            Opportunities
-          </Link>
-        </div>
-      </header>
+      <section className="workspace">
+        <PageHeader
+          title="Search"
+          subtitle={
+            <p className="page-subtitle">
+              Entries, notes, comments and filenames, across every deal you can
+              see.
+            </p>
+          }
+        />
+      </section>
 
       <form className="form search-form" onSubmit={submit}>
         <label>

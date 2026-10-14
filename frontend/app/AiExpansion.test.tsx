@@ -3,7 +3,12 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { ALEX, anEntry, anOpportunity } from "./test-api";
-import { openTimeline, renderDashboard } from "./test-app";
+import {
+  openAi,
+  openTimeline,
+  renderDashboard,
+  openBoardFilters,
+} from "./test-app";
 
 /**
  * The AI expansion on screen (milestone 6.4, `docs/FEATURES.md` §14).
@@ -29,9 +34,9 @@ async function openSidebar() {
     entries: [anEntry()],
   });
   await openTimeline("Northwind rollout");
-  return (await screen.findByRole("heading", { name: "AI Agent" })).closest(
-    "aside",
-  ) as HTMLElement;
+  // Behind the record header's Ask since R.1 (decision 2A): the panel is a
+  // drawer the reader opens, not a column that is always holding space.
+  return openAi();
 }
 
 describe("an answer that arrives as it is written", () => {
@@ -92,9 +97,7 @@ describe("limiting the question to a date range", () => {
       entries: [anEntry()],
     });
     await openTimeline("Northwind rollout");
-    const sidebar = (
-      await screen.findByRole("heading", { name: "AI Agent" })
-    ).closest("aside") as HTMLElement;
+    const sidebar = await openAi();
 
     await userEvent.click(
       within(sidebar).getByRole("button", { name: /Limit to dates/ }),
@@ -188,12 +191,18 @@ describe("a sentence as a filter you can read first", () => {
 
     await userEvent.click(within(panel).getByRole("button", { name: "Apply" }));
 
-    // And now the filter is in force, which the bar itself reports.
-    await waitFor(() =>
-      expect(screen.getByLabelText("Filter by stage")).toHaveValue(
-        "Negotiation",
-      ),
-    );
+    // And now the filter is in force, which the chips say without opening
+    // anything (R.1, decision 3A).
+    expect(
+      await screen.findByRole("button", { name: /Stage: Negotiation/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Min value: 50000/ }),
+    ).toBeInTheDocument();
+
+    // And the controls themselves agree, once asked for.
+    await openBoardFilters();
+    expect(screen.getByLabelText("Filter by stage")).toHaveValue("Negotiation");
     expect(screen.getByLabelText("Filter by minimum value")).toHaveValue(50000);
   });
 

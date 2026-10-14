@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { Outlet, useMatch, useNavigate, useSearchParams } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { useMatch, useNavigate, useSearchParams } from "react-router";
 
 import {
   adjacentStage,
@@ -30,7 +30,7 @@ import {
   useSession,
 } from "../lib/queries";
 import { paramsWithState, stateFromParams } from "../lib/viewState";
-import { AuthPanel } from "./AuthPanel";
+import { PageHeader } from "./AppShell";
 import { BulkActionBar } from "./BulkActionBar";
 import { ColumnPicker } from "./ColumnPicker";
 import { ManageCustomFields } from "./ManageCustomFields";
@@ -47,7 +47,6 @@ import { SavedViewsMenu } from "./SavedViewsMenu";
 import { StageBoard } from "./StageBoard";
 import { useToasts, useUndoableDelete } from "./Toasts";
 import { TaskSummary } from "./TaskSummary";
-import { TopBar } from "./TopBar";
 import { ViewSwitcher } from "./ViewSwitcher";
 
 /**
@@ -130,6 +129,26 @@ export function DashboardPage() {
     emptyOpportunityViewState,
     "opportunities",
   );
+
+  // The board's filter controls are a disclosure since R.1 (decision 3A), and
+  // the open state is owned here rather than in the bar because `/` has to be
+  // able to open them before it can put the cursor in the keyword box.
+  //
+  // They are open only when the reader opens them. An earlier version opened
+  // them whenever a filter was in force — mirroring the timeline bar's rule
+  // (D-137) — which defeated the disclosure: a filtered board carried the
+  // whole panel again and the chips that say what is in force were never
+  // reached. The chips are that signal here; the timeline bar needs its own
+  // because a reading *order* has no chip to show.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const focusKeyword = useRef(false);
+
+  useEffect(() => {
+    if (filtersOpen && focusKeyword.current) {
+      focusKeyword.current = false;
+      keywordFilterRef.current?.focus();
+    }
+  }, [filtersOpen]);
   function setViewState(next: OpportunityViewState) {
     setSearchParams(
       paramsWithState(
@@ -311,7 +330,13 @@ export function DashboardPage() {
               toggleChecked(focused);
             }
           },
-          "/": () => keywordFilterRef.current?.focus(),
+          "/": () => {
+            // Opens the bar if it is shut, then lands in the keyword box —
+            // the same shape as `c` opening the entry composer.
+            focusKeyword.current = true;
+            setFiltersOpen(true);
+            keywordFilterRef.current?.focus();
+          },
           "[": () => nudgeStage(-1),
           "]": () => nudgeStage(1),
           Escape: onEscape,
@@ -319,18 +344,6 @@ export function DashboardPage() {
         }
       : {},
   );
-
-  if (session.isPending) {
-    return (
-      <main className="app-shell">
-        <p className="status">Loading...</p>
-      </main>
-    );
-  }
-
-  if (!session.data) {
-    return <AuthPanel />;
-  }
 
   // The one destructive action that still asks first, and the only one that
   // asks the reader to type the name back: it cascades across a whole record,
@@ -546,61 +559,60 @@ export function DashboardPage() {
 
   return (
     <main className="app-shell">
-      <TopBar user={session.data} />
-
       <section className="workspace">
-        <div className="page-header">
-          <div>
-            <h1>Opportunities</h1>
-            <p className="page-subtitle">
-              {filteredOut > 0
-                ? `${visibleOpportunities.length} of ${total} shown, ${filteredOut} filtered out`
-                : `${total} ${total === 1 ? "opportunity" : "opportunities"}`}
-            </p>
-            {/* What is late, as a count beside the screen's own title
-                (milestone 4.1). Renders nothing when nothing is due. */}
-            <TaskSummary />
-          </div>
-          <div className="page-actions">
-            <ViewSwitcher
-              view={viewState.view}
-              onChange={(view: OpportunityView) =>
-                setViewState({ ...viewState, view })
-              }
-            />
-            {/* Both belong to the table and are offered only there: columns
+        <PageHeader
+          title="Opportunities"
+          subtitle={
+            <>
+              <p className="page-subtitle">
+                {filteredOut > 0
+                  ? `${visibleOpportunities.length} of ${total} shown, ${filteredOut} filtered out`
+                  : `${total} ${total === 1 ? "opportunity" : "opportunities"}`}
+              </p>
+              {/* What is late, as a count beside the screen's own title
+                  (milestone 4.1). Renders nothing when nothing is due. */}
+              <TaskSummary />
+            </>
+          }
+        >
+          <ViewSwitcher
+            view={viewState.view}
+            onChange={(view: OpportunityView) =>
+              setViewState({ ...viewState, view })
+            }
+          />
+          {/* Both belong to the table and are offered only there: columns
                 are its own setting, and `docs/DESIGN-SYSTEM.md` introduces
                 density as being "for the table view and power users"
                 (D-075). A control for how tall a row is, on a screen of
                 cards, is a control that explains nothing. */}
-            {viewState.view === "table" && (
-              <>
-                <ColumnPicker
-                  columns={viewState.columns}
-                  onChange={(columns: string) =>
-                    setViewState({ ...viewState, columns })
-                  }
-                  fields={fields}
-                />
-                <DensityToggle />
-              </>
-            )}
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => setManagingFields(true)}
-            >
-              Fields
-            </button>
-            <button
-              type="button"
-              className="primary-button"
-              onClick={() => setComposing(true)}
-            >
-              New opportunity
-            </button>
-          </div>
-        </div>
+          {viewState.view === "table" && (
+            <>
+              <ColumnPicker
+                columns={viewState.columns}
+                onChange={(columns: string) =>
+                  setViewState({ ...viewState, columns })
+                }
+                fields={fields}
+              />
+              <DensityToggle />
+            </>
+          )}
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => setManagingFields(true)}
+          >
+            Fields
+          </button>
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => setComposing(true)}
+          >
+            New opportunity
+          </button>
+        </PageHeader>
 
         {opportunities.isError && (
           <p className="error">{opportunities.error.message}</p>
@@ -631,6 +643,8 @@ export function DashboardPage() {
           ) : (
             <>
               <OpportunityFilterBar
+                open={filtersOpen}
+                onOpenChange={setFiltersOpen}
                 state={viewState}
                 keywordRef={keywordFilterRef}
                 onApply={setViewState}
@@ -726,8 +740,6 @@ export function DashboardPage() {
         <p className="visually-hidden" role="status">
           {announcement}
         </p>
-
-        <Outlet />
       </section>
 
       {(composing || editing) && (
@@ -773,14 +785,5 @@ function LoadingOpportunities() {
         <div className="skeleton-card" key={index} aria-hidden="true" />
       ))}
     </div>
-  );
-}
-
-/** The panel at `/`, before an opportunity has been opened. */
-export function NoOpportunitySelected() {
-  return (
-    <section className="timeline-panel empty-panel">
-      <h2>Select an opportunity to open its timeline.</h2>
-    </section>
   );
 }

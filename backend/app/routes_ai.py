@@ -11,6 +11,7 @@ from .ai_service import (
     ask_openai_for_filter,
     build_filter_prompt,
     build_timeline_context,
+    classify_ai_failure,
     extract_referenced_entry_numbers,
     normalize_ai_answer,
     stream_openai,
@@ -73,10 +74,10 @@ def ask_ai_agent(
             exc_info=exc,
             extra={"opportunity_id": opportunity_id},
         )
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="AI service is unavailable",
-        ) from exc
+        # Which kind of failure, rather than one sentence for all of them
+        # (R.1, D-052). The provider's own wording stays in the log above.
+        failure_status, message = classify_ai_failure(exc)
+        raise HTTPException(status_code=failure_status, detail=message) from exc
 
     return AiAskResponse(
         answer=answer,
@@ -152,7 +153,9 @@ def stream_ai_answer(
                 exc_info=exc,
                 extra={"opportunity_id": opportunity_id},
             )
-            yield sse_frame("error", "AI service is unavailable")
+            # The status line is long gone by here (D-187), so the kind of
+            # failure travels as the error event's own text.
+            yield sse_frame("error", classify_ai_failure(exc)[1])
             return
 
         whole = normalize_ai_answer("".join(answer))
@@ -221,9 +224,7 @@ def propose_filter(
         )
     except Exception as exc:
         logger.warning("ai_filter_call_failed", exc_info=exc)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="AI service is unavailable",
-        ) from exc
+        failure_status, message = classify_ai_failure(exc)
+        raise HTTPException(status_code=failure_status, detail=message) from exc
 
     return parse_filter_answer(answer)

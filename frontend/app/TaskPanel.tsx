@@ -2,7 +2,12 @@
 
 import { FormEvent, useRef, useState, type RefObject } from "react";
 
-import { todayIsoDate, type Access, type Task } from "../lib/domain";
+import {
+  todayIsoDate,
+  type Access,
+  type LinkTarget,
+  type Task,
+} from "../lib/domain";
 import {
   useCreateTask,
   useDeleteTask,
@@ -40,9 +45,13 @@ import { useUndoableDelete } from "./Toasts";
 export function TaskPanel({
   opportunityId,
   access,
+  linkTarget,
 }: {
   opportunityId: number;
   access: Access;
+  /** What a link pointed at (R.1): My Tasks links a task to the deal it
+   * belongs to, and this panel is where it lands. */
+  linkTarget?: LinkTarget | null;
 }) {
   const tasks = useTasks(opportunityId, true);
   const setDone = useSetTaskDone();
@@ -55,6 +64,17 @@ export function TaskPanel({
   const all = tasks.data ?? [];
   const open = all.filter((task) => !task.completed_at);
   const done = all.filter((task) => task.completed_at);
+  // A link to a task that has since been finished opens the Done list rather
+  // than landing on nothing — the same rule as a link into a resolved thread
+  // (D-128): reading it is not reopening it.
+  const linkedIsDone =
+    linkTarget?.level === "task" &&
+    done.some((task) => task.id === linkTarget.id);
+  const [openedForLink, setOpenedForLink] = useState(false);
+  if (linkedIsDone && !openedForLink) {
+    setOpenedForLink(true);
+    setShowDone(true);
+  }
 
   return (
     <section className="task-panel">
@@ -75,6 +95,7 @@ export function TaskPanel({
             key={task.id}
             task={task}
             today={today}
+            linkTarget={linkTarget}
             onToggle={(completed) =>
               setDone.mutate({ taskId: task.id, completed })
             }

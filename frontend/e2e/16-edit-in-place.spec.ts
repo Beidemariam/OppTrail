@@ -116,7 +116,7 @@ test("edit an entry, a note and an opportunity field without leaving the page", 
 
   // The opportunity's own fields are edited from its heading rather than from
   // a dialog on the board behind it.
-  const heading = page.locator(".timeline-heading");
+  const heading = page.locator(".record-header");
   await expect(heading.getByText("USD 75,000")).toBeVisible();
   await heading.getByTitle("Edit Value").click();
   // Exact, because "Save Value" and "Cancel editing Value" are labelled

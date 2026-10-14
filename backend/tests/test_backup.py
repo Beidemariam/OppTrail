@@ -122,3 +122,21 @@ def test_restore_recovers_data_written_after_a_backup(
 def test_restore_raises_for_a_missing_backup_file(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         restore_backup(tmp_path / "does-not-exist.db")
+
+
+def test_a_hand_named_file_beside_the_snapshots_does_not_take_out_the_probe(
+    tmp_path: Path,
+) -> None:
+    """Found by doing it: a copy named `app-pre-R1-<stamp>.db`, left in the
+    backup directory before a risky deploy, made `/api/health` answer 500 —
+    the probe that exists to report a disk problem became one (R.1)."""
+    (tmp_path / "app-20261013T041025757147Z.db").write_bytes(b"")
+    (tmp_path / "app-pre-R1-20261013T110251Z.db").write_bytes(b"")
+
+    assert latest_backup_at(tmp_path) == "2026-10-13T04:10:25Z"
+
+
+def test_a_directory_of_nothing_parseable_answers_none(tmp_path: Path) -> None:
+    (tmp_path / "app-notes.db").write_bytes(b"")
+
+    assert latest_backup_at(tmp_path) is None

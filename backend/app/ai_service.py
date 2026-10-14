@@ -446,3 +446,70 @@ def ask_openai_for_filter(
         store=False,
     )
     return str(response.output_text)
+
+
+# Which kind of failure, and what an operator should check (milestone R.1,
+# `AGENTS.md` v2 scope item 14, **D-052**).
+#
+# Every cause used to collapse into one "AI service is unavailable". A
+# misconfigured `OPENAI_MODEL` is a thirty-second operator fix and read
+# identically to OpenAI being down -- found the hard way during the Phase 1
+# user test, where a stale `gpt-oss-20b` in `.env` returned `model_not_found`
+# and the UI said only that the service was unavailable.
+#
+# The three classes the brief asks for, as the status the envelope carries:
+#
+# - **503** a configuration problem: a rejected key, an unknown model, a
+#   permission the deployment does not have. Nobody waits this one out.
+# - **504** the call did not answer in time, and **502** the service could not
+#   be reached or answered 5xx. Both are "try again"; neither is anybody's
+#   configuration.
+# - **400** the request itself was refused -- a question far past the model's
+#   context window is the realistic case.
+#
+# What the message may say is bounded: name *our* setting, never the key, the
+# provider's own wording, or which model is configured. The provider's text
+# goes to the log, which is where an operator is.
+def classify_ai_failure(exc: BaseException) -> tuple[int, str]:
+    """The status and the sentence for one failed model call.
+
+    Matched on the SDK's exception classes by name rather than by import, so
+    this stays true if the SDK reorganizes its module layout -- and so a test
+    can raise a stand-in without constructing an `httpx` response to satisfy
+    the real class's constructor.
+    """
+    name = type(exc).__name__
+    if name == "AuthenticationError":
+        return (
+            503,
+            "The AI service rejected this deployment's credentials. "
+            "An operator should check OPENAI_API_KEY.",
+        )
+    if name == "NotFoundError":
+        return (
+            503,
+            "The configured AI model is not available to this deployment. "
+            "An operator should check OPENAI_MODEL.",
+        )
+    if name == "PermissionDeniedError":
+        return (
+            503,
+            "This deployment is not permitted to use the configured AI model. "
+            "An operator should check OPENAI_API_KEY and OPENAI_MODEL.",
+        )
+    if name == "RateLimitError":
+        return 429, "The AI service is rate limiting this deployment. Try again shortly."
+    if name == "APITimeoutError":
+        return (
+            504,
+            "The AI service did not answer in time. Try again, or ask about a narrower date range.",
+        )
+    if name in {"APIConnectionError", "InternalServerError"}:
+        return 502, "The AI service could not be reached. Try again shortly."
+    if name == "BadRequestError":
+        return (
+            400,
+            "The AI service refused this request. A shorter question, or a "
+            "narrower date range, usually answers.",
+        )
+    return 502, "The AI service is unavailable."

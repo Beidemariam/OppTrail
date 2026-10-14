@@ -4,9 +4,10 @@ import { useState, useSyncExternalStore } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 
+import { AppShell } from "./AppShell";
 import { AutomationsPage } from "./AutomationsPage";
 import { ConfirmProvider } from "./ConfirmDialog";
-import { DashboardPage, NoOpportunitySelected } from "./DashboardPage";
+import { DashboardPage } from "./DashboardPage";
 import { DensityProvider } from "./Density";
 import { OpportunityPanel } from "./OpportunityPanel";
 import { SearchPage } from "./SearchPage";
@@ -25,9 +26,16 @@ const noSubscription = () => () => {};
  * Every route in the app (ADR 0005). Exported on its own so the tests can
  * mount the real route table inside a `MemoryRouter` rather than a copy of it.
  *
- * The dashboard is a layout route: the board stays mounted and the child route
- * decides which panel sits beside it, which is what gives an opportunity its
- * own URL.
+ * `AppShell` is the layout route every screen sits inside (R.1, decision 4A):
+ * it resolves the session once and draws the navigation rail and the
+ * application bar around whatever the route renders.
+ *
+ * A deal is a route of its own rather than a child of the dashboard (R.1,
+ * decision 1A). It used to be a panel appended *below* the board, which left
+ * the first pixel of the thing the reader had just clicked 888px down a 900px
+ * screen, under two filter bars acting on a list they were no longer looking
+ * at. The board unmounts now; the view state is in the URL, so going back
+ * restores it.
  *
  * `ShortcutsProvider` wraps the table rather than sitting inside a route: the
  * command palette and the keyboard map work on every screen (milestone 2.4a),
@@ -52,23 +60,22 @@ export function AppRoutes() {
           <ConfirmProvider>
             <ShortcutsProvider>
               <Routes>
-                <Route path="/search" element={<SearchPage />} />
-                {/* My Tasks is its own screen rather than a panel on the
-                    dashboard (milestone 4.1): the question it answers is not
-                    about one deal. The dashboard carries the overdue count and
-                    links here. */}
-                <Route path="/tasks" element={<TasksPage />} />
-                <Route path="/reports" element={<ReportsPage />} />
-                {/* Automations (milestone 6.3). Its own screen for the reason
-                    /reports and /tasks are: a rule is about every deal at
-                    once, so there is no one deal to hang it off. */}
-                <Route path="/automations" element={<AutomationsPage />} />
-                <Route path="/" element={<DashboardPage />}>
-                  <Route index element={<NoOpportunitySelected />} />
+                <Route element={<AppShell />}>
+                  <Route path="/" element={<DashboardPage />} />
                   <Route
-                    path="opportunities/:opportunityId"
+                    path="/opportunities/:opportunityId"
                     element={<OpportunityPanel />}
                   />
+                  <Route path="/search" element={<SearchPage />} />
+                  {/* My Tasks is its own screen rather than a panel on the
+                      dashboard (milestone 4.1): the question it answers is not
+                      about one deal. */}
+                  <Route path="/tasks" element={<TasksPage />} />
+                  <Route path="/reports" element={<ReportsPage />} />
+                  {/* Automations (milestone 6.3). Its own screen for the reason
+                      /reports and /tasks are: a rule is about every deal at
+                      once, so there is no one deal to hang it off. */}
+                  <Route path="/automations" element={<AutomationsPage />} />
                 </Route>
                 {/* Any other path reached the shell through FastAPI's catch-all
           rather than through a link, so there is nothing to render. */}

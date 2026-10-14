@@ -38,7 +38,7 @@ function queryBox(page: Page) {
 
 async function searchFor(page: Page, term: string) {
   await queryBox(page).fill(term);
-  await page.getByRole("button", { name: "Search" }).click();
+  await page.getByRole("button", { name: "Search", exact: true }).click();
 }
 
 test("search spans the opportunities a user can read, and no others", async ({
@@ -90,7 +90,7 @@ test("a result opens the match it found, not just the deal", async ({
     /\/opportunities\/\d+\?(entry|note|comment)=\d+$/,
   );
   await expect(
-    page.locator(".timeline-panel").getByRole("heading", { name: NORTHWIND }),
+    page.locator(".record-header").getByRole("heading", { name: NORTHWIND }),
   ).toBeVisible();
   // And the reader can see which row it was: the mark is the whole feature.
   await expect(page.locator(".is-linked").first()).toBeVisible();

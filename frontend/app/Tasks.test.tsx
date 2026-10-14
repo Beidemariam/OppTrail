@@ -10,7 +10,12 @@ import {
   anEntry,
   anOpportunity,
 } from "./test-api";
-import { openTimeline, renderApp, renderDashboard } from "./test-app";
+import {
+  openTimeline,
+  renderApp,
+  renderDashboard,
+  renderDealAt,
+} from "./test-app";
 import { writeInEditor } from "./test-editor";
 
 /**
@@ -200,6 +205,72 @@ describe("a deal's task panel", () => {
 });
 
 describe("my tasks", () => {
+  it("opens the task from its title rather than ticking it off", async () => {
+    // Reported while reading the real screen: the title *was* the checkbox's
+    // label, so clicking it completed the task instead of opening it (R.1).
+    const api = renderApp(
+      {
+        user: ALEX,
+        opportunities: [anOpportunity({ id: 10, name: "Northwind rollout" })],
+        tasks: [aTask({ id: 501, title: "Call them back" })],
+      },
+      "/tasks",
+    );
+
+    await userEvent.click(
+      await screen.findByRole("link", { name: "Call them back" }),
+    );
+
+    expect(api.callsTo("POST", "/api/v2/tasks/501/complete")).toHaveLength(0);
+    expect(
+      await screen.findByRole("heading", {
+        level: 2,
+        name: "Northwind rollout",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("marks the task the link named, once the deal is open", async () => {
+    await renderDealAt(
+      {
+        opportunities: [anOpportunity({ id: 10, name: "Northwind rollout" })],
+        entries: [anEntry()],
+        tasks: [
+          aTask({ id: 501, title: "Call them back" }),
+          aTask({ id: 502, title: "Something else" }),
+        ],
+      },
+      "/opportunities/10?task=502",
+    );
+
+    const marked = (await screen.findByText("Something else")).closest(
+      ".task-row",
+    );
+    expect(marked).toHaveClass("is-linked");
+    expect(
+      (await screen.findByText("Call them back")).closest(".task-row"),
+    ).not.toHaveClass("is-linked");
+  });
+
+  it("still ticks a task off from the box beside it", async () => {
+    const api = renderApp(
+      {
+        user: ALEX,
+        opportunities: [anOpportunity({ id: 10 })],
+        tasks: [aTask({ id: 501, title: "Call them back" })],
+      },
+      "/tasks",
+    );
+
+    await userEvent.click(
+      await screen.findByRole("checkbox", { name: "Complete Call them back" }),
+    );
+
+    await waitFor(() =>
+      expect(api.callsTo("POST", "/api/v2/tasks/501/complete")).toHaveLength(1),
+    );
+  });
+
   it("groups by standing, newest problem first, across deals", async () => {
     renderApp(
       {
@@ -227,7 +298,10 @@ describe("my tasks", () => {
       "/tasks",
     );
 
-    await screen.findByRole("heading", { name: "My tasks" });
+    // The screen names itself before its list arrives (R.1: the shell resolves
+    // the session, so the page renders its header while the read is in
+    // flight). Wait for the first group rather than for the title.
+    await screen.findByRole("heading", { name: "Overdue" });
     const headings = screen
       .getAllByRole("heading", { level: 2 })
       .map((heading) => heading.textContent);
@@ -274,8 +348,7 @@ describe("my tasks", () => {
       "/tasks",
     );
 
-    await screen.findByRole("heading", { name: "My tasks" });
-    expect(screen.getByText("Mine")).toBeInTheDocument();
+    expect(await screen.findByText("Mine")).toBeInTheDocument();
     expect(screen.queryByText("Blair's")).toBeNull();
   });
 
@@ -500,10 +573,13 @@ describe("the corners of the task screens", () => {
     // gone — the same situation D-145 is about, arrived at from the URL bar.
     renderApp({ user: null }, "/tasks");
 
+    // Since R.1 the shell answers this, identically on all five screens: the
+    // sign-in panel itself rather than a sentence linking back to the board.
     expect(
-      await screen.findByRole("heading", { name: "My tasks" }),
+      await screen.findByRole("heading", {
+        name: /Track every sales opportunity/,
+      }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Sign in" })).toBeInTheDocument();
   });
 
   it("links a task back to the entry that prompted it", async () => {
@@ -523,9 +599,8 @@ describe("the corners of the task screens", () => {
       "/tasks",
     );
 
-    await screen.findByRole("heading", { name: "My tasks" });
     expect(
-      screen.getByRole("link", { name: "Discovery call" }),
+      await screen.findByRole("link", { name: "Discovery call" }),
     ).toHaveAttribute("href", "/opportunities/10?entry=100");
     // The orphaned one is listed, without a link to an entry nobody can read.
     expect(screen.getByText("Orphan")).toBeInTheDocument();
@@ -549,10 +624,11 @@ describe("the corners of the task screens", () => {
       "/tasks?include_completed=true",
     );
 
-    await screen.findByRole("heading", { name: "My tasks" });
     // Nothing open, so the list says so rather than drawing an empty group.
     expect(
-      screen.getByRole("heading", { name: "Nothing is assigned to you." }),
+      await screen.findByRole("heading", {
+        name: "Nothing is assigned to you.",
+      }),
     ).toBeInTheDocument();
     expect(api.callsTo("GET", "/api/v2/tasks").length).toBeGreaterThan(0);
   });
@@ -604,9 +680,9 @@ describe("reopening a done task", () => {
       },
       "/tasks",
     );
-    await screen.findByRole("heading", { name: "My tasks" });
-
-    await userEvent.click(screen.getByRole("checkbox", { name: /Open one/ }));
+    await userEvent.click(
+      await screen.findByRole("checkbox", { name: /Open one/ }),
+    );
 
     await waitFor(() =>
       expect(api.callsTo("POST", "/api/v2/tasks/501/complete")).toHaveLength(1),

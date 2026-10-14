@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  backToBoard,
   entryForm,
   openEntryForm,
   expectNoAccessibilityViolations,
@@ -88,7 +89,9 @@ test("sign up, create an opportunity, add entries, change stage", async ({
     "Opportunity created",
   ]);
 
-  // Changing the stage must append a system entry nobody can edit.
+  // Changing the stage must append a system entry nobody can edit. The board
+  // is a separate screen since R.1 (decision 1A), so this goes back to it.
+  await backToBoard(page);
   await page
     .locator("article.opportunity-card")
     .filter({ hasText: opportunity })

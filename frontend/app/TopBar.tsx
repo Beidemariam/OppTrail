@@ -1,6 +1,6 @@
 "use client";
 
-import { Link, useNavigate } from "react-router";
+import { useNavigate } from "react-router";
 
 import type { User } from "../lib/domain";
 import { useLogout } from "../lib/queries";
@@ -15,8 +15,13 @@ import { useOpenCommandPalette } from "./ShortcutsProvider";
  * It carries no page title from milestone 2.7 — the screen names itself in its
  * own header, which is where the view switcher and the create action sit, so
  * this bar stays the same on every screen rather than being half chrome and
- * half page (D-079). Three regions, in reading order: brand, the palette, and
- * the account controls.
+ * half page (D-079).
+ *
+ * Since R.1 it carries no destinations either: the brand and the links to
+ * Search, Reports and Automations moved into `AppShell`'s rail, which is the
+ * region that can hold a sixth one. What is left is what belongs to the
+ * person rather than to the product — find anything, what is waiting, how it
+ * looks, who you are, and the way out.
  */
 export function TopBar({ user }: { user: User }) {
   const logout = useLogout();
@@ -38,13 +43,6 @@ export function TopBar({ user }: { user: User }) {
 
   return (
     <header className="topbar">
-      <Link className="brand" to="/">
-        <span className="brand-mark" aria-hidden="true">
-          OT
-        </span>
-        OppTrail
-      </Link>
-
       {/* The palette is the keyboard entry point to everything, so it is
           advertised here rather than left to be discovered (docs/UX.md). */}
       <button type="button" className="palette-button" onClick={openPalette}>
@@ -53,20 +51,6 @@ export function TopBar({ user }: { user: User }) {
       </button>
 
       <div className="user-block">
-        <Link className="ghost-button" to="/search">
-          Search
-        </Link>
-        {/* The six aggregations (milestone 6.2). Beside Search because both
-            are questions asked across every deal rather than about one, which
-            is what distinguishes them from everything on the board. */}
-        <Link className="ghost-button" to="/reports">
-          Reports
-        </Link>
-        {/* The rule builder (milestone 6.3), beside Reports for the same
-            reason: it is a screen about every deal rather than about one. */}
-        <Link className="ghost-button" to="/automations">
-          Automations
-        </Link>
         <NotificationMenu />
         <ThemeToggle />
         <span className="user-chip" title={user.email}>

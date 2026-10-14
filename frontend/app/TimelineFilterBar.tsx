@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useState, type RefObject } from "react";
 
 import {
   emptyTimelineFilters,
@@ -41,14 +41,23 @@ import {
 export function TimelineFilterBar({
   filters,
   onApply,
+  open,
+  onOpenChange,
+  keywordRef,
 }: {
   filters: TimelineFilters;
   onApply: (filters: TimelineFilters) => void;
+  /** Whether the controls are showing. Owned by the screen since R.1, for the
+   * reason `OpportunityFilterBar` explains: `/` has to be able to open them
+   * before it can put the cursor in the keyword box. */
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** Where `/` puts the cursor. */
+  keywordRef?: RefObject<HTMLInputElement | null>;
 }) {
   const applied = timelineFiltersApplied(filters);
   const [appliedFilters, setAppliedFilters] = useState(filters);
   const [draft, setDraft] = useState<TimelineFilters>(filters);
-  const [open, setOpen] = useState(applied > 0);
   if (filters !== appliedFilters) {
     setAppliedFilters(filters);
     setDraft(filters);
@@ -56,7 +65,7 @@ export function TimelineFilterBar({
     // the bar: what is filtering the timeline has to be visible where it is
     // changed, not only summarized.
     if (applied > 0) {
-      setOpen(true);
+      onOpenChange(true);
     }
   }
 
@@ -77,7 +86,7 @@ export function TimelineFilterBar({
           type="button"
           className="disclosure-button"
           aria-expanded={false}
-          onClick={() => setOpen(true)}
+          onClick={() => onOpenChange(true)}
         >
           <span aria-hidden="true">+</span> Filter and order
         </button>
@@ -93,7 +102,7 @@ export function TimelineFilterBar({
           type="button"
           className="disclosure-button"
           aria-expanded={true}
-          onClick={() => setOpen(false)}
+          onClick={() => onOpenChange(false)}
         >
           <span aria-hidden="true">-</span> Filter and order
         </button>
@@ -101,6 +110,7 @@ export function TimelineFilterBar({
       <label className="filter-field grow">
         Keyword
         <input
+          ref={keywordRef}
           aria-label="Filter the timeline by keyword"
           placeholder="Anything written in an entry"
           value={draft.q}

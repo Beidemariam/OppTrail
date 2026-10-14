@@ -75,10 +75,13 @@ path (`main.py:56-64`).
 - `app/[[...slug]]/page.tsx` is the single exported HTML file; `app/AppRoot.tsx`
   holds the router and the query client, and `/search` is the second route that
   justified introducing both (milestone 1.5). Milestone 2.1 decomposed the
-  former `page.tsx` into routed views and feature components: `/` is a layout
-  route (board and shell) with the opportunity's timeline as its child at
-  `/opportunities/:opportunityId`, and every server read and write is declared
-  in `lib/queries.ts`. Local state lives in the component that owns it.
+  former `page.tsx` into routed views and feature components, and milestone
+  R.1 settled the shape they sit in: `app/AppShell.tsx` is the layout route
+  every screen renders inside — a collapsible rail of destinations, the
+  application bar, and the session resolved once — with the board at `/` and a
+  deal at `/opportunities/:opportunityId` as siblings rather than parent and
+  child (**D-188**, **D-191**). Every server read and write is declared in
+  `lib/queries.ts`. Local state lives in the component that owns it.
 
 ### Backend
 

@@ -126,7 +126,7 @@ test("the calendar places a deal on its close month and accounts for the rest", 
   await page.getByRole("button", { name: "Previous month" }).click();
   await page.getByRole("link", { name: dated }).click();
   await expect(
-    page.locator(".timeline-panel").getByRole("heading", { name: dated }),
+    page.locator(".record-header").getByRole("heading", { name: dated }),
   ).toBeVisible();
 });
 
@@ -168,6 +168,6 @@ test("the calendar's second layer draws a task's due date and links back to its 
   // as well, which is how it reaches the conversation that produced it.
   await chip.click();
   await expect(
-    page.locator(".timeline-panel").getByRole("heading", { name: opportunity }),
+    page.locator(".record-header").getByRole("heading", { name: opportunity }),
   ).toBeVisible();
 });

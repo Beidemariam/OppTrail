@@ -55,13 +55,15 @@ describe("app routing", () => {
   it("serves one opportunity's timeline at its own URL", async () => {
     start("/opportunities/10");
 
-    // The board is still there — the timeline is a child route beside it, not
-    // a page that replaces it.
-    expect(
-      await screen.findByRole("heading", { name: "Opportunities" }),
-    ).toBeInTheDocument();
+    // A page of its own since R.1 (decision 1A), not a panel appended under
+    // the board: the board is gone, and the way back is a control rather than
+    // 888px of scrolling.
     expect(
       await screen.findByRole("heading", { name: "Discovery call" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Opportunities" })).toBeNull();
+    expect(
+      screen.getByRole("link", { name: "\u2190 Opportunities" }),
     ).toBeInTheDocument();
   });
 

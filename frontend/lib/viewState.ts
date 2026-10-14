@@ -65,3 +65,38 @@ export function paramsWithState<T extends Record<string, string>>(
   }
   return next;
 }
+
+/**
+ * The parameters belonging to one entity, and nothing else.
+ *
+ * R.1 (decision 1A) made a deal its own page rather than a panel under the
+ * board, and the board's view state is in the URL — so without this, opening
+ * a deal threw away the filters, the sort, the chosen view and the month, and
+ * the way back landed on an unfiltered board. The deal screen ignores these
+ * parameters and carries them; the control that goes back hands them to the
+ * board again.
+ */
+export function paramsForEntity(
+  params: URLSearchParams,
+  entity: SavedViewEntity,
+): URLSearchParams {
+  const kept = new URLSearchParams();
+  for (const [name, value] of params) {
+    if (name.startsWith(prefix(entity))) {
+      kept.append(name, value);
+    }
+  }
+  return kept;
+}
+
+/** A deal's own URL, carrying the board's view state with it. */
+export function opportunityHref(id: number, params: URLSearchParams): string {
+  const kept = paramsForEntity(params, "opportunities").toString();
+  return kept ? `/opportunities/${id}?${kept}` : `/opportunities/${id}`;
+}
+
+/** The board, restored to whatever the deal screen was carrying. */
+export function boardHref(params: URLSearchParams): string {
+  const kept = paramsForEntity(params, "opportunities").toString();
+  return kept ? `/?${kept}` : "/";
+}

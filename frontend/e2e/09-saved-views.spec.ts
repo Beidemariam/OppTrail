@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import {
+  backToBoard,
+  openBoardFilters,
   ALEX,
   BLAIR,
   NORTHWIND,
@@ -50,6 +52,7 @@ test("a board filter is in the URL and survives a reload", async ({ page }) => {
   await signIn(page, ALEX);
   await expect(cards(page)).toHaveCount(5);
 
+  await openBoardFilters(page);
   await page.getByLabel("Filter by stage").selectOption("Negotiation");
   await page.getByRole("button", { name: "Apply" }).click();
 
@@ -59,6 +62,7 @@ test("a board filter is in the URL and survives a reload", async ({ page }) => {
 
   await page.reload();
   await expect(cards(page)).toHaveCount(1);
+  await openBoardFilters(page);
   await expect(page.getByLabel("Filter by stage")).toHaveValue("Negotiation");
 
   await expectNoAccessibilityViolations(
@@ -88,6 +92,7 @@ test("a saved view is applied from the menu and is shareable by URL", async ({
 
   await page.goto(shared);
   await expect(cards(page)).toHaveCount(1);
+  await openBoardFilters(page);
   await expect(page.getByLabel("Filter by stage")).toHaveValue("Negotiation");
   await expect(page.getByLabel("Sort by")).toHaveValue("value");
 });
@@ -116,7 +121,19 @@ test("the timeline can be read newest-first, and that reading is linkable", asyn
   page,
 }) => {
   await signIn(page, ALEX);
+
+  // The board's own half first, so the two states can be seen sharing one
+  // query string below. R.1 (decision 1A) made that load bearing in a second
+  // way: the board is its own screen now, so a deal carries the board's
+  // parameters and the way back restores them — without which opening a deal
+  // would clear the list the reader had built.
+  await openBoardFilters(page);
+  await page.getByLabel("Filter by stage").selectOption("Negotiation");
+  await page.getByRole("button", { name: "Apply" }).click();
+  await expect(cards(page)).toHaveCount(1);
+
   await openTimeline(page, NORTHWIND);
+  await expect(page).toHaveURL(/opportunities\.stage=Negotiation/);
 
   // Newest-first is the default (3.1a, D-115): the oldest entry starts at
   // the bottom of the list with no control touched.
@@ -135,13 +152,9 @@ test("the timeline can be read newest-first, and that reading is linkable", asyn
   await page.getByRole("button", { name: "Filter", exact: true }).click();
 
   await expect(entries(page).first()).toContainText(oldest);
+  // Both states, in one query string, each under its own prefix.
   await expect(page).toHaveURL(/timeline\.order=asc/);
-
-  // The order survives a reload, and the board's own filter is still beside it
-  // in the same query string rather than having replaced it.
-  await page.getByLabel("Filter by stage").selectOption("Negotiation");
-  await page.getByRole("button", { name: "Apply" }).click();
-  await expect(page).toHaveURL(/timeline\.order=asc/);
+  await expect(page).toHaveURL(/opportunities\.stage=Negotiation/);
 
   await page.reload();
   await expect(entries(page).first()).toContainText(oldest);
@@ -152,6 +165,11 @@ test("the timeline can be read newest-first, and that reading is linkable", asyn
     page.getByRole("button", { name: "Filter and order" }),
   ).toHaveAttribute("aria-expanded", "true");
   await expect(page.getByLabel("Timeline reading order")).toHaveValue("asc");
+
+  // And the way back hands the board its own half again.
+  await backToBoard(page);
+  await openBoardFilters(page);
+  await expect(page.getByLabel("Filter by stage")).toHaveValue("Negotiation");
   await expect(cards(page)).toHaveCount(1);
 });
 
@@ -159,6 +177,7 @@ test("a default view applies itself on a later visit", async ({ page }) => {
   const suffix = Math.random().toString(36).slice(2, 8);
   await signUp(page, `views-${suffix}@opptrail.test`, "View Saver");
 
+  await openBoardFilters(page);
   await page.getByLabel("Filter by stage").selectOption("Negotiation");
   await page.getByRole("button", { name: "Apply" }).click();
 
@@ -179,6 +198,7 @@ test("a default view applies itself on a later visit", async ({ page }) => {
   // deep link is left alone, which the component tests cover directly.
   await page.goto("/");
   await expect(page).toHaveURL(/opportunities\.stage=Negotiation/);
+  await openBoardFilters(page);
   await expect(page.getByLabel("Filter by stage")).toHaveValue("Negotiation");
 });
 
@@ -193,6 +213,7 @@ test("a view is saved for everyone deliberately, and says so afterwards", async 
   const name = `Shared ${suffix}`;
   await signIn(page, ALEX);
 
+  await openBoardFilters(page);
   await page.getByLabel("Filter by stage").selectOption("Negotiation");
   await page.getByRole("button", { name: "Apply" }).click();
   await expect(cards(page)).toHaveCount(1);

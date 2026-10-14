@@ -769,3 +769,95 @@ def test_the_ai_timeout_clears_a_reasoning_models_floor_latency() -> None:
 def test_an_unknown_reasoning_effort_is_refused_at_startup() -> None:
     with pytest.raises(ValidationError):
         Settings(openai_reasoning_effort="exhaustive")
+
+
+class AuthenticationError(Exception):
+    """A stand-in for the SDK's own class.
+
+    `classify_ai_failure` matches on the class *name*, so a test can raise one
+    of these rather than constructing a real `openai.AuthenticationError`,
+    which needs an `httpx.Response` and a body to exist at all. The names here
+    are the SDK's exactly, which is the whole point of the match.
+    """
+
+
+class NotFoundError(Exception):
+    pass
+
+
+class APITimeoutError(Exception):
+    pass
+
+
+class APIConnectionError(Exception):
+    pass
+
+
+class RateLimitError(Exception):
+    pass
+
+
+class BadRequestError(Exception):
+    pass
+
+
+def test_a_misconfigured_model_does_not_read_as_an_outage() -> None:
+    """R.1, D-052. The defect this is about: a stale `OPENAI_MODEL` returned
+    `model_not_found` during the Phase 1 user test and the UI said only that
+    the service was unavailable — a thirty-second operator fix, indistinguishable
+    from OpenAI being down."""
+    model_status, model_message = ai_service.classify_ai_failure(NotFoundError())
+    outage_status, outage_message = ai_service.classify_ai_failure(APIConnectionError())
+
+    assert model_status == 503
+    assert "OPENAI_MODEL" in model_message
+    assert outage_status == 502
+    assert model_message != outage_message
+
+
+def test_each_failure_class_answers_with_its_own_status() -> None:
+    cases = {
+        AuthenticationError(): 503,
+        NotFoundError(): 503,
+        APITimeoutError(): 504,
+        APIConnectionError(): 502,
+        RateLimitError(): 429,
+        BadRequestError(): 400,
+        RuntimeError("something else"): 502,
+    }
+    for exc, expected in cases.items():
+        assert ai_service.classify_ai_failure(exc)[0] == expected, type(exc).__name__
+
+
+def test_a_failure_message_never_leaks_the_key_or_the_model() -> None:
+    """The bound on what may be said: name our own setting, never its value."""
+    for exc in (
+        AuthenticationError("sk-live-123 is invalid"),
+        NotFoundError("The model `gpt-oss-20b` does not exist"),
+        BadRequestError("maximum context length is 8192 tokens"),
+    ):
+        message = ai_service.classify_ai_failure(exc)[1]
+        assert "sk-live-123" not in message
+        assert "gpt-oss-20b" not in message
+        assert "8192" not in message
+
+
+def test_the_endpoint_answers_the_classified_status(client: TestClient, monkeypatch) -> None:
+    signup(client, "classify@example.com", "Casey")
+    opportunity = create_opportunity(client)
+
+    def fail(**_: object) -> str:
+        raise NotFoundError("model_not_found")
+
+    monkeypatch.setattr("app.routes_ai.ask_openai", fail)
+    monkeypatch.setattr(settings, "openai_api_key", "test-key")
+
+    response = client.post(
+        f"/api/v2/opportunities/{opportunity['id']}/ai/ask",
+        json={"question": "Where do we stand?"},
+    )
+
+    assert response.status_code == 503
+    body = response.json()["error"]
+    assert body["code"] == "service_unavailable"
+    assert "OPENAI_MODEL" in body["message"]

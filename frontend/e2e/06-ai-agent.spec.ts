@@ -5,6 +5,8 @@ import {
   NORTHWIND,
   apiSignIn,
   csrfToken,
+  openAi,
+  openBoardFilters,
   openTimeline,
   signIn,
 } from "./helpers";
@@ -31,11 +33,11 @@ test("the AI panel surfaces a service failure instead of silently swallowing it"
   await signIn(page, ALEX);
   await openTimeline(page, NORTHWIND);
 
-  const sidebar = page.locator(".ai-sidebar");
-  await expect(
-    sidebar.getByRole("heading", { name: "AI Agent" }),
-  ).toBeVisible();
-  await expect(sidebar.getByText("Read-only")).toBeVisible();
+  // Closed until it is asked for (R.1, decision 2A): the panel used to stand
+  // open at the top of the rail, where one long answer pushed the deal's own
+  // record and its tasks two screens down.
+  const sidebar = await openAi(page);
+  await expect(sidebar.getByRole("heading", { name: "Ask" })).toBeVisible();
 
   await sidebar
     .getByPlaceholder("Where do we stand?")
@@ -96,7 +98,7 @@ test("the date scope says what it is, and the filter builder refuses to pretend"
   await signIn(page, ALEX);
   await openTimeline(page, NORTHWIND);
 
-  const sidebar = page.locator(".ai-sidebar");
+  const sidebar = await openAi(page);
   const scope = sidebar.getByRole("button", { name: /Limit to dates/ });
   await expect(scope).toHaveAttribute("aria-expanded", "false");
   await scope.click();
@@ -132,8 +134,10 @@ test("the date scope says what it is, and the filter builder refuses to pretend"
     /OPENAI_API_KEY|unavailable/i,
   );
   // Nothing was applied, which is the property that matters even on the
-  // failure path: a proposal is only ever applied by the reader.
-  await expect(page.getByLabel("Filter by stage")).toHaveValue("");
+  // failure path: a proposal is only ever applied by the reader. The board's
+  // controls are collapsed since R.1 (decision 3A), and they would have opened
+  // themselves had anything arrived — so this reads the strip instead.
+  await expect(page.getByText("Showing everything you can see")).toBeVisible();
 });
 
 test("the value filter the AI's own example needs", async ({ page }) => {
@@ -144,7 +148,8 @@ test("the value filter the AI's own example needs", async ({ page }) => {
   await signIn(page, ALEX);
 
   // The bar applies on submit, not on every keystroke, so this is the whole
-  // gesture a person makes.
+  // gesture a person makes — behind its trigger since R.1 (decision 3A).
+  await openBoardFilters(page);
   const bar = page.locator("form.filter-bar");
   await bar.getByLabel("Filter by minimum value").fill("1000000");
   await bar.getByRole("button", { name: "Apply" }).click();
@@ -152,6 +157,8 @@ test("the value filter the AI's own example needs", async ({ page }) => {
     page.getByRole("heading", { name: "No opportunities match these filters" }),
   ).toBeVisible();
 
-  await bar.getByRole("button", { name: "Clear" }).click();
+  // Applying put the controls away (R.1), so clearing is the chip strip's own
+  // control.
+  await page.getByRole("button", { name: "Clear all" }).click();
   await expect(page.getByRole("link", { name: NORTHWIND })).toBeVisible();
 });

@@ -1,8 +1,9 @@
 "use client";
 
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 
 import { formatMoney, type Opportunity, type Stage } from "../lib/domain";
+import { opportunityHref } from "../lib/viewState";
 import { MoveToStage } from "./MoveToStage";
 import type { OpportunityViewProps } from "./StageBoard";
 import { useOpportunityItem } from "./useOpportunityItem";
@@ -113,6 +114,9 @@ function OpportunityRow({
   onToggleChecked: (opportunity: Opportunity) => void;
   onRangeSelect: (opportunity: Opportunity) => void;
 }) {
+  // The board's view state travels with the link (R.1): a deal is its own
+  // page now, so the way back has to be able to restore the list.
+  const [params] = useSearchParams();
   const owns = opportunity.current_user_role === "owner";
   const { itemProps, checkboxProps } = useOpportunityItem({
     className: "opportunity-row",
@@ -130,7 +134,7 @@ function OpportunityRow({
       <input className="card-checkbox" {...checkboxProps} />
       <div className="row-name">
         <h3>
-          <Link to={`/opportunities/${opportunity.id}`}>
+          <Link to={opportunityHref(opportunity.id, params)}>
             {opportunity.name}
           </Link>
         </h3>
