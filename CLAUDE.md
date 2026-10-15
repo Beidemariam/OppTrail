@@ -1867,6 +1867,47 @@ virtualized, the row the cursor moves to may not be in the DOM, so
 focused opportunity one stage either way, which is the drag done from the
 keyboard, and do nothing on an opportunity the reader does not own.
 
+### Keyboard, focus and the accessibility bar
+
+Milestone R.2. `AGENTS.md`'s Quality Bar is **WCAG 2.2 AA** and **D-002**
+ruled that over the brief's 2.1 — but `auditPage`'s tag list asked axe for 2.1
+from Phase F until R.2, so every "axe clean" claim up to R.1 was a 2.1 claim
+(**D-197**). The tags are 2.2 now. Five things follow:
+
+- **axe checks one of 2.2's additions and none of the other three.**
+  `target-size` (2.5.8) is machine-checkable and passed on the first run,
+  because R.1 reduced seven control heights to one 34px token. 2.4.11, 2.5.7
+  and 3.3.8 are not, and are in `e2e/30-focus-and-keyboard.spec.ts` and
+  `app/AuthPanel.tsx` instead. 3.3.7 and 3.2.6 do not apply (no multi-step
+  form, and the one help mechanism is already global).
+- **Nothing that has focus may be entirely hidden** (2.4.11, **D-198**).
+  `Shift+Tab` up a timeline scrolls a control to the top edge of the
+  scrollport, which on a deal is under 190px of application bar and record
+  band: 15 controls, measured on the shipped R.1 build. The fix is
+  `scroll-padding-top` on the **scrolling element**, not `scroll-margin-top`
+  on the controls — the browser scrolls nothing for an element it already
+  considers in view, and a control under a sticky band is in view as far as
+  the viewport rectangle is concerned. The two stacks are `--sticky-bar` and
+  `--sticky-deal`, the same numbers the bands themselves stick at, and which
+  one is in force is `data-sticky` on `<html>` from `lib/nav.ts`'s
+  `stickyStack` — a document-level fact as a root attribute, the shape
+  `lib/theme.ts` and `lib/density.ts` use.
+- **A skip link, and it moves the keyboard** (2.4.1, **D-199**). The rail
+  repeats six destinations above every screen. `#main-content` carries
+  `tabIndex={-1}`, without which the anchor scrolls the page and leaves focus
+  in the rail — the usual way this ships broken.
+- **A navigation moves focus into the screen it opened.** Clicking a rail link
+  left focus on the rail while everything else changed, so the next Tab
+  continued through navigation. `useFocusOnNavigate` focuses the content
+  region, with `preventScroll` (two other things already decide where the
+  screen sits) and never on the first render, because a page load is not a
+  navigation.
+- **Anything that measures a box or a colour waits for transitions to settle.**
+  `settleTransitions` in `e2e/helpers.ts`: the first 2.2 run reported 2.43:1 on
+  the deal page's Ask button, which was axe sampling a 120ms colour transition
+  60ms in. Transitions only — the skeleton shimmer and the AI cursor run
+  forever, and `finished` on an infinite animation never resolves.
+
 ### View state and saved views
 
 The applied filter/sort set is in the URL, not in component state — that is
@@ -2032,10 +2073,12 @@ the click and not the consequence.
 FastAPI, started by `scripts/e2e-server.sh`, which rebuilds and reseeds a
 throwaway database each run and deliberately starts the server with no
 `OPENAI_API_KEY` so the suite cannot reach a paid API. `@axe-core/playwright`
-runs on the major screens. `DEFERRED_AXE_RULES` in `e2e/helpers.ts` is a
-ratchet, not an allowlist: it holds `color-contrast` only, any other rule fails
-immediately, and a test asserts the deferred rule still fails — so the gate
-tightens itself when the palette work lands.
+runs on every screen, in both themes, against **WCAG 2.2 AA** — see "Keyboard,
+focus and the accessibility bar" below for what that does and does not check.
+`DEFERRED_AXE_RULES` in `e2e/helpers.ts` is a ratchet, not an allowlist: it has
+been empty since milestone 2.5, any rule fails immediately, and a test asserts
+that anything on the list still fails — so nothing can be added to it and left
+there once the problem is gone.
 
 Three rules the suite has already been bitten by:
 - Assertions must not depend on the wall clock. The auto-generated "Opportunity

@@ -41,6 +41,22 @@ export function isNavActive(itemPath: string, pathname: string): boolean {
   return pathname === itemPath || pathname.startsWith(`${itemPath}/`);
 }
 
+/**
+ * How much sticky chrome a screen keeps above its content (milestone R.2).
+ *
+ * Five screens have the application bar; a deal has the bar and the record
+ * band under it (R.1). The difference matters because the scrollport has to
+ * be shrunk by exactly that much, or `Shift+Tab` scrolls a control to the top
+ * edge and under the chrome — WCAG 2.2's 2.4.11. `app/globals.css` reads it as
+ * a root attribute, the shape `lib/theme.ts` and `lib/density.ts` already use
+ * for a fact the whole document depends on.
+ */
+export function stickyStack(pathname: string): "bar" | "deal" {
+  return pathname.startsWith("/opportunities/") ? "deal" : "bar";
+}
+
+export const STICKY_ATTRIBUTE = "data-sticky";
+
 export const NAV_STORAGE_KEY = "opptrail-nav";
 
 /**

@@ -8,7 +8,15 @@ import { useAuthenticate } from "../lib/queries";
  * The signed-out shell: sign up or sign in, in one panel.
  *
  * Everything the app shows past this point needs a session, so this is the
- * gate `DashboardPage` renders instead of the dashboard when there is none.
+ * gate `AppShell` renders instead of a screen when there is none (R.1: one
+ * answer for all six, rather than five screens deciding separately).
+ *
+ * Every field names its purpose (milestone R.2): WCAG 1.3.5 Identify Input
+ * Purpose is an AA criterion no axe rule checks, and the tokens are also what
+ * lets a password manager fill this form — which is how 2.2's 3.3.8
+ * Accessible Authentication is satisfied here, by not standing in the way of
+ * one. `username` rather than `email` on the address, because that is the
+ * token a browser pairs with a saved password.
  */
 export function AuthPanel() {
   const [mode, setMode] = useState<"login" | "signup">("signup");
@@ -58,6 +66,8 @@ export function AuthPanel() {
             <label>
               Name
               <input
+                name="name"
+                autoComplete="name"
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 required
@@ -69,6 +79,8 @@ export function AuthPanel() {
             Email
             <input
               type="email"
+              name="email"
+              autoComplete="username"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               required
@@ -79,6 +91,10 @@ export function AuthPanel() {
             Password
             <input
               type="password"
+              name="password"
+              autoComplete={
+                mode === "signup" ? "new-password" : "current-password"
+              }
               value={password}
               minLength={8}
               onChange={(event) => setPassword(event.target.value)}

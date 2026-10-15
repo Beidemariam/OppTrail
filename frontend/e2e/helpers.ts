@@ -298,6 +298,31 @@ export async function csrfToken(request: APIRequestContext) {
  */
 export const DEFERRED_AXE_RULES = new Set<string>();
 
+/**
+ * Waits for whatever is mid-transition to arrive (milestone R.2).
+ *
+ * Anything that measures a rendered box or a computed colour has to measure
+ * the settled screen. The deal page's Ask button swaps secondary for primary
+ * when the drawer opens, and axe sampling it 60ms in reported white text on a
+ * 60%-blended teal at 2.43:1 — a failure of the audit's timing rather than of
+ * the palette. The skip link slides in from above the viewport, so a focus
+ * check has the same problem in the other direction.
+ *
+ * Transitions only: two animations in this app run forever (the skeleton's
+ * shimmer and the AI answer's cursor), and `finished` on one of those never
+ * resolves.
+ */
+export async function settleTransitions(page: Page) {
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((animation) => animation instanceof CSSTransition)
+        .map((animation) => animation.finished.catch(() => undefined)),
+    ),
+  );
+}
+
 interface ReportedViolation {
   id: string;
   impact: string | null | undefined;
@@ -306,8 +331,30 @@ interface ReportedViolation {
 }
 
 async function auditPage(page: Page): Promise<ReportedViolation[]> {
+  // Audit the *settled* screen. `color-contrast` reads the computed
+  // background, so a control caught mid-transition is measured against a
+  // half-finished colour: the deal page's Ask button swaps secondary for
+  // primary when the drawer opens, and sampling it 60ms in reported white on
+  // a 60%-blended teal at 2.43:1 — a failure of the audit's timing, not of
+  // the palette (R.2). Chromium counts CSS transitions among
+  // `getAnimations()`, so this waits for exactly the thing that was moving.
+  await settleTransitions(page);
+
   const results = await new AxeBuilder({ page: page as never })
-    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .withTags([
+      "wcag2a",
+      "wcag2aa",
+      "wcag21a",
+      "wcag21aa",
+      // 2.2's own criteria, added by milestone R.2. `AGENTS.md`'s Quality Bar
+      // says WCAG 2.2 AA and **D-002** ruled that the bar; the tag list had
+      // asked for 2.1 since Phase F, so every "axe clean" claim up to R.1 was
+      // a 2.1 claim. Machine-checkable here is `target-size` (2.5.8); the rest
+      // of what 2.2 added is asserted by hand in
+      // `e2e/30-focus-and-keyboard.spec.ts`.
+      "wcag22a",
+      "wcag22aa",
+    ])
     .analyze();
 
   return results.violations.map((violation) => ({
@@ -321,8 +368,10 @@ async function auditPage(page: Page): Promise<ReportedViolation[]> {
 /**
  * Accessibility check for the page as it currently stands (brief §3.4, §6.1).
  *
- * WCAG 2.1 AA is the target in brief §8; axe asserts the machine-checkable
- * part of it, which is what can be gated automatically.
+ * **WCAG 2.2 AA** is the target — `AGENTS.md`'s Quality Bar, ruled by
+ * **D-002** over the brief's own 2.1 — and axe asserts the machine-checkable
+ * part of it, which is what can be gated automatically. What it cannot check
+ * is in `e2e/30-focus-and-keyboard.spec.ts`, measured rather than assumed.
  */
 export async function expectNoAccessibilityViolations(
   page: Page,

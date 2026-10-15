@@ -105,6 +105,66 @@ describe("one shell for every screen", () => {
     scrollTo.mockRestore();
   });
 
+  /**
+   * Keyboard operability of the shell itself (milestone R.2). The rail is
+   * what made both of these matter: six links and four bar controls now sit
+   * above every screen, on every navigation.
+   */
+  it("offers a way past the rail, and that way moves the keyboard", async () => {
+    await renderDashboard({ opportunities: [anOpportunity()] });
+
+    const skip = screen.getByRole("link", { name: "Skip to content" });
+    // The bypass has to be the first thing a Tab reaches, or it is not one.
+    await userEvent.tab();
+    expect(skip).toHaveFocus();
+
+    // And the target has to be focusable, or activating it scrolls the page
+    // and leaves the keyboard in the rail.
+    expect(document.getElementById("main-content")).toHaveAttribute(
+      "tabindex",
+      "-1",
+    );
+    expect(skip).toHaveAttribute("href", "#main-content");
+  });
+
+  it("moves focus into the screen a rail link opens", async () => {
+    await renderDashboard({ opportunities: [anOpportunity()] });
+
+    await userEvent.click(screen.getByRole("link", { name: /^Reports/ }));
+    await screen.findByRole("heading", { name: "Reports" });
+
+    // Not still on the link: the next Tab belongs to the new screen.
+    await waitFor(() =>
+      expect(document.getElementById("main-content")).toHaveFocus(),
+    );
+  });
+
+  it("leaves focus alone on the screen a reader arrives at", async () => {
+    // A page load is not a navigation. Taking focus here would interrupt
+    // somebody who has not gone anywhere.
+    await renderDashboard({ opportunities: [anOpportunity()] });
+
+    expect(document.getElementById("main-content")).not.toHaveFocus();
+  });
+
+  it("tells the document which sticky stack the screen has", async () => {
+    // `scroll-padding-top` reads this, and it is what keeps a control that
+    // has just taken focus from landing under the record band (2.4.11).
+    renderApp({ user: ALEX }, "/opportunities/10");
+    await screen.findByRole("heading", { level: 2 });
+
+    await waitFor(() =>
+      expect(document.documentElement).toHaveAttribute("data-sticky", "deal"),
+    );
+
+    await userEvent.click(screen.getByRole("link", { name: /^Reports/ }));
+    await screen.findByRole("heading", { name: "Reports" });
+
+    await waitFor(() =>
+      expect(document.documentElement).toHaveAttribute("data-sticky", "bar"),
+    );
+  });
+
   it("asks a signed-out reader to sign in, once, for all five", async () => {
     renderApp({ user: null }, "/automations");
 

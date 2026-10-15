@@ -2677,3 +2677,46 @@ the board can filter by. That is D-179's mistake inverted — inventing a
 capability rather than a constraint — and it would have produced a proposal
 that was inspectable and unapplicable, which is worse than no proposal. The
 fix narrowed the prompt *and* added the value filter §14's own example needs.
+
+## Milestone R.2 — the accessibility bar, and what it was actually asserting
+
+Frontend: **770 unit tests** (46 files), statements 96.3%, branches 90.1%.
+Backend untouched at **740** (1 skipped) — R.2 is a frontend and test-suite
+milestone. End to end: **112 passed, 1 skipped**, the skip being the documented
+WeasyPrint gap on a macOS host; `e2e/30-focus-and-keyboard.spec.ts` is new.
+
+**The first finding was the test suite, not the app.** `auditPage` had asked
+axe for `wcag2a, wcag2aa, wcag21a, wcag21aa` since Phase F while `AGENTS.md`
+and D-002 say 2.2 AA, so six phases of "axe clean" meant 2.1 (**D-197**). With
+the 2.2 tags in, `target-size` passed on the first run — R.1's single 34px
+control height had already paid for 2.5.8 without anybody checking.
+
+**Six states had no audit at all**: Tasks, Reports, Automations, the rule
+form, the activity dialog, and the board's filter controls, which exist in the
+DOM only while the disclosure is open. Three of those are screens R.1 put in
+the rail two days earlier. All clean, both themes, first run.
+
+**What the new suite found, which no stylesheet read could have.** 15 controls
+on one deal page took keyboard focus while entirely hidden under the sticky
+bands (2.4.11) — and the first fix, `scroll-margin-top` on the controls, was
+confirmed useless by the same test before `scroll-padding-top` on the root
+replaced it (**D-198**). The guard was checked against the unfixed stylesheet
+first, as this project requires, and the backward walk is the half that
+matters: `Shift+Tab` aligns a control to the top edge, where the chrome is,
+and a forward-only walk passes against the broken build.
+
+**Two things about measuring a live page.** An audit has to wait for
+transitions to settle — the first 2.2 run reported 2.43:1 on the Ask button,
+which was axe sampling a 120ms colour swap 60ms in — and it must wait for
+*transitions only*, because two animations here run forever and `finished` on
+an infinite animation never resolves.
+
+**And one test was asserting a screen that no longer exists.**
+`10-keyboard.spec.ts` pressed `/` on a deal and expected the board's keyword
+box to take focus, which R.1 ended; it passed on the race between the
+keystroke and React unmounting the board, and this milestone's extra
+post-navigation effect was enough to lose that race. The lesson is narrower
+than "tests rot": a chord pressed in the instant after a navigation is
+genuinely dropped, because the new screen has not registered its listener yet.
+A test can hit that window and a finger cannot, so the test now waits for the
+screen that owns the chord.

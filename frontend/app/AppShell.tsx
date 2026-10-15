@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Link,
   Outlet,
@@ -11,9 +11,11 @@ import {
 
 import type { User } from "../lib/domain";
 import {
+  STICKY_ATTRIBUTE,
   isNavActive,
   navItems,
   readNavCollapsed,
+  stickyStack,
   writeNavCollapsed,
 } from "../lib/nav";
 import { useMyTasks, useSession } from "../lib/queries";
@@ -36,7 +38,10 @@ import { TopBar } from "./TopBar";
 export function AppShell() {
   const session = useSession();
   const [collapsed, setCollapsed] = useState(readNavCollapsed);
+  const contentRef = useRef<HTMLDivElement>(null);
   useScrollToTopOnNavigate();
+  useFocusOnNavigate(contentRef);
+  useStickyStack();
 
   function toggleNav() {
     setCollapsed((previous) => {
@@ -61,10 +66,25 @@ export function AppShell() {
 
   return (
     <div className={collapsed ? "app-frame is-collapsed" : "app-frame"}>
+      {/* First in the DOM, so it is the first thing a Tab reaches (R.2). */}
+      <a className="skip-link" href="#main-content">
+        Skip to content
+      </a>
       <NavRail collapsed={collapsed} onToggle={toggleNav} />
       <div className="app-main">
         <TopBar user={session.data} />
-        <Outlet context={{ user: session.data } satisfies ShellContext} />
+        {/* `tabIndex={-1}` is what makes the skip link above actually move
+            focus: an anchor to an element that cannot hold focus scrolls the
+            page and leaves the keyboard where it was, which is the common way
+            a skip link is shipped broken. */}
+        <div
+          className="app-content"
+          id="main-content"
+          ref={contentRef}
+          tabIndex={-1}
+        >
+          <Outlet context={{ user: session.data } satisfies ShellContext} />
+        </div>
       </div>
     </div>
   );
@@ -95,6 +115,55 @@ function useScrollToTopOnNavigate() {
       window.scrollTo({ top: 0, behavior: "instant" });
     }
   }, [pathname, linked]);
+}
+
+/**
+ * Tells the document how much sticky chrome this screen has (milestone R.2).
+ *
+ * `app/globals.css` turns it into `scroll-padding-top`, which is what keeps a
+ * control that has just taken focus from being scrolled underneath the
+ * application bar and the record band (WCAG 2.2's 2.4.11). A root attribute
+ * rather than a prop, because the scrollport belongs to the document: the
+ * same reason `lib/theme.ts` writes `data-theme` and `lib/density.ts` writes
+ * `data-density` instead of threading either through the tree.
+ */
+function useStickyStack() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    document.documentElement.setAttribute(
+      STICKY_ATTRIBUTE,
+      stickyStack(pathname),
+    );
+  }, [pathname]);
+}
+
+/**
+ * Every navigation also moves the keyboard (milestone R.2).
+ *
+ * Six screens in one shell means the rail is a persistent set of links, and
+ * clicking one left focus on it while the whole screen changed underneath: the
+ * next Tab continued through the rail rather than into what had just been
+ * opened, and a screen reader was told nothing had happened. Focus moves to
+ * the content region, so the next Tab is the first control of the new screen
+ * and the screen's own heading is what gets read.
+ *
+ * Two things about it. **Not on the first render** — focus belongs to the
+ * document on a page load, and taking it would interrupt a reader who has not
+ * navigated anywhere. And `preventScroll`, because
+ * `useScrollToTopOnNavigate` above and a `?entry=` link below both decide
+ * where the screen sits; focus moving the viewport as well is how a reader
+ * arriving at a linked row gets taken away from it.
+ */
+function useFocusOnNavigate(target: React.RefObject<HTMLElement | null>) {
+  const { pathname } = useLocation();
+  const landed = useRef(false);
+  useEffect(() => {
+    if (!landed.current) {
+      landed.current = true;
+      return;
+    }
+    target.current?.focus({ preventScroll: true });
+  }, [pathname, target]);
 }
 
 type ShellContext = { user: User };

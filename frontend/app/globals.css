@@ -139,6 +139,16 @@
   --cell-padding-y: var(--space-2);
   --cell-padding-x: var(--space-3);
 
+  /* How much sticky chrome sits above the content (R.1's layout, named here
+     by R.2). The application bar is `--sticky-bar` tall and sticks at 0; on a
+     deal the record band sticks directly under it, and `--sticky-deal` is the
+     bottom of that pair. They were three literals in three rules, and the
+     scroll offsets below have to agree with them: a focused control scrolled
+     under this chrome is entirely hidden, which is what WCAG 2.2's 2.4.11
+     forbids. */
+  --sticky-bar: 56px;
+  --sticky-deal: 190px;
+
   color-scheme: light;
 }
 
@@ -357,7 +367,7 @@ kbd {
   gap: var(--space-4);
   /* Fixed, because the record header below it sticks to the bottom of this
      bar and a sticky offset cannot read a neighbour's height (R.1). */
-  min-height: 56px;
+  min-height: var(--sticky-bar);
   padding: var(--space-2) var(--space-6);
   position: sticky;
   top: 0;
@@ -3834,6 +3844,67 @@ kbd {
   min-width: 0;
 }
 
+/* The content of whichever screen is open, and the thing the skip link and
+   every route change put focus on (R.2). A wrapper rather than the screen's
+   own `<main>`, which each route renders for itself. */
+.app-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* **Bypass blocks** (WCAG 2.4.1, level A), missing until R.2.
+
+   The rail repeats six destinations and the bar four controls above every
+   screen, so reaching a screen's own content from the keyboard meant ten tabs,
+   on every navigation. Off-screen until focused rather than `display: none`,
+   because a hidden link is not focusable and therefore not a bypass. */
+.skip-link {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-sm);
+  color: var(--text-link);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  left: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  position: fixed;
+  text-decoration: none;
+  /* Above the application bar, which is the one thing it would appear under. */
+  top: calc(-1 * var(--sticky-deal));
+  transition: top var(--motion-fast) ease-out;
+  z-index: 30;
+}
+
+.skip-link:focus-visible {
+  top: var(--space-2);
+}
+
+/* **Focus not obscured** (WCAG 2.2's 2.4.11, level AA).
+
+   `Shift+Tab` up a long timeline brings a control down from above and the
+   browser aligns it to the top edge of the scrollport — which is underneath
+   190px of application bar and record band. Entirely hidden, which is what the
+   criterion forbids; 15 controls on one deal page, measured.
+
+   `scroll-padding-top` on the **scrolling element** is the fix, and
+   `scroll-margin-top` on the controls is not: the browser scrolls nothing at
+   all for an element it already considers in view, and a control under a
+   sticky band is in view as far as the viewport rect is concerned.
+   `scroll-padding` is what shrinks that rect, so the same control is now out
+   of view and gets scrolled clear.
+
+   Which stack is above the content is a fact about the screen, so it is a root
+   attribute, the way the theme and the density are (`lib/nav.ts`'s
+   `stickyStack`). */
+html {
+  scroll-padding-top: calc(var(--sticky-bar) + var(--space-2));
+}
+
+html[data-sticky="deal"] {
+  scroll-padding-top: calc(var(--sticky-deal) + var(--space-2));
+}
+
 .nav-rail {
   background: var(--bg-sunken);
   border-right: 1px solid var(--border-subtle);
@@ -3980,9 +4051,9 @@ kbd {
   justify-content: space-between;
   padding: var(--space-3) var(--space-4);
   position: sticky;
-  /* The application bar sticks at 0 and is 56px tall; this band sits directly
-     under it. Both numbers are in one place: `.topbar`'s own `min-height`. */
-  top: 56px;
+  /* The application bar sticks at 0; this band sits directly under it. Both
+     numbers are one token each, `--sticky-bar` and `--sticky-deal` (R.2). */
+  top: var(--sticky-bar);
   z-index: 4;
 }
 
@@ -4112,7 +4183,7 @@ kbd {
   grid-column: 3;
   max-height: calc(100vh - 200px);
   position: sticky;
-  top: 190px;
+  top: var(--sticky-deal);
 }
 
 @media (max-width: 1280px) {

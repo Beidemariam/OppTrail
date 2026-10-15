@@ -5870,8 +5870,79 @@ this phase reaches `AWAITING_REVIEW` and is accepted, the project is finished.
         is the sixth actor the authorization matrix cannot express — somebody
         who may read the deal and may not read one entry on it.
 
-- [ ] R.2 Accessibility: axe clean (2.2 AA per D-002); focus management in
+- [x] R.2 Accessibility: axe clean (2.2 AA per D-002); focus management in
       dialogs and the command palette; full keyboard operability.
+      **D-197**, **D-198**, **D-199**.
+
+      It opened by reading what the gate asserted rather than by looking for
+      things to fix, and the first finding was the gate itself.
+
+      - **The audit asked for 2.1 AA.** `auditPage`'s tag list has been
+        `wcag2a, wcag2aa, wcag21a, wcag21aa` since Phase F, while
+        `AGENTS.md` says 2.2 AA and **D-002** ruled that bar — so every "axe
+        clean" claim from Phase 2 to R.1 was a 2.1 claim (**D-197**). The
+        `wcag22a`/`wcag22aa` tags are in now, and `target-size` (2.5.8)
+        passed everywhere on the first run: R.1's single 34px control height
+        is what paid for that.
+      - **Six states had no entry in the audit at all** — Tasks, Reports,
+        Automations, the rule form, the activity dialog and the board's
+        filter controls, which are only on the page once the disclosure is
+        open. Three of those are screens R.1 put in the rail. All clean in
+        both themes.
+      - **An audit measures the settled screen.** The first 2.2 run reported
+        white text at 2.43:1 on the deal page's Ask button, which was axe
+        sampling a 120ms transition 60ms in — the control swaps secondary for
+        primary when the drawer opens. `settleTransitions` waits for exactly
+        the thing that was moving (transitions only: two animations in this
+        app run forever and `finished` on one of those never resolves).
+      - **2.4.11 Focus Not Obscured was a real failure, and R.1 introduced
+        it** (**D-198**). `Shift+Tab` up a deal's timeline scrolls the control
+        that takes focus to the top edge of the scrollport, under 190px of
+        application bar and record band: **15 controls entirely hidden** on
+        one deal page, measured. The fix is `scroll-padding-top` on the
+        scrolling element — `scroll-margin-top` on the controls was written
+        first and does nothing, because the browser scrolls nothing for an
+        element it already considers in view, and a control under a sticky
+        band is in view as far as the viewport rectangle is concerned. Which
+        stack is in force is `data-sticky` on `<html>` (`lib/nav.ts`'s
+        `stickyStack`), the shape the theme and the density already use.
+      - **A way past the rail** (**D-199**). Six rail links and four bar
+        controls sit above every screen, so 2.4.1 Bypass Blocks needed a skip
+        link — with `tabIndex={-1}` on its target, which is what makes it move
+        the keyboard rather than only the page. And a navigation moves focus
+        into the screen it opened, because clicking a rail link used to leave
+        focus on the rail while everything else changed. Not on the first
+        render: a page load is not a navigation.
+      - **1.3.5 Identify Input Purpose**, an AA criterion no axe rule checks:
+        the three sign-in fields name their purpose, which is also what lets a
+        password manager fill them — how 2.2's 3.3.8 Accessible
+        Authentication is satisfied here.
+      - **2.5.7 Dragging Movements**: the board's drag already had a
+        single-pointer alternative (`MoveToStage`, 2.7), and
+        `e2e/30-focus-and-keyboard.spec.ts` now asserts it exists on every
+        card that is draggable rather than on the one card a test happened to
+        use.
+      - What 2.2 adds that does not apply: 3.3.7 Redundant Entry (no
+        multi-step form asks twice) and 3.2.6 Consistent Help (the one help
+        mechanism, the `?` reference, is global already).
+
+      `e2e/30-focus-and-keyboard.spec.ts` is the new suite, and it measures
+      rendered boxes rather than reading rules off a stylesheet — the lesson
+      from 3.8 (**D-138**), where a defect visible at three gates survived
+      because nothing measured geometry. Both guards were confirmed to fail
+      against the unfixed code first.
+
+      One existing test turned out to be asserting the wrong screen.
+      `10-keyboard.spec.ts`'s board-cursor walk pressed `/` after opening a
+      deal and expected the *board's* keyword box to take focus — which R.1
+      ended, because the board is not mounted on a deal's page any more. It
+      kept passing on the race between the keystroke and React unmounting the
+      screen behind it, and the extra effect this milestone adds after a
+      navigation was enough to lose that race. It asserts the timeline's box
+      now, after waiting for the screen that owns the chord: **a chord pressed
+      before the new screen has registered its listener is dropped**, which a
+      test can hit and a finger cannot. The board's own `/` is a test of its
+      own.
 - [ ] R.3 Performance: large-dataset budgets met (800k-row seed per
       `AGENTS.md`'s "Confirmed Scale"); list/timeline virtualization; indexes
       justified by measurement, not guessed.

@@ -1,4 +1,4 @@
-import { test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import {
   ALEX,
   DEFERRED_AXE_RULES,
@@ -6,6 +6,9 @@ import {
   card,
   expectNoAccessibilityViolations,
   expectRuleIsStillDeferred,
+  openAi,
+  openBoardFilters,
+  openHistory,
   openTimeline,
   signIn,
 } from "./helpers";
@@ -40,7 +43,66 @@ for (const colorScheme of ["light", "dark"] as const) {
     }) => {
       await signIn(page, ALEX);
       await openTimeline(page, NORTHWIND);
-      await expectNoAccessibilityViolations(page, "timeline panel");
+      await expectNoAccessibilityViolations(page, "deal page");
+
+      // The drawer is a third column rather than the first thing in the rail
+      // since R.1 (D-189), and nothing had audited it in that shape.
+      await openAi(page);
+      await expectNoAccessibilityViolations(
+        page,
+        "deal page with the AI drawer",
+      );
+    });
+
+    /**
+     * The four screens that reached the audit only once they were in the
+     * shell (R.1): Tasks, Reports and Automations had no entry here at all,
+     * and the board's filter controls are a disclosure now, so the eight
+     * controls they hold are only on the page once it is open.
+     */
+    test("the board's filter controls are accessible once opened", async ({
+      page,
+    }) => {
+      await signIn(page, ALEX);
+      await openBoardFilters(page);
+      await expectNoAccessibilityViolations(page, "board filter controls");
+    });
+
+    test("my tasks is accessible", async ({ page }) => {
+      await signIn(page, ALEX);
+      await page.goto("/tasks");
+      await expect(page.getByRole("heading", { name: "Tasks" })).toBeVisible();
+      await expectNoAccessibilityViolations(page, "tasks");
+    });
+
+    test("the reports are accessible", async ({ page }) => {
+      await signIn(page, ALEX);
+      await page.goto("/reports");
+      await expect(
+        page.getByRole("heading", { name: "Reports" }),
+      ).toBeVisible();
+      await expectNoAccessibilityViolations(page, "reports");
+    });
+
+    test("the automations screen and its rule form are accessible", async ({
+      page,
+    }) => {
+      await signIn(page, ALEX);
+      await page.goto("/automations");
+      await expect(
+        page.getByRole("heading", { name: "Automations" }),
+      ).toBeVisible();
+      await expectNoAccessibilityViolations(page, "automations");
+
+      await page.getByRole("button", { name: "New rule" }).click();
+      await expectNoAccessibilityViolations(page, "automation rule form");
+    });
+
+    test("the activity log is accessible", async ({ page }) => {
+      await signIn(page, ALEX);
+      await openTimeline(page, NORTHWIND);
+      await openHistory(page);
+      await expectNoAccessibilityViolations(page, "activity and history");
     });
 
     test("the notification panel is accessible", async ({ page }) => {

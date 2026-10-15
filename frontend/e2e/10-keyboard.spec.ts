@@ -128,8 +128,34 @@ test("the board's cursor moves without a mouse", async ({ page }) => {
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/opportunities\/\d+$/);
 
-  // `/` puts the cursor in the board's keyword filter, from the timeline.
+  // `/` filters whichever screen you are on (R.1), so here it is the
+  // timeline's keyword box. This asserted the *board's* until R.2 — the board
+  // is not mounted on a deal's page any more, so it was passing on the race
+  // between the keypress and React unmounting the screen behind it, and
+  // failing in a full parallel run.
+  //
+  // The wait is part of the fix: a chord belongs to the screen that is open,
+  // and one pressed before that screen has registered its listener is
+  // dropped. A finger cannot hit that window; a test can.
+  await expect(
+    page.getByRole("button", { name: "Filter and order" }),
+  ).toBeVisible();
   await page.keyboard.press("/");
+  await expect(page.getByLabel("Filter the timeline by keyword")).toBeFocused();
+});
+
+/** The same chord, meaning the same thing about a different screen (R.1). A
+ *  test of its own rather than a second leg of the one above: leaving a text
+ *  field by keyboard is its own little puzzle, and the chord is what is being
+ *  tested here. */
+test("/ filters the board when the board is the screen", async ({ page }) => {
+  await signIn(page, ALEX);
+  await expect(
+    page.getByRole("button", { name: "+ Filter and sort" }),
+  ).toBeVisible();
+
+  await page.keyboard.press("/");
+
   await expect(
     page.getByLabel("Filter opportunities by keyword"),
   ).toBeFocused();
