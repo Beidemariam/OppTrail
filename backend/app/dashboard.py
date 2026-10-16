@@ -39,14 +39,8 @@ from .schemas import (
     WinLoss,
 )
 from .settings import settings
+from .stalled import STALLED_AFTER_DAYS
 from .time_utils import utc_days_ago
-
-# The 14-day rule the board already applies per card
-# (`routes_opportunities.is_opportunity_stalled`), read here across every deal
-# the caller can see. One definition would be better than two; the per-card one
-# answers "is this deal stalled" for one id and this answers "which are", and
-# the shared part is the constant below rather than the query.
-STALLED_AFTER_DAYS = 14
 
 CLOSED_STAGES = ("Closed Won", "Closed Lost")
 OPEN_STAGES = [stage for stage in STAGES if stage not in CLOSED_STAGES]
@@ -280,54 +274,34 @@ def stalled_opportunities(
     the cutoff as text. A closed deal is excluded -- it is not stalled, it is
     finished.
 
-    **Written as one grouped pass rather than a correlated subquery**, which
-    is a performance fix the 300 ms budget caught rather than a style
-    preference. The obvious shape -- `(SELECT MAX(...) WHERE opportunity_id =
-    opportunities.id)` -- runs once per deal, and at 400 deals over 200,000
-    entries that measured **343 ms**, over budget. Grouping the union once and
-    joining it scans each table a single time: **12 ms** on the same data.
-    `test_each_aggregate_answers_inside_the_budget` is what keeps it that way.
+    **It reads a column the schema maintains** (R.3, revision
+    `0022_last_activity`), which is the third formulation of this query and
+    the last. The correlated `MAX` per deal measured **343 ms** at 400 deals
+    over 200,000 entries and 6.2 replaced it with one grouped pass over the
+    union: **12 ms**, inside the budget (**D-172**). R.3 measured the same
+    union from the board's side, where it is paid per page, and found the
+    cost is the rows it walks rather than the shape of the statement — so the
+    union now runs in a trigger when activity happens, and both readers do an
+    indexed comparison. `test_each_aggregate_answers_inside_the_budget` keeps
+    the budget; `tests/test_stalled.py` keeps the column honest.
     """
     clause, params = _accessible(user_id)
     cutoff = utc_days_ago(STALLED_AFTER_DAYS)
     rows = connection.execute(
         f"""
-        WITH activity AS (
-            SELECT opportunity_id, MAX(activity_at) AS last_activity_at
-            FROM (
-                SELECT opportunity_id, event_timestamp AS activity_at
-                FROM timeline_entries
-                WHERE deleted_at IS NULL
-                UNION ALL
-                SELECT timeline_entries.opportunity_id, notes.created_at
-                FROM notes
-                JOIN timeline_entries ON timeline_entries.id = notes.entry_id
-                WHERE notes.deleted_at IS NULL
-                    AND timeline_entries.deleted_at IS NULL
-                UNION ALL
-                SELECT timeline_entries.opportunity_id, comments.created_at
-                FROM comments
-                JOIN notes ON notes.id = comments.note_id
-                JOIN timeline_entries ON timeline_entries.id = notes.entry_id
-                WHERE comments.deleted_at IS NULL
-                    AND notes.deleted_at IS NULL
-                    AND timeline_entries.deleted_at IS NULL
-            )
-            GROUP BY opportunity_id
-        )
         SELECT
             opportunities.id,
             opportunities.name,
             opportunities.account_name,
             opportunities.stage,
             opportunities.value,
-            activity.last_activity_at
+            opportunities.last_activity_at
         FROM opportunities
-        JOIN activity ON activity.opportunity_id = opportunities.id
         WHERE {clause}
             AND opportunities.stage NOT IN ({", ".join("?" for _ in CLOSED_STAGES)})
-            AND activity.last_activity_at < ?
-        ORDER BY activity.last_activity_at, opportunities.id
+            AND opportunities.last_activity_at IS NOT NULL
+            AND opportunities.last_activity_at < ?
+        ORDER BY opportunities.last_activity_at, opportunities.id
         LIMIT ?
         """,
         (*params, *CLOSED_STAGES, cutoff, limit),

@@ -5943,21 +5943,60 @@ this phase reaches `AWAITING_REVIEW` and is accepted, the project is finished.
       before the new screen has registered its listener is dropped**, which a
       test can hit and a finger cannot. The board's own `/` is a test of its
       own.
-- [ ] R.3 Performance: large-dataset budgets met (800k-row seed per
+- [x] R.3 Performance: large-dataset budgets met (800k-row seed per
       `AGENTS.md`'s "Confirmed Scale"); list/timeline virtualization; indexes
-      justified by measurement, not guessed.
-      **Includes moving the board's filter and sort predicate into SQL**
-      (**D-093**, ruled by the human 2026-09-23 at the Phase 2 gate — scheduled
-      here rather than left deferred). Milestone 2.9 moved the frontend onto
-      `/api/v2/opportunities`, which is keyset-paginated, but the board still
-      filters and sorts the page it has client-side. D-061 (2.2) and D-063
-      (2.3) both predicted this would have to flip and both pointed at a later
-      milestone; 2.9 declined it as view-layer work of its own. It is correct
-      at the 400-opportunity scale the dashboard runs at today and wrong at the
-      confirmed scale, because filtering one page is not filtering — a query
-      matching a row on page nine returns nothing while the client holds page
-      one. Measure it against the 800k seed R.7 builds, rather than assuming
-      the cutover point.
+      justified by measurement, not guessed. **D-200**, **D-201**, **D-202**.
+
+      - **The corpus is a module now** (`tests/scale.py`): 805,220 rows — 400
+        deals, 80,000 entries, 80,000 notes, 160,000 comments, 800 shares,
+        4,000 tasks, 160,000 notifications and a 320,000-document search
+        index — inserted on the real schema so the FTS triggers fire. 6.2's
+        dashboard corpus was the only thing in the project that had ever
+        built anything like it (**D-172**); this is the same builder with
+        dials, and the row *mix* matters because a read path meets notes and
+        comments where an aggregate does not.
+      - **`tests/test_performance.py` measures what a person waits for**,
+        through the real HTTP stack and as two readers — the owner, and
+        somebody the deal is shared with, whose read resolves a role and
+        filters sealed entries. Timeline 4 ms, activity log 2.5 ms, tasks
+        5 ms, inbox 9 ms, members 2 ms, export of a whole deal 5 ms, the six
+        dashboard aggregates 20 ms, search 182 ms as the owner — who can read
+        every deal — and 25 ms as a reader shared on some of them. Search is
+        the slowest read in the app and still less than half its budget; it
+        is the next candidate if anything ever needs to be. One read was
+        slow, and it was none of these.
+      - **The board's page took 63 ms, and the reason was not the one the
+        plan assumed** (**D-200**). The first hypothesis — the stalled rule
+        being asked once per row — was wrong: rewritten as one grouped pass
+        it measured 55 ms against 56 ms. Profiled, the page's own query is
+        **0.3 ms** and the 14-day rule is **55 ms**, because it walks 240,000
+        note and comment rows however it is phrased.
+      - **So the rule stopped being a query** (**D-201**). Revision
+        `0022_last_activity` maintains `opportunities.last_activity_at` with
+        triggers — the mechanism this project already uses for the FTS index,
+        chosen for the same reason: a write path added later cannot forget to
+        call something it never knew about. An insert takes the maximum; an
+        update recomputes, which is how a soft delete, a restore and an
+        edited `event_timestamp` all arrive. The board's page is **4 ms** and
+        the whole board **8 pages in 19 ms**. `app/stalled.py` is the single
+        definition the board, a deal's own screen and the dashboard all read
+        — `dashboard.py` had carried a second copy of the rule since 6.2 and
+        said so in a comment.
+      - **A stored answer needs a test per way it can be wrong**
+        (`tests/test_stalled.py`): deleting the newest activity, restoring
+        it, deleting a note and a comment, backdating an entry into the past,
+        and the board's badge agreeing with the dashboard's list. Each was
+        confirmed to fail with its trigger disabled.
+      - **D-093 is closed by measurement, not by a rewrite** (**D-202**). The
+        board keeps filtering and sorting the whole list in the client: the
+        correctness worry was answered by `fetchAll` in 2.9, and moving the
+        predicate into SQL would now save at most 16 ms on a read that
+        happens once a visit while splitting one tested pure function across
+        two languages. Flagged for the human, because it closes an item they
+        put in the roadmap at the Phase 2 gate.
+      - Virtualization was already done (2.3, `app/VirtualList.tsx`), and
+        nothing here changed it.
+
 - [ ] R.4 Docker: multi-stage build, pinned versions, WeasyPrint dependencies,
       `HEALTHCHECK`, `/healthz` and `/readyz`, graceful shutdown. **Non-root
       user moved out of this item** — pulled forward into Phase 1's rework

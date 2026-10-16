@@ -553,7 +553,9 @@ def test_an_unhandled_exception_on_a_v2_path_gets_the_envelope(
     def explode(*_args: object, **_kwargs: object) -> bool:
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(routes_opportunities, "is_opportunity_stalled", explode)
+    # Whatever this route calls that could fail; since R.3 the page read asks
+    # for the stalled set once rather than per row.
+    monkeypatch.setattr(routes_opportunities, "stalled_opportunity_ids", explode)
 
     with server_exceptions_not_raised(client):
         response = client.get("/api/v2/opportunities")

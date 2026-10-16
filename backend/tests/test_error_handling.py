@@ -66,7 +66,9 @@ def test_unhandled_exception_returns_json_detail_envelope(
     def explode(*_args: object, **_kwargs: object) -> bool:
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(routes_opportunities, "is_opportunity_stalled", explode)
+    # Whatever the list route calls that could fail; since R.3 it asks for the
+    # stalled set once per page rather than once per row.
+    monkeypatch.setattr(routes_opportunities, "stalled_opportunity_ids", explode)
 
     with server_exceptions_not_raised(client):
         response = client.get("/api/v2/opportunities")
@@ -86,7 +88,9 @@ def test_unhandled_exception_hides_details_in_production(
     def explode(*_args: object, **_kwargs: object) -> bool:
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(routes_opportunities, "is_opportunity_stalled", explode)
+    # Whatever the list route calls that could fail; since R.3 it asks for the
+    # stalled set once per page rather than once per row.
+    monkeypatch.setattr(routes_opportunities, "stalled_opportunity_ids", explode)
     monkeypatch.setattr(settings, "environment", "production")
 
     with server_exceptions_not_raised(client):

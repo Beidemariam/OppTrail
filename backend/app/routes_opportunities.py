@@ -28,7 +28,8 @@ from .schemas import (
 )
 from .share_utils import upsert_share_row
 from .soft_delete import restore_opportunity, soft_delete_opportunity, soft_delete_share
-from .time_utils import utc_days_ago, utc_now
+from .stalled import is_opportunity_stalled, stalled_opportunity_ids
+from .time_utils import utc_now
 from .timeline_utils import create_system_timeline_entry
 from .versioning import (
     OPPORTUNITY_VERSIONS,
@@ -39,51 +40,6 @@ from .versioning import (
 )
 
 router = APIRouter(prefix="/api/v2", tags=["opportunities"])
-
-
-STALLED_AFTER_DAYS = 14
-
-
-def is_opportunity_stalled(
-    connection: sqlite3.Connection,
-    opportunity_id: int,
-) -> bool:
-    """True when nothing has happened on the opportunity for 14 days.
-
-    Every timestamp is stored as fixed-width UTC ISO-8601, so SQLite can pick
-    the latest activity and compare it to the cutoff as a plain string.
-    """
-    latest_activity = connection.execute(
-        """
-        SELECT MAX(activity_at) AS latest_activity
-        FROM (
-            SELECT event_timestamp AS activity_at
-            FROM timeline_entries
-            WHERE opportunity_id = ? AND deleted_at IS NULL
-            UNION ALL
-            SELECT notes.created_at AS activity_at
-            FROM notes
-            JOIN timeline_entries ON timeline_entries.id = notes.entry_id
-            WHERE timeline_entries.opportunity_id = ?
-                AND timeline_entries.deleted_at IS NULL
-                AND notes.deleted_at IS NULL
-            UNION ALL
-            SELECT comments.created_at AS activity_at
-            FROM comments
-            JOIN notes ON notes.id = comments.note_id
-            JOIN timeline_entries ON timeline_entries.id = notes.entry_id
-            WHERE timeline_entries.opportunity_id = ?
-                AND timeline_entries.deleted_at IS NULL
-                AND notes.deleted_at IS NULL
-                AND comments.deleted_at IS NULL
-        )
-        """,
-        (opportunity_id, opportunity_id, opportunity_id),
-    ).fetchone()["latest_activity"]
-
-    if latest_activity is None:
-        return False
-    return bool(latest_activity < utc_days_ago(STALLED_AFTER_DAYS))
 
 
 def opportunity_from_row(
@@ -186,11 +142,17 @@ def list_opportunities_page(
 
         rows, next_cursor = split_page(rows, page.limit, lambda row: (row["updated_at"], row["id"]))
         definitions = live_definitions(connection, "opportunity")
+        # One query for the page, not one per row (milestone R.3): the 14-day
+        # rule reads three tables, and asking it 50 times measured 56 ms a
+        # page — 448 ms for the eight pages the board actually walks (D-093).
+        # Same shape as `definitions` above and `attachments_by_entry_id`
+        # before it: a page's worth of a thing, fetched once.
+        stalled = stalled_opportunity_ids(connection, [row["id"] for row in rows])
         items = [
             opportunity_from_row(
                 row,
                 row["current_user_role"],
-                is_opportunity_stalled(connection, row["id"]),
+                row["id"] in stalled,
                 definitions,
             )
             for row in rows

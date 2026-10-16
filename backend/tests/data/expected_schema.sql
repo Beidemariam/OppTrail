@@ -57,6 +57,9 @@ CREATE INDEX idx_notes_entry_id ON notes(entry_id);
 
 CREATE INDEX idx_notifications_user_id ON notifications(user_id);
 
+CREATE INDEX idx_opportunities_last_activity
+        ON opportunities (last_activity_at);
+
 CREATE INDEX idx_opportunities_owner_id ON opportunities(owner_id);
 
 CREATE INDEX idx_opportunity_shares_user_id ON opportunity_shares(user_id);
@@ -242,7 +245,7 @@ CREATE TABLE opportunities (
             created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
             updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
             deleted_at TEXT
-        , custom_values TEXT NOT NULL DEFAULT '{}');
+        , custom_values TEXT NOT NULL DEFAULT '{}', last_activity_at TEXT);
 
 CREATE TABLE opportunity_shares (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -414,6 +417,135 @@ CREATE TABLE watchers (
             created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
             UNIQUE (opportunity_id, user_id)
         );
+
+CREATE TRIGGER activity_comment_insert AFTER INSERT ON comments
+        WHEN NEW.deleted_at IS NULL
+        BEGIN
+            UPDATE opportunities
+            SET last_activity_at = MAX(
+                COALESCE(last_activity_at, NEW.created_at), NEW.created_at
+            )
+            WHERE id = (
+    SELECT opportunity_id FROM timeline_entries WHERE id = (
+        SELECT entry_id FROM notes WHERE id = NEW.note_id
+    )
+);
+        END;
+
+CREATE TRIGGER activity_comment_update AFTER UPDATE ON comments
+        BEGIN
+            UPDATE opportunities
+            SET last_activity_at = (
+    SELECT MAX(activity_at) FROM (
+        SELECT event_timestamp AS activity_at
+        FROM timeline_entries
+        WHERE opportunity_id = opportunities.id AND deleted_at IS NULL
+        UNION ALL
+        SELECT notes.created_at
+        FROM notes
+        JOIN timeline_entries ON timeline_entries.id = notes.entry_id
+        WHERE timeline_entries.opportunity_id = opportunities.id
+            AND notes.deleted_at IS NULL
+            AND timeline_entries.deleted_at IS NULL
+        UNION ALL
+        SELECT comments.created_at
+        FROM comments
+        JOIN notes ON notes.id = comments.note_id
+        JOIN timeline_entries ON timeline_entries.id = notes.entry_id
+        WHERE timeline_entries.opportunity_id = opportunities.id
+            AND comments.deleted_at IS NULL
+            AND notes.deleted_at IS NULL
+            AND timeline_entries.deleted_at IS NULL
+    )
+)
+            WHERE id = (
+    SELECT opportunity_id FROM timeline_entries WHERE id = (
+        SELECT entry_id FROM notes WHERE id = NEW.note_id
+    )
+);
+        END;
+
+CREATE TRIGGER activity_entry_insert AFTER INSERT ON timeline_entries
+        WHEN NEW.deleted_at IS NULL
+        BEGIN
+            UPDATE opportunities
+            SET last_activity_at = MAX(
+                COALESCE(last_activity_at, NEW.event_timestamp), NEW.event_timestamp
+            )
+            WHERE id = NEW.opportunity_id;
+        END;
+
+CREATE TRIGGER activity_entry_update AFTER UPDATE ON timeline_entries
+        BEGIN
+            UPDATE opportunities
+            SET last_activity_at = (
+    SELECT MAX(activity_at) FROM (
+        SELECT event_timestamp AS activity_at
+        FROM timeline_entries
+        WHERE opportunity_id = NEW.opportunity_id AND deleted_at IS NULL
+        UNION ALL
+        SELECT notes.created_at
+        FROM notes
+        JOIN timeline_entries ON timeline_entries.id = notes.entry_id
+        WHERE timeline_entries.opportunity_id = NEW.opportunity_id
+            AND notes.deleted_at IS NULL
+            AND timeline_entries.deleted_at IS NULL
+        UNION ALL
+        SELECT comments.created_at
+        FROM comments
+        JOIN notes ON notes.id = comments.note_id
+        JOIN timeline_entries ON timeline_entries.id = notes.entry_id
+        WHERE timeline_entries.opportunity_id = NEW.opportunity_id
+            AND comments.deleted_at IS NULL
+            AND notes.deleted_at IS NULL
+            AND timeline_entries.deleted_at IS NULL
+    )
+)
+            WHERE id = NEW.opportunity_id;
+        END;
+
+CREATE TRIGGER activity_note_insert AFTER INSERT ON notes
+        WHEN NEW.deleted_at IS NULL
+        BEGIN
+            UPDATE opportunities
+            SET last_activity_at = MAX(
+                COALESCE(last_activity_at, NEW.created_at), NEW.created_at
+            )
+            WHERE id = (
+                SELECT opportunity_id FROM timeline_entries WHERE id = NEW.entry_id
+            );
+        END;
+
+CREATE TRIGGER activity_note_update AFTER UPDATE ON notes
+        BEGIN
+            UPDATE opportunities
+            SET last_activity_at = (
+    SELECT MAX(activity_at) FROM (
+        SELECT event_timestamp AS activity_at
+        FROM timeline_entries
+        WHERE opportunity_id = opportunities.id AND deleted_at IS NULL
+        UNION ALL
+        SELECT notes.created_at
+        FROM notes
+        JOIN timeline_entries ON timeline_entries.id = notes.entry_id
+        WHERE timeline_entries.opportunity_id = opportunities.id
+            AND notes.deleted_at IS NULL
+            AND timeline_entries.deleted_at IS NULL
+        UNION ALL
+        SELECT comments.created_at
+        FROM comments
+        JOIN notes ON notes.id = comments.note_id
+        JOIN timeline_entries ON timeline_entries.id = notes.entry_id
+        WHERE timeline_entries.opportunity_id = opportunities.id
+            AND comments.deleted_at IS NULL
+            AND notes.deleted_at IS NULL
+            AND timeline_entries.deleted_at IS NULL
+    )
+)
+            WHERE id = (
+                SELECT opportunity_id FROM timeline_entries WHERE id = NEW.entry_id
+            );
+        END;
 
 CREATE TRIGGER attachments_search_delete AFTER DELETE ON attachments BEGIN
                 INSERT INTO search_index(search_index, rowid, title, body)

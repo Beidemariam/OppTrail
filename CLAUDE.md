@@ -427,6 +427,48 @@ single-container app. Revision `0020_job_runs` is the record of what ran.
   double-run every periodic job, since nothing here claims a lock. The same
   assumption ADR 0003's SSE makes, to be revisited together.
 
+### The 14-day rule, and the one thing measurement found slow
+
+Milestone R.3. `AGENTS.md`'s Confirmed Scale — 400 deals, ~200 entries each,
+~800,000 rows — is the figure every "no Postgres, no broker" decision was
+argued against, and `tests/scale.py` is now the corpus that size (805,220
+rows, with shares, sealed entries, tasks and 160,000 notifications).
+`tests/test_performance.py` measures every read a person waits on against it,
+through the real HTTP stack and as two readers.
+
+Everything was comfortably inside budget except one read, and **the reason was
+not the one the plan assumed** (**D-200**): the board's own page took 63 ms
+where a deal's timeline took 4 ms. The first hypothesis — the stalled rule
+being asked once per row — was wrong, and rewriting it as one grouped pass
+measured 55 ms against 56 ms. Profiled, the page's query is **0.3 ms** and the
+14-day rule is **55 ms**, because it walks 240,000 note and comment rows
+however it is phrased.
+
+- **So the rule stopped being a query** (**D-201**). Revision
+  `0022_last_activity` maintains `opportunities.last_activity_at` with
+  triggers — the mechanism the FTS index already uses, chosen for the same
+  reason: a write path added later cannot forget to call something it never
+  knew about. An insert takes `MAX(what is there, the new row)`, which keeps
+  bulk loading cheap; an **update** recomputes from the union, which is how a
+  soft delete, a restore and an edited `event_timestamp` all arrive. There are
+  no DELETE triggers because nothing hard-deletes user data here. The board's
+  page is **2.5 ms** now and the whole board **19 ms**.
+- **`app/stalled.py` is the single definition** the board, a deal's own screen
+  and the dashboard's stalled list all read. `dashboard.py` had carried a
+  second copy of the rule since 6.2 and said so in a comment ("One definition
+  would be better than two").
+- **A stored derived answer needs a test per way it can be wrong.**
+  `tests/test_stalled.py` is one case per way the answer can *fall*, each
+  confirmed to fail with its trigger disabled — and two of them only became
+  real guards after being strengthened, because a note is stamped the same
+  second as the deal's own creation entry.
+- **D-093 is closed by measurement** (**D-202**): the board keeps filtering
+  and sorting in the client. The correctness worry was answered by `fetchAll`
+  in 2.9, and moving the predicate into SQL would now save at most 16 ms on a
+  read that happens once a visit, while splitting one tested pure function
+  across two languages. The cutover point for whoever revisits it is the deal
+  count at which the whole list stops being one `fetchAll`.
+
 ### Health and backups
 
 `GET /api/health` (`main.py`) reports substance, not just liveness (ADR 0011):

@@ -2720,3 +2720,48 @@ than "tests rot": a chord pressed in the instant after a navigation is
 genuinely dropped, because the new screen has not registered its listener yet.
 A test can hit that window and a finger cannot, so the test now waits for the
 screen that owns the chord.
+
+## Milestone R.3 — what the app costs at the scale it was sized for
+
+Backend: **750 tests** (1 skipped), two of them new suites —
+`tests/test_performance.py`, which measures every read a person waits on, and
+`tests/test_stalled.py`, which is what makes a stored derived answer
+trustworthy. `tests/scale.py` is the corpus both share: 805,220 rows.
+
+**The measurement, after R.3's one fix** (805,220 rows, on a laptop):
+
+```
+board first page                     2.5 ms      whole board (8 pages)   18.7 ms
+timeline first page                  3.6 ms      activity log             2.9 ms
+my tasks                             7.2 ms      inbox                    9.2 ms
+members                              2.5 ms      health                   1.2 ms
+export one deal (json)               5.1 ms      dashboard (six)         20.1 ms
+search, as the owner               182.4 ms      search, shared reader   24.7 ms
+```
+
+Before it, the board's first page was **63 ms** and the whole board **448 ms**.
+Search is the slowest read and the only one above 25 ms; the owner's is slower
+than a shared reader's because the owner can read every deal, so more rows are
+ranked and more snippets built. It is less than half its budget.
+
+**The tests are where the method shows.** The first hypothesis about the
+board's 63 ms was wrong and the test said so — one grouped pass measured 55 ms
+against the per-row 56 ms — which is why the fix that landed is a maintained
+column rather than a cleverer query (**D-200**, **D-201**). Profiling the
+pieces was what found it: the page's own query is 0.3 ms.
+
+**Six guards, each confirmed to fail with its own trigger disabled.** A
+maintained column is a cache, and the half a careless denormalization gets
+wrong is the answer *falling*: a soft delete, a restore, a deleted note, a
+deleted comment, an entry backdated by an edit, and the board's badge agreeing
+with the dashboard's list. Two of them only became real guards after being
+strengthened — the note-and-comment case passed with its trigger disabled,
+because the deal's own creation entry is stamped the same second as the note,
+so the test now pushes the entries into the past to make the discussion the
+unquestioned latest activity.
+
+**And three test-suite defects the migration surfaced**, all of the same kind:
+`test_api_v2.py` and `test_error_handling.py` proved the 500 envelope by
+monkeypatching `is_opportunity_stalled`, the function the list route no longer
+calls. A test that fakes a failure has to fake it in something the code under
+test still reaches.
