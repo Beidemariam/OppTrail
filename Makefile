@@ -1,4 +1,4 @@
-.PHONY: dev test test-host check check-fast e2e build docker docker-test docker-smoke sqlite-version-check seed migrate reindex backup restore frontend-deps generate-client
+.PHONY: dev test test-host check check-fast e2e build docker docker-test docker-smoke sqlite-version-check seed seed-scale migrate reindex backup restore frontend-deps generate-client
 
 # Guards frontend targets against a clean checkout / empty node_modules volume
 # (see docs/autopilot/DECISIONS.md's F.2 review note — the sandbox gives the
@@ -91,6 +91,13 @@ docker-test:
 # relationship. Prints the seeded users and what each of them can see.
 seed:
 	cd backend && uv run python -m tools.seed
+
+# The same demo data, then `AGENTS.md`'s confirmed scale on top of it: ~800,000
+# rows around the five named deals, built by the corpus
+# tests/test_performance.py measures the budgets against (R.7). About 11
+# seconds and ~140 MB.
+seed-scale:
+	cd backend && uv run python -m tools.seed --scale
 
 # The host half of the gate. Needs a Docker socket, so it cannot run in the
 # autopilot sandbox; scripts/autopilot-gate.sh calls the same script.

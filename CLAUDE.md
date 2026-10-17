@@ -46,6 +46,7 @@ npm run e2e          # playwright; builds the app and starts scripts/e2e-server.
 make check-fast      # the inner-loop gate
 make check           # the full gate (Docker portion deferred to the host)
 make seed            # demo data; prints the seeded users and what each can see
+make seed-scale      # the same, plus AGENTS.md's confirmed scale on top (~800k rows, 11s)
 make reindex         # rebuilds the FTS5 search index from the source tables
 make backup          # VACUUM INTO snapshot, retained on a rolling window (ADR 0011)
 make restore BACKUP=path/to/app-<timestamp>.db   # stop the app first
@@ -2114,6 +2115,14 @@ load bearing:
 `make check-fast` is the inner loop and `make check` is the full gate; the Docker
 build and smoke test are the one piece that cannot run in the autopilot sandbox
 and are deferred to `scripts/autopilot-gate.sh` on a host.
+
+`tools/scale.py` is the one corpus builder at `AGENTS.md`'s confirmed scale —
+400 deals, 80,000 entries, ~805,000 rows — shared by `make seed-scale` and
+`tests/test_performance.py` (R.7, **D-208**), so what a person loads is what
+the budgets were measured against. It is composable: every id it generates is
+relative to `MAX(id)`, which is what lets it run on top of the demo seed
+without a generated note attaching itself to one of the five deals somebody is
+about to read.
 
 **Backend** (`backend/tests/`) mirrors the routers. `conftest.py` points
 `settings.database_url` at a per-test `tmp_path` database and yields a `TestClient`;

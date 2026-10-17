@@ -29,8 +29,15 @@ from app.database import db_connection, initialize_database, sqlite_path_from_ur
 from app.main import app
 from app.security import CSRF_COOKIE_NAME, SAFE_METHODS
 from app.settings import settings
+from tools.scale import build_scale_corpus
 
 DEMO_PASSWORD = "opptrail-demo-123"
+
+# `AGENTS.md`'s Confirmed Scale, for `--scale`: 400 deals and ~200 entries
+# each. The same numbers `tests/test_performance.py` measures the budgets
+# against, so loading this is loading what was measured.
+SCALE_OPPORTUNITIES = 400
+SCALE_ENTRIES = 80_000
 
 ALEX = "alex@opptrail.test"
 BLAIR = "blair@opptrail.test"
@@ -657,6 +664,105 @@ def seed() -> None:
         "pinning two opportunities into a saved view",
     )
 
+    # 23. Custom fields (milestone 6.1), which nothing seeded until R.7: the
+    #     two or three things a team tracks that nobody anticipated. Defined
+    #     by any authenticated caller (D-171) and filled in on two deals, so
+    #     the column picker, the filter bar and both forms all have something
+    #     real to show.
+    for definition in (
+        {
+            "entity_type": "opportunity",
+            "key": "region",
+            "label": "Region",
+            "type": "select",
+            "options": ["EMEA", "Americas", "APAC"],
+            "position": 1,
+        },
+        {
+            "entity_type": "opportunity",
+            "key": "renewal",
+            "label": "Renewal date",
+            "type": "date",
+            "position": 2,
+        },
+        {
+            "entity_type": "entry",
+            "key": "call_outcome",
+            "label": "Call outcome",
+            "type": "select",
+            "options": ["Positive", "Neutral", "Needs follow-up"],
+        },
+    ):
+        check(alex.client.post("/api/v2/custom-fields", json=definition), "defining a field")
+
+    check(
+        alex.client.patch(
+            f"/api/v2/opportunities/{northwind}",
+            json={"custom_values": {"region": "EMEA", "renewal": "2027-03-31"}},
+        ),
+        "filling in Northwind's custom fields",
+    )
+    check(
+        alex.client.patch(
+            f"/api/v2/opportunities/{globex}",
+            json={"custom_values": {"region": "Americas"}},
+        ),
+        "filling in Globex's region",
+    )
+
+    # 24. An automation (milestone 6.3). A rule that reads as a sentence, and a
+    #     dry run so the run log has a row in it: §11's "always dry-runnable"
+    #     is the half a person checks before letting a rule write anything.
+    nudge = check(
+        alex.client.post(
+            "/api/v2/automation-rules",
+            json={
+                "name": "Nudge me about quiet deals",
+                "trigger_type": "no_activity",
+                "trigger": {"days": 14},
+                "conditions": [{"field": "stage", "op": "ne", "value": "Closed Won"}],
+                "action_type": "create_task",
+                "action": {
+                    "title": "Check in — nothing has happened for two weeks",
+                    "recipient": "owner",
+                    "due_in_days": 2,
+                },
+            },
+        ),
+        "creating an automation rule",
+    ).json()["id"]
+    check(
+        alex.client.post(f"/api/v2/automation-rules/{nudge}/run?dry_run=true"),
+        "previewing the automation",
+    )
+
+    # 25. A sealed entry (milestone R.1b), which `add_entry`'s own docstring
+    #     has claimed was here since R.1b and which nothing actually wrote —
+    #     found by R.7 counting the rows. Blair keeps something back on a deal
+    #     Alex owns, so the tour can show both sides: Blair reads it whole,
+    #     and Alex — the *owner* — gets the row, the number, the author and
+    #     nothing else (D-194).
+    add_entry(
+        blair,
+        northwind,
+        visibility="private",
+        type="other",
+        title="My read on their procurement lead",
+        body="Not for the shared record yet.",
+        event_timestamp=days_ago(1),
+    )
+
+    # 26. A notebook of one's own (milestone R.1b). Not in the deal's history
+    #     at all: it is the running thinking that is not a record of anything
+    #     that happened, and nothing else in the app reads the table.
+    check(
+        alex.client.put(
+            f"/api/v2/opportunities/{northwind}/private-note",
+            json={"body": "Procurement is the real blocker. Ask Blair who signs."},
+        ),
+        "writing Alex's private note",
+    )
+
     for session in (alex, blair, casey):
         session.client.__exit__(None, None, None)
 
@@ -667,6 +773,15 @@ def main(argv: list[str] | None = None) -> int:
         "--force",
         action="store_true",
         help="seed even though the database already has users (adds a second set)",
+    )
+    parser.add_argument(
+        "--scale",
+        action="store_true",
+        help=(
+            "after the demo data, bulk the database up to AGENTS.md's confirmed "
+            "scale (~800,000 rows) with generated deals, entries, notes and "
+            "comments — the corpus tests/test_performance.py measures against"
+        ),
     )
     arguments = parser.parse_args(argv)
 
@@ -682,6 +797,29 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     seed()
+
+    # R.7's other half: the same seed at the scale this app is sized for.
+    # Layered *on top of* the demo rows rather than instead of them, so every
+    # feature and permission relationship above is still there to read — the
+    # five named deals stay findable, with 400 generated ones around them.
+    # `tools/scale.py` is the one corpus builder, shared with the performance
+    # suite, so what a person loads is what the budgets were measured against.
+    if arguments.scale:
+        print("Building the confirmed-scale corpus on top of the demo data...")
+        with db_connection() as connection:
+            facts = build_scale_corpus(
+                connection,
+                opportunities=SCALE_OPPORTUNITIES,
+                entries=SCALE_ENTRIES,
+                readers=20,
+                shares=True,
+                private_every=20,
+                notes=SCALE_ENTRIES,
+                comments=SCALE_ENTRIES * 2,
+                tasks=4_000,
+                notifications=160_000,
+            )
+        print(f"  {facts.summary()}")
 
     print(f"Seeded {database_path}.")
     print(f"Sign in with any of these; the password is {DEMO_PASSWORD!r}:")
@@ -846,6 +984,42 @@ def main(argv: list[str] | None = None) -> int:
         "  grants no access. Sign in as Alex and GET\n"
         "  /api/v2/opportunities/1/watchers - owner-only, like the share list\n"
         "  beside it - names Dana as the one watcher.\n"
+        "\n"
+        "  Custom fields (milestone 6.1) are defined and filled in: Region\n"
+        "  and Renewal date on an opportunity, Call outcome on an entry.\n"
+        "  Northwind is EMEA and renews on 2027-03-31, Globex is Americas.\n"
+        "  They are in the table's column picker, in the filter bar and on\n"
+        "  both forms — and archiving one (POST /api/v2/custom-fields/1/\n"
+        "  archive) removes it from all three without rewriting a value, which\n"
+        "  is ADR 0006's whole bet: validated on write, never trusted on read.\n"
+        "\n"
+        "  Reports (milestone 6.2) are at /reports, computed live from these\n"
+        "  same rows: pipeline by stage, the win rate, average time in stage,\n"
+        "  the stalled list with Globex on it, activity per rep and the\n"
+        "  forecast. Two of the six say 'not measured' rather than zero —\n"
+        "  time in stage knows how far back it can be trusted, and a win rate\n"
+        "  with nothing closed is a different claim from 0%. Casey and Dana\n"
+        "  see their own numbers, because every one of the six filters by what\n"
+        "  the caller may read.\n"
+        "\n"
+        "  Automations (milestone 6.3) are at /automations: Alex's 'Nudge me\n"
+        "  about quiet deals' reads as a sentence above the controls that\n"
+        "  built it, and its run log already has a line — a dry run, which is\n"
+        "  what §11's 'always dry-runnable' means in practice. Press Run to\n"
+        "  preview again, or untick the dry run to let it write. The screen's\n"
+        "  first line says when the scheduler last checked the rules, or that\n"
+        "  nothing has (milestone 6.5), which is the only place a dead\n"
+        "  scheduler is felt.\n"
+        "\n"
+        "  Keeping something to yourself (milestone R.1b) is on Northwind in\n"
+        "  both shapes. Blair's 'My read on their procurement lead' is\n"
+        "  sealed: Blair reads it whole, and Alex — who owns the deal — gets\n"
+        "  the row, its number, Blair's name and nothing else, because\n"
+        "  'private unless the owner asks' is not private (D-194). And Alex's\n"
+        "  own notes are in the deal's rail under 'My notes / Only you',\n"
+        "  outside the deal's history altogether: search for 'procurement'\n"
+        "  and the note does not come back, because nothing but its own two\n"
+        "  routes reads that table.\n"
         "\n"
         "  Live updates and the note edit guard (milestone 3.4) are the one\n"
         "  thing here that needs two windows rather than seeded rows. Open\n"

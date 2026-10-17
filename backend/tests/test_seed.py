@@ -57,6 +57,11 @@ def test_seed_populates_every_shipped_feature(tmp_path) -> None:
                 "tasks",
                 "attachments",
                 "task_comments",
+                # Phase 6 and R.1b, which nothing seeded until R.7.
+                "custom_field_definitions",
+                "automation_rules",
+                "automation_runs",
+                "private_notes",
             )
         }
         entry_types = {
@@ -107,6 +112,10 @@ def test_seed_populates_every_shipped_feature(tmp_path) -> None:
         "tasks",
         "attachments",
         "task_comments",
+        "custom_field_definitions",
+        "automation_rules",
+        "automation_runs",
+        "private_notes",
     ):
         assert counts[table] > 0, f"{table} is empty after seeding"
 
@@ -119,6 +128,62 @@ def test_seed_populates_every_shipped_feature(tmp_path) -> None:
     assert replies > 0
     assert resolved_threads > 0
     assert open_threads > 0
+
+
+def test_the_seed_shows_both_sides_of_a_sealed_entry(tmp_path) -> None:
+    """R.1b in the demo data, and a defect R.7 found by counting rows:
+    `add_entry`'s docstring had claimed since R.1b that "one seeded private
+    entry is added deliberately below", and nothing wrote one.
+
+    It is Blair's on a deal Alex owns, which is the pair worth seeing by
+    hand — the author reads it whole and the *owner* does not (D-194).
+    """
+    settings.database_url = f"sqlite:///{tmp_path / 'seed.db'}"
+    initialize_database()
+    seed()
+
+    with db_connection() as connection:
+        sealed = connection.execute(
+            """
+            SELECT timeline_entries.id, timeline_entries.opportunity_id, users.email AS author
+            FROM timeline_entries
+            JOIN users ON users.id = timeline_entries.created_by
+            WHERE timeline_entries.visibility = 'private'
+            """
+        ).fetchall()
+        owner = connection.execute(
+            "SELECT users.email FROM opportunities JOIN users ON users.id = owner_id WHERE "
+            "opportunities.id = ?",
+            (sealed[0]["opportunity_id"],),
+        ).fetchone()["email"]
+
+    assert len(sealed) == 1
+    assert sealed[0]["author"] == BLAIR
+    assert owner == ALEX
+
+    author = seeded_client(BLAIR)
+    deal_owner = seeded_client(ALEX)
+    try:
+        entry_id = sealed[0]["id"]
+        deal = sealed[0]["opportunity_id"]
+        read_by_author = next(
+            item
+            for item in author.get(f"/api/v2/opportunities/{deal}/timeline").json()["items"]
+            if item["id"] == entry_id
+        )
+        read_by_owner = next(
+            item
+            for item in deal_owner.get(f"/api/v2/opportunities/{deal}/timeline").json()["items"]
+            if item["id"] == entry_id
+        )
+    finally:
+        author.__exit__(None, None, None)
+        deal_owner.__exit__(None, None, None)
+
+    assert read_by_author["title"] == "My read on their procurement lead"
+    # The row keeps its place and its number for the owner, and nothing else.
+    assert read_by_owner["title"] == ""
+    assert read_by_owner["sequence"] == read_by_author["sequence"]
 
 
 def test_seeded_permissions_match_the_printed_tour(tmp_path) -> None:
@@ -346,11 +411,17 @@ def test_seeded_permissions_match_the_printed_tour(tmp_path) -> None:
         # twice and the history is what still holds the first figure. Owner-
         # only, so Blair — an editor who can write to this opportunity — is
         # refused the same read.
+        #
+        # Four versions rather than three since R.7 seeded custom field values
+        # (6.1): filling in Region and Renewal date is a write to the
+        # opportunity, so it records a snapshot like every other one, with the
+        # value unchanged. That is invariant 8 working, not a stray row.
         history = alex.get(f"/api/v2/opportunities/{northwind}/versions")
         assert history.status_code == 200
         assert [version["value"] for version in history.json()["items"]] == [
             "185000",
             "185000",
+            "162000",
             "162000",
         ]
         assert blair.get(f"/api/v2/opportunities/{northwind}/versions").status_code == 403

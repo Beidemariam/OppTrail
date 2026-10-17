@@ -22,6 +22,7 @@ and the search index is built the way a running database builds it — which is
 most of the 136 MB, and the thing search performance is actually about.
 """
 
+import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -63,7 +64,7 @@ class ScaleFacts:
 
 
 def build_scale_corpus(
-    connection,
+    connection: sqlite3.Connection,
     *,
     opportunities: int,
     entries: int,
@@ -75,16 +76,23 @@ def build_scale_corpus(
     tasks: int = 0,
     notifications: int = 0,
 ) -> ScaleFacts:
-    """Fill an initialized database with a corpus of the given size.
+    """Fill a database with a corpus of the given size.
 
     Spread across two years rather than all stamped now, because that is what
     a database holding this many rows looks like and because several reads ask
     for a *window* of it — a fixture with every row inside that window
     measures something no deployment will ever ask.
 
-    The caller is assumed to be user 1 and owns every opportunity, so a read
-    as the owner is the widest possible answer; `shares` adds the rows that
-    make the same read a permission-filtered one for everybody else.
+    **Composable with rows that are already there** (R.7). Every id below is
+    relative to what the database already holds, so this runs on an empty
+    database for `tests/test_performance.py` and on top of `make seed`'s demo
+    rows for `make seed --scale`. Without that, a generated note would attach
+    itself to one of the five deals a person is about to read.
+
+    The first user owns every generated opportunity — user 1 on an empty
+    database, Alex after a demo seed — so a read as the owner is the widest
+    possible answer; `shares` adds the rows that make the same read a
+    permission-filtered one for everybody else.
     """
     base = datetime.now(UTC) - timedelta(days=730)
     now = utc_now()
@@ -92,18 +100,35 @@ def build_scale_corpus(
     def spread(index: int, total: int) -> str:
         return (base + timedelta(seconds=int(730 * 86400 * index / max(total, 1)))).strftime(STAMP)
 
+    def highest(table: str) -> int:
+        row = connection.execute(f"SELECT COALESCE(MAX(id), 0) AS top FROM {table}").fetchone()
+        return int(row["top"])
+
+    first_user = highest("users")
+    first_opportunity = highest("opportunities")
+    first_entry = highest("timeline_entries")
+    first_note = highest("notes")
+    first_task = highest("tasks")
+    owner = max(first_user, 1)
+
+    def reader_id(index: int) -> int:
+        return first_user + (index % readers) + 1
+
     connection.executemany(
         "INSERT INTO users (email, password_hash, name, created_at) VALUES (?, ?, ?, ?)",
-        [(f"rep{rep}@example.com", "x", f"Rep {rep}", now) for rep in range(readers)],
+        [
+            (f"rep{first_user + rep}@example.com", "x", f"Rep {first_user + rep}", now)
+            for rep in range(readers)
+        ],
     )
     connection.executemany(
         """
         INSERT INTO opportunities
             (name, account_name, value, currency, stage, owner_id, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
-            (f"Deal {i}", f"Account {i}", 1000 + i, "USD", STAGES[i % 5], now, now)
+            (f"Deal {i}", f"Account {i}", 1000 + i, "USD", STAGES[i % 5], owner, now, now)
             for i in range(opportunities)
         ],
     )
@@ -116,10 +141,16 @@ def build_scale_corpus(
             """
             INSERT INTO opportunity_shares
                 (opportunity_id, user_id, role, invited_by, created_at)
-            VALUES (?, ?, ?, 1, ?)
+            VALUES (?, ?, ?, ?, ?)
             """,
             [
-                (deal + 1, reader, "editor" if (deal + offset) % 2 else "viewer", now)
+                (
+                    first_opportunity + deal + 1,
+                    first_user + reader,
+                    "editor" if (deal + offset) % 2 else "viewer",
+                    owner,
+                    now,
+                )
                 for deal in range(opportunities)
                 for offset, reader in enumerate(
                     (2 + (deal % max(readers - 1, 1)), 2 + ((deal + 1) % max(readers - 1, 1)))
@@ -140,12 +171,12 @@ def build_scale_corpus(
         """,
         [
             (
-                (i % opportunities) + 1,
+                first_opportunity + (i % opportunities) + 1,
                 "stage_change" if i % 500 == 0 else "call",
                 "Stage changed to Proposal" if i % 500 == 0 else f"Entry {i}",
                 "body",
                 spread(i, entries),
-                (i % readers) + 1,
+                reader_id(i),
                 spread(i, entries),
                 visibility(i),
             )
@@ -164,14 +195,25 @@ def build_scale_corpus(
         VALUES (?, ?, ?, ?, ?)
         """,
         [
-            ((i % entries) + 1, "note", (i % readers) + 1, spread(i, note_rows), now)
+            (
+                first_entry + (i % entries) + 1,
+                "note",
+                reader_id(i),
+                spread(i, note_rows),
+                now,
+            )
             for i in range(note_rows)
         ],
     )
     connection.executemany(
         "INSERT INTO comments (note_id, body, created_by, created_at) VALUES (?, ?, ?, ?)",
         [
-            ((i % note_rows) + 1, "comment", (i % readers) + 1, spread(i, comment_rows))
+            (
+                first_note + (i % note_rows) + 1,
+                "comment",
+                reader_id(i),
+                spread(i, comment_rows),
+            )
             for i in range(comment_rows)
         ],
     )
@@ -185,11 +227,11 @@ def build_scale_corpus(
             """,
             [
                 (
-                    (i % opportunities) + 1,
-                    (i % entries) + 1,
+                    first_opportunity + (i % opportunities) + 1,
+                    first_entry + (i % entries) + 1,
                     f"Follow up {i}",
                     spread(i, tasks)[:10],
-                    1,
+                    owner,
                     now,
                     now,
                 )
@@ -198,7 +240,7 @@ def build_scale_corpus(
         )
         connection.executemany(
             "INSERT INTO task_assignees (task_id, user_id) VALUES (?, ?)",
-            [(i + 1, (i % readers) + 1) for i in range(tasks)],
+            [(first_task + i + 1, reader_id(i)) for i in range(tasks)],
         )
 
     if notifications:
@@ -211,14 +253,14 @@ def build_scale_corpus(
             """,
             [
                 (
-                    (i % readers) + 1,
+                    reader_id(i),
                     "shared_activity",
                     (
                         '{"source_type": "entry", "source_id": '
-                        f"{(i % entries) + 1}"
+                        f"{first_entry + (i % entries) + 1}"
                         ', "opportunity_id": '
-                        f"{(i % opportunities) + 1}"
-                        ', "actor_id": 1, "title": "Entry"}'
+                        f"{first_opportunity + (i % opportunities) + 1}"
+                        ', "actor_id": ' + str(owner) + ', "title": "Entry"}'
                     ),
                     spread(i, notifications),
                 )

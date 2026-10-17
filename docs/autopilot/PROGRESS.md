@@ -6126,8 +6126,41 @@ this phase reaches `AWAITING_REVIEW` and is accepted, the project is finished.
       - **Not pushed**, as the roadmap asks: the workflow is reviewed as code
         and takes effect whenever this repository gets a remote.
 
-- [ ] R.7 Seed data exercising every shipped feature and permission
-      relationship, at the confirmed 800k-row scale.
+- [x] R.7 Seed data exercising every shipped feature and permission
+      relationship, at the confirmed 800k-row scale. **D-208**.
+
+      The demo seed has covered features and permissions since Phase 1 and its
+      printed tour is asserted by `tests/test_seed.py`. Two things were wrong
+      with it, and both were found by counting rows rather than reading prose.
+
+      - **Nothing seeded Phase 6 or R.1b.** No custom fields, no automation
+        rule, no run log, no private note — three phases of features with
+        nothing to look at. They are seeded now: Region and Renewal date on a
+        deal and Call outcome on an entry, Alex's "Nudge me about quiet deals"
+        with a dry run already in its log, and Alex's own private note. The
+        tour gained a paragraph each, including what `/reports` shows from
+        these same rows and which two of the six say "not measured" rather
+        than zero.
+      - **`add_entry`'s docstring had claimed since R.1b that "one seeded
+        private entry is added deliberately below", and nothing wrote one.**
+        It is Blair's on a deal Alex owns, which is the pair worth seeing by
+        hand: the author reads it whole and the *owner* does not (D-194).
+        `test_the_seed_shows_both_sides_of_a_sealed_entry` is that claim as an
+        assertion, since a docstring plainly was not enough.
+      - **`make seed-scale` is the other half** (**D-208**): the demo data,
+        then `AGENTS.md`'s confirmed scale **on top of it** — 805,388 rows, 11
+        seconds — so every relationship above is still there to read with 400
+        generated deals around the five named ones. One corpus builder
+        (`tools/scale.py`, moved out of `tests/` so both callers share it), so
+        what a person loads is what the performance budgets were measured
+        against. It had to become composable to do that: every generated id is
+        now relative to what the database already holds, or a generated note
+        would hang itself off one of the five deals somebody is about to read.
+      - Also seeded along the way: the version history gained a fourth row on
+        Northwind, because filling in custom values is a write to the
+        opportunity and records a snapshot like any other. The tour's
+        assertion says so rather than being loosened.
+
 - [ ] R.8 Documentation: `README.md`, `ARCHITECTURE.md` (Mermaid data model,
       auth/permission model, real-time design, AI read-only guarantee), ADR
       index, API guide, `docs/user-guide.md`, `docs/operations.md`,

@@ -25,10 +25,10 @@ Three things about how it measures:
 import time
 
 from fastapi.testclient import TestClient
-from scale import build_scale_corpus
 
 from app.auth import hash_password
 from app.database import db_connection
+from tools.scale import build_scale_corpus
 
 #: `AGENTS.md`'s own arithmetic: 400 deals, ~200 entries each.
 OPPORTUNITIES = 400

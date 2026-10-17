@@ -86,6 +86,19 @@ bytes.
 blob on purpose and getting it back, because ADR 0011 requires the restore to
 be "actually exercised" rather than assumed.
 
+## Seeding a demonstration or a load test
+
+```bash
+make seed           # five named deals, every feature, every permission pair
+make seed-scale     # the same, then ~805,000 rows around it (11s, ~140 MB)
+```
+
+Both refuse to run on a database that already has users unless you pass
+`--force`. `make seed` prints a walkthrough of what was created and who can
+see what; `tests/test_seed.py` is what keeps those sentences true. The scale
+corpus is the one `tests/test_performance.py` measures the read budgets
+against, so a load test and a budget are talking about the same database.
+
 ## The probes
 
 Three endpoints, three questions (R.4, D-203):
