@@ -78,6 +78,15 @@ Specified in `docs/FEATURES.md`, sequenced in `docs/ROADMAP.md`:
     a failure says whether it is a misconfiguration or an outage
 15. **Edit history** — every edit to user content keeps the previous value, with a
     screen the opportunity owner can read it from
+16. **Privacy within a shared deal** — an entry sealed to its author, and a
+    private note per person per deal. Added mid-Phase R at the human's request
+    (**D-193** to **D-196**); not in the original v2 list, and the numbering
+    continues rather than renumbering anything above it
+
+**Shipped**, as of Phase R: 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16.
+**Deferred to v3**: 5 (email), with ADR 0009 kept as the record of how it would
+be built. `CHANGELOG.md` is what shipped per phase and
+`docs/autopilot/PROGRESS.md` the milestone detail.
 
 ## Design bar
 

@@ -6161,10 +6161,42 @@ this phase reaches `AWAITING_REVIEW` and is accepted, the project is finished.
         opportunity and records a snapshot like any other. The tour's
         assertion says so rather than being loosened.
 
-- [ ] R.8 Documentation: `README.md`, `ARCHITECTURE.md` (Mermaid data model,
+- [x] R.8 Documentation: `README.md`, `ARCHITECTURE.md` (Mermaid data model,
       auth/permission model, real-time design, AI read-only guarantee), ADR
       index, API guide, `docs/user-guide.md`, `docs/operations.md`,
       `CHANGELOG.md`, updated `AGENTS.md` and `PLAN.md`.
+
+      - **`docs/user-guide.md`** is new and is the one written for the person
+        using the app rather than running or building it: getting around, what
+        a deal is, who can see what, both shapes of privacy, and the fact that
+        almost nothing asks "are you sure" because everything offers Undo.
+      - **`docs/api.md`** is new: authentication and the CSRF pair with a
+        working `curl` sequence, the keyset envelope, the error envelope with
+        its stable codes, the four permission gates and what absence looks
+        like, the timestamp rule, the writes with a guard on them, and why the
+        two streams are different shapes.
+      - **`docs/adr/README.md`** is the index, including which records were
+        *amended* and why those are the most useful paragraphs in the
+        directory.
+      - **`docs/ARCHITECTURE.md`** gained the four sections R.8 names — a
+        Mermaid entity diagram of the shipped schema with the five load-bearing
+        properties, the authorization model as a table of the four gates, the
+        real-time design with a sequence diagram and the five rules the stream
+        obeys, and the AI guarantee as four independent mechanisms **plus what
+        it does not cover**, which is the model's obedience to the instruction
+        it cannot read inside an attachment.
+      - **`CHANGELOG.md`** is what shipped per phase, with the acceptance tags.
+      - **`README.md`** was 54 lines about starting a container; it now says
+        what the app is, what it does, and which of the eight documents answers
+        which question.
+      - **`AGENTS.md`** gains scope item 16 (privacy within a shared deal,
+        added mid-phase at the human's request) and a line saying which items
+        shipped and which one is deferred. **`PLAN.md` was annotated, not
+        rewritten**: it is accurate about the MVP and the MVP is three API
+        surfaces ago, so the note at the top says where to read instead — a
+        plan edited into a description of the present stops being evidence of
+        what was decided when.
+
 - [ ] R.9 `docs/autopilot/FINAL-REPORT.md`: what shipped per phase, coverage
       history, invariant and E2E test lists, open blockers, non-reversible
       decisions, recommended next steps.

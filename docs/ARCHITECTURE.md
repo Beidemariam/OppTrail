@@ -189,6 +189,180 @@ the whole set — the opportunity list, a timeline, a share list, an audit log �
 `lib/queries.ts`'s `fetchAll` follows `next_cursor` to the last page rather than
 pushing the cursor into the views (D-093).
 
+## The data model
+
+Written in milestone R.8 against the shipped schema (22 revisions), not the
+plan. Soft-delete and audit tables are omitted from the diagram and described
+below it, because every content table carries `deleted_at` and drawing twelve
+of those adds nothing.
+
+```mermaid
+erDiagram
+    users ||--o{ opportunities : owns
+    users ||--o{ opportunity_shares : "is granted"
+    opportunities ||--o{ opportunity_shares : "is shared by"
+    opportunities ||--o{ timeline_entries : "has a history of"
+    opportunities ||--o{ tasks : "has work on"
+    opportunities ||--o{ saved_views : "is filtered into"
+    opportunities ||--o{ private_notes : "is annotated privately in"
+    opportunities ||--o{ audit_log_entries : "is audited in"
+    opportunities ||--o{ opportunity_versions : "keeps edits in"
+    timeline_entries ||--o{ notes : "carries"
+    timeline_entries ||--o{ attachments : "carries"
+    timeline_entries ||--o{ timeline_entry_versions : "keeps edits in"
+    timeline_entries ||--o| tasks : "prompted"
+    notes ||--o{ comments : "is discussed in"
+    notes ||--o{ note_versions : "keeps edits in"
+    comments ||--o{ comments : "is replied to by"
+    comments ||--o{ reactions : "is reacted to with"
+    tasks ||--o{ task_assignees : "is owed by"
+    tasks ||--o{ task_comments : "is discussed in"
+    tasks ||--o{ task_versions : "keeps edits in"
+    users ||--o{ notifications : "is told in"
+    users ||--o{ watchers : "follows"
+    users ||--o{ sessions : "is authenticated by"
+    custom_field_definitions }o--|| users : "was defined by"
+    automation_rules ||--o{ automation_runs : "records"
+    automation_rules }o--|| users : "acts as"
+    job_runs }o--|| job_runs : "one row per tick"
+```
+
+Five properties of this shape are load bearing:
+
+- **One root.** Everything a person writes hangs off an opportunity, directly
+  or through an entry. There is no workspace, team or tenant above it (ADR
+  0010), which is what keeps authorization to one function and one test matrix.
+- **The timeline is the spine**, and the nesting stops at four levels:
+  opportunity → entry → note → comment → one reply. A deeper tree was possible
+  in the schema and is refused by the route, because a discussion that indents
+  four times is the thing `resolve` exists to prevent.
+- **Nothing is deleted.** Every content table has `deleted_at`, every read
+  filters it at each level it joins through, and one delete writes one stamp
+  across a whole subtree so the matching restore can ask for exactly that value
+  back. `sessions`, `reactions` and `watchers` are the three exceptions, and
+  each is toggle state rather than content.
+- **Every edit is kept.** Four `*_versions` tables, one shape: a whole snapshot
+  per write rather than a diff, so a partial `PATCH` still records complete
+  state and no reader has to reconstruct one from a chain with a gap in it.
+- **Two JSON columns, both validated on write.** `custom_values` on
+  opportunities and entries (ADR 0006) and the trigger/action/condition
+  parameters on `automation_rules`. Neither is trusted on read: a value whose
+  definition has been archived is dropped from the answer, which is what lets a
+  field be archived without rewriting a row.
+
+## The authorization model
+
+Three roles and no fourth: **owner** (implicitly, via
+`opportunities.owner_id`), **editor** and **viewer** (rows in
+`opportunity_shares`). Every route resolves the caller's role from the database
+through `app/permissions.py` — never from the client — and the four gates are:
+
+| Gate | Means | Used by |
+|---|---|---|
+| `require_opportunity_access` | any role | reads, the AI, the member list, a private note |
+| `require_timeline_write` | not a viewer | writing an entry, note, comment, reaction |
+| `require_author_or_owner` | wrote it, or owns the deal | editing or deleting an existing item |
+| `require_opportunity_owner` | owns the deal | the record, sharing, audit log, version history |
+
+Four consequences worth stating:
+
+- **Absence of access is 404, not 403.** Opportunity existence is itself not
+  public. 403 is reserved for "you can see this and may not do that", which is
+  why a shared editor gets 403 from an owner-only route and a stranger gets
+  404.
+- **Editing and deleting are the same rule**, resolved through one function, so
+  they cannot drift apart again — they had, and the human overruled the
+  permissive reading (D-005).
+- **A private entry is narrower than any role** (R.1b): readable by its author
+  alone, including against the deal's owner, enforced by one predicate
+  (`permissions.VISIBLE_ENTRIES_SQL`) applied to every read that could return
+  one. `tests/test_entry_visibility.py` is the actor the role matrix cannot
+  express — somebody who may read the deal and may not read one entry on it.
+- **Two routes are deliberately wider.** Watching a deal answers for any
+  signed-in caller, because following a deal you are not shared on is the
+  feature; it grants no read access. And defining a custom field is open to any
+  authenticated caller, because `FEATURES.md` says "admin-defined" and this app
+  has no admin role, so the record of who defined it is the accountability
+  instead (D-171).
+
+`tests/test_authorization_matrix.py` is every endpoint × {owner, editor,
+viewer, unrelated, anonymous}, read from the running app — **a new route with
+no entry fails the build**.
+
+## Real-time design
+
+`GET /api/v2/opportunities/{id}/events` is ADR 0003: one long-lived
+`text/event-stream` per open timeline, carrying **invalidations and never
+payloads**. The server says `{"type":"timeline.changed","opportunity_id":7}`
+and the client refetches through the ordinary paginated reads, so nothing about
+what a row contains or who may read it is decided twice.
+
+```mermaid
+sequenceDiagram
+    participant A as Alex's browser
+    participant S as FastAPI (one process)
+    participant B as Blair's browser
+    B->>S: POST /timeline (a new entry)
+    S->>S: write, commit
+    S-->>A: event: timeline.changed
+    S-->>B: event: timeline.changed
+    A->>S: GET /timeline (refetch)
+    S-->>A: the page, filtered by Alex's role
+```
+
+- **Two event types, and one is a superset.** `timeline.changed` covers
+  anything hanging off the timeline; `opportunity.changed` covers the record,
+  its stage, sharing, ownership and watchers — and also invalidates the
+  timeline, because most writes to a record leave a system entry there and the
+  event does not say whether this one did. An invalidation may be broader than
+  the write behind it and never narrower.
+- **Published after `commit()`.** A subscriber's only reaction is to read
+  again; an event sent from inside the transaction sends them to fetch the
+  state it is about to replace.
+- **The queue de-duplicates**, which is what bounds it: two writes a
+  millisecond apart are one refetch, and a slow reader cannot grow the writer's
+  memory. Sound only because these are idempotent invalidations carrying
+  nothing a dropped duplicate would lose.
+- **A stream ends itself** after five minutes having advertised a `retry:`, so
+  no intermediary gets to reap a connection the app still believes in. A
+  reconnect is a *gap*, so the client refetches on every reopen.
+- **A revoked role is not re-checked mid-stream.** The reader keeps receiving
+  invalidations, and the refetch each one provokes is the read that answers
+  404. No content travels this path either way.
+
+The AI's streamed answer is a different shape on purpose: a POST, because the
+question is in the body, carrying content rather than invalidations (D-187).
+
+## The AI read-only guarantee
+
+ADR 0012, and it is a property of the plumbing rather than a promise in a
+prompt. Four independent mechanisms:
+
+1. **`PRAGMA query_only = ON`.** `routes_ai` opens
+   `database.read_only_connection()`, so SQLite itself raises on any write from
+   that path no matter what the calling code, the prompt or the model's answer
+   says. A pragma rather than a `mode=ro` URI because the database runs in WAL.
+2. **No tool surface.** The model is handed a question and a block of text and
+   can call nothing. `tests/test_ai.py::test_invariant_ai_agent_has_no_write_tools`
+   is a source scan, not a behavioural test.
+3. **The context is labelled, and the labels are unforgeable.** Every body is
+   fenced between `[BEGIN USER TEXT <token>]` and `[END USER TEXT <token>]`
+   with a token drawn per request, and every value that sits on a structural
+   line — a title, an author, a filename — is flattened to one line. A fixed
+   marker would be a string somebody could type into a note.
+4. **It reads only what the asker may read.** The context is assembled per
+   reader, which is the one place a leak would be invisible: a private entry is
+   absent from everyone's context but its author's, and a viewer may ask
+   questions because the route is `require_opportunity_access`.
+
+What the guarantee does **not** cover, stated plainly: the model's obedience to
+the instruction that it cannot read inside an attachment. That is behaviour, the
+test suite forbids live network calls, and a human checks it at the gate — which
+is how the Phase 4 review found the model answering truthfully from the timeline
+while never mentioning it had not opened the file (D-169).
+
+`store=False` on every call, so nothing is retained by the provider.
+
 ## Testing strategy
 
 The existing shape is right and should be extended, not replaced: integration tests

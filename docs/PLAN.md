@@ -1,5 +1,20 @@
 # PLAN.md
 
+> **This plan describes the MVP, which shipped and was then audited and
+> extended.** It is accurate about the MVP's data model, API surface and phase
+> sequence, and it is the historical record of those choices — but the
+> application has moved well past it: `/api/v2` replaced the v1 surface,
+> Alembic replaced the hand-rolled migration, and fifteen of the sixteen v2
+> scope items in `AGENTS.md` have shipped.
+>
+> Read it for the MVP's reasoning. For what the system *is* today, read
+> `docs/ARCHITECTURE.md` (the data model, the authorization, real-time and AI
+> boundaries), `docs/api.md` (the surface as it stands) and `CHANGELOG.md`
+> (what shipped per phase). `CLAUDE.md` is what to know before changing the
+> code. Milestone R.8 added this note rather than rewriting the plan, because a
+> plan edited into a description of the present stops being evidence of what
+> was decided when.
+
 ## Overview
 OppTrail lets a sales team log every event in the life of an opportunity as a
 timestamped timeline entry, attach follow-up notes to any entry at any time, and
@@ -252,4 +267,8 @@ Resolved with the following defaults so the build isn't blocked:
 - **One flat user pool in MVP** — no organizations; any signed-in user can be
   invited to any opportunity by email, and must already have an account
 - **Stalled means 14 days without activity** — activity is the latest
-  non-deleted timeline entry, note, or comment timestamp on the opportunity
+  non-deleted timeline entry, note, or comment timestamp on the opportunity.
+  Still the rule; since milestone R.3 the answer is maintained by triggers in
+  `opportunities.last_activity_at` rather than computed per read, because
+  computing it cost 60 of the 63 ms a board page took at the confirmed scale
+  (**D-201**)
