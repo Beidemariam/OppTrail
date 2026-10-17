@@ -12,6 +12,7 @@ import sqlite3
 import pytest
 from fastapi.testclient import TestClient
 
+from app import database
 from app.database import SQLITE_BUSY_TIMEOUT_MS, db_connection, sqlite_path_from_url
 from app.settings import settings
 
@@ -48,3 +49,35 @@ def test_wal_is_written_into_the_database_file(client: TestClient) -> None:
         assert outsider.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     finally:
         outsider.close()
+
+
+def test_a_connection_that_cannot_be_set_up_is_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Milestone R.4, found by a `ResourceWarning`.
+
+    Asserting WAL is a write, so `PRAGMA journal_mode = WAL` is the statement
+    that fails on a read-only mount or a full disk — and it fails *inside*
+    `get_connection`, before the caller has the object, so `db_connection`'s
+    `finally` cannot close it. The container's HEALTHCHECK probes `/readyz`
+    every 30 seconds, which made this a leaked file descriptor every 30
+    seconds on exactly the deployment already in trouble.
+    """
+
+    class RefusesToSetUp:
+        def __init__(self) -> None:
+            self.closed = False
+            self.row_factory: object = None
+
+        def execute(self, statement: str) -> None:
+            if "journal_mode" in statement:
+                raise sqlite3.OperationalError("attempt to write a readonly database")
+
+        def close(self) -> None:
+            self.closed = True
+
+    stand_in = RefusesToSetUp()
+    monkeypatch.setattr(database.sqlite3, "connect", lambda *_args, **_kwargs: stand_in)
+
+    with pytest.raises(sqlite3.OperationalError):
+        database.get_connection()
+
+    assert stand_in.closed, "the connection was left open when its setup failed"

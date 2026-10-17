@@ -5997,13 +5997,60 @@ this phase reaches `AWAITING_REVIEW` and is accepted, the project is finished.
       - Virtualization was already done (2.3, `app/VirtualList.tsx`), and
         nothing here changed it.
 
-- [ ] R.4 Docker: multi-stage build, pinned versions, WeasyPrint dependencies,
+- [x] R.4 Docker: multi-stage build, pinned versions, WeasyPrint dependencies,
       `HEALTHCHECK`, `/healthz` and `/readyz`, graceful shutdown. **Non-root
       user moved out of this item** — pulled forward into Phase 1's rework
       (`docs/autopilot/reviews/phase-1-review-1.md` finding 1, `DECISIONS.md`
       D-044) after it hid a real permission bug from `/api/health`'s
-      writability probe in the image. Done there; nothing left for R.4 to do
-      on it.
+      writability probe in the image. **D-203**, **D-204**.
+
+      Like R.2, this opened by reading what was there, and the first finding
+      was again a claim nothing backed.
+
+      - **ADR 0011 item 4 had never been implemented.** No `HEALTHCHECK` in
+        the Dockerfile and no restart policy in the run scripts — while
+        `CLAUDE.md`, `docs/ARCHITECTURE.md` and D-094 all referred to "the
+        container's `HEALTHCHECK`" as a thing that existed. Both halves are in
+        now, and `scripts/docker-smoke.sh` waits for the container to report
+        `healthy`, which is the absence that let this sit through four phases.
+      - **Three endpoints, three questions** (**D-203**). `/healthz` is
+        liveness and does no I/O — restarting a process does not empty a disk,
+        so a liveness probe that reads the database turns a degraded
+        deployment into a restart loop. `/readyz` takes the same
+        `BEGIN IMMEDIATE` a real write would and answers with a **status
+        code**, which is all a `HEALTHCHECK` reads. `/api/health` keeps its
+        richer body for a person or a dashboard.
+      - **The healthcheck reads `/readyz`, not `/api/health` as the ADR
+        says.** That endpoint answers 200 with `database_writable: false` by
+        design, so pointed there the healthcheck would call a read-only mount
+        healthy — the exact failure the item exists to surface. ADR 0011
+        carries an amendment.
+      - **`--timeout-graceful-shutdown 8`.** ADR 0003's SSE streams are held
+        for up to 300 s and uvicorn's graceful shutdown waits for in-flight
+        requests, so every `docker stop` with a reader attached was ending in
+        a SIGKILL after Docker's 10 s patience. Verified in the built image: a
+        stop is clean, the scheduler logs `scheduler_stopped` and the process
+        exits.
+      - **Pinned versions is a decision, not a default** (**D-204**): the
+        dependency trees are locked, the two base images stay on tags, and the
+        reasoning — a digest pin with nothing to refresh it stops security
+        updates arriving — is written down so it reads as a choice. Revisit
+        when R.6's CI could carry a dependency bot.
+      - **And the new probe found a leak within minutes of existing.** A
+        `ResourceWarning` from the readiness test pointed at
+        `get_connection()`: it opens a connection and then asserts WAL, which
+        is a *write*, so on a read-only mount or a full disk it raises with
+        the connection open and nobody holding it — `db_connection`'s
+        `finally` never receives the object. With the HEALTHCHECK probing
+        `/readyz` every 30 seconds that is a leaked file descriptor every 30
+        seconds, on exactly the deployment already in trouble. Fixed, with
+        `tests/test_database.py::test_a_connection_that_cannot_be_set_up_is_closed`
+        standing in for a disk nobody can fill on demand. The same
+        `try`/`finally` shape now covers `read_only_connection`'s own pragma.
+      - Multi-stage build and the WeasyPrint libraries were already right; the
+        smoke test proves the PDF path in the real image (9,944 bytes, `%PDF`
+        verified).
+
 - [ ] R.5 Data safety: documented volume layout; SQLite online backup and
       restore procedure with a restore test; uploads included.
 - [ ] R.6 CI: GitHub Actions running `make check` on push to `main`, with

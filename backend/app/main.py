@@ -83,9 +83,58 @@ app.include_router(automations_router)
 app.include_router(job_runs_router)
 
 
-# Unversioned on purpose (D-094): this is an operations probe — the
-# container's HEALTHCHECK, `scripts/docker-smoke.sh`, ADR 0011 — not part of
-# the client surface the version boundary exists to move.
+# Three operations endpoints, all unversioned on purpose (D-094): a probe is
+# not part of the client surface the version boundary exists to move, and one
+# that moved when the client API changed shape could break a deployment for a
+# reason unrelated to deployment.
+#
+# They answer three different questions, which is why there are three
+# (milestone R.4, **D-203**):
+#
+# - `/healthz` — **is this process answering?** No I/O at all. What an
+#   orchestrator restarts a container for, and the one thing that must not
+#   fail because of a full disk: restarting a process does not empty a disk,
+#   so a liveness probe that reads the database turns a degraded deployment
+#   into a restart loop.
+# - `/readyz` — **can it serve a request?** The database opens and takes a
+#   write lock, answered with a **status code**, which is what a `HEALTHCHECK`
+#   reads. ADR 0011 item 4 asks for the healthcheck against `/api/health`;
+#   that endpoint answers 200 with `database_writable: false` by design, so a
+#   healthcheck pointed at it reports healthy on exactly the failure the ADR
+#   wants caught.
+# - `/api/health` — **what is the state of the deployment?** The rich report a
+#   person or a dashboard reads: schema version, writability, the last backup,
+#   the newest run of each scheduled job.
+@app.get("/healthz", include_in_schema=False)
+def liveness() -> JSONResponse:
+    """The process is up and routing. Deliberately does no I/O."""
+    return JSONResponse({"status": "ok"})
+
+
+@app.get("/readyz", include_in_schema=False)
+def readiness() -> JSONResponse:
+    """Whether this process can serve a request that writes.
+
+    `BEGIN IMMEDIATE` and roll back: the same lock a real write takes, which
+    is what catches a read-only mount or a full disk. 503 rather than a body
+    somebody has to parse — the status code is the whole answer, because that
+    is all a container healthcheck or a load balancer reads.
+
+    The schema is not re-checked here. `initialize_database()` runs
+    `alembic upgrade head` during startup and raises if it cannot, so a
+    process that is answering at all is a process whose migrations ran.
+    """
+    try:
+        with db_connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.rollback()
+    except sqlite3.OperationalError as exc:
+        logger.warning("readiness_database_not_writable", exc_info=exc)
+        return JSONResponse({"status": "unavailable"}, status_code=503)
+
+    return JSONResponse({"status": "ready"})
+
+
 @app.get("/api/health", response_model=HealthStatus)
 def health_check() -> HealthStatus:
     # `get_connection()` itself asserts WAL mode, which is a write -- so a

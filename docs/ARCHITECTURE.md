@@ -175,10 +175,14 @@ remaining mutations and single-resource reads, moved the frontend and deleted
 v1. Pagination and the notification rework are both breaking, so a version
 boundary is what made them incremental.
 
-Everything the client calls is `/api/v2/*` today. `/api/health` is deliberately
-outside it: an operations probe read by the container's `HEALTHCHECK` and
-`scripts/docker-smoke.sh` is not part of the surface a version boundary exists
-to move (D-094).
+Everything the client calls is `/api/v2/*` today. Three operations endpoints
+are deliberately outside it, because a probe is not part of the surface a
+version boundary exists to move (D-094) — and they answer three different
+questions (R.4, **D-203**): `/healthz` is liveness and does no I/O,
+`/readyz` is readiness and answers with a status code, which is what the
+container's `HEALTHCHECK` reads, and `/api/health` is the richer report a
+person or a dashboard reads. `scripts/docker-smoke.sh` exercises all three
+against the real image.
 
 Because every collection read is paginated and four of the frontend's reads want
 the whole set — the opportunity list, a timeline, a share list, an audit log —

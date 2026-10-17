@@ -471,6 +471,22 @@ however it is phrased.
 
 ### Health and backups
 
+**Three probes, three questions** (R.4, **D-203**), all unversioned (D-094):
+`/healthz` is liveness and deliberately does no I/O — restarting a process
+does not empty a disk, so a liveness probe that reads the database turns a
+degraded deployment into a restart loop. `/readyz` is readiness: the same
+`BEGIN IMMEDIATE` a real write takes, answered with a **status code**, which
+is all a `HEALTHCHECK` reads. The container's healthcheck points there rather
+than at `/api/health` as ADR 0011 says, because that endpoint answers 200 with
+`database_writable: false` by design — pointed at it, the healthcheck would
+call a read-only mount healthy. ADR 0011 item 4 had never actually been
+implemented before R.4, though three documents referred to it; the Dockerfile
+carries it now and `scripts/docker-smoke.sh` waits for `healthy`, which is the
+check whose absence let that sit. The `CMD` also carries
+`--timeout-graceful-shutdown 8`, because ADR 0003's streams are held for 300s
+and uvicorn waits for in-flight requests — without a bound, every
+`docker stop` with a reader attached ended in a SIGKILL.
+
 `GET /api/health` (`main.py`) reports substance, not just liveness (ADR 0011):
 `schema_version` (the `alembic_version` row), `database_writable` (a
 `BEGIN IMMEDIATE` that immediately rolls back — cheap, and the same lock a real
@@ -479,7 +495,11 @@ becomes a 500 somewhere else), `last_backup_at`, and — since milestone 6.5 —
 `jobs`, the newest run of each scheduled job (**D-183**). Opening the connection at
 all is inside the same `try`, because `get_connection()` asserts WAL mode,
 which is itself a write — a genuinely unwritable database can fail there
-before any query runs.
+before any query runs. That is also why `get_connection()` closes its own
+connection when the setup fails (R.4): the caller never receives the object,
+so `db_connection`'s `finally` cannot, and with the healthcheck probing every
+30 seconds a leak there is a file descriptor every 30 seconds on a deployment
+that is already degraded.
 
 `app/backup.py` is `VACUUM INTO`, which snapshots a consistent copy without
 locking out writers (unlike copying `app.db`, which can capture a torn WAL

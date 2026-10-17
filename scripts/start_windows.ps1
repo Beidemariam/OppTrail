@@ -12,6 +12,7 @@ docker build -t opptrail .
 docker rm -f opptrail 2>$null
 docker run `
   --name opptrail `
+  --restart unless-stopped `
   --env-file .env `
   -p "${Port}:8000" `
   -v "${PWD}/data:/data" `

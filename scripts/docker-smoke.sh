@@ -44,6 +44,26 @@ curl -fsS -c "$jar" "${api}/api/health" >/dev/null || {
 }
 echo "health          ok"
 
+# The two probes R.4 added (D-203), and the HEALTHCHECK that reads one of them
+# — ADR 0011 item 4, which had been referenced as done for four phases while
+# the Dockerfile carried no such instruction. Checked here because this is the
+# only place in the project that runs the real image.
+curl -fsS "${api}/healthz" >/dev/null || { echo "FAIL: /healthz"; exit 1; }
+curl -fsS "${api}/readyz" >/dev/null || { echo "FAIL: /readyz"; exit 1; }
+echo "probes          ok"
+
+for _ in $(seq 1 40); do
+  status="$(docker inspect "$CONTAINER" --format '{{.State.Health.Status}}')"
+  [ "$status" = "healthy" ] && break
+  sleep 1
+done
+[ "$status" = "healthy" ] || {
+  echo "FAIL: the container never reported healthy (last: ${status})"
+  docker inspect "$CONTAINER" --format '{{json .State.Health}}'
+  exit 1
+}
+echo "healthcheck     ok"
+
 csrf="$(awk '$6 == "opptrail_csrf" { print $7 }' "$jar")"
 [ -n "$csrf" ] || { echo "FAIL: no CSRF cookie was issued on a safe request"; exit 1; }
 echo "csrf cookie     ok"

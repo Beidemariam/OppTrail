@@ -74,4 +74,30 @@ RUN mkdir -p /data \
 USER app
 
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# ADR 0011 item 4, implemented in R.4 — it had been referenced as done by
+# `CLAUDE.md`, `docs/ARCHITECTURE.md` and D-094 while the instruction was
+# missing from this file (**D-203**).
+#
+# Pointed at `/readyz` rather than `/api/health`, which the ADR names: that
+# endpoint answers **200** with `database_writable: false` by design, so a
+# healthcheck reading it would report healthy on a read-only mount or a full
+# disk — the exact failure the ADR wants caught.
+# `tests/test_health.py::test_readiness_fails_while_liveness_holds_on_an_unwritable_database`
+# is that behaviour pinned.
+#
+# Python rather than `curl`, which this slim image does not carry and which is
+# not worth a layer: `urlopen` raises on a non-2xx status, so the exit code is
+# the answer.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD ["python", "-c", \
+         "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=4)"]
+
+# `--timeout-graceful-shutdown` is load bearing here, not tidiness. ADR 0003's
+# SSE streams are held open for `sse_max_connection_seconds` (300s), and
+# uvicorn's graceful shutdown waits for in-flight requests — so without a
+# bound, every `docker stop` with a reader connected would wait out Docker's
+# own 10s patience and then take a SIGKILL. 8 seconds leaves uvicorn room to
+# close the streams itself and exit cleanly inside that window.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", \
+     "--timeout-graceful-shutdown", "8"]

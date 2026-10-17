@@ -39,10 +39,22 @@ def sqlalchemy_url() -> str:
 def get_connection() -> sqlite3.Connection:
     database_path = sqlite_path_from_url(settings.database_url)
     connection = sqlite3.connect(database_path)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON")
-    connection.execute("PRAGMA journal_mode = WAL")
-    connection.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}")
+    # Closed by hand if the setup below fails, because the caller never
+    # receives the object and `db_connection`'s `finally` therefore cannot
+    # close it (milestone R.4). This is not hypothetical: asserting WAL is a
+    # *write*, so it is the statement that fails on a read-only mount or a
+    # full disk — and `/readyz` is probed by the container's HEALTHCHECK every
+    # 30 seconds, so a leak here is a file descriptor every 30 seconds on
+    # exactly the deployment that is already in trouble. Found by a
+    # `ResourceWarning` in `tests/test_health.py`.
+    try:
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
+        connection.execute("PRAGMA journal_mode = WAL")
+        connection.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}")
+    except BaseException:
+        connection.close()
+        raise
     return connection
 
 
@@ -72,8 +84,8 @@ def read_only_connection() -> Iterator[sqlite3.Connection]:
     the agent a question" into an intermittent failure.
     """
     connection = get_connection()
-    connection.execute("PRAGMA query_only = ON")
     try:
+        connection.execute("PRAGMA query_only = ON")
         yield connection
     finally:
         connection.close()

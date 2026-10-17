@@ -913,9 +913,19 @@ MATRIX: dict[Endpoint, Case] = {
         ),
     ),
     # --- Identity-independent surfaces ------------------------------------
+    Endpoint("GET", "/healthz"): public(
+        lambda world: "/healthz",
+        "Liveness probe (R.4): must answer before anyone can authenticate, and does no I/O at all.",
+    ),
+    Endpoint("GET", "/readyz"): public(
+        lambda world: "/readyz",
+        "Readiness probe (R.4): the container's HEALTHCHECK reads its status "
+        "code, so it cannot require a session.",
+    ),
     Endpoint("GET", "/api/health"): public(
         lambda world: "/api/health",
-        "Liveness probe; must answer before anyone can authenticate.",
+        "The deployment's state, for a person or a dashboard; open for the "
+        "same reason the two probes beside it are.",
     ),
     Endpoint("GET", "/api/{path:path}"): public(
         lambda world: "/api/no-such-endpoint",
