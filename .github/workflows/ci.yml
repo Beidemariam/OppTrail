@@ -1,13 +1,16 @@
 name: CI
 
-# docs/ROADMAP.md Phase 1 technical work ("GitHub Actions CI: backend suite,
-# frontend typecheck/lint, `docker build`, and the backend suite inside the
-# image", review blocker B4 in docs/ARCHITECTURE.md). Runs `make check-fast`
-# (everything the autopilot sandbox already runs without a Docker socket) plus
-# the two Docker-only steps the sandbox cannot: an image build and the backend
-# suite run inside it. `make check`'s remaining items (pip-audit, npm audit,
-# Playwright E2E) are Phase R's CI scope (brief docs/autopilot-brief.md §8
-# R.6) — not pulled forward here.
+# `make check` on every push to main, plus the two Docker-only steps the
+# autopilot sandbox cannot run (no Docker socket — sandbox/README.md).
+#
+# Phase 1 built the first half of this (review blocker B4): `make check-fast`
+# and the image build. Milestone **R.6** is the rest — the dependency audits,
+# the Playwright suite, and the coverage and report artifacts that make a
+# failure readable without re-running anything locally.
+#
+# Deliberately not pushed to a remote by the autopilot: the roadmap's R.6 says
+# "create the workflow file; do not push it", so this is reviewed as code and
+# takes effect whenever the repository gets a remote.
 
 on:
   push:
@@ -22,8 +25,17 @@ concurrency:
 
 jobs:
   checks:
-    name: make check-fast
+    name: make check
     runs-on: ubuntu-latest
+    # The e2e suite builds the frontend and boots the real server; 20 minutes
+    # is roughly three times the measured run, so a hang fails rather than
+    # burning an hour.
+    timeout-minutes: 20
+    env:
+      # Written for the artifact below. On the command line rather than in
+      # `pyproject.toml` so a local `make check-fast` still leaves no files
+      # behind — CI is the only place that wants a coverage file on disk.
+      PYTEST_ADDOPTS: --cov-report=xml
     steps:
       - uses: actions/checkout@v4
 
@@ -50,13 +62,53 @@ jobs:
             libpango-1.0-0 \
             libpangoft2-1.0-0
 
-      - name: make check-fast
-        run: make check-fast
+      # `--with-deps` installs the shared libraries Chromium needs on a bare
+      # runner. Cached by version, because this is the slowest step here.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+
+      - name: Install Playwright browsers
+        run: cd frontend && npx playwright install --with-deps chromium
+
+      # Everything: ruff, mypy, typecheck, lint, prettier, both test suites
+      # with their coverage floors, the generated API client check, pip-audit,
+      # the npm audit ratchet (scripts/audit-gate.mjs, D-207) and the
+      # Playwright suite.
+      - name: make check
+        run: make check
+
+      # Coverage from both suites, and Playwright's report. `always()` so a
+      # failed run is the one you can actually read — a trace and a screenshot
+      # per failed test are in `test-results/`.
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            backend/coverage.xml
+            frontend/coverage/
+          if-no-files-found: warn
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 14
+          if-no-files-found: warn
 
   docker:
     name: docker build, in-image backend suite, smoke test
     runs-on: ubuntu-latest
     needs: checks
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -83,5 +135,7 @@ jobs:
       - name: Run the backend suite inside the image
         run: make docker-test
 
+      # Health, the two probes, the container's own HEALTHCHECK reaching
+      # `healthy`, a seeded sign-in, an opportunity, and a PDF export (R.4).
       - name: Docker smoke test
         run: make docker-smoke

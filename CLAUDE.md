@@ -2163,6 +2163,22 @@ Three rules the suite has already been bitten by:
 - In Playwright, do not filter a locator by text you are about to change — the
   locator stops matching mid-test. Address the element by position instead.
 
+**`npm audit` is a ratchet, not a wall** (R.6, **D-207**).
+`scripts/audit-gate.mjs` is what `make check` runs: a high or critical
+advisory with no entry in its allowlist fails, **and** an allowlisted advisory
+that no longer appears also fails, so an entry cannot outlive the problem it
+documents — the same bargain `DEFERRED_AXE_RULES` makes. The single entry
+today is GHSA-vfj7-8cjw-p6xm in `braces`, which has no fix anywhere (the
+advisory covers `<= 3.0.3` and that is the newest release there has ever
+been) and is reachable only at lint time, over this repository's own
+configuration: `output: "export"` means no `node_modules` ships. Nothing may
+be added there without the reason it is safe *in this deployment*.
+
+`.github/workflows/ci.yml` runs `make check` plus the Docker-only steps the
+sandbox cannot, and uploads coverage from both suites and Playwright's report
+on `always()`. `PYTEST_ADDOPTS` supplies `--cov-report=xml` in CI only, so a
+local run still leaves no files behind.
+
 `docs/TEST_CRITERIA.md` defines the phase gates and the Review / Accept / Reject
 decision block. `docs/code_review.md` records the findings from the last full review
 and their resolution status.

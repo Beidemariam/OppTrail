@@ -54,7 +54,7 @@ check-fast: frontend-deps
 # that half is named rather than silently skipped, per the split gate.
 check: check-fast
 	cd backend && uv run pip-audit
-	cd frontend && npm audit
+	node scripts/audit-gate.mjs
 	@$(MAKE) e2e
 	@echo
 	@echo "Docker build + in-image backend suite + smoke test: deferred to the host —"

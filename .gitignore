@@ -35,6 +35,7 @@ data/
 # Test output: Vitest coverage, Playwright artefacts, and the throwaway
 # database scripts/e2e-server.sh rebuilds on every run.
 coverage/
+coverage.xml
 playwright-report/
 test-results/
 .e2e/

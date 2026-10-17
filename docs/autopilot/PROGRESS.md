@@ -6086,9 +6086,46 @@ this phase reaches `AWAITING_REVIEW` and is accepted, the project is finished.
         documentation now says so rather than leaving it to be inferred from
         a path.
 
-- [ ] R.6 CI: GitHub Actions running `make check` on push to `main`, with
+- [x] R.6 CI: GitHub Actions running `make check` on push to `main`, with
       coverage and Playwright report artifacts and an image build (create the
-      workflow file; do not push it).
+      workflow file; do not push it). **D-207**.
+
+      Phase 1 built the first half (review blocker B4): `make check-fast` and
+      the image build, with the audits and the Playwright suite deferred here
+      by name. R.6 is the rest — and the interesting part was not the YAML.
+
+      - **`make check` could not be green and honest at the same time.** It
+        runs `npm audit`, and the tree carries a high-severity advisory with
+        **no fix published anywhere** (GHSA-vfj7-8cjw-p6xm in `braces`: the
+        advisory covers `<= 3.0.3` and that is the newest release there has
+        ever been; npm's suggested fix is a *downgrade* of
+        `eslint-config-next`). `--audit-level=critical` would hide every
+        future high too, and a permanently red gate is one nobody reads.
+      - **So the audit is a ratchet** (**D-207**, `scripts/audit-gate.mjs`),
+        the shape `DEFERRED_AXE_RULES` already uses here: an unlisted high or
+        critical fails, **and** a listed advisory that no longer appears also
+        fails, so an entry cannot outlive its problem. Both failure modes were
+        exercised before the gate was trusted. The one entry records why it is
+        safe in this deployment — lint-time only, over this repository's own
+        configuration, and absent from the shipped artifact entirely, because
+        `output: "export"` emits static files and the image copies
+        `frontend/out` with no `node_modules`.
+      - **Two advisories were genuinely fixable and are fixed.** `npm audit
+        fix` cleared `sharp` (a librsvg CVE) and `source-map-js`; typecheck,
+        lint, the unit suite and the production build were re-run against the
+        new lockfile. Seven high advisories became one.
+      - **Artifacts, so a failed run is readable without re-running it
+        locally**: `backend/coverage.xml` (written by `PYTEST_ADDOPTS` in CI
+        only, so a local run still leaves no files behind), `frontend/
+        coverage/` with an lcov report added for the viewer, and Playwright's
+        HTML report plus `test-results/` — which holds a trace and a
+        screenshot per failed test. All on `always()`.
+      - The Docker job keeps the image build, the SQLite version floor, the
+        in-image backend suite and the smoke test, which now also covers R.4's
+        probes and the container reaching `healthy`.
+      - **Not pushed**, as the roadmap asks: the workflow is reviewed as code
+        and takes effect whenever this repository gets a remote.
+
 - [ ] R.7 Seed data exercising every shipped feature and permission
       relationship, at the confirmed 800k-row scale.
 - [ ] R.8 Documentation: `README.md`, `ARCHITECTURE.md` (Mermaid data model,

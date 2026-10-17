@@ -11,7 +11,10 @@ export default defineConfig({
     include: ["{app,lib}/**/*.test.{ts,tsx}"],
     coverage: {
       provider: "v8",
-      reporter: ["text", "json-summary"],
+      // `lcov` as well since R.6: CI uploads `coverage/` as an artifact, and
+      // lcov is the format a coverage viewer reads. Both land under
+      // `coverage/`, which is gitignored.
+      reporter: ["text", "json-summary", "lcov"],
       // Show the fully covered files too; a silent 100% is still evidence.
       skipFull: false,
       include: ["{app,lib}/**/*.{ts,tsx}"],
