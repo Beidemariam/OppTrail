@@ -1,4 +1,4 @@
-STATUS: IN_PROGRESS phase=R
+STATUS: AWAITING_REVIEW phase=R
 
 # Autopilot Progress
 
@@ -6197,9 +6197,18 @@ this phase reaches `AWAITING_REVIEW` and is accepted, the project is finished.
         plan edited into a description of the present stops being evidence of
         what was decided when.
 
-- [ ] R.9 `docs/autopilot/FINAL-REPORT.md`: what shipped per phase, coverage
+- [x] R.9 `docs/autopilot/FINAL-REPORT.md`: what shipped per phase, coverage
       history, invariant and E2E test lists, open blockers, non-reversible
       decisions, recommended next steps.
+
+      Written to be read once, at the gate, by the person deciding whether
+      this is finished. Seven sections: what shipped, what it costs (the
+      measured table at 805,220 rows), the suites with the four that carry
+      rules rather than features, **eight decisions that cannot be undone**
+      with the reason each was taken, no open blockers, **three things that
+      need the human** — the default-private ruling, the three R.1b checks,
+      and the two widest write surfaces — and what I would do next in order,
+      with a short list of what I would *not* do and why.
 
 The Phase R review packet doubles as the release sign-off (brief §8).
 
