@@ -3,6 +3,10 @@
 Stop the application before running this: `app/backup.restore_backup` deletes
 the WAL sidecar files and overwrites `app.db` in place, which a running
 process must not race with.
+
+Uploads come back with it (R.5): any blob the live tree is missing is copied
+from the snapshot directory's mirror, because a restored row pointing at a
+file the volume has lost answers a download with 404.
 """
 
 from __future__ import annotations
@@ -22,6 +26,7 @@ def main() -> int:
 
     database_path = restore_backup(args.backup_path)
     print(f"Restored {args.backup_path} to {database_path}.")
+    print("Uploads: any file missing from the live tree was copied back from the mirror.")
     return 0
 
 

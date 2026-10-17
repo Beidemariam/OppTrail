@@ -12,9 +12,18 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from test_attachments import PDF, upload
+from test_timeline import create_entry
 
-from app.backup import create_backup, latest_backup_at, restore_backup
+from app.backup import (
+    attachment_mirror,
+    create_backup,
+    latest_backup_at,
+    mirror_attachments,
+    restore_backup,
+)
 from app.settings import settings
+from app.uploads import attachments_dir, resolve_stored_path
 
 
 def signup(client: TestClient, email: str = "owner@example.com") -> dict:
@@ -140,3 +149,79 @@ def test_a_directory_of_nothing_parseable_answers_none(tmp_path: Path) -> None:
     (tmp_path / "app-notes.db").write_bytes(b"")
 
     assert latest_backup_at(tmp_path) is None
+
+
+def test_a_snapshot_carries_the_uploads_and_a_restore_puts_them_back(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR 0011 item 2's other half, built in R.5: "plus a copy of
+    `/data/attachments`".
+
+    The failure this prevents is specific and was a documented real state
+    until now — a restored database row says a file is there and the download
+    answers 404, because the row came back and the bytes did not. So the test
+    loses the live blob on purpose, which is what a lost volume looks like
+    from the application's side.
+    """
+    destination = tmp_path / "backups"
+    monkeypatch.setattr(settings, "backup_dir", str(destination))
+
+    signup(client)
+    opportunity = create_opportunity(client)
+    entry = create_entry(client, opportunity["id"], "Proposal sent")
+    attachment = upload(client, entry["id"])
+
+    snapshot = create_backup()
+    mirrored = sorted(path.name for path in attachment_mirror().glob("*/*") if path.is_file())
+    assert mirrored == [attachment["sha256"]], mirrored
+
+    # The volume loses the blob but keeps the database: the row is still there
+    # and the bytes are gone, which is the inconsistency to repair.
+    live = resolve_stored_path(attachments_dir(), attachment["sha256"])
+    live.unlink()
+    assert client.get(f"/api/v2/attachments/{attachment['id']}/download").status_code == 404
+
+    restore_backup(snapshot)
+
+    assert live.is_file()
+    recovered = client.get(f"/api/v2/attachments/{attachment['id']}/download")
+    assert recovered.status_code == 200
+    assert recovered.content == PDF
+
+
+def test_mirroring_the_same_upload_twice_copies_it_once(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """What content addressing buys: a file's name is its digest, so a blob the
+    mirror already holds is a blob it holds correctly, and the second snapshot
+    copies nothing."""
+    monkeypatch.setattr(settings, "backup_dir", str(tmp_path / "backups"))
+
+    signup(client)
+    opportunity = create_opportunity(client)
+    entry = create_entry(client, opportunity["id"], "Proposal sent")
+    upload(client, entry["id"])
+
+    assert mirror_attachments() == 1
+    assert mirror_attachments() == 0
+
+
+def test_the_blob_mirror_is_not_pruned_with_the_snapshots(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Retention applies to database snapshots only (R.5): an attachment's
+    delete is soft and never removes the file (D-149), so any retained
+    snapshot may reference any digest that has ever existed."""
+    monkeypatch.setattr(settings, "backup_dir", str(tmp_path / "backups"))
+    monkeypatch.setattr(settings, "backup_retention_count", 1)
+
+    signup(client)
+    opportunity = create_opportunity(client)
+    entry = create_entry(client, opportunity["id"], "Proposal sent")
+    attachment = upload(client, entry["id"])
+
+    create_backup()
+    create_backup()
+
+    assert len(list(Path(settings.backup_dir).glob("app-*.db"))) == 1
+    assert (attachment_mirror() / attachment["sha256"][:2] / attachment["sha256"]).is_file()

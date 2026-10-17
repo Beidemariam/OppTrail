@@ -503,7 +503,17 @@ that is already degraded.
 
 `app/backup.py` is `VACUUM INTO`, which snapshots a consistent copy without
 locking out writers (unlike copying `app.db`, which can capture a torn WAL
-checkpoint). `make backup` writes a timestamped snapshot to `backup_dir()`
+checkpoint). **Uploads are part of a snapshot since R.5** (**D-205**), which
+is the other half of ADR 0011 item 2: blobs are content addressed, so
+`backups/attachments/` is one mirror holding each digest exactly once rather
+than a copy per snapshot, a backup copies in only what is new, and a restore
+puts back only what the live tree is missing. The mirror is **never pruned**
+while database snapshots are, because an attachment's delete never removes
+the file (D-149) and any retained snapshot may reference any digest that has
+ever existed. `docs/operations.md` is the volume layout and the procedures,
+including the sentence nobody had written down: `backups/` is on the same
+volume as the database, which protects against a bad write and not against
+losing the disk (**D-206**). `make backup` writes a timestamped snapshot to `backup_dir()`
 (default: a `backups/` directory next to the database file — `/data/backups`
 under the shipped `DATABASE_URL`) and prunes down to `BACKUP_RETENTION_COUNT`
 (default 7). `make restore BACKUP=<path>` reverses it — stop the application
@@ -1059,8 +1069,10 @@ any endpoint accepted a file — is what they are wired into.
   never a static path. `uploads.download_headers` forces the download and
   sets `nosniff`; the digest in the payload is not a capability, because the
   route resolves the row the id names and reads the digest from it. A file the
-  volume has lost answers 404 rather than failing mid-response, which is a
-  real state until uploads join the backup story in R.5.
+  volume has lost answers 404 rather than failing mid-response — still a real
+  state, but a recoverable one since R.5: a restore copies back any blob the
+  live tree is missing (**D-205**), and `tests/test_backup.py` loses one on
+  purpose to prove it.
 - **Deleting one never removes the file** (**D-149**). The row is soft,
   audited (`attachment_deleted`/`attachment_restored`) and undoable, and the
   only safe prune predicate has to consider a soft-deleted row and a restorable

@@ -6051,8 +6051,41 @@ this phase reaches `AWAITING_REVIEW` and is accepted, the project is finished.
         smoke test proves the PDF path in the real image (9,944 bytes, `%PDF`
         verified).
 
-- [ ] R.5 Data safety: documented volume layout; SQLite online backup and
-      restore procedure with a restore test; uploads included.
+- [x] R.5 Data safety: documented volume layout; SQLite online backup and
+      restore procedure with a restore test; uploads included. **D-205**,
+      **D-206**.
+
+      The database half has existed since 1.6 — `VACUUM INTO`, a restore that
+      is actually exercised, retention, `last_backup_at` on `/api/health`.
+      What R.5 adds is the half ADR 0011 item 2 names and nothing had built:
+      *"plus a copy of `/data/attachments`"*.
+
+      - **A mirror, not a copy per snapshot** (**D-205**). Blobs are content
+        addressed (ADR 0008), so a file never changes and two snapshots that
+        both reference one want the same bytes: `backups/attachments/` holds
+        each digest exactly once and a backup copies in only what is new.
+        Written through a `.partial` name and renamed, so an interrupted
+        backup cannot leave half a file under a digest that promises its
+        contents.
+      - **The mirror is never pruned** while database snapshots are, because
+        an attachment's delete is soft and never removes the file (D-149) — so
+        any retained snapshot may reference any digest that has ever existed.
+      - **A restore puts back what is missing and overwrites nothing.** The
+        test loses a live blob on purpose and recovers it, because the failure
+        this prevents is precise: a restored row saying a file is there while
+        the download answers 404. Confirmed to fail with the mirroring
+        disabled.
+      - **`docs/operations.md`** is the documented layout — the volume tree
+        with a line per path, the backup and restore procedures as commands,
+        what the three probes mean, and the settings an operator touches.
+      - **And one sentence that had never been written** (**D-206**):
+        `backups/` is on the same volume as the database it snapshots. That
+        protects against what this application can cause — a bad write, a
+        mistaken delete, a migration gone wrong — and not against losing the
+        disk. Copying snapshots off the host is the operator's job and the
+        documentation now says so rather than leaving it to be inferred from
+        a path.
+
 - [ ] R.6 CI: GitHub Actions running `make check` on push to `main`, with
       coverage and Playwright report artifacts and an image build (create the
       workflow file; do not push it).
