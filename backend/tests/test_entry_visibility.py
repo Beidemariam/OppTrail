@@ -1,12 +1,17 @@
-"""A sealed entry: present, numbered, and withheld (milestone R.1b).
+"""A sealed entry: absent, and absent without trace (milestone R.1b, R.1c).
 
 The human's ask: *"the ability to keep entries private since as an owner, I
 might not want to share everything with whoever I give read or edit rights to
-the opportunity."* They chose the sealed shape over the invisible one, and the
-reason is in `test_a_sealed_entry_keeps_its_number_for_everyone` below: an
-entry's number is a property of the deal, printed on the card and cited by the
-AI, so an entry that vanished for one reader would renumber the deal for them
-and the two screens would stop agreeing.
+the opportunity."*
+
+R.1b built the sealed shape -- the row stayed in everybody's timeline, emptied
+of everything but its author and its time -- and the human overruled it at the
+shakedown (**D-209**): *"it is better not to mention anything instead of
+saying it is kept private, so the other person doesn't know anything about
+what's kept away from them."* So a sealed entry is now simply not in anybody
+else's timeline, and `test_a_sealed_entry_is_numbered_per_reader` is the other
+half of that: a row that vanished while the numbering stayed would leave a gap
+between #1 and #3, which says what the removed card used to say out loud.
 
 The actor this file exists for is the one the authorization matrix cannot
 express: somebody who may read the *deal* and may not read one *entry* on it.
@@ -101,26 +106,25 @@ def shared_deal(client: TestClient) -> tuple[dict, dict, dict]:
     return owner, colleague, opportunity
 
 
-def test_a_colleague_meets_a_sealed_entry_with_nothing_in_it(client: TestClient) -> None:
+def test_a_colleague_meets_no_trace_of_a_sealed_entry(client: TestClient) -> None:
+    """R.1c, **D-209**. Not an emptied card: no card.
+
+    The whole of what a colleague could learn from the R.1b shape -- that
+    somebody wrote something here, and when -- is what this asserts is gone.
+    """
     _, _, opportunity = shared_deal(client)
-    add_entry(client, opportunity["id"], "Said out loud", "shared")
+    shared = add_entry(client, opportunity["id"], "Said out loud", "shared")
     sealed = add_entry(client, opportunity["id"], "Kept back", "private", "2026-09-02T10:00:00")
 
     client.post("/api/v2/auth/logout")
     login(client, "colleague@example.com")
     entries = {entry["id"]: entry for entry in timeline(client, opportunity["id"])}
 
-    seen = entries[sealed["id"]]
-    assert seen["visibility"] == "private"
-    assert seen["title"] == ""
-    assert seen["body"] == ""
-    assert seen["notes"] == []
-    assert seen["attachments"] == []
-    # What a colleague is told: that the author wrote something, and when.
-    assert seen["author_name"] == "Owner"
-    assert seen["event_timestamp"] == "2026-09-02T10:00:00Z"
+    assert sealed["id"] not in entries
+    # Not its id, not its author, not its time, in any row of the page.
+    assert "2026-09-02T10:00:00Z" not in [entry["event_timestamp"] for entry in entries.values()]
     # And the entry beside it is untouched.
-    assert entries[sealed["id"] - 1]["title"] == "Said out loud"
+    assert entries[shared["id"]]["title"] == "Said out loud"
 
 
 def test_its_author_reads_it_whole(client: TestClient) -> None:
@@ -134,12 +138,15 @@ def test_its_author_reads_it_whole(client: TestClient) -> None:
     assert entries[sealed["id"]]["visibility"] == "private"
 
 
-def test_a_sealed_entry_keeps_its_number_for_everyone(client: TestClient) -> None:
-    """The reason the sealed shape was chosen over the invisible one.
+def test_a_sealed_entry_is_numbered_per_reader(client: TestClient) -> None:
+    """R.1c, **D-209**: a removed row takes its number with it.
 
-    `ENTRY_SEQUENCE_SQL` counts the deal's entries, not the reader's, and this
-    test is what stops anybody moving the visibility predicate inside it: the
-    AI cites `#n` and the card prints `#n`, so the two must mean one thing.
+    `ENTRY_SEQUENCE_SQL` counts the entries *this reader* may read. Leaving it
+    counting the deal's would leave the colleague reading #1 then #3, which is
+    the announcement the card used to make. The cost is that the two people
+    call one entry by two numbers -- tolerable precisely because D-139 says
+    this number is a reading aid and never an identity, and because a single
+    reader's card and the AI's citation still come from this one expression.
     """
     _, _, opportunity = shared_deal(client)
     add_entry(client, opportunity["id"], "First", "shared", "2026-09-01T10:00:00")
@@ -156,15 +163,14 @@ def test_a_sealed_entry_keeps_its_number_for_everyone(client: TestClient) -> Non
 
     # The three above are backdated to September, so the deal's own system
     # entries -- created, shared -- are stamped now and sort after them.
+    assert owner_numbers["Second"] == 2
     assert owner_numbers["Third"] == 3
-    # The colleague sees the same numbers, with no gap: the sealed entry is
-    # still there, still #2, still occupying its place in the count.
+    # No sealed row, and no gap where it was: the colleague's "Third" is #2.
+    assert all(entry["visibility"] == "shared" for entry in colleague_view)
     numbers = sorted(entry["sequence"] for entry in colleague_view)
     assert numbers == list(range(1, len(numbers) + 1))
     third = next(entry for entry in colleague_view if entry["title"] == "Third")
-    assert third["sequence"] == owner_numbers["Third"]
-    sealed = next(entry for entry in colleague_view if entry["visibility"] == "private")
-    assert sealed["sequence"] == 2
+    assert third["sequence"] == 2
 
 
 def test_a_colleague_cannot_act_on_a_sealed_entry(client: TestClient) -> None:
@@ -312,9 +318,17 @@ def test_invariant_a_sealed_entry_is_not_in_anybody_elses_ai_context(client: Tes
     assert "The body of Kept back" not in for_colleague
 
 
-def test_a_task_made_from_a_sealed_entry_withholds_its_title(client: TestClient) -> None:
+def test_a_task_made_from_a_sealed_entry_withholds_where_it_came_from(
+    client: TestClient,
+) -> None:
     """A task carries its entry's title to whoever it is assigned to, including
-    on My Tasks, which spans deals (the human's second ruling)."""
+    on My Tasks, which spans deals (the human's second ruling).
+
+    **The id goes with the title** (R.1c, **D-209**). R.1b kept `entry_id` and
+    let the link 404, which was consistent while the sealed entry still stood
+    on the timeline as an empty card. With the card gone, that id is the one
+    remaining place a colleague could learn the entry exists.
+    """
     _, _, opportunity = shared_deal(client)
     sealed = add_entry(client, opportunity["id"], "Kept back", "private")
     created = client.post(
@@ -334,7 +348,7 @@ def test_a_task_made_from_a_sealed_entry_withholds_its_title(client: TestClient)
 
     assert [task["title"] for task in mine] == ["Chase it"]
     assert mine[0]["entry_title"] is None
-    assert mine[0]["entry_id"] == sealed["id"]
+    assert mine[0]["entry_id"] is None
 
 
 def test_a_file_on_a_sealed_entry_is_not_downloadable_by_anybody_else(client: TestClient) -> None:
@@ -369,3 +383,72 @@ def test_an_existing_timeline_is_untouched_by_the_new_default(client: TestClient
 
     # The system entries the deal was created with.
     assert rows and {row["visibility"] for row in rows} == {"shared"}
+
+
+def test_the_activity_log_does_not_announce_a_sealed_entry(client: TestClient) -> None:
+    """R.1c, **D-209**. The last place a sealed entry announced itself.
+
+    An owner reads the version half of the activity feed, so an edit to a
+    colleague's private entry -- or to a note hanging off one -- used to reach
+    them as "Colleague edited an entry, changing the title", with its id. The
+    content was never there (the version read and the restore both 404), but
+    the existence, the author, the time and the field names were, which is the
+    whole of what the ruling says a colleague must not learn.
+    """
+    owner, _, opportunity = shared_deal(client)
+    client.post("/api/v2/auth/logout")
+    login(client, "colleague@example.com")
+
+    sealed = add_entry(client, opportunity["id"], "Kept back", "private")
+    assert (
+        client.patch(f"/api/v2/timeline/{sealed['id']}", json={"title": "Kept back, revised"})
+    ).status_code == 200
+    note = client.post(
+        f"/api/v2/timeline/{sealed['id']}/notes", json={"body": "A private note"}
+    ).json()
+    assert (
+        client.patch(
+            f"/api/v2/notes/{note['id']}",
+            json={"body": "A private note, revised", "updated_at": note["updated_at"]},
+        )
+    ).status_code == 200
+
+    # The same two edits on a shared entry, which the owner *should* read.
+    shared = add_entry(client, opportunity["id"], "Said out loud", "shared")
+    assert (
+        client.patch(f"/api/v2/timeline/{shared['id']}", json={"title": "Said out loud, again"})
+    ).status_code == 200
+
+    client.post("/api/v2/auth/logout")
+    login(client, "owner@example.com")
+    response = client.get(f"/api/v2/opportunities/{opportunity['id']}/activity")
+    assert response.status_code == 200
+    edits = [
+        event["detail"]
+        for event in response.json()["items"]
+        if event["detail"]["source"] == "version"
+    ]
+
+    assert {edit["target_id"] for edit in edits if edit["target"] == "timeline_entry"} == {
+        shared["id"]
+    }
+    assert [edit for edit in edits if edit["target"] == "note"] == []
+    assert owner["id"]
+
+
+def test_an_owner_still_reads_their_own_sealed_entrys_edits(client: TestClient) -> None:
+    """The predicate is the reader's, not a blanket exclusion: an owner who
+    sealed their own entry keeps its history in their own feed."""
+    _, _, opportunity = shared_deal(client)
+    sealed = add_entry(client, opportunity["id"], "Mine alone", "private")
+    assert (
+        client.patch(f"/api/v2/timeline/{sealed['id']}", json={"title": "Mine alone, revised"})
+    ).status_code == 200
+
+    response = client.get(f"/api/v2/opportunities/{opportunity['id']}/activity")
+    targets = {
+        event["detail"]["target_id"]
+        for event in response.json()["items"]
+        if event["detail"]["source"] == "version" and event["detail"]["target"] == "timeline_entry"
+    }
+    assert sealed["id"] in targets

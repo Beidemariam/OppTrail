@@ -119,6 +119,19 @@ def client(tmp_path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     # `tests/test_scheduler.py` turns it back on for the two tests that are
     # about the scheduler itself.
     monkeypatch.setattr(settings, "scheduler_enabled", False)
+    # Who administers the deployment under test (R.1c, **D-215**). The suites
+    # sign their first user up as `owner@example.com`, and that user is the
+    # one who defines custom fields and writes automation rules in dozens of
+    # tests that are about the *feature* rather than about who may use it --
+    # so this fixture makes them the administrator and those tests keep
+    # saying what they were written to say.
+    #
+    # Everybody else is therefore a non-admin by default, which is what keeps
+    # the refusals honest: `test_authorization_matrix.py`'s editor, viewer,
+    # unrelated and anonymous actors are all refused these writes without any
+    # of them having to opt out here, and `tests/test_admin.py` is the pair of
+    # tests that pins both directions.
+    monkeypatch.setattr(settings, "admin_emails", "owner@example.com")
     initialize_database()
     with CsrfClient(app) as test_client:
         yield test_client

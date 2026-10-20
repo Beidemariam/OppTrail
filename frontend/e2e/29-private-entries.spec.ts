@@ -16,7 +16,7 @@ import {
  * The journey the unit tests cannot make: two people, one deal, one browser
  * each, and the question of what the second one sees.
  */
-test("an entry kept private is sealed for a colleague and whole for its author", async ({
+test("an entry kept private is invisible to a colleague and whole for its author", async ({
   page,
   browser,
 }) => {
@@ -41,13 +41,16 @@ test("an entry kept private is sealed for a colleague and whole for its author",
     await signIn(blair, BLAIR);
     await openTimeline(blair, NORTHWIND);
 
-    // Blair is shared on this deal, and meets a sealed card: the entry is
-    // there, in its place, carrying nothing.
+    // Blair is shared on this deal and meets nothing at all (R.1c, D-209):
+    // not the words, and not a card saying somebody kept something back. The
+    // timeline has loaded — the deal's own creation entry is on it — so this
+    // is an absence rather than a page that has not arrived.
+    await expect(blair.locator("article.timeline-entry").first()).toBeVisible();
     await expect(blair.getByText(title)).toHaveCount(0);
     await expect(blair.getByText("The part nobody else sees.")).toHaveCount(0);
-    await expect(
-      blair.getByText(/kept this entry to themselves/).first(),
-    ).toBeVisible();
+    await expect(blair.getByText(/kept this entry to themselves/)).toHaveCount(
+      0,
+    );
   } finally {
     await second.close();
   }
@@ -87,9 +90,16 @@ test("a notebook on a deal is one person's own", async ({ page, browser }) => {
   await signIn(page, ALEX);
   await openTimeline(page, NORTHWIND);
 
+  // Either trigger opens the editor, and which one is showing depends on
+  // whether this reader already has a notebook here: the demo seed writes one
+  // for Alex on Northwind (R.7), which is what made this test wait thirty
+  // seconds for an empty-state button that was never going to appear. The
+  // test is about who may read a notebook, not about which state it opens in.
   const notebook = page.locator("section.private-note-panel");
   await notebook
-    .getByRole("button", { name: /Keep a note on this deal, just for you/ })
+    .getByRole("button", {
+      name: /Keep a note on this deal, just for you|Edit my notes/,
+    })
     .click();
   await notebook.getByLabel("My private notes on this deal").fill(held);
   await notebook.getByRole("button", { name: "Save", exact: true }).click();
@@ -101,13 +111,16 @@ test("a notebook on a deal is one person's own", async ({ page, browser }) => {
     await signIn(blair, BLAIR);
     await openTimeline(blair, NORTHWIND);
 
-    // Blair's own notebook is empty, and the search that spans every deal
-    // they can read finds nothing of Alex's.
+    // Blair's own notebook is empty — the seed writes one for Alex only — and
+    // the search that spans every deal they can read finds nothing of Alex's.
     await expect(
       blair.locator("section.private-note-panel").getByRole("button", {
         name: /Keep a note on this deal, just for you/,
       }),
     ).toBeVisible();
+    await expect(blair.locator("section.private-note-panel")).not.toContainText(
+      held,
+    );
     await blair.goto(`/search?q=${held.split(" ")[0]}`);
     await expect(blair.getByText(held)).toHaveCount(0);
   } finally {

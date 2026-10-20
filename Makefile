@@ -121,14 +121,37 @@ migrate:
 reindex:
 	cd backend && uv run python -m tools.reindex
 
+# Which database `backup` and `restore` act on. **The deployment's, by
+# default** -- `./data/app.db`, the file the container bind-mounts at /data
+# (R.1c, D-214). Until this existed both targets inherited the application's
+# own fallback, `sqlite:///./app.db`, which from `backend/` is a scratch file
+# no container has ever read: `make backup` snapshotted it and `make restore`
+# overwrote it, reporting success either way. The restore was the one that
+# hurt, because a restore that silently does nothing is indistinguishable
+# from a restore until the day you need it.
+#
+# Override for a local database: `make backup DATABASE_URL=sqlite:///./app.db`
+# from `backend/`, or point it anywhere else you mean.
+DATA_DIR ?= $(CURDIR)/data
+DATABASE_URL ?= sqlite:///$(DATA_DIR)/app.db
+
 # `VACUUM INTO` snapshot of the live database (ADR 0011). Safe to run while
 # the app is serving traffic; see app/backup.py. Prunes down to
 # BACKUP_RETENTION_COUNT (default 7) automatically.
 backup:
-	cd backend && uv run python -m tools.backup
+	cd backend && DATABASE_URL="$(DATABASE_URL)" uv run python -m tools.backup
 
 # Restores a snapshot produced by `make backup` over the live database file.
 # Stop the application first -- see app/backup.py's restore_backup docstring.
 # Usage: make restore BACKUP=backend/backups/app-20260920T140305Z.db
+# FOREIGN=1 restores a snapshot that does not come from this database's own
+# backups/ directory -- which is refused by default, because that mismatch is
+# exactly the shape of the defect above.
+#
+# `$(abspath ...)` because the recipe runs from `backend/` and every path in
+# `docs/operations.md` is written from the repository root: `BACKUP=data/
+# backups/app-....db` resolved to `backend/data/backups/...` and failed to
+# find a file that was plainly there (R.1c, D-214).
 restore:
-	cd backend && uv run python -m tools.restore "$(BACKUP)"
+	cd backend && DATABASE_URL="$(DATABASE_URL)" uv run python -m tools.restore \
+		$(if $(FOREIGN),--allow-foreign-snapshot,) "$(abspath $(BACKUP))"

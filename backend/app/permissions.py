@@ -3,6 +3,8 @@ from typing import Literal
 
 from fastapi import HTTPException, status
 
+from .settings import settings
+
 Role = Literal["owner", "editor", "viewer"]
 
 # Every opportunity one user may read, as a subquery for the reads that are not
@@ -35,11 +37,17 @@ ACCESSIBLE_OPPORTUNITY_IDS_SQL = """
 # and `authorization is structural` (AGENTS.md invariant 2) means it belongs
 # here, beside the rule it extends, rather than being retyped per query.
 #
-# Deliberately *not* used inside `timeline_utils.ENTRY_SEQUENCE_SQL`. An entry's
-# number is a property of the deal, not of the reader: putting this there would
-# renumber one person's timeline relative to another's, and the AI cites those
-# numbers. A reader who may not see #36 sees #35 then #37, which is the honest
-# answer -- the entry is sealed, not erased.
+# **Used inside `timeline_utils.ENTRY_SEQUENCE_SQL` since R.1c**, which is the
+# reverse of what R.1b decided and is the human's ruling at the R.1b
+# shakedown: *"it is better not to mention anything instead of saying it is
+# kept private, so the other person doesn't know anything about what's kept
+# away from them"* (**D-209**). A sealed entry is now absent from a
+# colleague's timeline rather than standing there emptied -- and an absent row
+# has to take its number with it, because a gap between #35 and #37 says
+# exactly what the card used to say out loud. So the number is per reader: it
+# counts the entries *that reader* may read. The AI's context was already
+# assembled per reader (R.1b), so the two still agree about what `#7` means
+# for the person asking.
 VISIBLE_ENTRIES_SQL = "(timeline_entries.visibility = 'shared' OR timeline_entries.created_by = ?)"
 
 
@@ -193,4 +201,48 @@ def require_opportunity_owner(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only the owner can manage this opportunity",
+        )
+
+
+def admin_emails() -> frozenset[str]:
+    """The configured administrators, lower-cased (R.1c, **D-215**).
+
+    Read on every call rather than cached at import, so a test can set
+    `settings.admin_emails` the way every other setting here is driven.
+    """
+    return frozenset(
+        address.strip().lower() for address in settings.admin_emails.split(",") if address.strip()
+    )
+
+
+def is_admin(user: sqlite3.Row) -> bool:
+    """Whether this caller administers the deployment.
+
+    Not a role in the `Role` sense: those three are *per opportunity* and come
+    from the database, while this is a property of the deployment and comes
+    from its configuration. The two never mix -- an admin has no more access
+    to a deal than their shares give them, and an opportunity's owner
+    administers nothing beyond it.
+    """
+    return str(user["email"]).lower() in admin_emails()
+
+
+def require_admin(user: sqlite3.Row) -> None:
+    """The two global writes: defining a custom field, writing an automation
+    rule (R.1c, **D-215**).
+
+    **403 and not 404**, unlike every opportunity-scoped refusal in this
+    module. Hiding existence is pointless here and the message is the useful
+    part: the field list and the rule list are readable by everyone, so the
+    caller already knows these objects exist and needs to be told who may
+    change them -- which is why the sentence names the setting rather than
+    saying "forbidden".
+    """
+    if not is_admin(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Only an administrator can change this. Administrators are set in "
+                "the deployment's ADMIN_EMAILS setting."
+            ),
         )

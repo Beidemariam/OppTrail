@@ -18,6 +18,7 @@ import {
   useRunAutomationRule,
 } from "../lib/queries";
 import { schedulerLine } from "../lib/jobs";
+import { canAdminister } from "../lib/permissions";
 import { formatTimestamp } from "../lib/time";
 import { PageHeader, useShellUser } from "./AppShell";
 import { AutomationRuleForm } from "./AutomationRuleForm";
@@ -75,13 +76,20 @@ export function AutomationsPage() {
             </p>
           }
         >
-          <button
-            type="button"
-            className="primary-button"
-            onClick={() => setComposing(true)}
-          >
-            New rule
-          </button>
+          {/* Writing a rule is the administrator's (R.1c, D-215): a rule
+              writes to records unattended, under its creator's name. Reading
+              the list stays open, because "which automations run here, and
+              whose" is a question anybody on the deployment may ask
+              (D-173). */}
+          {canAdminister(viewer) && (
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => setComposing(true)}
+            >
+              New rule
+            </button>
+          )}
           <label className="checkbox-field">
             <input
               type="checkbox"
@@ -96,6 +104,18 @@ export function AutomationsPage() {
           A rule watches for one thing, checks your conditions, and does one
           thing. It runs on the deals you can see and does only what you could
           do yourself, and it never triggers another rule.
+          {/* Why there is no New rule button, for the reader who cannot see
+              one (R.1c, D-215). A hidden control with no explanation reads as
+              a missing feature -- and this screen is otherwise fully readable
+              to everybody, which is the point: what runs here, and whose, is
+              a question anybody may ask. */}
+          {!canAdminister(viewer) && (
+            <>
+              {" "}
+              Writing one is an administrator&apos;s; ask whoever administers
+              this deployment.
+            </>
+          )}
         </p>
 
         {/* When the clock last looked (milestone 6.5). On screen because the

@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { aCustomField, anEntry, anOpportunity } from "./test-api";
+import { ALEX, aCustomField, anEntry, anOpportunity } from "./test-api";
 import {
   openTimeline,
   renderDashboard,
@@ -504,5 +504,30 @@ describe("defining and retiring a field", () => {
         screen.queryByLabelText("Filter by Region"),
       ).not.toBeInTheDocument(),
     );
+  });
+});
+
+describe("who may define one", () => {
+  it("offers Fields to an administrator", async () => {
+    await renderDashboard(seeded());
+
+    expect(
+      await screen.findByRole("button", { name: "Fields" }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not offer it to anybody else, but still draws their columns", async () => {
+    // R.1c, **D-215**: the reviewer's ruling at the Phase R gate. The control
+    // is hidden rather than the feature — the definitions still arrive, and
+    // the column picker and filter bar are built from them, because "which
+    // fields does this team track" is not a privileged question.
+    await renderDashboard(
+      { ...seeded(), user: { ...ALEX, is_admin: false } },
+      "/?opportunities.view=table&opportunities.columns=name,custom:region",
+    );
+    await screen.findByRole("button", { name: "Table" });
+
+    expect(screen.queryByRole("button", { name: "Fields" })).toBeNull();
+    expect(await screen.findByText("Region")).toBeInTheDocument();
   });
 });

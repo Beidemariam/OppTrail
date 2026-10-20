@@ -301,6 +301,16 @@ def database_is_empty() -> bool:
 
 
 def seed() -> None:
+    # Alex administers the seeded deployment (R.1c, **D-215**): this function
+    # drives the real API, and defining a custom field or writing an
+    # automation rule is an administrator's write. Set here rather than left
+    # to the environment because the seed configures the deployment it is
+    # building -- a demo where nobody can define a field would seed neither
+    # Phase 6 feature, which is the gap R.7 existed to close. A real
+    # deployment sets `ADMIN_EMAILS` in its own environment; the printed tour
+    # below says so.
+    settings.admin_emails = ALEX
+
     alex = sign_up(*USERS[0])
     blair = sign_up(*USERS[1])
     casey = sign_up(*USERS[2])
@@ -820,8 +830,28 @@ def main(argv: list[str] | None = None) -> int:
                 notifications=160_000,
             )
         print(f"  {facts.summary()}")
+        # Who they belong to, because the tour below says Alex owns four
+        # opportunities and `--scale` has just given them 400 more (R.1c).
+        # The generated corpus is owned by the lowest user id, which after
+        # the demo seed is Alex; without this line a person follows the tour,
+        # signs in, and cannot find a single one of the rows they just built.
+        print(
+            f"  All {SCALE_OPPORTUNITIES} generated deals (Deal 0 ... "
+            f"Deal {SCALE_OPPORTUNITIES - 1}, 200 entries each) belong to {ALEX},"
+        )
+        print("  shared with 20 generated rep accounts. The tour below describes the")
+        print("  five hand-written deals, which are the ones worth reading.")
 
     print(f"Seeded {database_path}.")
+    # Said precisely, because the seed's own `settings.admin_emails` applies
+    # to *this process* and the app you then start is a different one: a
+    # container with no ADMIN_EMAILS has no administrator however its
+    # database was seeded (R.1c, D-215).
+    print(
+        f"  Custom fields and automation rules are an administrator's.\n"
+        f"  This seed wrote them as {ALEX}; to administer the running app,\n"
+        f"  set ADMIN_EMAILS={ALEX} in .env and restart it."
+    )
     print(f"Sign in with any of these; the password is {DEMO_PASSWORD!r}:")
     for email, name in USERS:
         print(f"  {email:26} {name}")

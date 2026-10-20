@@ -89,10 +89,18 @@ def build_scale_corpus(
     rows for `make seed --scale`. Without that, a generated note would attach
     itself to one of the five deals a person is about to read.
 
-    The first user owns every generated opportunity — user 1 on an empty
-    database, Alex after a demo seed — so a read as the owner is the widest
-    possible answer; `shares` adds the rows that make the same read a
-    permission-filtered one for everybody else.
+    The **lowest existing user id** owns every generated opportunity — the
+    first generated rep on an empty database, Alex after a demo seed — so a
+    read as the owner is the widest possible answer; `shares` adds the rows
+    that make the same read a permission-filtered one for everybody else.
+
+    That it is the lowest and not the highest is the whole of R.1c's fix here:
+    this read `MAX(id)`, which is the right base for the ids it *creates* and
+    the wrong answer for "who should own this". On an empty database the two
+    agree, which is why `tests/test_performance.py` never noticed; after
+    `make seed` they do not, and all 400 deals landed on Dana — the one demo
+    user the seed's printed tour never mentions. A person following the tour
+    signed in as Alex and found none of the 805,000 rows they had just built.
     """
     base = datetime.now(UTC) - timedelta(days=730)
     now = utc_now()
@@ -109,7 +117,11 @@ def build_scale_corpus(
     first_entry = highest("timeline_entries")
     first_note = highest("notes")
     first_task = highest("tasks")
-    owner = max(first_user, 1)
+    # `first_user` is the highest id that exists, which is what the new rows
+    # below count from. The owner is the *lowest* one -- Alex after a seed --
+    # and on an empty database that is the first rep this function creates.
+    lowest_user = connection.execute("SELECT MIN(id) AS first FROM users").fetchone()["first"]
+    owner = int(lowest_user) if lowest_user is not None else first_user + 1
 
     def reader_id(index: int) -> int:
         return first_user + (index % readers) + 1

@@ -136,7 +136,8 @@ def test_the_seed_shows_both_sides_of_a_sealed_entry(tmp_path) -> None:
     entry is added deliberately below", and nothing wrote one.
 
     It is Blair's on a deal Alex owns, which is the pair worth seeing by
-    hand — the author reads it whole and the *owner* does not (D-194).
+    hand — the author reads it whole and the *owner* does not (D-194), and
+    since R.1c the owner does not read that it exists either (**D-209**).
     """
     settings.database_url = f"sqlite:///{tmp_path / 'seed.db'}"
     initialize_database()
@@ -171,19 +172,17 @@ def test_the_seed_shows_both_sides_of_a_sealed_entry(tmp_path) -> None:
             for item in author.get(f"/api/v2/opportunities/{deal}/timeline").json()["items"]
             if item["id"] == entry_id
         )
-        read_by_owner = next(
-            item
-            for item in deal_owner.get(f"/api/v2/opportunities/{deal}/timeline").json()["items"]
-            if item["id"] == entry_id
-        )
+        owners_timeline = deal_owner.get(f"/api/v2/opportunities/{deal}/timeline").json()["items"]
     finally:
         author.__exit__(None, None, None)
         deal_owner.__exit__(None, None, None)
 
     assert read_by_author["title"] == "My read on their procurement lead"
-    # The row keeps its place and its number for the owner, and nothing else.
-    assert read_by_owner["title"] == ""
-    assert read_by_owner["sequence"] == read_by_author["sequence"]
+    # Nothing of it reaches the owner, not even the row (R.1c). Their
+    # timeline is numbered without it, so there is no gap to notice either.
+    assert [item for item in owners_timeline if item["id"] == entry_id] == []
+    numbers = sorted(item["sequence"] for item in owners_timeline)
+    assert numbers == list(range(1, len(numbers) + 1))
 
 
 def test_seeded_permissions_match_the_printed_tour(tmp_path) -> None:

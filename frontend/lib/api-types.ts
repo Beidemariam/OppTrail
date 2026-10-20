@@ -1820,7 +1820,24 @@ export interface paths {
          */
         get: operations["list_automation_rules_api_v2_automation_rules_get"];
         put?: never;
-        /** Create Automation Rule */
+        /**
+         * Create Automation Rule
+         * @description Write a rule. **Administrators only since R.1c** (**D-215**).
+         *
+         *     D-173 left this open to any authenticated caller, on the reasoning that a
+         *     rule grants its author nothing they did not already have: it is evaluated
+         *     only over deals its creator can read, attributed to them, and the role
+         *     each action needs is re-checked per deal at run time. That reasoning
+         *     still holds -- and the reviewer ruled anyway, at the Phase R gate:
+         *     *"both have to be done by the owner."* The distinction they were drawing
+         *     is the one D-173 itself named: a rule **writes to records** rather than to
+         *     metadata, unattended, under somebody's name. Who may set that in motion is
+         *     a narrower question than who may be trusted with their own authority.
+         *
+         *     Everything else about a rule is unchanged, including that editing,
+         *     archiving and running one stays the creator's alone -- an admin does not
+         *     inherit another admin's rules.
+         */
         post: operations["create_automation_rule_api_v2_automation_rules_post"];
         delete?: never;
         options?: never;
@@ -4041,6 +4058,11 @@ export interface components {
             name: string;
             /** Created At */
             created_at: string;
+            /**
+             * Is Admin
+             * @default false
+             */
+            is_admin: boolean;
         };
         /** ValidationError */
         ValidationError: {

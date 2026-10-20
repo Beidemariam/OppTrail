@@ -84,6 +84,9 @@ router = APIRouter(prefix="/api/v2", tags=["tasks"])
 # (milestone 4.6) -- SQLite's `group_concat` has no ordering of its own, so the
 # order comes from the subquery. `assignee_names` is the same set for reading,
 # in the same order, so the two never disagree about who is on a task.
+# Two bound parameters lead this one: the reader's id, twice -- once for the
+# withheld title and once for the withheld link (R.1c). Both are in the SELECT
+# list, so they bind before anything in the caller's own `WHERE`.
 TASK_ROWS_SQL = """
     SELECT
         tasks.*,
@@ -91,14 +94,25 @@ TASK_ROWS_SQL = """
         -- Withheld when the entry is sealed and the reader is not its author
         -- (R.1b, the human's ruling): a task carries its entry's title to
         -- whoever it is assigned to, including on My Tasks, which spans deals.
-        -- The link itself survives -- following it answers 404, which is the
-        -- same answer the entry gives.
+        --
+        -- **The link goes with it** (R.1c, **D-209**). R.1b kept `entry_id`
+        -- and let it 404, which was consistent while a sealed entry still
+        -- stood on the timeline as an empty card; now that it stands nowhere,
+        -- an id pointing at it is the one place left that says a colleague's
+        -- sealed entry exists. Both columns answer the same question, so they
+        -- are withheld together.
         CASE
             WHEN timeline_entries.visibility = 'private'
                 AND timeline_entries.created_by != ?
             THEN NULL
             ELSE timeline_entries.title
         END AS entry_title,
+        CASE
+            WHEN timeline_entries.visibility = 'private'
+                AND timeline_entries.created_by != ?
+            THEN NULL
+            ELSE tasks.entry_id
+        END AS visible_entry_id,
         authors.name AS author_name,
         completers.name AS completed_by_name,
         (
@@ -218,7 +232,7 @@ def task_from_row(
         id=row["id"],
         opportunity_id=row["opportunity_id"],
         opportunity_name=row["opportunity_name"],
-        entry_id=row["entry_id"],
+        entry_id=row["visible_entry_id"],
         # `NULL` when the entry it came from has been deleted, which is
         # deliberate: an action item outlives the record of where it came from.
         entry_title=row["entry_title"],
@@ -257,7 +271,7 @@ def fetch_task(connection: sqlite3.Connection, task_id: int, reader_id: int) -> 
             AND tasks.deleted_at IS NULL
             AND opportunities.deleted_at IS NULL
         """,
-        (reader_id, task_id),
+        (reader_id, reader_id, task_id),
     ).fetchone()
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
@@ -517,7 +531,7 @@ def list_tasks(
             ORDER BY tasks.due_date IS NULL, tasks.due_date ASC, tasks.id ASC
             LIMIT ?
             """,
-            [int(user["id"]), *params],
+            [int(user["id"]), int(user["id"]), *params],
         ).fetchall()
 
     tasks, next_cursor = split_page(rows, page.limit, lambda row: (row["due_date"], row["id"]))
@@ -613,7 +627,7 @@ def list_tasks_across_opportunities(
             ORDER BY tasks.due_date IS NULL, tasks.due_date ASC, tasks.id ASC
             LIMIT ?
             """,
-            [int(user["id"]), *params],
+            [int(user["id"]), int(user["id"]), *params],
         ).fetchall()
 
     tasks, next_cursor = split_page(rows, page.limit, lambda row: (row["due_date"], row["id"]))

@@ -150,16 +150,21 @@ test("the deal's owner can clear up an entry a rule wrote", async ({
   // rule leaves entries behind and somebody has to be able to remove them.
   // Before this, every system entry answered 403 to everybody.
   //
-  // This test owns its account and its deal, which is the lesson of two
-  // failures getting here: triggered by silence it depended on the seeded
-  // deals still being quiet (which the test above stops being true), and
-  // moved to a named stage it depended on which stage the seed left Northwind
-  // in (Qualification -- so "move to Qualification" wrote nothing at all).
+  // This test owns its **deal**, which is the lesson of two failures getting
+  // here: triggered by silence it depended on the seeded deals still being
+  // quiet (which the test above stops being true), and moved to a named stage
+  // it depended on which stage the seed left Northwind in (Qualification --
+  // so "move to Qualification" wrote nothing at all). The fresh deal is what
+  // answers both; the account never was.
+  //
+  // It owned its account too until R.1c, when writing a rule became an
+  // administrator's (**D-215**) and a throwaway signup stopped being able to.
+  // Alex is the seeded administrator, as in every other test in this file.
   const suffix = Math.random().toString(36).slice(2, 8);
   const name = `Clear me up ${suffix}`;
   const deal = `Rule cleanup ${suffix}`;
 
-  await signUp(page, `cleanup-${suffix}@opptrail.test`, "Cleanup Tester");
+  await signIn(page, ALEX);
   await createOpportunity(page, deal, { stage: "Prospecting" });
 
   await openAutomations(page);

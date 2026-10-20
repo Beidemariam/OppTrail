@@ -33,6 +33,7 @@ import { paramsWithState, stateFromParams } from "../lib/viewState";
 import { PageHeader } from "./AppShell";
 import { BulkActionBar } from "./BulkActionBar";
 import { ColumnPicker } from "./ColumnPicker";
+import { canAdminister } from "../lib/permissions";
 import { ManageCustomFields } from "./ManageCustomFields";
 import { useConfirm } from "./ConfirmDialog";
 import { DensityToggle } from "./Density";
@@ -598,13 +599,20 @@ export function DashboardPage() {
               <DensityToggle />
             </>
           )}
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => setManagingFields(true)}
-          >
-            Fields
-          </button>
+          {/* Defining a field is the administrator's (R.1c, D-215): it lands
+              on every record of its type, for everybody. Everyone still
+              *reads* the definitions -- the column picker and the filter bar
+              are built from them -- so what is hidden is this one control
+              rather than the feature. */}
+          {canAdminister(session.data) && (
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setManagingFields(true)}
+            >
+              Fields
+            </button>
+          )}
           <button
             type="button"
             className="primary-button"

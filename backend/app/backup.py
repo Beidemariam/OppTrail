@@ -164,7 +164,15 @@ def latest_backup_at(destination_dir: Path | None = None) -> str | None:
     return None
 
 
-def restore_backup(backup_path: Path) -> Path:
+class RestoreTargetMismatch(RuntimeError):
+    """The snapshot does not belong to the database about to be overwritten.
+
+    Raised rather than restoring, because the failure it catches is silent
+    and total: see `restore_backup`.
+    """
+
+
+def restore_backup(backup_path: Path, *, allow_foreign_snapshot: bool = False) -> Path:
     """Restore a snapshot over the live database file.
 
     The application must not be running against this database while this
@@ -172,11 +180,42 @@ def restore_backup(backup_path: Path) -> Path:
     checked against a swapped-out main file are not safe to replay) and then
     overwrites `app.db` in place. `make restore` documents this as an offline
     operation; there is no in-app route that calls this.
+
+    **It refuses a snapshot from another database's backup directory**, and
+    that guard is the whole of what the R.1c review round found (**D-214**).
+    The target is `settings.database_url`, which on a host shell falls back
+    to the relative default -- `backend/app.db`, a scratch file the container
+    has never read, while the deployment's database is the one bind-mounted
+    at `/data`. So the documented procedure copied a real snapshot over the
+    wrong file, printed "Restored ... to app.db", and exited 0: a restore that
+    silently did nothing, which is the most expensive way for a backup to
+    fail. The reviewer met it as "the deleted opportunity never restored".
+
+    Comparing the snapshot's own directory against `backup_dir()` catches it
+    exactly, because `backup_dir()` is derived from the same
+    `database_url`: a snapshot taken beside *this* database restores
+    silently, and one from anywhere else has to say so with
+    `allow_foreign_snapshot` (`make restore FOREIGN=1`). The mismatch is
+    reported as both absolute paths, because the fix is almost always to set
+    `DATABASE_URL` and the message is the only place that will say so.
     """
     if not backup_path.is_file():
         raise FileNotFoundError(f"Backup file not found: {backup_path}")
 
     database_path = sqlite_path_from_url(settings.database_url)
+    snapshot_dir = backup_path.resolve().parent
+    expected_dir = backup_dir().resolve()
+    if snapshot_dir != expected_dir and not allow_foreign_snapshot:
+        raise RestoreTargetMismatch(
+            f"Refusing to restore: {backup_path.resolve()} does not come from "
+            f"the backup directory of the database it would overwrite.\n"
+            f"  snapshot's directory: {snapshot_dir}\n"
+            f"  would overwrite:      {database_path.resolve()}\n"
+            f"  whose backups are in: {expected_dir}\n"
+            "Point DATABASE_URL at the database you mean "
+            '(for the shipped container: DATABASE_URL="sqlite:///./data/app.db"), '
+            "or pass FOREIGN=1 to restore a snapshot from elsewhere on purpose."
+        )
     for sidecar_suffix in ("-wal", "-shm"):
         sidecar = database_path.with_name(database_path.name + sidecar_suffix)
         sidecar.unlink(missing_ok=True)

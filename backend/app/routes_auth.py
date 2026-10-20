@@ -13,6 +13,7 @@ from .auth import (
     verify_password,
 )
 from .database import db_connection
+from .permissions import is_admin
 from .rate_limit import auth_rate_limiter, client_key
 from .schemas import AuthResponse, LoginRequest, PasswordChangeRequest, SignupRequest, UserPublic
 from .settings import settings
@@ -27,6 +28,10 @@ def public_user(row: sqlite3.Row) -> UserPublic:
         email=row["email"],
         name=row["name"],
         created_at=row["created_at"],
+        # Resolved per request from `ADMIN_EMAILS` (R.1c, D-215): there is no
+        # column, so a change to the setting takes effect on the next read
+        # rather than needing a row repaired.
+        is_admin=is_admin(row),
     )
 
 

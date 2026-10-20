@@ -4,6 +4,29 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     database_url: str = "sqlite:///./app.db"
+    # Who may define a custom field or write an automation rule (R.1c,
+    # **D-215**, the reviewer's ruling at the Phase R gate: *"both have to be
+    # done by the owner"*). Comma-separated email addresses.
+    #
+    # These two writes were open to every signed-in caller, because
+    # `FEATURES.md` says "admin-defined" and this app had no admin (D-171,
+    # D-173). They are the widest surfaces in the application and both are
+    # global rather than scoped to a deal, so "the owner" cannot mean an
+    # opportunity's owner: there is no opportunity in sight when you define a
+    # field that lands on every deal.
+    #
+    # **Configuration rather than a column**, which is a deliberate departure
+    # from the "flag on users" shape the ruling named. The two are
+    # indistinguishable to a reader -- neither offers an in-app way to grant
+    # admin, which nobody asked for -- and this way there is no migration, no
+    # second source of truth to drift from the environment, and no state to
+    # repair if the list changes. `permissions.is_admin` is the whole
+    # implementation. If granting it in the app is ever wanted, a column is an
+    # additive migration and this list becomes its seed.
+    #
+    # Empty means **nobody**, which is the safe default for a fresh install
+    # and the loud one: the screens say who to ask rather than failing a form.
+    admin_emails: str = ""
     frontend_static_dir: str = "../frontend/out"
     openai_api_key: str | None = None
     openai_model: str = "gpt-5.6-luna"

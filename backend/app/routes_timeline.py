@@ -206,6 +206,11 @@ def note_from_row(row: sqlite3.Row, comments: list[CommentThread]) -> NotePublic
 # return the row they touched). Shared for the reason `SHARE_ROWS_SQL` is: the
 # `sequence` column has to be on every one of them, since a client cannot tell
 # which route produced the entry it is drawing.
+#
+# **Its first bound parameter is the reader's id**, which `ENTRY_SEQUENCE_SQL`
+# takes (R.1c): the number counts the entries this reader may read, and the
+# subquery is in the SELECT list, so it binds before anything in the caller's
+# own `WHERE`.
 ENTRY_ROWS_SQL = f"""
     SELECT
         timeline_entries.*,
@@ -233,37 +238,22 @@ def entry_from_row(
     the four writes below answer with, since a rule's own entry is never the
     thing a request just created.
 
-    **A sealed entry is emptied here** (R.1b), which is the whole mechanism:
-    the row stays in the page so the numbering, the paging and every count go
-    on meaning the same thing for everyone, and this function decides what
-    leaves the process. One place rather than a predicate in each of the four
-    reads -- a filtered-out row is a row the next read has to remember to
-    filter out too, and this way the only way to serve an entry at all is
-    through here. `reader_id` of `None` means a caller that has already
-    resolved what it may see (the export, which reads per reader itself).
+    **A sealed entry never reaches here for anybody but its author** (R.1c,
+    **D-209**). R.1b emptied one in place and served the hollow row, so the
+    numbering and the paging could go on meaning the same thing for every
+    reader; the human ruled at the shakedown that a colleague should meet
+    nothing rather than a card announcing that something is being kept from
+    them. So the predicate moved up into the queries -- `timeline_filters`
+    for the list, and the six context fetchers, which already had it -- and
+    `ENTRY_SEQUENCE_SQL` counts per reader so no gap is left behind. What
+    reaches this function is an entry its reader may read.
+
+    `reader_id` is kept on the signature: it is what the three writes pass to
+    bind their own `sequence`, and a reader argument that a future read has to
+    supply is a reader argument a future read cannot forget. `None` means a
+    caller that has already resolved what it may see (the export, which reads
+    per reader itself).
     """
-    if sealed_for(row, reader_id):
-        return TimelineEntryPublic(
-            id=row["id"],
-            opportunity_id=row["opportunity_id"],
-            # The type is withheld with everything else: "Contract" on a sealed
-            # card says more than the author chose to.
-            type="other",
-            title="",
-            body="",
-            event_timestamp=row["event_timestamp"],
-            follow_up_date=None,
-            created_by=row["created_by"],
-            author_name=row["author_name"],
-            system_generated=bool(row["system_generated"]),
-            created_at=row["created_at"],
-            sequence=row["sequence"],
-            visibility="private",
-            automation_rule_id=None,
-            custom_values={},
-            notes=[],
-            attachments=[],
-        )
     return TimelineEntryPublic(
         id=row["id"],
         opportunity_id=row["opportunity_id"],
@@ -453,14 +443,21 @@ def timeline_filters(
 
     `reader_id` is here rather than in the route because a filter set that can
     be assembled without it is one somebody can assemble without it (R.1b).
-    Sealed entries are *kept* in the result and emptied by `entry_from_row`;
-    what this predicate governs is nothing here — see the route.
+
+    **It drops a sealed entry outright** (R.1c, **D-209**). R.1b kept the row
+    and emptied it in `entry_from_row`, so a colleague met a card saying
+    somebody had kept something to themselves; the human's ruling at the
+    shakedown was that they should meet nothing at all. The other five reads
+    of an entry — the six context fetchers, search, the export, the AI's
+    context and an attachment download — have filtered on this predicate
+    since R.1b, so this is the list joining them rather than a new rule.
     """
     where = [
         "timeline_entries.opportunity_id = ?",
         "timeline_entries.deleted_at IS NULL",
+        VISIBLE_ENTRIES_SQL,
     ]
-    params: list[object] = [opportunity_id]
+    params: list[object] = [opportunity_id, reader_id]
 
     if q:
         # Was four `LIKE '%…%'` predicates and two correlated EXISTS
@@ -515,15 +512,6 @@ def timeline_filters(
     return where, params
 
 
-def sealed_for(row: sqlite3.Row, reader_id: int | None) -> bool:
-    """Whether this reader meets this entry sealed (R.1b).
-
-    Its author never does, and nobody else ever does not — including the
-    opportunity's owner. "Private, unless the owner asks" is not private.
-    """
-    return bool(row["visibility"] == "private" and row["created_by"] != reader_id)
-
-
 def entries_with_notes(
     connection: sqlite3.Connection,
     entries: list[sqlite3.Row],
@@ -535,11 +523,9 @@ def entries_with_notes(
     Five queries for the whole set rather than four per entry, so a page of
     entries costs the same number of round trips as one.
     """
-    # Only the entries this reader may read: a sealed entry's notes, comments
-    # and files are never fetched, rather than being fetched and dropped.
-    entry_ids = [entry["id"] for entry in entries if not sealed_for(entry, reader_id)]
+    entry_ids = [entry["id"] for entry in entries]
     if not entry_ids:
-        return [entry_from_row(entry, [], [], None, None, reader_id) for entry in entries]
+        return []
 
     placeholders = ",".join("?" for _ in entry_ids)
     notes = connection.execute(
@@ -655,7 +641,8 @@ def list_timeline_page(
             ORDER BY timeline_entries.event_timestamp {direction}, timeline_entries.id {direction}
             LIMIT ?
             """,
-            params,
+            # The reader leads: `ENTRY_SEQUENCE_SQL` is in the SELECT list.
+            [reader_id, *params],
         ).fetchall()
 
         entries, next_cursor = split_page(
@@ -746,7 +733,7 @@ def create_timeline_entry(
             {ENTRY_ROWS_SQL}
             WHERE timeline_entries.id = ?
             """,
-            (entry_id,),
+            (int(user["id"]), entry_id),
         ).fetchone()
         definitions = live_definitions(connection, "entry")
 
@@ -858,7 +845,7 @@ def update_timeline_entry(
             {ENTRY_ROWS_SQL}
             WHERE timeline_entries.id = ?
             """,
-            (entry_id,),
+            (int(user["id"]), entry_id),
         ).fetchone()
         definitions = live_definitions(connection, "entry")
 
@@ -993,7 +980,7 @@ def restore_timeline_entry_version(
             {ENTRY_ROWS_SQL}
             WHERE timeline_entries.id = ?
             """,
-            (entry_id,),
+            (int(user["id"]), entry_id),
         ).fetchone()
         definitions = live_definitions(connection, "entry")
 

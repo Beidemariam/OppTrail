@@ -5,15 +5,19 @@ so `permissions.py`'s owner/editor/viewer machinery does not apply -- but
 unlike a saved view it is not personal either. A field changes the shape of
 every record of its entity type, for everybody.
 
-**Who may define one is D-171.** `docs/FEATURES.md` §3 says "admin-defined"
-and this application has no admin role: `AGENTS.md`'s "owner or admin"
-resolves to the *opportunity* owner everywhere else (see `CLAUDE.md`,
-"Permissions"), and a definition has no opportunity to own. So the rule here
-is **any authenticated user may define, edit and archive a field**, and the
-creator is recorded on the row. That is the honest reading of a 20-known-user
-internal tool with no role table, and it is the reversible direction: adding
-a gate later is a route change, while inventing an admin role now is a schema
-and a UI nobody asked for.
+**Who may define one was D-171 and is now D-215.** `docs/FEATURES.md` §3
+says "admin-defined"; this application had no admin, so D-171 read that as
+*any authenticated user* -- the reversible direction, on the reasoning that
+adding a gate later is a route change. The reviewer closed it at the Phase R
+gate: *"both have to be done by the owner."* A definition has no opportunity
+to own, so "the owner" is the deployment's, and
+`permissions.require_admin` is the gate: the administrators are the addresses
+in `ADMIN_EMAILS`.
+
+**Reading stays open to every signed-in caller**, which is the half that
+matters for the screens: the column picker, the filter bar and both forms
+need the definitions, and "which fields does this team track" is not a
+privileged question. What is gated is the four writes.
 
 Archiving rather than deleting is the ADR's own requirement, and it is also
 why there is no DELETE here: values stay in the JSON, the definition stops
@@ -30,6 +34,7 @@ from .auth import get_current_user
 from .custom_fields import DEFINITION_ROWS_SQL, definition_from_row
 from .database import db_connection
 from .pagination import Page, PageRequest, cursor_clause, page_params, split_page
+from .permissions import require_admin
 from .schemas import (
     CustomFieldCreate,
     CustomFieldEntity,
@@ -133,6 +138,7 @@ def create_custom_field(
     payload: CustomFieldCreate,
     user: sqlite3.Row = Depends(get_current_user),
 ) -> CustomFieldPublic:
+    require_admin(user)
     with db_connection() as connection:
         refuse_duplicate_key(connection, payload.entity_type, payload.key)
         now = utc_now()
@@ -175,6 +181,7 @@ def update_custom_field(
     rows to match a definition edit is the data migration ADR 0006 exists to
     avoid.
     """
+    require_admin(user)
     with db_connection() as connection:
         row = fetch_field(connection, field_id)
         if row["archived_at"] is not None:
@@ -224,6 +231,7 @@ def archive_custom_field(
     the first archiver is the one recorded and a retry is safe -- the rule
     `resolve`/`unresolve` already follow (milestone 3.3).
     """
+    require_admin(user)
     with db_connection() as connection:
         row = fetch_field(connection, field_id)
         if row["archived_at"] is None:
@@ -253,6 +261,7 @@ def restore_custom_field(
     may have been taken by a field created in the meantime, which is exactly
     the reuse the partial unique index allows.
     """
+    require_admin(user)
     with db_connection() as connection:
         row = fetch_field(connection, field_id)
         if row["archived_at"] is not None:

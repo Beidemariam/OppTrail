@@ -158,7 +158,9 @@ def build_timeline_context(
             {" ".join(scope)}
         ORDER BY timeline_entries.event_timestamp ASC, timeline_entries.id ASC
         """,
-        (opportunity_id, reader_id, *scope_params),
+        # `ENTRY_SEQUENCE_SQL` binds the reader first (R.1c): it is in the
+        # SELECT list, and it counts the entries this reader may read.
+        (reader_id, opportunity_id, reader_id, *scope_params),
     ).fetchall()
     # The numbers this context actually cites, which is what an answer's
     # citations are checked against (milestone 3.9, **D-140**). They are the

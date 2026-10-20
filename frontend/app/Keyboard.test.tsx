@@ -140,7 +140,7 @@ describe("the command palette", () => {
     await userEvent.click(screen.getByRole("option", { name: "Sign out" }));
 
     expect(
-      await screen.findByRole("button", { name: "Create account" }),
+      await screen.findByRole("button", { name: "Sign in" }),
     ).toBeInTheDocument();
     expect(api.callsTo("POST", "/api/v2/auth/logout")).toHaveLength(1);
   });
@@ -159,14 +159,11 @@ describe("the command palette", () => {
 
     await userEvent.keyboard(CTRL_K);
     await userEvent.click(screen.getByRole("option", { name: "Sign out" }));
-    await screen.findByRole("button", { name: "Create account" });
+    await screen.findByRole("button", { name: "Sign in" });
 
-    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
     await userEvent.type(screen.getByLabelText("Email"), "casey@opptrail.test");
     await userEvent.type(screen.getByLabelText("Password"), "password123");
-    await userEvent.click(
-      screen.getAllByRole("button", { name: "Sign in" })[1],
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
 
     await screen.findByRole("heading", { name: "Opportunities" });
     expect(screen.getByRole("button", { name: "Board" })).toHaveAttribute(
@@ -177,7 +174,7 @@ describe("the command palette", () => {
 
   it("stays shut for a signed-out visitor", async () => {
     renderApp();
-    await screen.findByRole("button", { name: "Create account" });
+    await screen.findByRole("button", { name: "Sign in" });
 
     await userEvent.keyboard(CTRL_K);
 

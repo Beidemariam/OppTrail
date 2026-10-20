@@ -114,38 +114,21 @@ function TimelineEntryCard({
   // Sealing is the author's own (R.1b): the server refuses it for anybody
   // else, and this is the client mirror that stops the button being offered.
   const isAuthor = entry.created_by === session.data?.id;
-  // What a colleague meets: the row is here, its content is not.
-  const sealed = entry.visibility === "private" && !isAuthor;
 
   const failure = [addNote, deleteEntry, setVisibility].find(
     (mutation) => mutation.isError,
   );
 
-  // A sealed entry (R.1b): somebody wrote something here and kept it to
-  // themselves. It keeps its place and its number — which is the whole reason
-  // this shape was chosen over hiding the row — and carries nothing else.
-  // Rendered before anything that would read a title, a body or an action,
-  // because there is none of either to read.
-  if (sealed) {
-    return (
-      <article
-        className={`timeline-entry is-sealed${linked ? " is-linked" : ""}`}
-        ref={cardRef}
-      >
-        <div className="timeline-marker other" />
-        <div className="timeline-entry-body">
-          <div className="meta-row">
-            <span className="entry-number">#{entry.sequence}</span>
-            <span className="system-badge">Private</span>
-            <span>{formatTimestamp(entry.event_timestamp)}</span>
-          </div>
-          <p className="timeline-copy">
-            {entry.author_name ?? "Somebody"} kept this entry to themselves.
-          </p>
-        </div>
-      </article>
-    );
-  }
+  // There is no sealed card any more (R.1c, **D-209**). R.1b drew one — the
+  // row in its place, with its number, its author and its time, and the
+  // sentence "<name> kept this entry to themselves" — and the human ruled at
+  // the shakedown that a colleague should meet nothing instead: "better not
+  // to mention anything instead of saying it is kept private, so the other
+  // person doesn't know anything about what's kept away from them". A sealed
+  // entry now leaves the timeline the server sends, and the numbering counts
+  // per reader so no gap is left where it stood. What remains here is the
+  // author's own `Private` badge below, which is the one reader who should
+  // see it.
 
   return (
     <article

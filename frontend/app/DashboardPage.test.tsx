@@ -46,31 +46,47 @@ afterEach(() => {
 });
 
 describe("signed out", () => {
-  it("shows the sign-up form when the session check fails", async () => {
+  it("opens on sign in, not on create account", async () => {
+    // R.1c, the reviewer's change at the Phase R gate: every visit after the
+    // first is a sign-in, and this screen used to open asking for a name.
     renderApp();
 
     expect(
-      await screen.findByRole("button", { name: "Create account" }),
+      await screen.findByRole("button", { name: "Sign in" }),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("Name")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Create account" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { name: "Opportunities" }),
     ).not.toBeInTheDocument();
   });
 
-  it("drops the name field when switching to sign in", async () => {
+  it("offers the name field only once you ask to create an account", async () => {
     renderApp();
-    await screen.findByRole("button", { name: "Create account" });
+    await screen.findByRole("button", { name: "Sign in" });
 
-    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Create an account" }),
+    );
 
-    expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Sign in" })).toHaveLength(2);
+    expect(screen.getByLabelText("Name")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Create account" }),
+    ).toBeInTheDocument();
+    // And the way back, so neither mode is a dead end.
+    expect(
+      screen.getByRole("button", { name: "Sign in instead" }),
+    ).toBeInTheDocument();
   });
 
   it("signs a new user up and lands them on the dashboard", async () => {
     const api = renderApp({ opportunities: [anOpportunity()] });
-    await screen.findByRole("button", { name: "Create account" });
+    await screen.findByRole("button", { name: "Sign in" });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Create an account" }),
+    );
 
     await userEvent.type(screen.getByLabelText("Name"), "Alex");
     await userEvent.type(screen.getByLabelText("Email"), "alex@opptrail.test");
@@ -92,14 +108,11 @@ describe("signed out", () => {
         "POST /api/v2/auth/login": [401, "Invalid email or password"],
       },
     });
-    await screen.findByRole("button", { name: "Create account" });
+    await screen.findByRole("button", { name: "Sign in" });
 
-    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
     await userEvent.type(screen.getByLabelText("Email"), "alex@opptrail.test");
     await userEvent.type(screen.getByLabelText("Password"), "wrong-password");
-    await userEvent.click(
-      screen.getAllByRole("button", { name: "Sign in" })[1],
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
 
     expect(
       await screen.findByText("Invalid email or password"),
@@ -317,7 +330,7 @@ describe("the dashboard", () => {
     await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
 
     expect(
-      await screen.findByRole("button", { name: "Create account" }),
+      await screen.findByRole("button", { name: "Sign in" }),
     ).toBeInTheDocument();
     expect(screen.queryByText("Northwind rollout")).not.toBeInTheDocument();
   });
@@ -337,14 +350,11 @@ describe("the dashboard", () => {
     );
 
     await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
-    await screen.findByRole("button", { name: "Create account" });
+    await screen.findByRole("button", { name: "Sign in" });
 
-    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
     await userEvent.type(screen.getByLabelText("Email"), "casey@opptrail.test");
     await userEvent.type(screen.getByLabelText("Password"), "password123");
-    await userEvent.click(
-      screen.getAllByRole("button", { name: "Sign in" })[1],
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
 
     await screen.findByRole("heading", { name: "Opportunities" });
     expect(screen.getByRole("button", { name: "Board" })).toHaveAttribute(

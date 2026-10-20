@@ -48,7 +48,7 @@ from typing import Literal
 
 from .audit_utils import parse_audit_detail
 from .pagination import PageRequest, cursor_clause, split_page
-from .permissions import Role
+from .permissions import Role, visible_entries_clause
 from .schemas import (
     ActivityAuditEvent,
     ActivityEditEvent,
@@ -251,13 +251,18 @@ def _edit_events(
     target: Literal["opportunity", "timeline_entry", "note", "task"],
     parent_sql: str,
     silent_fields: tuple[str, ...] = (),
+    parent_params: tuple[object, ...] = (),
 ) -> list[ActivityEventPublic]:
     """One versioned table's edits, as feed rows.
 
     `parent_sql` is the join from the version table down to the opportunity,
     which is also where `deleted_at IS NULL` is asserted at every level: an
     edit to a note that has since been deleted is not an event a reader can
-    still make sense of, and the delete itself is in the audit half.
+    still make sense of, and the delete itself is in the audit half. It is
+    also where a **sealed** entry is dropped (R.1c), which is why
+    `parent_params` exists: the two joins that pass through
+    `timeline_entries` take the reader's id, and they bind before the cursor
+    because the join is written before the `WHERE` continuation.
 
     The join to `previous` is what makes this "edits" rather than "versions" --
     version 1 has no predecessor, and it is the creation baseline rather than
@@ -290,7 +295,7 @@ def _edit_events(
         ORDER BY version.created_at ASC, {_id_expression("version.id", source)} ASC
         LIMIT ?
         """,
-        [opportunity_id, *cursor_values, page.limit + 1],
+        [opportunity_id, *parent_params, *cursor_values, page.limit + 1],
     ).fetchall()
     return [
         ActivityEventPublic(
@@ -318,18 +323,29 @@ OPPORTUNITY_PARENT_SQL = """
         AND opportunities.deleted_at IS NULL
 """
 
-TIMELINE_ENTRY_PARENT_SQL = """
+# The two that pass through `timeline_entries` carry the sealed-entry
+# predicate (R.1c, **D-209**), and each therefore takes the reader's id after
+# the opportunity. Without it this feed was the last place a sealed entry
+# announced itself: the timeline stopped showing the card, and an owner still
+# read "Blair edited an entry, changing the title" with its id beside it.
+# Nothing here ever showed the *content* -- the version read and the restore
+# both resolve through `fetch_entry_context` and 404 -- but the existence, the
+# author, the time and the field names are exactly what the human's ruling
+# says a colleague must not learn.
+TIMELINE_ENTRY_PARENT_SQL = f"""
     JOIN timeline_entries ON timeline_entries.id = version.entry_id
     WHERE timeline_entries.opportunity_id = ?
         AND timeline_entries.deleted_at IS NULL
+        AND {visible_entries_clause("timeline_entries")}
 """
 
-NOTE_PARENT_SQL = """
+NOTE_PARENT_SQL = f"""
     JOIN notes ON notes.id = version.note_id
     JOIN timeline_entries ON timeline_entries.id = notes.entry_id
     WHERE timeline_entries.opportunity_id = ?
         AND notes.deleted_at IS NULL
         AND timeline_entries.deleted_at IS NULL
+        AND {visible_entries_clause("timeline_entries")}
 """
 
 # A task hangs off the opportunity directly, so this is the shortest of the four
@@ -346,12 +362,19 @@ def fetch_activity_page(
     opportunity_id: int,
     role: Role,
     page: PageRequest,
+    reader_id: int,
 ) -> tuple[list[ActivityEventPublic], str | None]:
     """The merged feed, oldest first, as `(items, next_cursor)`.
 
     Oldest first is the audit log's order and the three histories': the log is
     read as the narrative of what happened to the opportunity, so the page
     boundary walks forward in time.
+
+    `reader_id` is not a second permission check -- the version half is still
+    owner-only and `role` is what decides that. It is the sealed-entry
+    predicate (R.1c): an owner may read every *version row* on their deal and
+    still not the one belonging to a colleague's private entry, which is one
+    predicate rather than a role, exactly as `permissions.py` has it.
     """
     events = _system_entry_events(connection, opportunity_id, page)
     if role == "owner":
@@ -374,6 +397,7 @@ def fetch_activity_page(
             spec=TIMELINE_ENTRY_VERSIONS,
             target="timeline_entry",
             parent_sql=TIMELINE_ENTRY_PARENT_SQL,
+            parent_params=(reader_id,),
         )
         events += _edit_events(
             connection,
@@ -383,6 +407,7 @@ def fetch_activity_page(
             spec=NOTE_VERSIONS,
             target="note",
             parent_sql=NOTE_PARENT_SQL,
+            parent_params=(reader_id,),
         )
         events += _edit_events(
             connection,

@@ -286,47 +286,35 @@ def _no_activity_candidates(
 ) -> list[sqlite3.Row]:
     """Deals silent for N days, longest-silence-first.
 
-    The grouped-union pass `dashboard.stalled_opportunities` arrived at under
-    the 300 ms budget (**D-172**), asked with the rule's own window instead of
-    the fixed fourteen days. Closed deals are excluded for the same reason
-    they are there: a won deal is not stalled, it is finished -- and a rule
-    nudging somebody about a closed deal is the rule nobody keeps enabled.
+    **`opportunities.last_activity_at`, not a union** (R.1c). This carried
+    the grouped-union pass D-172 arrived at, asked with the rule's own window
+    instead of the fixed fourteen days -- and then R.3 replaced that union
+    everywhere else with a column the schema maintains (**D-201**) and did
+    not come back for this one. So the definition of "nothing has happened"
+    existed a fourth time, in the one feature named after it, and measured
+    **112 ms** against **under 1 ms** on `AGENTS.md`'s confirmed scale for
+    the same answer. Nobody waits on a scheduler tick, which is why this was
+    not felt; a fourth copy with no test holding it to the other three is the
+    reason it is gone anyway.
+
+    Closed deals are excluded for the same reason they are there: a won deal
+    is not stalled, it is finished -- and a rule nudging somebody about a
+    closed deal is the rule nobody keeps enabled. A deal nothing has *ever*
+    happened on has `NULL` here and is not a candidate, which is the same
+    answer the union gave when its `MAX` came back empty.
     """
     clause, params = _accessible_clause(creator_id)
     cutoff = utc_days_ago(days)
     return list(
         connection.execute(
             f"""
-            WITH activity AS (
-                SELECT opportunity_id, MAX(activity_at) AS last_activity_at
-                FROM (
-                    SELECT opportunity_id, event_timestamp AS activity_at
-                    FROM timeline_entries
-                    WHERE deleted_at IS NULL
-                    UNION ALL
-                    SELECT timeline_entries.opportunity_id, notes.created_at
-                    FROM notes
-                    JOIN timeline_entries ON timeline_entries.id = notes.entry_id
-                    WHERE notes.deleted_at IS NULL
-                        AND timeline_entries.deleted_at IS NULL
-                    UNION ALL
-                    SELECT timeline_entries.opportunity_id, comments.created_at
-                    FROM comments
-                    JOIN notes ON notes.id = comments.note_id
-                    JOIN timeline_entries ON timeline_entries.id = notes.entry_id
-                    WHERE comments.deleted_at IS NULL
-                        AND notes.deleted_at IS NULL
-                        AND timeline_entries.deleted_at IS NULL
-                )
-                GROUP BY opportunity_id
-            )
             SELECT {OPPORTUNITY_COLUMNS}
             FROM opportunities
-            JOIN activity ON activity.opportunity_id = opportunities.id
             WHERE {clause}
                 AND opportunities.stage NOT IN ({", ".join("?" for _ in CLOSED_STAGES)})
-                AND activity.last_activity_at < ?
-            ORDER BY activity.last_activity_at, opportunities.id
+                AND opportunities.last_activity_at IS NOT NULL
+                AND opportunities.last_activity_at < ?
+            ORDER BY opportunities.last_activity_at, opportunities.id
             LIMIT ?
             """,
             (*params, *CLOSED_STAGES, cutoff, AUTOMATION_RUN_LIMIT),
@@ -504,7 +492,7 @@ def _task_row(connection: sqlite3.Connection, task_id: int, creator_id: int) -> 
         # The rule's creator is the reader here, as everywhere else a rule
         # reads (D-173): a rule sees what its author would see by hand.
         f"{TASK_ROWS_SQL} WHERE tasks.id = ?",
-        (creator_id, task_id),
+        (creator_id, creator_id, task_id),
     ).fetchone()
     return row
 

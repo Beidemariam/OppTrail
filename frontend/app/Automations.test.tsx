@@ -988,3 +988,37 @@ describe("what the browser refuses, said out loud (6.5a, D-184)", () => {
     );
   });
 });
+
+describe("who may write one", () => {
+  it("offers New rule to an administrator", async () => {
+    await openAutomations({ automationRules: [aRule()] });
+
+    expect(
+      screen.getByRole("button", { name: "New rule" }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not offer it to anybody else, and still shows what runs here", async () => {
+    // R.1c, **D-215**. Reading the list stays open on purpose: "which
+    // automations run here, and whose" is answerable by design (D-173), and a
+    // rule's run log is the reason an archived row is kept at all.
+    await openAutomations({
+      user: { ...ALEX, is_admin: false },
+      automationRules: [aRule({ name: "Nudge me about quiet deals" })],
+    });
+
+    expect(screen.queryByRole("button", { name: "New rule" })).toBeNull();
+    expect(
+      await screen.findByText("Nudge me about quiet deals"),
+    ).toBeInTheDocument();
+  });
+});
+
+it("tells a non-administrator why there is no New rule button", async () => {
+  // A hidden control with no explanation reads as a missing feature (R.1c).
+  await openAutomations({ user: { ...ALEX, is_admin: false } });
+
+  expect(
+    await screen.findByText(/Writing one is an administrator's/),
+  ).toBeInTheDocument();
+});

@@ -40,3 +40,19 @@ export function canChangeItem(options: {
     canManageOpportunity(role) || (authorId != null && authorId === userId)
   );
 }
+
+/**
+ * Whether this caller administers the deployment (R.1c, **D-215**).
+ *
+ * Not a `Role`: those three are per opportunity and come from a share, while
+ * this is a property of the deployment and arrives on the session, resolved
+ * from `ADMIN_EMAILS` on the server. It gates the two writes that are not
+ * scoped to a deal — defining a custom field, writing an automation rule —
+ * and like everything else in this file it decides which controls are drawn,
+ * never who may do what.
+ */
+export function canAdminister(
+  user: { is_admin?: boolean } | null | undefined,
+): boolean {
+  return user?.is_admin === true;
+}

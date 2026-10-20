@@ -65,38 +65,36 @@ describe("a sealed entry on somebody else's deal", () => {
     author_name: BLAIR.name,
   });
 
-  it("keeps its place and its number, and carries nothing else", async () => {
+  it("is not on the timeline at all, and leaves no gap", async () => {
     await renderDeal({
       user: ALEX,
       opportunities: [anOpportunity()],
-      entries: [anEntry({ id: 100, title: "Said out loud" }), sealed],
+      entries: [
+        anEntry({ id: 100, title: "Said out loud" }),
+        sealed,
+        // #2 for this reader, because the sealed one is not in their count.
+        anEntry({ id: 102, title: "Said out loud again", sequence: 2 }),
+      ],
     });
+    await screen.findByText("Said out loud");
 
-    const card = (
-      await screen.findByText(/kept this entry to themselves/)
-    ).closest("article") as HTMLElement;
-
-    expect(within(card).getByText("#2")).toBeInTheDocument();
-    expect(within(card).getByText("Private")).toBeInTheDocument();
+    // R.1c, **D-209**: not an emptied card — no card. R.1b drew the row with
+    // its number, its author and "kept this entry to themselves"; the human
+    // ruled that a colleague should not be told there is anything to know.
+    expect(
+      screen.queryByText(/kept this entry to themselves/),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("Kept back")).not.toBeInTheDocument();
     expect(
       screen.queryByText("The part nobody else sees"),
     ).not.toBeInTheDocument();
-    // And the entry beside it is untouched.
-    expect(screen.getByText("Said out loud")).toBeInTheDocument();
-  });
+    expect(screen.queryByText(BLAIR.name)).not.toBeInTheDocument();
 
-  it("offers no way to act on it", async () => {
-    await renderDeal({
-      user: ALEX,
-      opportunities: [anOpportunity()],
-      entries: [sealed],
-    });
-    await screen.findByText(/kept this entry to themselves/);
-
-    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Add note" })).toBeNull();
+    // And the numbering runs 1, 2 — not 1, 3, which would say as much as the
+    // card used to.
+    expect(screen.getByText("#1")).toBeInTheDocument();
+    expect(screen.getByText("#2")).toBeInTheDocument();
+    expect(screen.queryByText("#3")).not.toBeInTheDocument();
   });
 });
 

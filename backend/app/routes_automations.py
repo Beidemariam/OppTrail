@@ -46,6 +46,7 @@ from .database import db_connection
 from .events import publish_opportunity_changed
 from .jobs import JOB_ROWS_SQL, job_run_from_row
 from .pagination import Page, PageRequest, cursor_clause, page_params, split_page
+from .permissions import require_admin
 from .schemas import (
     MAX_ENABLED_RULES_PER_CREATOR,
     AutomationRuleCreate,
@@ -167,6 +168,23 @@ def create_automation_rule(
     payload: AutomationRuleCreate,
     user: sqlite3.Row = Depends(get_current_user),
 ) -> AutomationRulePublic:
+    """Write a rule. **Administrators only since R.1c** (**D-215**).
+
+    D-173 left this open to any authenticated caller, on the reasoning that a
+    rule grants its author nothing they did not already have: it is evaluated
+    only over deals its creator can read, attributed to them, and the role
+    each action needs is re-checked per deal at run time. That reasoning
+    still holds -- and the reviewer ruled anyway, at the Phase R gate:
+    *"both have to be done by the owner."* The distinction they were drawing
+    is the one D-173 itself named: a rule **writes to records** rather than to
+    metadata, unattended, under somebody's name. Who may set that in motion is
+    a narrower question than who may be trusted with their own authority.
+
+    Everything else about a rule is unchanged, including that editing,
+    archiving and running one stays the creator's alone -- an admin does not
+    inherit another admin's rules.
+    """
+    require_admin(user)
     with db_connection() as connection:
         if payload.enabled:
             refuse_over_the_cap(connection, int(user["id"]))

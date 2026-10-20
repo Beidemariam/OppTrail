@@ -163,6 +163,29 @@ def creator_only(status: int) -> dict[Actor, int]:
     }
 
 
+def admin_only(status: int) -> dict[Actor, int]:
+    """The deployment's administrator may write it; everybody else may not.
+
+    The two global writes (**D-215**, R.1c): defining a custom field, and
+    creating an automation rule. `owner` is this world's administrator -- the
+    `world` fixture puts their address in `settings.admin_emails` -- so the
+    other three signed-in actors get **403 and not 404**, because both lists
+    are readable by everyone and there is no existence to hide.
+
+    Identical in shape to `creator_only` and different in meaning, which is
+    why it is its own function: that one is "whoever made this row", this one
+    is "whoever administers this deployment", and a future change to either
+    must not silently move the other.
+    """
+    return {
+        "anonymous": 401,
+        "unrelated": 403,
+        "viewer": 403,
+        "editor": 403,
+        "owner": status,
+    }
+
+
 def scoped(*, viewer: int, editor: int, owner: int) -> dict[Actor, int]:
     """The shape almost every opportunity-scoped endpoint has."""
     return {
@@ -705,7 +728,7 @@ MATRIX: dict[Endpoint, Case] = {
         notes="A reader has to know what the columns on their screen mean.",
     ),
     Endpoint("POST", "/api/v2/custom-fields"): Case(
-        expected=authenticated_only(201),
+        expected=admin_only(201),
         url=lambda world: "/api/v2/custom-fields",
         body=lambda world, actor: {
             "entity_type": "opportunity",
@@ -714,24 +737,28 @@ MATRIX: dict[Endpoint, Case] = {
             "type": "text",
         },
         notes=(
-            "Any signed-in user may define a field; the key is per-actor "
-            "so the runs do not collide."
+            "Administrators define fields (D-215, R.1c; it was any signed-in "
+            "user under D-171). The key is per-actor so the runs do not "
+            "collide."
         ),
     ),
     Endpoint("PATCH", "/api/v2/custom-fields/{field_id}"): Case(
-        expected=authenticated_only(200),
+        expected=admin_only(200),
         url=lambda world: f"/api/v2/custom-fields/{world.custom_field_id}",
         body=lambda world, actor: {"label": f"Renamed by {actor}", "required": False},
         notes="Label, options, required and position. Never key or type (ADR 0006).",
     ),
     Endpoint("POST", "/api/v2/custom-fields/{field_id}/archive"): Case(
-        expected=authenticated_only(200),
+        expected=admin_only(200),
         url=lambda world: f"/api/v2/custom-fields/{world.custom_field_id}/archive",
         body=lambda world, actor: None,
-        notes="Idempotent, so every actor in turn answers 200 rather than the first one winning.",
+        notes=(
+            "Idempotent, so the administrator answers 200 however many times "
+            "they call it; everybody else is refused (D-215)."
+        ),
     ),
     Endpoint("POST", "/api/v2/custom-fields/{field_id}/restore"): Case(
-        expected=authenticated_only(200),
+        expected=admin_only(200),
         url=lambda world: f"/api/v2/custom-fields/{world.archived_field_id}/restore",
         body=lambda world, actor: None,
         notes="The undo of archive, against a field the fixture archived.",
@@ -751,7 +778,7 @@ MATRIX: dict[Endpoint, Case] = {
         ),
     ),
     Endpoint("POST", "/api/v2/automation-rules"): Case(
-        expected=authenticated_only(201),
+        expected=admin_only(201),
         url=lambda world: "/api/v2/automation-rules",
         body=lambda world, actor: {
             "name": f"Matrix rule for {actor}",
@@ -966,6 +993,15 @@ def world(tmp_path, monkeypatch) -> World:
 
     settings.database_url = f"sqlite:///{tmp_path / 'matrix.db'}"
     initialize_database()
+
+    # The owner is this deployment's administrator (R.1c, **D-215**), which is
+    # what lets the fixtures below define a custom field and write an
+    # automation rule. Every other actor is deliberately *not* one, so the
+    # four `custom-fields` writes and `POST /automation-rules` expect 403 from
+    # editor, viewer, unrelated and anonymous alike -- the rows that pin the
+    # ruling. This fixture builds its own world rather than using the `client`
+    # fixture, so it sets the setting itself.
+    monkeypatch.setattr(settings, "admin_emails", "owner@example.com")
 
     monkeypatch.setattr(settings, "openai_api_key", "matrix-test-key")
     monkeypatch.setattr(

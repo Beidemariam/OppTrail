@@ -20,6 +20,11 @@ tsconfig.tsbuildinfo
 # carry no extension, so no pattern below matches them -- milestone 4.3 is what
 # made this directory something other than one ignored `.db` file.
 data/
+# The throwaway volume behind the Phase R gate checks (R.1c): a second
+# instance on :8001 holding the demo seed plus the confirmed-scale corpus, so
+# the review's performance and restore checks run against 805,000 rows
+# without touching the real one. Deleted when the round is done.
+data-demo/
 
 # Local data and logs
 *.db

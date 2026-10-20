@@ -5,6 +5,16 @@ an untested backup is not a backup -- so
 `test_restore_recovers_data_written_after_a_backup` drives the real sequence:
 back up, write more data, restore, and check the write is gone rather than
 merely asserting a file was produced.
+
+**What that was not enough to catch** (R.1c, **D-214**): every test here
+points `settings.database_url` at its own `tmp_path`, so the snapshot and the
+live database are always the same database by construction. The shipped
+procedure ran on a host shell where they were *not* -- the fallback
+`sqlite:///./app.db` from `backend/`, against a deployment whose database is
+bind-mounted at `/data` -- and the restore copied a real snapshot over a
+scratch file and reported success. `test_a_snapshot_from_another_databases_
+backups_is_refused` is the guard; the rest of that fix is in the `Makefile`,
+which now names the database both targets act on.
 """
 
 import sqlite3
@@ -16,7 +26,9 @@ from test_attachments import PDF, upload
 from test_timeline import create_entry
 
 from app.backup import (
+    RestoreTargetMismatch,
     attachment_mirror,
+    backup_dir,
     create_backup,
     latest_backup_at,
     mirror_attachments,
@@ -225,3 +237,51 @@ def test_the_blob_mirror_is_not_pruned_with_the_snapshots(
 
     assert len(list(Path(settings.backup_dir).glob("app-*.db"))) == 1
     assert (attachment_mirror() / attachment["sha256"][:2] / attachment["sha256"]).is_file()
+
+
+def test_a_snapshot_from_another_databases_backups_is_refused(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """R.1c, **D-214**. The failure this replaces was silent and total.
+
+    A snapshot belongs to the database whose `backups/` directory it sits in,
+    because `backup_dir()` is derived from the same `DATABASE_URL` the restore
+    would overwrite. A snapshot from anywhere else means the two have been
+    pointed at different databases -- which is what happened to the reviewer,
+    whose restore of a real snapshot reported success and changed nothing.
+    """
+    signup(client)
+    create_backup()
+
+    foreign = tmp_path / "elsewhere"
+    foreign.mkdir()
+    snapshot = foreign / "app-20261020T120000000000Z.db"
+    snapshot.write_bytes(next(iter(backup_dir().glob("app-*.db"))).read_bytes())
+
+    with pytest.raises(RestoreTargetMismatch) as refused:
+        restore_backup(snapshot)
+
+    # The message has to carry both paths: the fix is to set DATABASE_URL, and
+    # this is the only place that says so.
+    message = str(refused.value)
+    assert str(snapshot.parent) in message
+    assert str(backup_dir().resolve()) in message
+    assert "DATABASE_URL" in message
+
+
+def test_a_foreign_snapshot_restores_when_it_is_asked_for(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """Moving a snapshot between machines is a real operation, so the guard is
+    a question rather than a wall -- `make restore FOREIGN=1`."""
+    signup(client)
+    created = create_backup()
+
+    foreign = tmp_path / "elsewhere"
+    foreign.mkdir()
+    snapshot = foreign / created.name
+    snapshot.write_bytes(created.read_bytes())
+
+    restored = restore_backup(snapshot, allow_foreign_snapshot=True)
+
+    assert restored == Path(settings.database_url.removeprefix("sqlite:///"))

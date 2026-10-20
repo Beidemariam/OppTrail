@@ -5,7 +5,17 @@ import { FormEvent, useState } from "react";
 import { useAuthenticate } from "../lib/queries";
 
 /**
- * The signed-out shell: sign up or sign in, in one panel.
+ * The signed-out shell: **a sign-in screen**, with a way to create an account
+ * under it.
+ *
+ * It opened on *Sign up* until R.1c, which is the reviewer's one change at the
+ * Phase R gate: *"the log in screen defaults into create account instead of
+ * log in. just make a log in screen with a link in the bottom to create an
+ * account if first time user."* Every visit after the first is a sign-in, so
+ * the first field of the first screen asked almost everybody for something
+ * they had already done. The segmented switch is gone with it: a person
+ * signing up once does not need a control that is wrong for them the rest of
+ * the time.
  *
  * Everything the app shows past this point needs a session, so this is the
  * gate `AppShell` renders instead of a screen when there is none (R.1: one
@@ -19,7 +29,7 @@ import { useAuthenticate } from "../lib/queries";
  * token a browser pairs with a saved password.
  */
 export function AuthPanel() {
-  const [mode, setMode] = useState<"login" | "signup">("signup");
+  const [mode, setMode] = useState<"login" | "signup">("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -45,23 +55,6 @@ export function AuthPanel() {
         </div>
 
         <form className="form" onSubmit={submit}>
-          <div className="segmented">
-            <button
-              type="button"
-              className={mode === "signup" ? "active" : ""}
-              onClick={() => setMode("signup")}
-            >
-              Sign up
-            </button>
-            <button
-              type="button"
-              className={mode === "login" ? "active" : ""}
-              onClick={() => setMode("login")}
-            >
-              Sign in
-            </button>
-          </div>
-
           {mode === "signup" && (
             <label>
               Name
@@ -113,6 +106,27 @@ export function AuthPanel() {
           {authenticate.isError && (
             <p className="error">{authenticate.error.message}</p>
           )}
+
+          {/* The way to the other mode, under the form rather than above it
+              (R.1c). A button and not a link: it changes this screen instead
+              of going anywhere, and a `ghost-button` is this app's weight for
+              an action that must not compete with the one above it. The
+              password is cleared on the way, so a half-typed sign-in is not
+              submitted as a new account. */}
+          <p className="auth-switch">
+            {mode === "login" ? "First time here?" : "Already have an account?"}{" "}
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => {
+                setMode(mode === "login" ? "signup" : "login");
+                setPassword("");
+                authenticate.reset();
+              }}
+            >
+              {mode === "login" ? "Create an account" : "Sign in instead"}
+            </button>
+          </p>
         </form>
       </section>
     </main>

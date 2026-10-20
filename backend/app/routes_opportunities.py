@@ -544,7 +544,9 @@ def list_activity_page(
     """
     with db_connection() as connection:
         role = require_opportunity_access(connection, opportunity_id, int(user["id"]))
-        items, next_cursor = fetch_activity_page(connection, opportunity_id, role, page)
+        items, next_cursor = fetch_activity_page(
+            connection, opportunity_id, role, page, int(user["id"])
+        )
 
     return Page(items=items, next_cursor=next_cursor)
 

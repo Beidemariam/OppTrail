@@ -24,9 +24,19 @@ from fastapi.testclient import TestClient
 from test_automations import closing_in, create_rule, runs_for, silence, timeline
 from test_tasks import create_opportunity, signup
 
-from app import jobs, scheduler
+from app import jobs, permissions, scheduler
 from app.database import db_connection
 from app.settings import settings
+
+
+@pytest.fixture(autouse=True)
+def every_signed_in_user_administers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Writing a rule is admin-only since R.1c (**D-215**), and these tests
+    are about the clock rather than about who may write one -- the same seam
+    `test_automations.py` carries, and for the same reason: the cast here is
+    chosen to make a scenario true, not to make a permission true.
+    """
+    monkeypatch.setattr(permissions, "is_admin", lambda user: True)
 
 
 def job_rows(job: str | None = None) -> list[sqlite3.Row]:

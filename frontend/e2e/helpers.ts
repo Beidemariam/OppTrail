@@ -17,13 +17,11 @@ export const NORTHWIND = "Northwind platform rollout";
 
 export async function signIn(page: Page, email: string) {
   await page.goto("/");
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  // No mode switch to press any more (R.1c): the panel opens signed out on
+  // the sign-in form, which is what every visit after the first wants.
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(DEMO_PASSWORD);
-  await page
-    .getByRole("button", { name: "Sign in", exact: true })
-    .last()
-    .click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Opportunities" }),
   ).toBeVisible();
@@ -31,7 +29,8 @@ export async function signIn(page: Page, email: string) {
 
 export async function signUp(page: Page, email: string, name: string) {
   await page.goto("/");
-  await page.getByRole("button", { name: "Sign up", exact: true }).click();
+  // The panel opens on sign-in since R.1c, with this under the form.
+  await page.getByRole("button", { name: "Create an account" }).click();
   await page.getByLabel("Name").fill(name);
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(DEMO_PASSWORD);

@@ -6210,6 +6210,84 @@ this phase reaches `AWAITING_REVIEW` and is accepted, the project is finished.
       and the two widest write surfaces — and what I would do next in order,
       with a short list of what I would *not* do and why.
 
+- [ ] R.1c **The shakedown's three corrections, and three the review found**
+      (2026-10-18). The human passed all three R.1b checks and ruled on the
+      default (private, kept), then asked for two changes and overturned one
+      decision; reviewing the phase before the gate found three more.
+
+      - **A sealed entry is invisible, not emptied** (**D-209**). *"It is
+        better not to mention anything instead of saying it is kept private
+        so the other person doesn't know anything about what's kept away from
+        them."* The timeline list filters on `VISIBLE_ENTRIES_SQL`, the
+        sealed card is gone from `TimelineEntryList` along with its CSS, and
+        `ENTRY_SEQUENCE_SQL` counts per reader so no gap stands where the row
+        did. `entry_from_row`'s emptying branch and `sealed_for` are deleted:
+        with every read filtering, no sealed row reaches them.
+        `test_a_sealed_entry_keeps_its_number_for_everyone` becomes its own
+        inverse.
+      - **The task's link goes with its title** (D-209). R.1b withheld
+        `entry_title` and let `entry_id` 404; with the card gone, that id was
+        the one place left naming a colleague's sealed entry.
+      - **The activity log stopped announcing one** (**D-210**). Found by
+        review, confirmed by a test that fails against the unfixed code: an
+        owner read "Colleague edited an entry, changing the title" with its
+        id. Never the content — the version read and the restore both 404 —
+        but existence, author, time and field names.
+      - **The 14-day rule lost its fourth copy** (**D-211**).
+        `automations._no_activity_candidates` still walked the three-way
+        union R.3 replaced everywhere else: 112 ms against under 1 ms at
+        confirmed scale, for the same answer.
+      - **The scale corpus belongs to Alex again** (**D-212**).
+        `MAX(id)` gave 400 deals to Dana after a seed, so a person following
+        R.7's tour could not find any of the 805,000 rows they had built.
+      - **The end-to-end suite was red on the committed phase** (**D-213**).
+        R.7's seed writes Alex a notebook; `e2e/29-private-entries.spec.ts`,
+        written in R.1b, waits for the empty-state trigger that is therefore
+        no longer there. `FINAL-REPORT.md`'s "112 passed" did not hold.
+      **The Phase R gate round (`phaseRgate`, 2026-10-18): REVIEW.** Five of
+      the six checks passed or were skipped for want of a working step; one
+      failed, and the verdict carried one change.
+
+      - **The restore reached the wrong database** (**D-214**), which is check
+        pr-4's failure reproduced: `make restore` resolved its target from the
+        application's own fallback, so on a host shell it overwrote
+        `backend/app.db` — a scratch file no container reads — and reported
+        success. `make backup` shared the flaw and `BACKUP` was resolved
+        relative to `backend/`. Both targets name the deployment's database
+        now, the path is resolved from the repository root, and a snapshot
+        from another database's `backups/` is refused with both paths named.
+        **No test could have caught it**: every test in `test_backup.py`
+        points `database_url` at its own `tmp_path`.
+      - **pr-5 was blocked by a non-problem.** `start_mac.sh` runs
+        `docker run` in the foreground and the healthcheck prints
+        `GET /readyz 200` every 30 seconds, which together read as a hang.
+        Said so in `docs/operations.md`, with the detached command.
+      - **The sign-in screen opened on Create account**, which the verdict
+        asked for: *"just make a log in screen with a link in the bottom to
+        create an account if first time user."* `AuthPanel` opens on sign-in,
+        the segmented switch is gone, and the way to sign up is one line under
+        the form.
+      - **Both global writes are an administrator's** (**D-215**), the ruling
+        on the two widest write surfaces: *"both have to be done by the
+        owner."* `ADMIN_EMAILS` names them, `permissions.require_admin` is the
+        gate on five routes, the matrix gained an `admin_only` expectation,
+        and `tests/test_admin.py` runs the predicate both ways. Reading stays
+        open.
+      - **The backup needs a schedule outside the app** — the reviewer chose
+        a cron line, which is in `docs/operations.md` with the off-the-box
+        copy beside it. The in-process job had fired **zero** times in six
+        days against 154 automation ticks, because an interval's first firing
+        is one interval after boot and the machine sleeps.
+      - **pr-2 was my error, not a defect**: the check said to search
+        `pricing` as a reader who cannot see the only prose in the database.
+        The generated corpus's entries are titled `Entry 400` with the body
+        `body`; `Entry` is the term, and it measures 184 ms at 805,000 rows.
+      - Still open from the R.1b shakedown, and not in this list yet: the
+        follow-up tick in the entry composer (a task by default, optional),
+        and one button size across the app. Carried from pr-6: a Q&A page
+        with a feedback form for questions the user guide does not answer
+        (v3).
+
 The Phase R review packet doubles as the release sign-off (brief §8).
 
 ---
@@ -6256,6 +6334,12 @@ Each names the decision that put it here.
       carried since 3.9 and blocked on the same thing: no test may make a real
       model call (`conftest.no_live_network`), so compliance has to be verified
       by hand against a real one.
+- [ ] **A Q&A page with a feedback form** (R.1c, the reviewer's note on check
+      pr-6): questions the user guide does not answer get submitted from the
+      app rather than asked over somebody's shoulder. Named here because it
+      is a feature with a form, a store and a reader — not a documentation
+      change.
+
 - [ ] **Attachment pruning** is *not* here — it belongs with uploads joining the
       backup story in **R.5** (D-149), because the safe predicate needs the
       backup's shape to be settled.

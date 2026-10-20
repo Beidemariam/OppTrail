@@ -503,6 +503,27 @@ textarea {
   grid-template-columns: minmax(0, 1fr) 110px;
 }
 
+/* The sign-up route out of the sign-in screen (R.1c): one line under the
+   form, reading as a sentence with the control inside it rather than as a
+   second call to action. The button keeps the ghost weight so the primary
+   action above it stays the only filled thing on the panel. */
+.auth-switch {
+  align-items: baseline;
+  color: var(--text-secondary);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: var(--text-sm);
+  gap: var(--space-1);
+  justify-content: center;
+  margin: 0;
+}
+
+.auth-switch .ghost-button {
+  color: var(--text-link);
+  padding: 0 var(--space-1);
+  text-decoration: underline;
+}
+
 .segmented {
   background: var(--bg-sunken);
   border-radius: var(--radius-md);
@@ -4295,19 +4316,10 @@ html[data-sticky="deal"] {
   }
 }
 
-/* A sealed entry (R.1b): the row keeps its place and its number, and says who
-   kept it back. Quieter than a card with content in it — there is nothing to
-   read, and a dashed edge says so without a second badge. */
-.timeline-entry.is-sealed .timeline-entry-body {
-  background: var(--bg-sunken);
-  border-style: dashed;
-}
-
-.timeline-entry.is-sealed .timeline-copy {
-  color: var(--text-secondary);
-  font-style: italic;
-  margin: var(--space-2) 0 0;
-}
+/* The sealed card's own styling stood here until R.1c (D-209). There is no
+   sealed card any more: a private entry leaves the timeline the server sends
+   rather than standing in it emptied, so the rule had nothing left to match.
+   The author's `Private` badge is an ordinary `.system-badge`. */
 
 /* The tick box that reveals an entry, and the sentence under it. */
 .entry-visibility {

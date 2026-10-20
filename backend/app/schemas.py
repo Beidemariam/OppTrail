@@ -103,6 +103,13 @@ class UserPublic(BaseModel):
     email: str
     name: str
     created_at: str
+    # Whether this caller administers the deployment (R.1c, **D-215**).
+    # Derived from `ADMIN_EMAILS` rather than stored, and sent so the screens
+    # can stop offering the two writes an administrator alone may make -- a
+    # form that submits into a 403 is the thing `lib/permissions.ts` exists to
+    # prevent. It decides which controls are drawn and never who may do what:
+    # `permissions.require_admin` is the only enforcement.
+    is_admin: bool = False
 
 
 class SignupRequest(BaseModel):

@@ -21,7 +21,19 @@ export interface RecordedCall {
 }
 
 export interface FakeApiOptions {
-  user?: { id: number; email: string; name: string; created_at: string } | null;
+  user?: {
+    id: number;
+    email: string;
+    name: string;
+    created_at: string;
+    /** Whether this session administers the deployment (R.1c, D-215). The
+     * two global writes — defining a custom field, writing an automation
+     * rule — are an administrator's, and the screens hide their controls for
+     * anybody else. `ALEX`, `BLAIR` and the rest are administrators here so
+     * that every suite about those features keeps testing the feature; a
+     * test about the gate passes `is_admin: false` explicitly. */
+    is_admin?: boolean;
+  } | null;
   opportunities?: Opportunity[];
   entries?: TimelineEntry[];
   notifications?: Notification[];
@@ -228,12 +240,14 @@ export const ALEX = {
   email: "alex@opptrail.test",
   name: "Alex",
   created_at: "2026-01-01T00:00:00Z",
+  is_admin: true,
 };
 export const BLAIR = {
   id: 2,
   email: "blair@opptrail.test",
   name: "Blair",
   created_at: "2026-01-01T00:00:00Z",
+  is_admin: true,
 };
 
 export function anOpportunity(
@@ -1129,7 +1143,18 @@ export class FakeApi {
     }
     if (segments[2] === "timeline") {
       if (method === "GET") {
-        return this.page(this.entries, path);
+        // A sealed entry never leaves the server for anybody but its author
+        // (R.1c), so the fake drops it rather than handing the component a
+        // row it would never receive. It does **not** renumber: `sequence` is
+        // the server's own per-reader count (D-139, D-209) and a fixture says
+        // what it means, which is what keeps the card honest about printing
+        // the number it was sent rather than one derived here.
+        const readable = this.entries.filter(
+          (item) =>
+            item.visibility !== "private" ||
+            item.created_by === (this.user?.id ?? ALEX.id),
+        );
+        return this.page(readable, path);
       }
       const created = anEntry({
         ...body,

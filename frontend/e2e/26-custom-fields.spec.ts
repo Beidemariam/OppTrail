@@ -1,11 +1,12 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  ALEX,
   openBoardFilters,
   createOpportunity,
   openEntryForm,
   openTimeline,
-  signUp,
+  signIn,
 } from "./helpers";
 
 /**
@@ -24,7 +25,11 @@ test("a new select field becomes a column, a filter and a form input", async ({
   const label = `Region ${suffix}`;
   const opportunity = `Fields ${suffix}`;
 
-  await signUp(page, `fields-${suffix}@opptrail.test`, "Field Definer");
+  // Defining a field is an administrator's (R.1c, D-215), and the seeded
+  // administrator is Alex (`ADMIN_EMAILS` in `scripts/e2e-server.sh`). The
+  // random suffix is what keeps one run from colliding with the next, not
+  // the actor.
+  await signIn(page, ALEX);
 
   // --- define it ---
   await page.getByRole("button", { name: "Fields" }).click();
@@ -88,7 +93,7 @@ test("an entry field appears on the entry form and is kept", async ({
   const suffix = Math.random().toString(36).slice(2, 8);
   const label = `Sentiment ${suffix}`;
 
-  await signUp(page, `entryfields-${suffix}@opptrail.test`, "Entry Definer");
+  await signIn(page, ALEX); // the administrator (R.1c, D-215)
   await page.getByRole("button", { name: "Fields" }).click();
   const dialog = page.getByRole("dialog", { name: "Custom fields" });
   await dialog.getByLabel("These fields are on").selectOption("entry");
@@ -129,7 +134,7 @@ test("archiving a field hides it everywhere without losing the value", async ({
   const label = `Tier ${suffix}`;
   const opportunity = `Archive ${suffix}`;
 
-  await signUp(page, `archive-${suffix}@opptrail.test`, "Archiver");
+  await signIn(page, ALEX); // the administrator (R.1c, D-215)
   await page.getByRole("button", { name: "Fields" }).click();
   const dialog = page.getByRole("dialog", { name: "Custom fields" });
   await dialog.getByLabel("Label").fill(label);

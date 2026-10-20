@@ -1,9 +1,14 @@
 """Automations (milestone 6.3, `docs/FEATURES.md` §11).
 
-The authorization matrix covers who may call each route (**D-173**: anybody
-signed in may write a rule, only its creator may change or run one). This file
-is about what §11's own constraints mean in practice, and the five that carry
-the feature are:
+The authorization matrix covers who may call each route (**D-215** since
+R.1c: only an administrator may write a rule, and only its creator may change
+or run one). This file is about what §11's own constraints mean in practice,
+and every test in it signs up as whoever the scenario needs and then writes a
+rule, so `every_signed_in_user_administers` below removes that gate for this
+module alone -- the subject here is what a rule *does*. The gate itself is
+pinned in `test_admin.py` and in every actor row of the matrix.
+
+The five constraints that carry the feature are:
 
 - **one hop** -- a rule's write cannot wake a rule, which is why the design
   contains no loop detection at all,
@@ -26,8 +31,25 @@ from test_custom_fields import define
 from test_tasks import create_opportunity, login, logout, share, signup
 from test_timeline import create_entry
 
+from app import permissions
 from app.database import db_connection
 from app.schemas import MAX_ENABLED_RULES_PER_CREATOR
+
+
+@pytest.fixture(autouse=True)
+def every_signed_in_user_administers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Writing a rule is admin-only since R.1c (**D-215**), and these tests
+    are not about that.
+
+    Patched at the predicate rather than by listing addresses in
+    `settings.admin_emails`: the tests below sign up as a dozen different
+    people on purpose -- a creator, a colleague who may not read a deal, an
+    owner whose role an action needs -- and keeping that cast honest matters
+    more here than re-stating the configuration in each one. `test_admin.py`
+    runs the real predicate in both directions.
+    """
+    monkeypatch.setattr(permissions, "is_admin", lambda user: True)
+
 
 AUTOMATIONS_SOURCE = Path(__file__).resolve().parent.parent / "app" / "automations.py"
 
@@ -250,7 +272,10 @@ def test_a_resent_custom_value_is_not_a_change(client: TestClient) -> None:
     """A JSON column is written whole, so a form resending a value unchanged
     would look like a change to anything comparing the submitted set against
     nothing."""
-    signup(client, "carla@example.com", "Carla")
+    # Defining a field is admin-only since R.1c (D-215), and conftest makes
+    # `owner@example.com` the administrator; this test is about comparing
+    # custom values, not about who may define one.
+    signup(client, "owner@example.com", "Carla")
     define(client, "region", "select", options=["EMEA", "APAC"])
     opportunity = create_opportunity(client, "Custom watch")
     rule = create_rule(
@@ -393,7 +418,7 @@ def test_archiving_a_custom_field_disarms_the_rules_that_read_it(client: TestCli
     The value stays in the JSON, so a rule reading the raw column would keep
     acting on a field nobody can see on screen any more.
     """
-    signup(client, "archie@example.com", "Archie")
+    signup(client, "owner@example.com", "Archie")  # the admin (R.1c, D-215)
     field = define(client, "tier", "select", options=["Gold", "Silver"])
     opportunity = create_opportunity(client, "Gold account")
     client.patch(
@@ -879,7 +904,7 @@ def test_a_checkbox_and_a_multi_select_compare_as_text(client: TestClient) -> No
     """A custom value is not always a string. A checkbox reads as
     `true`/`false` and a multi-select as its joined options, because a
     condition's own value is typed by a person into one text box."""
-    signup(client, "shapes@example.com", "Shapes")
+    signup(client, "owner@example.com", "Shapes")  # the admin (R.1c, D-215)
     define(client, "follow_up", "checkbox")
     define(client, "regions", "multi_select", options=["EMEA", "APAC"])
     opportunity = create_opportunity(client, "Shaped values")

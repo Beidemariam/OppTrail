@@ -396,7 +396,10 @@ single-container app. Revision `0020_job_runs` is the record of what ran.
 - **Two jobs, which is all of v2's recurring work.** `automations` evaluates
   the two of §11's five triggers the clock owns (`TIME_TRIGGERS`) through
   `automations.run_rule` — the same function the manual run route calls, so a
-  tick cannot drift from a person pressing Run (D-175). `backup` is ADR 0011's
+  tick cannot drift from a person pressing Run (D-175). Its `no_activity`
+  candidates read `opportunities.last_activity_at` since R.1c (**D-211**):
+  R.3 replaced that union everywhere else and missed this one, which measured
+  112 ms a tick against under 1 ms for the column. `backup` is ADR 0011's
   `VACUUM INTO`, which has had no schedule since milestone 1.6.
 - **Interval triggers, `max_instances=1`, `coalesce=True`.** An interval's
   first firing is one interval away, which keeps a restart loop from taking a
@@ -454,8 +457,9 @@ however it is phrased.
   soft delete, a restore and an edited `event_timestamp` all arrive. There are
   no DELETE triggers because nothing hard-deletes user data here. The board's
   page is **2.5 ms** now and the whole board **19 ms**.
-- **`app/stalled.py` is the single definition** the board, a deal's own screen
-  and the dashboard's stalled list all read. `dashboard.py` had carried a
+- **`app/stalled.py` is the single definition** the board, a deal's own screen,
+  the dashboard's stalled list and — since R.1c's D-211 — the `no_activity`
+  automation trigger all read. `dashboard.py` had carried a
   second copy of the rule since 6.2 and said so in a comment ("One definition
   would be better than two").
 - **A stored derived answer needs a test per way it can be wrong.**
@@ -519,7 +523,21 @@ losing the disk (**D-206**). `make backup` writes a timestamped snapshot to `bac
 under the shipped `DATABASE_URL`) and prunes down to `BACKUP_RETENTION_COUNT`
 (default 7). `make restore BACKUP=<path>` reverses it — stop the application
 first, since it deletes the live database's `-wal`/`-shm` sidecars before
-overwriting `app.db` in place. `tests/test_backup.py` exercises the full
+overwriting `app.db` in place.
+
+**Both targets name the database they act on** (R.1c, **D-214**), and that is
+not tidiness: they inherited the application's own fallback until the Phase R
+review, so on a host shell they acted on `backend/app.db` — a scratch file no
+container has ever read — while the deployment's database is bind-mounted at
+`/data`. `make restore` copied a real snapshot over the wrong file and
+reported success, which is how the reviewer met it: *"the deleted opportunity
+never restored."* The `Makefile` now sets `DATABASE_URL` to `./data/app.db`
+for both and resolves `BACKUP` from the repository root; `restore_backup`
+**refuses a snapshot from another database's `backups/` directory**
+(`FOREIGN=1` overrides) and prints the absolute path it wrote. Every test
+here points `database_url` at its own `tmp_path`, so the snapshot and the
+live database were the same database by construction and no test could have
+caught it. `tests/test_backup.py` exercises the full
 round trip, not just that a snapshot file gets created: ADR 0011 requires the
 restore to be "actually exercised," not assumed.
 
@@ -1181,23 +1199,37 @@ its author alone — **not by the opportunity's owner** (**D-194**): "private
 unless the owner asks" is not private, and the symmetric rule is what makes
 this one predicate rather than a role lookup.
 
-- **The row stays; the content goes.** A colleague's timeline still holds the
-  entry, with its number, its author and its time, and nothing else.
-  `routes_timeline.entry_from_row` is where it is emptied — one function that
-  every read of an entry passes through, rather than a predicate each of the
-  four reads has to remember.
-- **`permissions.VISIBLE_ENTRIES_SQL` is the rule**, and it is deliberately
-  *not* inside `timeline_utils.ENTRY_SEQUENCE_SQL`. An entry's number is a
-  property of the deal: putting it there would renumber one reader's timeline
-  against another's, and the AI cites those numbers.
-  `test_a_sealed_entry_keeps_its_number_for_everyone` is what fails if anybody
-  moves it.
+- **The row goes too, since R.1c** (**D-209**). R.1b kept it — number,
+  author, time, nothing else — and the human overruled that at the shakedown:
+  *"better not to mention anything instead of saying it is kept private, so
+  the other person doesn't know anything about what's kept away from them."*
+  So `timeline_filters` drops it from the list, `entry_from_row`'s emptying
+  branch is gone, and there is no sealed card on the timeline. Every other
+  read already filtered; the list was the last one that did not.
+- **`permissions.VISIBLE_ENTRIES_SQL` is the rule**, and since R.1c it *is*
+  inside `timeline_utils.ENTRY_SEQUENCE_SQL` — the reverse of what R.1b
+  decided, and the other half of D-209. A row that vanishes while the
+  numbering stays leaves a gap between #35 and #37, which says exactly what
+  the removed card used to say out loud; deletions renumber here rather than
+  leaving gaps, so a gap is unambiguous. The cost is the one D-139 already
+  named: two people may call one entry by two numbers, tolerable because this
+  was never an identity (`?entry=` links carry the row id). A single reader's
+  card and the AI's citation still come from one expression, and the AI's
+  context is per reader. `test_a_sealed_entry_is_numbered_per_reader` is what
+  fails if anybody takes it back out.
 - **Every read that could leak one was changed**: the timeline list, the six
   context fetchers that resolve the parent of a note, a comment or a reaction
   (so every write on a sealed entry answers 404), all four branches of the
   search query, the AI's context — now per reader, which is the one place a
-  leak would be invisible — the export, the attachment download, and the title
-  a task shows for the entry it came from.
+  leak would be invisible — the export, the attachment download, and the
+  title *and id* a task shows for the entry it came from (R.1c: the id alone
+  was the last thing naming a colleague's sealed entry). **The activity log
+  was not among them until R.1c** (**D-210**), and it was the one place a
+  sealed entry still announced itself — an owner read that a colleague had
+  edited an entry, with its id and which fields changed. The content was
+  never reachable there; `activity.py`'s two joins through
+  `timeline_entries` now carry the predicate, which is why
+  `fetch_activity_page` takes a reader id beside the role.
 - **Sealing afterwards withdraws what the entry already said** (**D-195**). A
   notification is a copy carrying the title, written at the time and read
   without re-checking the deal, so `notification_service.withdraw_entry_
@@ -1514,8 +1546,15 @@ pressure.* Revision `0018_automation_rules` adds `automation_rules` and
   `ACTION_REQUIRES` is that table, and `change_stage` is owner-only there for
   the same reason `PATCH /opportunities/{id}` is. A rule naming an action its
   creator may not perform on a matched deal records `skipped` with the
-  reason. That is what makes creation open to any authenticated caller (D-171's
-  rule): a rule grants its author nothing they did not already have.
+  reason.
+- **Writing one is an administrator's, since R.1c** (**D-215**). D-173 left
+  creation open to any authenticated caller on the reasoning that a rule
+  grants its author nothing they did not already have — which still holds.
+  The human ruled otherwise at the Phase R gate, on the distinction D-173
+  itself drew: a rule **writes to records** rather than to metadata,
+  unattended. Listing stays open, and editing, archiving and running one
+  remain the *creator's* alone — an admin does not inherit another admin's
+  rules.
   **Editing, archiving and running one is the creator's alone**, which is the
   one place this departs from custom fields — a rule performs writes recorded
   under its creator's name. Listing is open, so "which automations run here,
@@ -1600,14 +1639,19 @@ text where nothing can filter on them. Revision `0016_custom_fields` adds
 `custom_field_definitions` and a `custom_values` JSON column on both
 `opportunities` and `timeline_entries`.
 
-- **Who may define one is the widest write surface in the app** (**D-171**).
-  §3 says "admin-defined" and there is no admin role here, so the rule is
-  *any authenticated caller* — not the saved views' creator-only rule, because
-  a field is shared by construction rather than personal (a typo in a label
-  everyone reads should not be fixable only by whoever typed it). The creator
-  is recorded, so narrowing this later is a route change rather than a
-  migration, and every actor row in `test_authorization_matrix.py` pins the
-  rule so a change to it cannot be silent.
+- **Who may define one is an administrator, since R.1c** (**D-215**, closing
+  **D-171**). §3 says "admin-defined"; there was no admin, so D-171 read that
+  as *any authenticated caller* and recorded the creator — explicitly the
+  reversible direction, since narrowing it later is a route change rather
+  than a migration. The human closed it at the Phase R gate (*"both have to
+  be done by the owner"*), and because a definition has no opportunity to
+  own, "the owner" is the deployment's: `permissions.require_admin`, against
+  the addresses in `ADMIN_EMAILS`. **Configuration rather than a column** —
+  there is nothing to grant in-app and nothing to repair when the list
+  changes, and `permissions.is_admin` is the whole implementation. Reading
+  stays open to everyone, which is what the column picker, the filter bar and
+  both forms need. The matrix's `admin_only` expectation pins all four writes
+  and `tests/test_admin.py` runs the predicate in both directions.
 - **Validated on write, never trusted on read** — the ADR's two rules, and
   both are load bearing. `custom_fields.validated_values` checks a submitted
   set against the live definitions; `visible_values` drops any key with no

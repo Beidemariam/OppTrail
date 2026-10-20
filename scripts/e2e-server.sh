@@ -31,6 +31,14 @@ export OPENAI_API_KEY=""
 # fail a test that is about something else; the limit itself is asserted in
 # `backend/tests/test_rate_limit.py`, against the real default.
 export AUTH_RATE_LIMIT_ATTEMPTS=200
+# Alex administers this deployment (R.1c, **D-215**), which the specs need:
+# the Fields control and New rule are an administrator's, and three specs open
+# them. It has to be set *here* rather than left to `tools.seed` -- the seed
+# makes Alex the administrator of the database it builds, in its own process,
+# and the server below is a different process that reads this environment.
+# That split is the real deployment's too: a container with no ADMIN_EMAILS
+# has no administrator however the database was seeded.
+export ADMIN_EMAILS="alex@opptrail.test"
 
 cd backend
 uv run python -m tools.seed >/dev/null

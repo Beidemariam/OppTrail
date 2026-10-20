@@ -38,12 +38,39 @@ Three things about this layout are deliberate:
 
 ## Backups
 
-A snapshot is taken automatically every `BACKUP_INTERVAL_HOURS` (default 24)
-by the scheduler inside the process (ADR 0004, milestone 6.5), and
-`make backup` takes one by hand. Both run the same code.
+A snapshot is taken every `BACKUP_INTERVAL_HOURS` (default 24) by the
+scheduler inside the process (ADR 0004, milestone 6.5), and `make backup`
+takes one by hand. Both run the same code.
 
 ```bash
 make backup     # VACUUM INTO a timestamped snapshot, then mirror new uploads
+```
+
+**Do not rely on the scheduled one alone.** An interval job's first firing is
+one interval after boot, deliberately, so that a restart loop cannot take a
+snapshot per restart — which means a process that is never up for a whole
+interval never reaches it. On the deployment this was written against, the
+automations job had run 154 times and the backup job **zero** times, because
+the machine sleeps and the container restarts. A snapshot on a schedule
+outside the application is the only kind that does not depend on the
+application's uptime:
+
+```cron
+# 02:30 daily: snapshot, then copy the volume's backups somewhere else.
+30 2 * * * cd /path/to/Sales_Opp_Tracker && make backup >> /var/log/opptrail-backup.log 2>&1
+45 2 * * * rsync -a --delete /path/to/Sales_Opp_Tracker/data/backups/ /elsewhere/opptrail/
+```
+
+The second line is the part this repository cannot do for you, and it is the
+one that matters: see the volume note above about `backups/` living on the
+same disk as the database.
+
+**Both targets act on `./data/app.db`**, the file the container mounts at
+`/data`. That is the `DATABASE_URL` the `Makefile` sets for them; override it
+for any other database:
+
+```bash
+make backup DATABASE_URL="sqlite:///$PWD/data-demo/app.db"
 ```
 
 - **`VACUUM INTO`, not a file copy.** It writes a consistent snapshot while
@@ -70,7 +97,27 @@ overwrites `app.db` in place; a running process must not race with that.
 ```bash
 ./scripts/stop_mac.sh                  # or stop_linux.sh
 make restore BACKUP=data/backups/app-20261017T093012123456Z.db
-./scripts/start_mac.sh
+./scripts/start_mac.sh                 # runs in the foreground; see below
+```
+
+`BACKUP` is read from the repository root, and the restore prints the
+**absolute** path of the database it wrote. Read that line: it is how you know
+the restore reached the deployment and not a scratch file beside the code.
+A snapshot from any other database's `backups/` directory is **refused**, with
+both paths named — pass `FOREIGN=1` to restore one on purpose, after checking
+that is what you mean. (This guard exists because the version without it
+copied a real snapshot over the wrong file and reported success: R.1c,
+**D-214**.)
+
+**`start_mac.sh` does not return.** It runs `docker run` in the foreground, so
+the container's log keeps printing — including a `GET /readyz 200` every 30
+seconds, which is the healthcheck and not a loop. The app is up when you see
+the first of those; leave the terminal alone, or run the container detached
+yourself if you would rather have your prompt back:
+
+```bash
+docker run -d --name opptrail --restart unless-stopped --env-file .env \
+  -p 8000:8000 -v "$PWD/data:/data" opptrail
 ```
 
 What it does, in order: delete `app.db-wal` and `app.db-shm` (stale WAL frames
@@ -126,9 +173,38 @@ complete list with defaults):
 
 | Setting | Default | What it does |
 |---|---|---|
+| `ADMIN_EMAILS` | — (nobody) | Who may define custom fields and write automation rules |
 | `DATABASE_URL` | `/data/app.db` in the image | Where the database lives |
 | `BACKUP_INTERVAL_HOURS` | 24 | How often the scheduler snapshots |
 | `BACKUP_RETENTION_COUNT` | 7 | How many snapshots to keep |
 | `SCHEDULER_ENABLED` | true | Turns off the in-process scheduler entirely |
 | `ENVIRONMENT` | development | `production` sets `Secure` on the session cookie |
 | `OPENAI_API_KEY` | — | Without it the AI panel answers 503 and says which setting is missing |
+
+## Who administers it
+
+Two writes in this application are not scoped to a deal: **defining a custom
+field**, which changes the shape of every record of its type, and **writing an
+automation rule**, which writes to records unattended under its creator's
+name. Both are an administrator's (R.1c, **D-215**), and the administrators
+are the addresses in `ADMIN_EMAILS`:
+
+```bash
+ADMIN_EMAILS=you@example.com,someone-else@example.com
+```
+
+- **Comma-separated, trimmed, case-insensitive.** Empty means nobody, which
+  is the default: a fresh install has no administrator until you name one, and
+  the two screens say who to ask rather than failing a form.
+- **Configuration, not a column.** There is no in-app way to grant it and
+  nothing to repair if the list changes — the next request reads the new
+  value. `permissions.is_admin` is the whole implementation.
+- **It is not a role.** The three roles in this app (owner, editor, viewer)
+  are per opportunity and come from a share. An administrator gets no extra
+  access to any deal, and an opportunity's owner administers nothing beyond
+  it.
+- **Everyone still reads both lists.** The column picker, the filter bar and
+  both forms are built from the field definitions, and "which automations run
+  here, and whose" is answerable by anybody. What is gated is the five writes.
+- `make seed` makes `alex@opptrail.test` the administrator of the database it
+  builds, so the demo has Phase 6 in it to look at.
