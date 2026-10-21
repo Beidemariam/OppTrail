@@ -6341,14 +6341,26 @@ The Phase R review packet doubles as the release sign-off (brief §8).
       Phase R. Backup and restore are tested and were *wrong* until R.1c:
       the documented procedure never reached the deployment (**D-214**)
 - [x] CI workflow present and valid
-- [x] No unresolved high/critical dependency vulnerabilities — one allowlisted
-      with its reason, and the gate fails if it stops appearing (D-207)
+- [x] No unresolved high/critical dependency vulnerabilities — one npm
+      advisory allowlisted with its reason, and that gate fails if it stops
+      appearing (D-207). **The Python side went red four days after R.6
+      locked it** (**D-220**): `pip-audit` found 9 advisories against
+      `certifi` and `pillow`, both transitive, neither of which existed when
+      the lockfile was written. Bumped to `certifi 2026.10.19` and
+      `pillow 13.0.0`; audit clean. Worth knowing that `pip-audit` is a bare
+      wall where npm has a ratchet — a Python advisory with no upgrade
+      available takes the build red with no way to record why it is safe here
 - [ ] Documentation set and `FINAL-REPORT.md` complete — the set is written
       (R.8); the report is being trued up for acceptance, since two of its
       numbers and all three of its open questions have moved since R.9
 
-- [ ] `make check` green on `main` from a clean clone — after the
-      fast-forward, which is the first thing to run on `main`
+- [x] `make check` green on `main` from a clean clone — run from a 45 MB
+      clone of the accepted commit with no `.env`, no `node_modules` and no
+      `data/`, which also proves the suites do not depend on the OpenAI key.
+      It **failed first time** on `pip-audit` (the item above), which is the
+      only reason that was found: `pip-audit` is not in `check-fast`, and the
+      host gate runs `make test-host`, so every gate up to acceptance was
+      green while `make check` was red
 
 ---
 
