@@ -6319,18 +6319,36 @@ The Phase R review packet doubles as the release sign-off (brief §8).
 
 ## Definition of Done (brief §10) — tracking
 
-- [ ] `phase-F-accepted` through `phase-6-accepted` and `phase-R-accepted`
-      tags exist — **4 of 7** so far (`F`, `1`, `2`, `3`). Seven rather than
-      eight since email moved to v3 (**D-141**); there is no
-      `phase-5-accepted` to earn
-- [ ] `make check` green on `main` from a clean clone
-- [ ] Coverage floors met; history in `COVERAGE.md`
-- [ ] Invariant tests and authorization matrix passing
-- [ ] All applicable E2E journeys passing with axe checks
-- [ ] Docker image passes smoke test, runs non-root; backup/restore tested
-- [ ] CI workflow present and valid
-- [ ] No unresolved high/critical dependency vulnerabilities
-- [ ] Documentation set and `FINAL-REPORT.md` complete
+- [x] `phase-F-accepted` through `phase-6-accepted` tags exist — **6 of 7**
+      (`F`, `1`, `2`, `3`, `4`, `6`). Seven rather than eight since email moved
+      to v3 (**D-141**); there is no `phase-5-accepted` to earn
+- [ ] **`phase-R-accepted`** — the last one. The reviewer's verdict is
+      **accept** (round two, 2026-10-21: all five remaining checks passed), so
+      what stands between here and the tag is the host-gate receipt:
+      `scripts/autopilot-gate.sh R` on the host, then
+      `scripts/autopilot-accept.sh R`. The receipt is keyed to the branch's
+      exact commit, so it has to be taken after the last one
+- [x] Coverage floors met; history in `COVERAGE.md`
+- [x] Invariant tests and authorization matrix passing — 105 matrix rows, and
+      the matrix gained an `admin_only` expectation in R.1c (D-215)
+- [x] All applicable E2E journeys passing with axe checks — **and this was the
+      one line in `FINAL-REPORT.md` that was not true when it was written**:
+      the suite was red on the committed phase, because R.7's seed broke a
+      spec written in R.1b (**D-213**). Found by running it at the review
+      rather than by trusting the report
+- [ ] Docker image passes smoke test, runs non-root; backup/restore tested —
+      the image half is the host gate above, and it has never run against
+      Phase R. Backup and restore are tested and were *wrong* until R.1c:
+      the documented procedure never reached the deployment (**D-214**)
+- [x] CI workflow present and valid
+- [x] No unresolved high/critical dependency vulnerabilities — one allowlisted
+      with its reason, and the gate fails if it stops appearing (D-207)
+- [ ] Documentation set and `FINAL-REPORT.md` complete — the set is written
+      (R.8); the report is being trued up for acceptance, since two of its
+      numbers and all three of its open questions have moved since R.9
+
+- [ ] `make check` green on `main` from a clean clone — after the
+      fast-forward, which is the first thing to run on `main`
 
 ---
 

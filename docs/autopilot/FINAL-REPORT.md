@@ -83,9 +83,28 @@ writers, or no local disk.
 
 | Suite | Count | Coverage |
 |---|---|---|
-| Backend (`pytest`) | **757** passed, 1 skipped | 97.3% statements |
-| Frontend unit (`vitest`) | **770** passed, 46 files | 96.3% statements, 90.2% branches |
-| End-to-end (Playwright) | **112** passed, 1 skipped | 30 spec files |
+| Backend (`pytest`) | **772** passed, 1 skipped | 97.3% statements |
+| Frontend unit (`vitest`) | **778** passed, 46 files | 96.3% statements, 90.2% branches |
+| End-to-end (Playwright) | **113** passed, 1 skipped | 30 spec files |
+
+**The e2e row in the version of this report written at R.9 said 112 passed,
+and that was not true** (**D-213**). The suite was red on the committed phase:
+milestone R.7's seed wrote Alex a notebook, and a spec written four milestones
+earlier in R.1b waits for the empty-state notebook trigger, so it timed out
+deterministically. It was found by running the suite at the review rather than
+by trusting this table — which is the same way the other two corrections below
+were found, and the reason this row now carries a measured number and a date.
+
+Two more claims from R.9 that needed correcting, both recorded as decisions
+rather than quietly edited:
+
+- **The documented restore never reached the deployment** (**D-214**). It
+  overwrote a scratch file beside the code and reported success.
+- **"axe clean at WCAG 2.2 AA" was narrower than it sounded** (**D-219**):
+  clean at one viewport, at rest. Both criteria 2.2 added that this project
+  can check had something wrong — `--sticky-deal` was 66px short of the real
+  sticky chrome at 1024, which is a focused control two thirds hidden under a
+  band, and the audit that would have caught it only ever ran at 1280.
 
 Both skips are the documented WeasyPrint gap: PDF rendering needs native
 libraries absent on a macOS host, so one backend test and one e2e test skip
@@ -192,27 +211,53 @@ appearing, so the entry cannot outlive the problem.
 
 ---
 
-## 6. What needs you
+## 6. What needed you, and what you decided
 
-Three things, in the order they matter:
+All three are answered, in two review rounds. The record matters because each
+was a product judgement I could not make from the requirements.
 
-1. **The default for a new entry** (**D-196**). Private-by-default is running
-   because you asked for it. Flipping it broke 132 backend tests, every one a
-   scenario where one person writes and another reads — that is the honest
-   measure of how much of this app assumes a shared timeline, not an argument
-   either way. It is one constant. Use it for a few days and rule.
-2. **The three R.1b checks** on the shakedown page — a sealed entry from both
-   sides, the notification withdrawal, and the notebook. They are the only part
-   of R.1b a test cannot answer.
-3. **Two write surfaces you may want narrower.** Defining a custom field
-   (**D-171**) is open to any signed-in person, because `FEATURES.md` says
-   "admin-defined" and this app has no admin role; creating an automation rule
-   (**D-173**) is likewise open, though a rule can only ever act with its
-   creator's own authority. Both are recorded as the widest surfaces in the
-   application, both are pinned by the authorization matrix, and neither is a
-   ruling I can make from the requirements.
+1. **The default for a new entry** stays **private** (**D-196**). Ruled at the
+   R.1b round after using it, which is what was asked for.
+2. **The three R.1b checks passed** — a sealed entry from both sides, the
+   notification withdrawal ("yes it does take it away"), and the notebook,
+   which neither the export nor the AI picks up. Both shapes stay. And the
+   check produced a reversal: *"better not to mention anything instead of
+   saying it is kept private"* — so a sealed entry is now **absent** from a
+   colleague's timeline rather than standing there emptied, and the numbering
+   counts per reader so no gap is left where it was (**D-209**).
+3. **Both wide write surfaces are narrowed** (**D-215**): *"both have to be
+   done by the owner."* Defining a custom field and writing an automation rule
+   are an administrator's, named in `ADMIN_EMAILS`. Reading stays open.
 
----
+Two more things the rounds settled:
+
+- **Backups need a schedule outside the application** — a cron line, chosen at
+  the gate. The in-process job had fired **zero** times in six days against
+  154 automation ticks, because an interval's first firing is one interval
+  after boot and the machine sleeps. `docs/operations.md` carries the line and
+  the off-the-box copy beside it.
+- **The sign-in screen** opened on *Create account*. It opens on sign-in now,
+  with the account link under the form.
+
+### What the review rounds found that no test did
+
+Worth keeping, because it is the fourth time running on this project:
+
+- The **documented restore never reached the deployment** (**D-214**). It
+  copied a real snapshot over a scratch file beside the code and reported
+  success. Every test in `test_backup.py` points the database at its own
+  temporary directory, so the snapshot and the live database were the same
+  database by construction and the defect was invisible to the design of the
+  tests.
+- The **activity log still announced a sealed entry** to the deal's owner
+  (**D-210**) — existence, author, time, which fields changed.
+- The **14-day rule had a fourth copy** in the one feature named after it
+  (**D-211**): 112 ms a tick against under 1 ms.
+- The **end-to-end suite was red** on the committed phase (**D-213**), which
+  is the one claim in §3 of this report that was not true when it was written.
+- The **scale corpus belonged to the wrong user** (**D-212**), so a person
+  following R.7's own tour could not find any of the 805,000 rows they had
+  just built.
 
 ## 7. What I would do next
 

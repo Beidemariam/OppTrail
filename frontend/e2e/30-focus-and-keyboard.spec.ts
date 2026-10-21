@@ -115,6 +115,57 @@ test.describe("focus not obscured (2.4.11, AA in WCAG 2.2)", () => {
     );
   });
 
+  test("the scroll padding is never less than the chrome it clears", async ({
+    page,
+  }) => {
+    // R.1c. `--sticky-deal` was a literal matching the record band's height
+    // when R.2 measured it, and R.1c's one button size made that band
+    // shorter — so the number became an over-estimate. Over-padding is
+    // harmless; **under**-padding is the 2.4.11 failure R.2 fixed, and the
+    // band is taller at narrow widths where its rows wrap. So the invariant
+    // worth holding is the inequality, measured rather than commented, at
+    // every width the responsive suite uses.
+    await signIn(page, ALEX);
+    await openTimeline(page, NORTHWIND);
+
+    const tooSmall: string[] = [];
+    // The responsive suite's eight, plus 1200, 1100 and 960: the band's
+    // height steps at the 1280px media query and then grows as it wraps, so
+    // the worst case is inside that range rather than at either end of it.
+    for (const width of [
+      1440, 1280, 1200, 1100, 1024, 960, 900, 768, 640, 520, 420,
+    ]) {
+      await page.setViewportSize({ width, height: 900 });
+      await settleTransitions(page);
+      // **Scrolled, so the bands are actually stuck.** Measuring at rest
+      // reads the record band's position in the document flow, which on a
+      // narrow screen is hundreds of pixels down the page and is not sticky
+      // chrome at all — the first version of this test did exactly that and
+      // reported 543px of "chrome" at 900px wide.
+      await page.evaluate(() =>
+        window.scrollTo({ top: 800, behavior: "instant" }),
+      );
+      await settleTransitions(page);
+      const measured = await page.evaluate(() => {
+        const band = document.querySelector(".record-header");
+        const root = getComputedStyle(document.documentElement);
+        const token = parseFloat(root.getPropertyValue("--sticky-deal"));
+        const bottom = band ? band.getBoundingClientRect().bottom : 0;
+        return { token, bottom };
+      });
+      if (measured.token < measured.bottom) {
+        tooSmall.push(
+          `${width}px: --sticky-deal ${measured.token} < chrome ${measured.bottom}`,
+        );
+      }
+    }
+
+    expect(
+      tooSmall,
+      "scroll padding smaller than the sticky chrome it has to clear",
+    ).toEqual([]);
+  });
+
   test("nor on the board, which has one", async ({ page }) => {
     await signIn(page, ALEX);
 

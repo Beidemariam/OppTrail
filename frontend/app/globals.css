@@ -162,9 +162,30 @@
      bottom of that pair. They were three literals in three rules, and the
      scroll offsets below have to agree with them: a focused control scrolled
      under this chrome is entirely hidden, which is what WCAG 2.2's 2.4.11
-     forbids. */
+     forbids.
+
+     **`--sticky-deal` varies with width, and 190px was wrong at every one of
+     them** (R.1c, **D-219**). R.2 took one measurement at one viewport and
+     wrote the literal; measured while the bands are actually stuck, the pair
+     ends at **196px** at 1440 and 1280 and at **256px** at 1024, where the
+     1280px media query re-flows the record band and it wraps. So the padding
+     was 6px short on a desktop and **66px short at 1024** — a control reached
+     by `Shift+Tab` could sit two thirds of a band under it, which is the
+     2.4.11 failure R.2 existed to fix, still present at the width below the
+     one it checked.
+
+     Below 900px the band is `position: static` (see the media query near
+     `.record-header`), so the only sticky chrome is the application bar and
+     this follows `--sticky-bar` down rather than padding a scroll by a
+     quarter of a short viewport.
+
+     Over-padding is harmless and under-padding is the defect, so each value
+     clears its measurement with room. `e2e/30-focus-and-keyboard.spec.ts`
+     asserts the inequality at eleven widths while the bands are stuck —
+     measured, not commented, which is the only reason any of this was
+     found. */
   --sticky-bar: 56px;
-  --sticky-deal: 190px;
+  --sticky-deal: 204px;
 
   color-scheme: light;
 }
@@ -176,6 +197,22 @@
  * combination of the two already works and none of them is a fourth palette
  * to audit.
  */
+/* The record band wraps as the deal screen narrows, so the sticky stack it
+   forms with the application bar grows (R.1c, D-219). Measured stuck: 196px
+   at 1440 and 1280, 256px at 1024. Below 900px the band is static and the bar
+   is the only sticky chrome left. */
+@media (max-width: 1280px) {
+  :root {
+    --sticky-deal: 272px;
+  }
+}
+
+@media (max-width: 900px) {
+  :root {
+    --sticky-deal: var(--sticky-bar);
+  }
+}
+
 [data-density="compact"] {
   --row-height: 30px;
   --row-text: var(--text-xs);

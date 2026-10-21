@@ -2017,10 +2017,24 @@ from Phase F until R.2, so every "axe clean" claim up to R.1 was a 2.1 claim
   on the controls — the browser scrolls nothing for an element it already
   considers in view, and a control under a sticky band is in view as far as
   the viewport rectangle is concerned. The two stacks are `--sticky-bar` and
-  `--sticky-deal`, the same numbers the bands themselves stick at, and which
-  one is in force is `data-sticky` on `<html>` from `lib/nav.ts`'s
-  `stickyStack` — a document-level fact as a root attribute, the shape
-  `lib/theme.ts` and `lib/density.ts` use.
+  `--sticky-deal`, and which one is in force is `data-sticky` on `<html>` from
+  `lib/nav.ts`'s `stickyStack` — a document-level fact as a root attribute,
+  the shape `lib/theme.ts` and `lib/density.ts` use.
+
+  **`--sticky-deal` was wrong at every width until R.1c** (**D-219**). R.2
+  wrote one literal, 190px, from one measurement at one viewport; measured
+  while the bands are actually stuck it is 196px at 1440 and 1280, 230px at
+  1100, **256px at 1024** where the band re-flows and wraps, 238px at 960,
+  and nothing below 900px where the band is `position: static`. 66px short at
+  1024 is a focused control sitting two thirds of a band under it — the
+  criterion this rule exists for, still broken at the width below the one it
+  was checked at, and invisible to its own test because that test asserts
+  *entirely* hidden and only ever ran at 1280. Three measured values now,
+  each clearing its measurement, with
+  `e2e/30-focus-and-keyboard.spec.ts` asserting the inequality at eleven
+  widths **while the bands are stuck** — measuring at rest reads the band's
+  position in the document flow, which is how the first version of that guard
+  reported 543px of "chrome" at 900px wide.
 - **A skip link, and it moves the keyboard** (2.4.1, **D-199**). The rail
   repeats six destinations above every screen. `#main-content` carries
   `tabIndex={-1}`, without which the anchor scrolls the page and leaves focus
