@@ -25,6 +25,10 @@ answers 503 and names the setting rather than failing obscurely. Optional:
 `OPENAI_MODEL`, `OPENAI_REASONING_EFFORT`, `OPENAI_TIMEOUT_SECONDS`,
 `OPENAI_MAX_RETRIES`, `ENVIRONMENT`, `PORT`. `docs/operations.md` has the rest.
 
+Set `ADMIN_EMAILS` to the addresses that may define custom fields and write
+automation rules. Empty means nobody, so those two screens tell every user to
+ask an administrator until it is set.
+
 Stop it with `./scripts/stop_mac.sh`.
 
 ## Try it with data in it
