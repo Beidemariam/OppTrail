@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.opptrail.backup</string>
+
+  <!-- One command, so what the scheduler runs is what can be tested by hand. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-lc</string>
+    <string>exec "$HOME/Projects/Sales_Opp_Tracker/scripts/scheduled-backup.sh"</string>
+  </array>
+
+  <!-- 02:30 daily. launchd runs a missed calendar job when the machine wakes,
+       which is the whole reason this is a LaunchAgent and not a cron line:
+       cron skips a job slept through and keeps no record of having done so,
+       which is how the in-process scheduler came to take zero backups in six
+       days against 154 automation ticks. -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key><integer>2</integer>
+    <key>Minute</key><integer>30</integer>
+  </dict>
+
+  <!-- No StandardOutPath here on purpose: launchd does not expand `$HOME`, so
+       naming a log file would hard-code one machine's home directory into a
+       committed file. `scripts/scheduled-backup.sh` redirects its own output
+       to ~/Library/Logs/opptrail-backup.log, which a shell can expand. -->
+
+  <!-- Not at load: a snapshot per login is noise, and the calendar entry above
+       already catches up after sleep. -->
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>

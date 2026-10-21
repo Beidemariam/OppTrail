@@ -55,11 +55,40 @@ the machine sleeps and the container restarts. A snapshot on a schedule
 outside the application is the only kind that does not depend on the
 application's uptime:
 
+**On macOS, use `launchd` rather than cron** (**D-221**). cron skips a job it
+sleeps through and keeps no record of it — the same failure as the in-process
+scheduler above. `launchd` runs a missed calendar job when the machine wakes.
+`scripts/scheduled-backup.sh` is the whole job, so what the scheduler runs is
+what you can test by hand:
+
+```bash
+scripts/scheduled-backup.sh                      # test it first, by hand
+cp scripts/com.opptrail.backup.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.opptrail.backup.plist
+launchctl kickstart -k gui/$(id -u)/com.opptrail.backup   # run it once, now
+tail ~/Library/Logs/opptrail-backup.log
+```
+
+Two things that will bite otherwise. **`uv` is not on a scheduled job's
+`PATH`** (it lives in `~/.local/bin`), which the script handles. And **a
+`launchd` job has no access to iCloud Drive, Desktop or Documents** until you
+add its interpreter — `/bin/bash` — under System Settings → Privacy & Security
+→ Full Disk Access. The same script run from Terminal works, because Terminal
+already has that access, so this must be tested the way the scheduler runs it.
+The script prints the remedy into its log when it is refused.
+
+`OPPTRAIL_OFFSITE=/Volumes/YourDisk/OppTrail` points the copy anywhere else.
+
+On a Linux host, cron is the portable form:
+
 ```cron
 # 02:30 daily: snapshot, then copy the volume's backups somewhere else.
 30 2 * * * cd /path/to/Sales_Opp_Tracker && make backup >> /var/log/opptrail-backup.log 2>&1
-45 2 * * * rsync -a --delete /path/to/Sales_Opp_Tracker/data/backups/ /elsewhere/opptrail/
+45 2 * * * rsync -a --ignore-existing /path/to/Sales_Opp_Tracker/data/backups/ /elsewhere/opptrail/
 ```
+
+`--ignore-existing` rather than `--delete`: the mirror is what survives losing
+this disk, so local retention pruning must not reach through to it.
 
 The second line is the part this repository cannot do for you, and it is the
 one that matters: see the volume note above about `backups/` living on the
