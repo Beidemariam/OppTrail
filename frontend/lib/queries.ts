@@ -1255,10 +1255,16 @@ export interface TimelineEntryPayload {
   title: string;
   body: string;
   event_timestamp: string;
-  // No `follow_up_date` since milestone 4.2 (**D-144**): a follow-up is a task
-  // now. The API still accepts the field for the legacy column, and omitting it
-  // from a `PATCH` is what leaves an already-migrated entry's copy of the date
-  // untouched rather than clearing it.
+  /** When to come back to this, or `null` for no follow-up (R.1c, **D-217**).
+   *
+   * It was deliberately absent from milestone 4.2 to R.1c (**D-144**): a date
+   * written here alone diverges from the task list, which is what the rest of
+   * the app reads. The composer offers it again because the tick beside it
+   * creates the task — the field is the *record* of a follow-up and the task
+   * is the *work*, and `app/TimelineEntryForm.tsx` writes both. Still
+   * `undefined`-able, which is what leaves an already-migrated entry's copy of
+   * the date untouched when a `PATCH` is about something else. */
+  follow_up_date?: string | null;
 }
 
 export function useSaveTimelineEntry(opportunityId: number) {

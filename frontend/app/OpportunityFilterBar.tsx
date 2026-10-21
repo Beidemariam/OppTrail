@@ -134,7 +134,7 @@ export function OpportunityFilterBar({
             <li>
               <button
                 type="button"
-                className="secondary-button compact-button"
+                className="secondary-button"
                 onClick={clear}
               >
                 Clear all
@@ -324,7 +324,7 @@ export function OpportunityFilterBar({
           {pinned.size === 1 ? "pinned opportunity" : "pinned opportunities"}{" "}
           from a saved view.
           <button
-            className="secondary-button compact-button"
+            className="secondary-button"
             type="button"
             onClick={() => {
               setDraft({ ...draft, ids: "" });

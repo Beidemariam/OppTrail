@@ -255,11 +255,11 @@ function FieldRow({
               onChange={(event) => setLabel(event.target.value)}
             />
           </label>
-          <button className="primary-button compact" type="submit">
+          <button className="primary-button" type="submit">
             Save
           </button>
           <button
-            className="secondary-button compact"
+            className="secondary-button"
             type="button"
             onClick={() => {
               setLabel(field.label);
@@ -287,7 +287,7 @@ function FieldRow({
           <div className="inline-actions">
             {!archived && (
               <button
-                className="secondary-button compact"
+                className="secondary-button"
                 type="button"
                 onClick={() => setEditing(true)}
               >
@@ -295,7 +295,7 @@ function FieldRow({
               </button>
             )}
             <button
-              className="secondary-button compact"
+              className="secondary-button"
               type="button"
               onClick={onToggleArchive}
             >

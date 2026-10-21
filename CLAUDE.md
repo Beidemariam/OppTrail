@@ -832,6 +832,16 @@ already stored. It is entirely frontend; no route, schema or table changed.
   (`[text](url)`, `### `) because a button for either has to open a dialog out
   of a composer. It is named "Formatting", not after the field — a group called
   "Formatting: Body" is also a match for a query for "Body".
+- **A follow-up is a date and, by default, a task** (R.1c, **D-217**). The
+  composer carries `Follow up (optional)` and, once a date is set, a tick
+  that creates the task — on by default, so the common path writes the thing
+  My Tasks, the task panel and the calendar read. Unticking leaves the date on
+  the entry alone and the hint says so. Milestone 4.2 had removed the field
+  (D-144) precisely because a date with nothing behind it diverges from the
+  task list; the tick is what makes it safe, and `timeline_entries.
+  follow_up_date` is therefore kept rather than dropped (`docs/ROADMAP.md`'s
+  breaking-changes table is amended). Three requests in order — entry, file,
+  task — with `createdId` and `taskMade` so a retry repeats only what failed.
 - **An edit that changed nothing writes nothing** (**D-114**): the editor
   normalizes syntax, so `NoteBlock.save` compares the draft against
   `normalizeMarkdown(note.body)` rather than the raw text — otherwise reopening
@@ -2128,6 +2138,17 @@ load bearing:
   fails there, naming the token, before axe renders a page. `DEFERRED_AXE_RULES`
   in `e2e/helpers.ts` is now empty, and `e2e/07-accessibility.spec.ts` audits
   every screen once per `prefers-color-scheme`.
+- **One button size, and it is measured** (R.1c, **D-216**).
+  `--button-height: 30px` with one font size and one padding on the rule that
+  owns the three weights. Before it, the same weights rendered at **five**
+  sizes on the deal page — the base rule, `.compact`, `.compact-button`, a
+  `.sidebar-column` override and the filter bar's — all at one 34px height, so
+  the inconsistency was in the type and the padding rather than the box, which
+  is why reading the CSS did not show it and measuring did. Two deliberate
+  exceptions: the application bar keeps `--control-height` (its ghosts sit in
+  a row with the search field, where a shorter control reads as misaligned),
+  and so do inputs and selects. Nothing else may set a button's size; adding a
+  sixth variant is how this got here.
 - **A control holds its label, and geometry is tested** (milestone 3.8,
   **D-138**). The base button rule carried `min-width: 0` with
   `overflow-wrap: anywhere` from the MVP, so any flex row short of room broke a

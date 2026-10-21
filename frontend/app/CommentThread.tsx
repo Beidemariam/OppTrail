@@ -78,7 +78,7 @@ function ReactionBar({
         <div className="reaction-picker-trigger">
           <button
             type="button"
-            className="secondary-button compact"
+            className="secondary-button"
             aria-expanded={pickerOpen}
             onClick={() => setPickerOpen((open) => !open)}
           >
@@ -145,7 +145,7 @@ function CommentReply({
       {access.canChangeItem(reply.created_by) && (
         <button
           type="button"
-          className="danger-button compact"
+          className="danger-button"
           onClick={() => onDelete(reply.id)}
         >
           Delete
@@ -215,7 +215,7 @@ export function CommentThread({
         </p>
         <button
           type="button"
-          className="secondary-button compact"
+          className="secondary-button"
           aria-expanded={false}
           onClick={() => setExpanded(true)}
         >
@@ -234,7 +234,7 @@ export function CommentThread({
           </p>
           <button
             type="button"
-            className="secondary-button compact"
+            className="secondary-button"
             aria-expanded
             onClick={() => setExpanded(false)}
           >
@@ -260,7 +260,7 @@ export function CommentThread({
           {canManageThread && (
             <button
               type="button"
-              className="secondary-button compact"
+              className="secondary-button"
               onClick={() =>
                 resolveThread.mutate({
                   commentId: thread.id,
@@ -274,7 +274,7 @@ export function CommentThread({
           {canManageThread && (
             <button
               type="button"
-              className="danger-button compact"
+              className="danger-button"
               onClick={() => onDelete(thread.id)}
             >
               Delete

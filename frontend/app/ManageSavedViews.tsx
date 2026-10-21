@@ -150,7 +150,7 @@ export function ManageSavedViews<T extends Record<string, string>>({
                       </span>
                       <button
                         type="button"
-                        className="danger-button compact-button"
+                        className="danger-button"
                         autoFocus
                         onClick={() => {
                           setConfirmingId(null);
@@ -161,7 +161,7 @@ export function ManageSavedViews<T extends Record<string, string>>({
                       </button>
                       <button
                         type="button"
-                        className="secondary-button compact-button"
+                        className="secondary-button"
                         onClick={() => setConfirmingId(null)}
                       >
                         Keep it
@@ -171,7 +171,7 @@ export function ManageSavedViews<T extends Record<string, string>>({
                     <>
                       <button
                         type="button"
-                        className="secondary-button compact-button"
+                        className="secondary-button"
                         aria-label={`Edit view ${view.name}`}
                         onClick={() => startEditing(view)}
                       >
@@ -179,7 +179,7 @@ export function ManageSavedViews<T extends Record<string, string>>({
                       </button>
                       <button
                         type="button"
-                        className="secondary-button compact-button"
+                        className="secondary-button"
                         aria-label={`Delete view ${view.name}`}
                         onClick={() => setConfirmingId(view.id)}
                       >

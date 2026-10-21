@@ -346,7 +346,7 @@ hard read-only AI boundary confirmed in Q2.
 | Alembic replaces auto-init | 1 | Startup behaviour | Baseline-stamp an existing database; CI applies migrations to a restored snapshot every run |
 | Notification model | 1 | Client field names | Additive columns; v1 shape preserved behind `/api/v1` |
 | Task assignee → assignees | 4 | Field replaced | `assignee_email` becomes `assignee_emails` (a list) on create and PATCH, and `assignee_id`/`assignee_name` become `assignees` on every task read; `task_versions` gains `assignee_ids` and keeps the old column for the versions already written. `tasks.assignee_id` is unread from 4.6 and dropped in 6 beside `follow_up_date` (**D-163**) |
-| `follow_up_date` → tasks | 4 | Field moves | Backfill into `tasks`; column retained one phase, then dropped in 6 — it named Phase 5 until email moved to v3 (**D-141**), and the point is that a phase passes between the backfill and the drop, not which one |
+| `follow_up_date` → tasks | 4 | Field moves | Backfill into `tasks`; the column was to be dropped in 6 and **is now kept** (**D-217**, R.1c): the composer writes it again as the record of a follow-up, beside the task that is the work. What D-144 removed was a date with no task behind it, which is what the tick now prevents |
 | Entry `type` enum extension | 2 | CHECK constraint | Additive only; no existing value changes |
 | Rich text | 3 | None | Storage stays Markdown — the deliberate payoff of the original choice |
 | Note edit guard | 3 | `PATCH /api/v2/notes/{id}` requires `updated_at` | Required rather than optional: an optional guard is no guard, and the value is already on `NotePublic`, so a client echoes back what it read (ADR 0003) |

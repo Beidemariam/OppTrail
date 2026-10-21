@@ -133,6 +133,23 @@
      density reads these rather than declaring its own value, which is what
      makes Compact one block rather than a per-component variant. */
   --control-height: 34px;
+  /* **One size for every button** (R.1c, **D-216**, the reviewer's ask at the
+     Phase R gate: "review the button designs again and make them all the same
+     size and a bit smaller than the current delete button"). Measured on the
+     shipped build first: the three weights rendered at **five** different
+     sizes on the deal page alone -- `6px 14px` at 15px in the main column,
+     `4px 8px` at 13px in the sidebar, `5px 8px` via `.compact` on a thread,
+     `7px 10px` via `.compact-button` on the saved views, and another pair in
+     the filter bar -- all at the same 34px height, so the inconsistency was
+     in the type and the padding rather than in the box. One token here and
+     one rule below; the four variants are gone.
+
+     30px rather than 34: smaller than the Delete they were looking at, and
+     comfortably above WCAG 2.5.8's 24px target minimum (D-002), which
+     `e2e/07-accessibility.spec.ts` checks and `e2e/23-responsive.spec.ts`
+     measures. Inputs and selects keep `--control-height`: a text field is
+     sized by what is typed into it, not by the button beside it. */
+  --button-height: 30px;
   --row-height: 40px;
   --row-text: var(--text-sm);
   --row-line: var(--line-sm);
@@ -398,6 +415,11 @@ kbd {
   width: 26px;
 }
 
+/* The application bar keeps its own rhythm at `--control-height`, which is
+   the one place a button is deliberately not `--button-height` (R.1c, D-216):
+   these sit in a row with the search field and the theme select, and a
+   control that is shorter than the field beside it reads as misaligned rather
+   than as smaller. Everything in the page below this bar is one button size. */
 .topbar .ghost-button,
 .topbar select,
 .topbar .notification-button {
@@ -563,16 +585,21 @@ textarea {
    fails the build if any control renders taller than wide again. */
 .primary-button,
 .secondary-button,
-.danger-button {
+.danger-button,
+.ghost-button {
   align-items: center;
   border-radius: var(--radius-sm);
   display: inline-flex;
   flex-shrink: 0;
+  /* The size, in one place (R.1c, D-216). Font and padding are here rather
+     than per context because that is what differed: five variants at one
+     height, which reads as five sizes. */
+  font-size: var(--text-sm);
   font-weight: 700;
   justify-content: center;
   line-height: 1.15;
-  min-height: var(--control-height);
-  padding: 6px 14px;
+  min-height: var(--button-height);
+  padding: 4px 12px;
   text-align: center;
   white-space: nowrap;
 }
@@ -724,11 +751,10 @@ a.danger-button {
   margin-top: 4px;
 }
 
-.compact-button {
-  font-size: var(--text-sm);
-  min-height: var(--control-height);
-  padding: 7px 10px;
-}
+/* `.compact-button` and `.compact` were two of the five button sizes R.1c
+   consolidated (D-216), and `.sidebar-column`'s own override was a third.
+   Nothing sets a button's size outside the one rule above now; the class
+   names are gone from the components rather than left as no-ops. */
 
 /* The dashboard: page header, view controls, then whichever view is on. */
 
@@ -1048,16 +1074,8 @@ a.danger-button {
   align-items: center;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
   color: var(--text-secondary);
-  display: inline-flex;
-  font-size: var(--text-xs);
-  font-weight: 700;
-  justify-content: center;
-  min-height: var(--control-height);
-  padding: 0 var(--space-2);
   text-decoration: none;
-  white-space: nowrap;
 }
 
 .ghost-button:hover {
@@ -1259,11 +1277,12 @@ a.danger-button {
   font-size: var(--text-base);
 }
 
+/* Fields only. The buttons used to be in this list, which is how the sidebar
+   came to render the same three weights a size smaller than the main column
+   did -- one of the five R.1c consolidated (D-216). A button is one size
+   everywhere now; a text field still reads this column's scale. */
 .sidebar-column .task-form input,
 .sidebar-column .task-form select,
-.sidebar-column .primary-button,
-.sidebar-column .secondary-button,
-.sidebar-column .danger-button,
 .sidebar-column select,
 .sidebar-column input {
   font-size: var(--text-sm);
@@ -1674,13 +1693,6 @@ a.task-title:hover {
   font-size: var(--text-sm);
   min-height: var(--control-height);
   padding: var(--space-1) var(--space-2);
-}
-
-.filter-bar .primary-button,
-.filter-bar .secondary-button {
-  font-size: var(--text-sm);
-  min-height: var(--control-height);
-  padding: var(--space-1) var(--space-3);
 }
 
 /* Saved views sit above the filter bar as a quieter line: they name the
@@ -2517,11 +2529,6 @@ a.task-title:hover {
   color: var(--text-primary);
   line-height: 1.4;
   overflow-wrap: anywhere;
-}
-
-.compact {
-  min-height: var(--control-height);
-  padding: 5px 8px;
 }
 
 /* One discussion on a note (milestone 3.3). Replies are indented against a

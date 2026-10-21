@@ -62,7 +62,7 @@ export function NotificationMenu() {
             <h3>Notifications</h3>
             <button
               type="button"
-              className="secondary-button compact-button"
+              className="secondary-button"
               onClick={() => void notifications.refetch()}
             >
               Refresh
@@ -86,7 +86,7 @@ export function NotificationMenu() {
             </select>
             <button
               type="button"
-              className="secondary-button compact-button"
+              className="secondary-button"
               disabled={unreadCount === 0}
               onClick={() => markAllRead.mutate()}
             >
@@ -139,7 +139,7 @@ export function NotificationMenu() {
                     {!notification.read_at && (
                       <button
                         type="button"
-                        className="secondary-button compact-button"
+                        className="secondary-button"
                         onClick={() => markRead.mutate(notification.id)}
                       >
                         Mark read

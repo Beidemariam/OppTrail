@@ -233,7 +233,7 @@ function Toolbar({ editor }: { editor: Editor }) {
         <button
           key={control.name}
           type="button"
-          className="ghost-button compact"
+          className="ghost-button"
           aria-pressed={active[index]}
           title={`${control.label} (${control.keys})`}
           // The chain starts with `focus` so a click on a control puts the

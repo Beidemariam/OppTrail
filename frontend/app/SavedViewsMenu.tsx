@@ -145,14 +145,14 @@ export function SavedViewsMenu<T extends Record<string, string>>({
 
       <button
         type="button"
-        className="secondary-button compact-button"
+        className="secondary-button"
         onClick={() => setSaving(true)}
       >
         Save current {entityLabel} view
       </button>
       <button
         type="button"
-        className="secondary-button compact-button"
+        className="secondary-button"
         onClick={() => setManaging(true)}
       >
         Manage {entityLabel} views

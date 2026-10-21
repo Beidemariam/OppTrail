@@ -103,7 +103,7 @@ function ToastRow({
         {toast.action && (
           <button
             type="button"
-            className="secondary-button compact"
+            className="secondary-button"
             onClick={() => {
               toast.action?.run();
               onDismiss(toast.id);
@@ -114,7 +114,7 @@ function ToastRow({
         )}
         <button
           type="button"
-          className="secondary-button compact"
+          className="secondary-button"
           onClick={() => onDismiss(toast.id)}
         >
           Dismiss

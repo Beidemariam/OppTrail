@@ -6282,11 +6282,27 @@ this phase reaches `AWAITING_REVIEW` and is accepted, the project is finished.
         `pricing` as a reader who cannot see the only prose in the database.
         The generated corpus's entries are titled `Entry 400` with the body
         `body`; `Entry` is the term, and it measures 184 ms at 805,000 rows.
-      - Still open from the R.1b shakedown, and not in this list yet: the
-        follow-up tick in the entry composer (a task by default, optional),
-        and one button size across the app. Carried from pr-6: a Q&A page
-        with a feedback form for questions the user guide does not answer
-        (v3).
+      **The R.1b shakedown's other two asks, 2026-10-21.**
+
+      - **One button size** (**D-216**). Measured first, which is what found
+        that my own earlier account of this was wrong: the three weights
+        rendered at **five** sizes on the deal page, all at one height, so the
+        difference was in the type and the padding. `--button-height: 30px`
+        with one font and one padding on the shared rule; `.compact`,
+        `.compact-button`, the `.sidebar-column` override and the filter bar's
+        are gone, and the class names are out of the markup rather than left
+        sizing nothing. The application bar keeps `--control-height` on
+        purpose, because its controls sit in a row with the search field.
+      - **The follow-up tick** (**D-217**), which did not exist: 4.2 removed
+        the field (D-144) and "continue to create Task by default" described
+        nothing. The composer has a date again *and* a tick that creates the
+        task, on by default — so the common path writes the thing My Tasks,
+        the task panel and the calendar read, and unticking is the reviewer's
+        "just in the notes", with the hint saying so in as many words. No
+        backend change: `TimelineEntryCreate` has validated the field all
+        along.
+      - Carried from pr-6: a Q&A page with a feedback form for questions the
+        user guide does not answer (v3).
 
 The Phase R review packet doubles as the release sign-off (brief §8).
 

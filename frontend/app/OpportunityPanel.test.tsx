@@ -189,11 +189,13 @@ describe("the timeline", () => {
       title: "Proposal sent",
       event_timestamp: "2026-09-06T14:30:00Z",
     });
-    // No `follow_up_date` since milestone 4.2: a follow-up is a task now
-    // (D-144), and the composer no longer offers the field. Asserted as an
-    // absence, because the failure worth catching is the field quietly coming
-    // back and diverging from the task list.
-    expect(posted).not.toHaveProperty("follow_up_date");
+    // The composer offers a follow-up date again since R.1c (**D-217**), so
+    // this is no longer an absence — but an entry posted without one must
+    // carry no date rather than a blank string, which is what the API would
+    // have to coerce. What D-144 was really guarding against (a date landing
+    // on a column the task list does not read) is answered by the tick, which
+    // `follow-up tick` below covers.
+    expect(posted).toMatchObject({ follow_up_date: null });
   });
 
   it("adds a note and a comment to an entry", async () => {
@@ -1718,3 +1720,99 @@ describe("a link lands on the match, not on the deal (milestone 6.0)", () => {
 async function openTimelineBody() {
   await screen.findByText("Security review");
 }
+
+describe("the follow-up tick", () => {
+  /**
+   * R.1c, **D-217**, the reviewer's ask: *"Follow up tick should continue to
+   * create Task by default as the follow up action. However, it shouldn't be
+   * mandatory to create a task so a follow up could be put just in the notes
+   * or be created as a task."*
+   *
+   * Milestone 4.2 removed this field for a good reason (D-144): a date that
+   * only wrote `timeline_entries.follow_up_date` would diverge from the task
+   * list, which is what everything else reads. The tick is what makes the
+   * field safe — so both of these tests are about the tick, not the date.
+   */
+  async function composeWithFollowUp(date: string) {
+    const api = await renderDashboard({
+      opportunities: [anOpportunity()],
+      entries: [],
+    });
+    await openTimeline("Northwind rollout");
+
+    const form = await openEntryForm();
+    await userEvent.type(within(form).getByLabelText("Title"), "Pricing call");
+    await userEvent.type(
+      within(form).getByLabelText("Follow up (optional)"),
+      date,
+    );
+    return { api, form };
+  }
+
+  it("makes a task by default, due on the date and linked to the entry", async () => {
+    const { api, form } = await composeWithFollowUp("2026-11-30");
+
+    await userEvent.click(
+      within(form).getByRole("button", { name: "Add Entry" }),
+    );
+
+    await waitFor(() => expect(api.callsTo("POST", "/tasks")).toHaveLength(1));
+    expect(api.callsTo("POST", "/tasks")[0].body).toMatchObject({
+      title: "Follow up: Pricing call",
+      due_date: "2026-11-30",
+    });
+    // The date is on the entry as well: the card prints it, and the entry is
+    // what the task points back at.
+    expect(api.callsTo("POST", "/timeline")[0].body).toMatchObject({
+      follow_up_date: "2026-11-30",
+    });
+  });
+
+  it("leaves the date on the entry alone when the tick is cleared", async () => {
+    const { api, form } = await composeWithFollowUp("2026-11-30");
+
+    await userEvent.click(
+      within(form).getByLabelText("Create a task for this follow-up"),
+    );
+    await userEvent.click(
+      within(form).getByRole("button", { name: "Add Entry" }),
+    );
+
+    await waitFor(() =>
+      expect(api.callsTo("POST", "/timeline")).toHaveLength(1),
+    );
+    expect(api.callsTo("POST", "/timeline")[0].body).toMatchObject({
+      follow_up_date: "2026-11-30",
+    });
+    expect(api.callsTo("POST", "/tasks")).toHaveLength(0);
+  });
+
+  it("says which of the two it is about to do", async () => {
+    // The consequence belongs on the control: "just in the notes" and "on
+    // somebody's list" are different promises, and the form should not make
+    // the reader guess which one they have chosen.
+    const { form } = await composeWithFollowUp("2026-11-30");
+
+    expect(
+      within(form).getByText(/assigned to you, due on that date/),
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      within(form).getByLabelText("Create a task for this follow-up"),
+    );
+
+    expect(
+      within(form).getByText(/will not appear in Tasks or on the calendar/),
+    ).toBeInTheDocument();
+  });
+
+  it("offers no tick until there is a date to act on", async () => {
+    await renderDashboard({ opportunities: [anOpportunity()], entries: [] });
+    await openTimeline("Northwind rollout");
+    const form = await openEntryForm();
+
+    expect(
+      within(form).queryByLabelText("Create a task for this follow-up"),
+    ).toBeNull();
+  });
+});

@@ -11,8 +11,10 @@ import {
 } from "../lib/domain";
 import { submitFormOnModEnter } from "../lib/keyboard";
 import {
+  useCreateTask,
   useCustomFields,
   useSaveTimelineEntry,
+  useSession,
   useUploadAttachment,
 } from "../lib/queries";
 import {
@@ -35,6 +37,9 @@ interface EntryFormState {
    * deliberately: the human's ruling was that privacy is "set upfront ...
    * with a tick box to reveal it". */
   visibility: EntryVisibility;
+  /** When to come back to this, as `YYYY-MM-DD` or empty (R.1c, D-217). It is
+   * a field of the entry *and* the due date of the task the tick creates. */
+  follow_up_date: string;
 }
 
 function formFor(entry: TimelineEntry | null): EntryFormState {
@@ -46,6 +51,7 @@ function formFor(entry: TimelineEntry | null): EntryFormState {
       event_timestamp: nowDateTimeInput(),
       custom_values: {},
       visibility: "private",
+      follow_up_date: "",
     };
   }
   return {
@@ -55,6 +61,7 @@ function formFor(entry: TimelineEntry | null): EntryFormState {
     event_timestamp: toDateTimeInput(entry.event_timestamp),
     custom_values: (entry.custom_values ?? {}) as CustomValues,
     visibility: entry.visibility ?? "private",
+    follow_up_date: entry.follow_up_date ?? "",
   };
 }
 
@@ -63,14 +70,23 @@ function formFor(entry: TimelineEntry | null): EntryFormState {
  * re-keys this component on the entry being edited, so the fields reload
  * without an effect chasing props.
  *
- * **No "Follow up" field since milestone 4.2.** A follow-up is a task now
- * (`app/TaskPanel.tsx`), and the existing dates were migrated into tasks by
- * revision `0010_follow_ups_to_tasks`. Leaving the field here would have been
- * the worst of the three states: new follow-ups would keep landing on a column
- * the task list does not read, so the two would diverge for as long as both
- * existed (**D-144**). `timeline_entries.follow_up_date` itself stays until
- * Phase 6 per `docs/ROADMAP.md`'s breaking-changes table, holding the values the
- * migration copied.
+ * **The "Follow up" field is back, and it makes a task** (R.1c, **D-217**,
+ * the reviewer's ask: *"Follow up tick should continue to create Task by
+ * default as the follow up action. However, it shouldn't be mandatory to
+ * create a task so a follow up could be put just in the notes or be created
+ * as a task."*)
+ *
+ * Milestone 4.2 removed it, and **D-144**'s reasoning for that was right: a
+ * date on this form writing only `timeline_entries.follow_up_date` would land
+ * on a column the task list does not read, so the two would diverge for as
+ * long as both existed. What makes the field safe now is that the tick is on
+ * by default and what it writes is a **task** — the thing the rest of the app
+ * reads. Unticking it is the reviewer's "just in the notes": the date stays on
+ * the entry, the card prints it, and nothing claims it is on anybody's list.
+ *
+ * Two requests in order, like the attachment path above it: the entry has to
+ * exist before a task can name it. `createdId` is what keeps a retry from
+ * posting a second entry.
  */
 export function TimelineEntryForm({
   opportunityId,
@@ -90,9 +106,20 @@ export function TimelineEntryForm({
   // upload after it did not. Without it, pressing the button again would post
   // a second entry rather than retrying the file (milestone 4.3a).
   const [createdId, setCreatedId] = useState<number | null>(null);
+  // Ticked by default, which is the reviewer's "continue to create Task by
+  // default as the follow up action" (R.1c, D-217). Unticking it leaves the
+  // date on the entry alone.
+  const [makeTask, setMakeTask] = useState(true);
+  // The task this form has already created, for the same reason `createdId`
+  // exists: if the task request fails, pressing the button again must not
+  // post the entry a second time -- and if it succeeded while something after
+  // it failed, it must not make a second task either.
+  const [taskMade, setTaskMade] = useState(false);
   const customFields = useCustomFields("entry");
   const save = useSaveTimelineEntry(opportunityId);
   const upload = useUploadAttachment();
+  const createTask = useCreateTask(opportunityId);
+  const session = useSession();
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -104,6 +131,10 @@ export function TimelineEntryForm({
           // `datetime-local` is always local wall-clock time; the API stores
           // canonical UTC (`lib/time.ts`).
           event_timestamp: localInputToUtc(form.event_timestamp),
+          // `null` rather than the empty string an unfilled date input holds.
+          // The API coerces either to NULL, so this is about what the request
+          // *says*: a cleared follow-up is an absent date, not a blank one.
+          follow_up_date: form.follow_up_date || null,
         },
       })
       .then(
@@ -132,6 +163,35 @@ export function TimelineEntryForm({
         return;
       }
     }
+
+    // The task, last: it is the only one of the three that can be retried
+    // without the entry, and doing it after the file keeps the order of
+    // failures the same as the order of the fields.
+    if (makeTask && form.follow_up_date !== "" && !taskMade) {
+      const made = await createTask
+        .mutateAsync({
+          // `Follow up: <title>` is revision `0010_follow_ups_to_tasks`'s own
+          // wording, kept so the tasks this form makes and the ones that
+          // migration wrote read as the same kind of thing.
+          title: `Follow up: ${form.title}`,
+          due_date: form.follow_up_date,
+          entry_id: saved.id,
+          // Whoever wrote the entry, which is who a follow-up belongs to
+          // until somebody says otherwise. `assignee_emails` is a set since
+          // 4.6; leaving it out would make the task nobody's and keep it off
+          // My Tasks entirely.
+          assignee_emails: session.data?.email ? [session.data.email] : [],
+        })
+        .then(
+          () => true,
+          () => false,
+        );
+      if (!made) {
+        return;
+      }
+      setTaskMade(true);
+    }
+
     onDone();
   }
 
@@ -213,6 +273,51 @@ export function TimelineEntryForm({
           moment a proposal is actually to hand. The card keeps its own
           control, because a file that arrives later (the signed copy) should
           not require editing the entry to add. */}
+      {/* When to come back to this (R.1c, **D-217**). The date is a field of
+          the entry; the tick is what turns it into a task, which is the only
+          thing the task list, My Tasks and the calendar read. Ticked by
+          default — the reviewer's "continue to create Task by default as the
+          follow up action" — and unticking it is their "just in the notes":
+          the card still prints the date, and nothing pretends it is on
+          somebody's list. The tick only appears once there is a date to act
+          on, because a checkbox about an empty field is a question nobody
+          asked. */}
+      <label>
+        Follow up (optional)
+        <input
+          type="date"
+          name="follow_up_date"
+          value={form.follow_up_date}
+          onChange={(event) =>
+            setForm({ ...form, follow_up_date: event.target.value })
+          }
+        />
+      </label>
+      {form.follow_up_date !== "" && (
+        <>
+          <label className="checkbox-field">
+            <input
+              type="checkbox"
+              checked={makeTask}
+              onChange={(event) => setMakeTask(event.target.checked)}
+            />
+            Create a task for this follow-up
+          </label>
+          <p className="field-hint">
+            {makeTask
+              ? "It will be assigned to you, due on that date, and linked back to this entry."
+              : "The date stays on this entry only. It will not appear in Tasks or on the calendar."}
+          </p>
+        </>
+      )}
+      {createTask.isError && (
+        <p className="error-text" role="alert">
+          The entry was saved, but the follow-up task was not:{" "}
+          {createTask.error instanceof Error
+            ? createTask.error.message
+            : "the task could not be created."}
+        </p>
+      )}
       {/* The tick box that reveals it (R.1b). Off is private, which is what a
           new entry is: "privacy is set upfront ... with a tick box to reveal
           it". Phrased as what ticking it *does* rather than as a state, so the
