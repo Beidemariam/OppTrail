@@ -15,7 +15,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from app.backup import RestoreTargetMismatch, restore_backup
+from app.backup import BackupNotFound, RestoreTargetMismatch, restore_backup
 
 
 def main() -> int:
@@ -37,11 +37,11 @@ def main() -> int:
         database_path = restore_backup(
             args.backup_path, allow_foreign_snapshot=args.allow_foreign_snapshot
         )
-    except RestoreTargetMismatch as mismatch:
+    except (BackupNotFound, RestoreTargetMismatch) as refusal:
         # Not a traceback: the message is the operator's instructions, and
         # this path exists because the silent version of this failure shipped
         # (R.1c, D-214).
-        print(mismatch, file=sys.stderr)
+        print(refusal, file=sys.stderr)
         return 2
 
     # The absolute path, because the relative one is what made the defect

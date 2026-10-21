@@ -164,6 +164,18 @@ def latest_backup_at(destination_dir: Path | None = None) -> str | None:
     return None
 
 
+class BackupNotFound(RuntimeError):
+    """The `BACKUP` path names no file (R.1c, **D-218**).
+
+    Not `FileNotFoundError`, which `tools/restore.py` would print as a
+    traceback: this is the operator mistyping a path, and the answer is a
+    message that names where this database's snapshots live and what is in
+    there. Raised for the same reason `RestoreTargetMismatch` is -- the two
+    failures an operator meets at the restore are both about *which database*,
+    and both deserve an answer rather than a stack.
+    """
+
+
 class RestoreTargetMismatch(RuntimeError):
     """The snapshot does not belong to the database about to be overwritten.
 
@@ -200,7 +212,29 @@ def restore_backup(backup_path: Path, *, allow_foreign_snapshot: bool = False) -
     `DATABASE_URL` and the message is the only place that will say so.
     """
     if not backup_path.is_file():
-        raise FileNotFoundError(f"Backup file not found: {backup_path}")
+        # Instructions, not a traceback (R.1c, **D-218**). A missing `BACKUP`
+        # is an operator typing a path, which is the most ordinary thing that
+        # can go wrong here -- and the two paths that matter are the one they
+        # asked for and the directory this database's snapshots are actually
+        # in, because the usual cause is the two disagreeing. Naming what *is*
+        # there turns "no such file" into the next command to run.
+        available = sorted(
+            (path.name for path in backup_dir().glob(f"{BACKUP_FILENAME_PREFIX}*")),
+            reverse=True,
+        )
+        listing = (
+            "\n".join(f"    {name}" for name in available[:5])
+            if available
+            else "    (none -- take one with `make backup` first)"
+        )
+        raise BackupNotFound(
+            f"No such snapshot: {backup_path}\n"
+            f"  looked for:           {backup_path.resolve()}\n"
+            f"  this database's are:  {backup_dir().resolve()}\n"
+            f"  newest there:\n{listing}\n"
+            "If those two directories disagree, DATABASE_URL is pointing at a "
+            "different database than the snapshot belongs to."
+        )
 
     database_path = sqlite_path_from_url(settings.database_url)
     snapshot_dir = backup_path.resolve().parent

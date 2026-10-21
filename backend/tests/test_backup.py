@@ -26,6 +26,7 @@ from test_attachments import PDF, upload
 from test_timeline import create_entry
 
 from app.backup import (
+    BackupNotFound,
     RestoreTargetMismatch,
     attachment_mirror,
     backup_dir,
@@ -140,8 +141,13 @@ def test_restore_recovers_data_written_after_a_backup(
     assert opportunity_names(database_path) == ["Before backup"]
 
 
-def test_restore_raises_for_a_missing_backup_file(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError):
+def test_restore_refuses_a_missing_backup_file(tmp_path: Path) -> None:
+    """`BackupNotFound` rather than `FileNotFoundError` since R.1c (**D-218**):
+    the two things an operator meets at a restore are both about *which
+    database*, and `tools/restore.py` answers both with a message instead of a
+    stack. Still a refusal before anything is opened, which is what it was.
+    """
+    with pytest.raises(BackupNotFound):
         restore_backup(tmp_path / "does-not-exist.db")
 
 
@@ -285,3 +291,41 @@ def test_a_foreign_snapshot_restores_when_it_is_asked_for(
     restored = restore_backup(snapshot, allow_foreign_snapshot=True)
 
     assert restored == Path(settings.database_url.removeprefix("sqlite:///"))
+
+
+def test_a_mistyped_snapshot_path_says_where_this_databases_are(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """R.1c, **D-218**. The reviewer met this as a traceback.
+
+    Their command named `data/backups/...` for a snapshot that was in
+    `data-demo/backups/...`, with `DATABASE_URL` left off a wrapped line — two
+    ordinary slips, and the answer was a `FileNotFoundError` stack. Nothing
+    was harmed, which is the important half; the message is the half worth
+    fixing, because the usual cause is the snapshot and the database belonging
+    to different deployments and only this message can say so.
+    """
+    signup(client)
+    create_backup()
+
+    with pytest.raises(BackupNotFound) as refused:
+        restore_backup(tmp_path / "nowhere" / "app-20261021T091707889189Z.db")
+
+    message = str(refused.value)
+    # Where it looked, where this database's snapshots are, and what is in
+    # there -- the three facts that turn "no such file" into the next command.
+    assert "app-20261021T091707889189Z.db" in message
+    assert str(backup_dir().resolve()) in message
+    assert next(iter(backup_dir().glob("app-*.db"))).name in message
+    assert "DATABASE_URL" in message
+
+
+def test_an_empty_backup_directory_says_to_take_one(client: TestClient, tmp_path: Path) -> None:
+    """The same message with nothing to list, which is a different problem and
+    a different instruction: there is no snapshot to restore at all."""
+    signup(client)
+
+    with pytest.raises(BackupNotFound) as refused:
+        restore_backup(tmp_path / "app-20261021T091707889189Z.db")
+
+    assert "make backup" in str(refused.value)

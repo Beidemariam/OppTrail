@@ -6301,6 +6301,15 @@ this phase reaches `AWAITING_REVIEW` and is accepted, the project is finished.
         "just in the notes", with the hint saying so in as many words. No
         backend change: `TimelineEntryCreate` has validated the field all
         along.
+      - **A mistyped snapshot path answers with instructions** (**D-218**),
+        found by the reviewer walking the restore: a path that named the wrong
+        backup directory printed a `FileNotFoundError` traceback, while the
+        refusal D-214 added two lines below it printed instructions. Both
+        failures are the same question — which database — so both answer the
+        same way now, and the missing-file one lists what *is* in the
+        directory it looked in. The page's steps were the other half: one
+        `export` up front and `$(ls -t ...)` for the filename, because a
+        command long enough to wrap gets pasted in two pieces.
       - Carried from pr-6: a Q&A page with a feedback form for questions the
         user guide does not answer (v3).
 
