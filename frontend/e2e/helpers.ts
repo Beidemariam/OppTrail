@@ -25,6 +25,17 @@ export async function signIn(page: Page, email: string) {
   await expect(
     page.getByRole("heading", { name: "Opportunities" }),
   ).toBeVisible();
+  // ...and then wait for the board to have settled, not just for its heading.
+  // `useOpportunities` walks every page through `fetchAll` (D-093), so the
+  // heading is up well before there is anything under it, and a test that
+  // acts in that gap acts on an empty board. A single keypress is the case
+  // that bites: `j` pressed with no items does nothing and is not retried,
+  // unlike an assertion. Either outcome counts as settled -- a card for a
+  // reader who has deals, `.onboarding-panel` for one who has none, which is
+  // what the freshly-signed-up actors here see.
+  await expect(
+    page.locator("article.opportunity-card, .onboarding-panel").first(),
+  ).toBeVisible();
 }
 
 export async function signUp(page: Page, email: string, name: string) {

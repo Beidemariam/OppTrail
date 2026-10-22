@@ -215,6 +215,9 @@ test.describe("dragging movements (2.5.7, AA in WCAG 2.2)", () => {
     const draggable = page.locator(
       "article.opportunity-card[draggable='true']",
     );
+    // `signIn` has already waited for the board to settle, which is what
+    // makes this snapshot count safe: it read 0 under Playwright 1.64 when it
+    // did not.
     const count = await draggable.count();
     expect(count).toBeGreaterThan(0);
 

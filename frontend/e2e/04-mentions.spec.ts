@@ -106,6 +106,9 @@ test("notification history survives being read, and mark-all-read clears the bad
   await page.getByRole("button", { name: "Notifications" }).click();
   const panel = page.locator(".notification-panel");
   const rows = panel.locator(".notification-row");
+  // Same reason as the draggable count in 30-focus-and-keyboard: `count()`
+  // does not retry, so the first row has to be on screen before it is asked.
+  await expect(rows.first()).toBeVisible();
   const total = await rows.count();
   expect(total).toBeGreaterThanOrEqual(2);
   await expect(
