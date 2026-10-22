@@ -2240,11 +2240,46 @@ a.task-title:hover {
   padding: 0;
 }
 
+/* A label, a bar and a number — and the row **wraps** rather than overflowing
+   when the three cannot share a line.
+
+   It was a three-column grid, `minmax(96px, 150px) 1fr minmax(96px, auto)`,
+   and the third column's `auto` maximum has no ceiling: `.bar-value` carries
+   money plus a deal count and is `nowrap`, so it took the 182px it needed.
+   150 + 182 + two 12px gaps is 356px inside a 338px card at 420px wide, and
+   the `1fr` bar track was squeezed out first. Measured, the list overflowed
+   itself by 27px there — and on CI's font stack 2px of that escaped the body,
+   which is the sideways scroll `e2e/23-responsive.spec.ts` reported.
+
+   Wrapping rather than a breakpoint, deliberately. A media query would be
+   another number measured on one machine's fonts, which is how
+   `--sticky-deal` was wrong three times; flex wrap asks the question at
+   layout time instead, so it holds at any width and any font metrics. Same
+   trade D-138 made for the heading rows: the text half yields (`min-width:
+   0`, and the label already ellipsises), the number does not. */
 .bar-list > li {
   align-items: center;
-  display: grid;
-  gap: var(--space-3);
-  grid-template-columns: minmax(96px, 150px) 1fr minmax(96px, auto);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+}
+
+.bar-list > li > .bar-label {
+  flex: 0 1 150px;
+  min-width: 0;
+}
+
+.bar-list > li > .bar-track,
+.bar-list > li > .spark {
+  flex: 1 1 120px;
+  min-width: 0;
+}
+
+.bar-list > li > .bar-value {
+  /* Pushed to the end of whichever line it lands on, so the numbers stay in a
+     column while the rows above still fit on one. */
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
 .bar-label {
