@@ -156,36 +156,23 @@
   --cell-padding-y: var(--space-2);
   --cell-padding-x: var(--space-3);
 
-  /* How much sticky chrome sits above the content (R.1's layout, named here
-     by R.2). The application bar is `--sticky-bar` tall and sticks at 0; on a
-     deal the record band sticks directly under it, and `--sticky-deal` is the
-     bottom of that pair. They were three literals in three rules, and the
-     scroll offsets below have to agree with them: a focused control scrolled
-     under this chrome is entirely hidden, which is what WCAG 2.2's 2.4.11
-     forbids.
+  /* How much sticky chrome sits above the content. The application bar is
+     `--sticky-bar` tall and sticks at 0; on a deal the record band sticks
+     directly under it, and that band **measures itself** rather than being
+     written down here (`app/useStickyChrome.ts` publishes `--sticky-chrome`).
 
-     **`--sticky-deal` varies with width, and 190px was wrong at every one of
-     them** (R.1c, **D-219**). R.2 took one measurement at one viewport and
-     wrote the literal; measured while the bands are actually stuck, the pair
-     ends at **196px** at 1440 and 1280 and at **256px** at 1024, where the
-     1280px media query re-flows the record band and it wraps. So the padding
-     was 6px short on a desktop and **66px short at 1024** — a control reached
-     by `Shift+Tab` could sit two thirds of a band under it, which is the
-     2.4.11 failure R.2 existed to fix, still present at the width below the
-     one it checked.
+     It was a literal three times and wrong three times: 190px from one
+     viewport (R.2), then three measured literals (R.1c, D-219), then those
+     found short by CI's first Linux run — the band wraps to 292.39px at
+     1024px under a different font stack where it measured 256px on macOS, so
+     the padding under-cleared it by 20px and WCAG 2.2's 2.4.11 failure was
+     live again for any reader whose fonts render taller. The scroll offsets
+     have to agree with the chrome exactly, and only the chrome knows.
 
-     Below 900px the band is `position: static` (see the media query near
-     `.record-header`), so the only sticky chrome is the application bar and
-     this follows `--sticky-bar` down rather than padding a scroll by a
-     quarter of a short viewport.
-
-     Over-padding is harmless and under-padding is the defect, so each value
-     clears its measurement with room. `e2e/30-focus-and-keyboard.spec.ts`
-     asserts the inequality at eleven widths while the bands are stuck —
-     measured, not commented, which is the only reason any of this was
-     found. */
+     `--sticky-bar` stays a token because the bar's height is a design
+     decision rather than a consequence: it is `min-height` on one flex row
+     that nothing wraps. */
   --sticky-bar: 56px;
-  --sticky-deal: 204px;
 
   color-scheme: light;
 }
@@ -197,22 +184,6 @@
  * combination of the two already works and none of them is a fourth palette
  * to audit.
  */
-/* The record band wraps as the deal screen narrows, so the sticky stack it
-   forms with the application bar grows (R.1c, D-219). Measured stuck: 196px
-   at 1440 and 1280, 256px at 1024. Below 900px the band is static and the bar
-   is the only sticky chrome left. */
-@media (max-width: 1280px) {
-  :root {
-    --sticky-deal: 272px;
-  }
-}
-
-@media (max-width: 900px) {
-  :root {
-    --sticky-deal: var(--sticky-bar);
-  }
-}
-
 [data-density="compact"] {
   --row-height: 30px;
   --row-text: var(--text-xs);
@@ -3935,8 +3906,8 @@ kbd {
   padding: var(--space-2) var(--space-3);
   position: fixed;
   text-decoration: none;
-  /* Above the application bar, which is the one thing it would appear under. */
-  top: calc(-1 * var(--sticky-deal));
+  /* Above the chrome, which is the one thing it would appear under. */
+  top: calc(-1 * (var(--sticky-chrome, var(--sticky-bar)) + var(--space-2)));
   transition: top var(--motion-fast) ease-out;
   z-index: 30;
 }
@@ -3959,15 +3930,24 @@ kbd {
    `scroll-padding` is what shrinks that rect, so the same control is now out
    of view and gets scrolled clear.
 
-   Which stack is above the content is a fact about the screen, so it is a root
-   attribute, the way the theme and the density are (`lib/nav.ts`'s
-   `stickyStack`). */
+   How much chrome there is comes from the chrome itself: a deal's record band
+   publishes `--sticky-chrome` while it is mounted and sticky
+   (`app/useStickyChrome.ts`), and the fallback is the application bar, which
+   is all there is on every other screen and on a deal below 900px where the
+   band goes static. One rule, no breakpoints, and nothing to keep in step. */
 html {
-  scroll-padding-top: calc(var(--sticky-bar) + var(--space-2));
-}
-
-html[data-sticky="deal"] {
-  scroll-padding-top: calc(var(--sticky-deal) + var(--space-2));
+  /* The chrome, plus a full minimum target (2.5.8's 24px) rather than a
+     decorative gap. Clearing the chrome *exactly* is not enough: whatever a
+     focus scroll brings to the top of the content area lands against the
+     band, and a control flush with it is reported by axe as partially
+     obscured -- measured at **14.5px of 38px exposed** on the composer's Type
+     select when this was `--space-2`. The literal it replaced happened to
+     over-estimate by 8px and so hid that; over-padding is harmless and
+     under-padding is the defect, so the margin is now deliberate and sized by
+     the criterion instead of by luck. */
+  scroll-padding-top: calc(
+    var(--sticky-chrome, var(--sticky-bar)) + var(--space-6)
+  );
 }
 
 .nav-rail {
@@ -4116,8 +4096,8 @@ html[data-sticky="deal"] {
   justify-content: space-between;
   padding: var(--space-3) var(--space-4);
   position: sticky;
-  /* The application bar sticks at 0; this band sits directly under it. Both
-     numbers are one token each, `--sticky-bar` and `--sticky-deal` (R.2). */
+  /* The application bar sticks at 0; this band sits directly under it. This
+     offset plus the band's own height is what `useStickyChrome` publishes. */
   top: var(--sticky-bar);
   z-index: 4;
 }
@@ -4248,7 +4228,10 @@ html[data-sticky="deal"] {
   grid-column: 3;
   max-height: calc(100vh - 200px);
   position: sticky;
-  top: var(--sticky-deal);
+  /* Below the chrome, measured rather than assumed -- the same value
+     `scroll-padding-top` uses, so the drawer and a scrolled-to control agree
+     about where the content starts. */
+  top: var(--sticky-chrome, var(--sticky-bar));
 }
 
 @media (max-width: 1280px) {

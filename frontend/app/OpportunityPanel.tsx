@@ -15,6 +15,7 @@ import {
   type CustomValues,
 } from "../lib/domain";
 import { useKeyboardShortcuts } from "../lib/keyboard";
+import { useStickyChrome } from "./useStickyChrome";
 import { useLiveUpdates } from "../lib/liveUpdates";
 import {
   canChangeItem,
@@ -376,8 +377,13 @@ function RecordHeader({
   // `CustomFieldInputs` renders the right control for each type.
   const fields = useCustomFields("opportunity");
   const values = (opportunity.custom_values ?? {}) as CustomValues;
+  // This band is the sticky chrome a deal adds, and it publishes its own
+  // reach so `scroll-padding-top` needs no literal to keep in step with it
+  // (`app/useStickyChrome.ts`, WCAG 2.2's 2.4.11).
+  const bandRef = useRef<HTMLElement>(null);
+  useStickyChrome(bandRef);
   return (
-    <header className="record-header">
+    <header className="record-header" ref={bandRef}>
       <div className="record-main">
         <p className="record-crumb">
           {/* Back to the board, carrying its view state: the filters, the

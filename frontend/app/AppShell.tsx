@@ -11,11 +11,9 @@ import {
 
 import type { User } from "../lib/domain";
 import {
-  STICKY_ATTRIBUTE,
   isNavActive,
   navItems,
   readNavCollapsed,
-  stickyStack,
   writeNavCollapsed,
 } from "../lib/nav";
 import { useMyTasks, useSession } from "../lib/queries";
@@ -41,7 +39,6 @@ export function AppShell() {
   const contentRef = useRef<HTMLDivElement>(null);
   useScrollToTopOnNavigate();
   useFocusOnNavigate(contentRef);
-  useStickyStack();
 
   function toggleNav() {
     setCollapsed((previous) => {
@@ -115,26 +112,6 @@ function useScrollToTopOnNavigate() {
       window.scrollTo({ top: 0, behavior: "instant" });
     }
   }, [pathname, linked]);
-}
-
-/**
- * Tells the document how much sticky chrome this screen has (milestone R.2).
- *
- * `app/globals.css` turns it into `scroll-padding-top`, which is what keeps a
- * control that has just taken focus from being scrolled underneath the
- * application bar and the record band (WCAG 2.2's 2.4.11). A root attribute
- * rather than a prop, because the scrollport belongs to the document: the
- * same reason `lib/theme.ts` writes `data-theme` and `lib/density.ts` writes
- * `data-density` instead of threading either through the tree.
- */
-function useStickyStack() {
-  const { pathname } = useLocation();
-  useEffect(() => {
-    document.documentElement.setAttribute(
-      STICKY_ATTRIBUTE,
-      stickyStack(pathname),
-    );
-  }, [pathname]);
 }
 
 /**

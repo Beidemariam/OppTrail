@@ -81,6 +81,16 @@ test("a note saved against a copy somebody else moved is refused", async ({
 
     const blairNote = entry(blair, title).locator("section.note-block").first();
     await blairNote.getByRole("button", { name: "Edit" }).click();
+    // **A second, deliberately.** The guard compares `updated_at`, and
+    // `utc_now()` is second-resolution -- `routes_timeline.update_note` says
+    // so itself: two edits inside one second carry the same stamp and the
+    // later one is accepted (D-067's granularity, documented and accepted).
+    // Measured, this note was stamped :52 and Alex's save landed at :53, and
+    // the whole flow between them takes about a second -- so whether the
+    // scenario could happen at all was close to a coin flip. This is the
+    // precondition the test needs, not a sleep waiting for something to
+    // settle: without two distinct seconds there is no conflict to refuse.
+    await blair.waitForTimeout(1_100);
 
     await signIn(page, ALEX);
     await openTimeline(page, NORTHWIND);
@@ -89,6 +99,14 @@ test("a note saved against a copy somebody else moved is refused", async ({
     await alexNote.getByLabel("Edit this note").fill("Alex got here first.");
     await alexNote.getByRole("button", { name: "Save" }).click();
     await expect(alexNote).toContainText("Alex got here first.");
+    // **Wait for the server, not for Alex's own screen.** `useSaveNote` is
+    // optimistic (2.4b), so the line above is satisfied by Alex's local
+    // render before the PATCH has been answered -- and this test needs Alex's
+    // write to be *on the server* before Blair's, or Blair's stale baseline
+    // is still current and the server rightly accepts it. The editor closes
+    // in `onSuccess` (`app/NoteBlock.tsx`), so its Save button going away is
+    // the one signal here that means the write landed.
+    await expect(alexNote.getByRole("button", { name: "Save" })).toHaveCount(0);
 
     // Blair's editor is still open on the copy that has just been replaced --
     // the live stream refetched the note underneath it, and the guard compares

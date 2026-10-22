@@ -147,24 +147,6 @@ describe("one shell for every screen", () => {
     expect(document.getElementById("main-content")).not.toHaveFocus();
   });
 
-  it("tells the document which sticky stack the screen has", async () => {
-    // `scroll-padding-top` reads this, and it is what keeps a control that
-    // has just taken focus from landing under the record band (2.4.11).
-    renderApp({ user: ALEX }, "/opportunities/10");
-    await screen.findByRole("heading", { level: 2 });
-
-    await waitFor(() =>
-      expect(document.documentElement).toHaveAttribute("data-sticky", "deal"),
-    );
-
-    await userEvent.click(screen.getByRole("link", { name: /^Reports/ }));
-    await screen.findByRole("heading", { name: "Reports" });
-
-    await waitFor(() =>
-      expect(document.documentElement).toHaveAttribute("data-sticky", "bar"),
-    );
-  });
-
   it("asks a signed-out reader to sign in, once, for all five", async () => {
     renderApp({ user: null }, "/automations");
 

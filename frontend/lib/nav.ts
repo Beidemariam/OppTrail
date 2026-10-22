@@ -42,20 +42,45 @@ export function isNavActive(itemPath: string, pathname: string): boolean {
 }
 
 /**
- * How much sticky chrome a screen keeps above its content (milestone R.2).
+ * How much sticky chrome a screen keeps above its content (R.2, rewritten).
  *
- * Five screens have the application bar; a deal has the bar and the record
- * band under it (R.1). The difference matters because the scrollport has to
- * be shrunk by exactly that much, or `Shift+Tab` scrolls a control to the top
- * edge and under the chrome — WCAG 2.2's 2.4.11. `app/globals.css` reads it as
- * a root attribute, the shape `lib/theme.ts` and `lib/density.ts` already use
- * for a fact the whole document depends on.
+ * The scrollport has to be shrunk by exactly that much, or `Shift+Tab`
+ * scrolls a control to the top edge and under the chrome — WCAG 2.2's 2.4.11.
+ * Five screens have only the application bar; a deal has the bar and the
+ * record band stuck under it, and the band is the part that varies.
+ *
+ * **It is measured now, not written down.** This was a literal three times
+ * and wrong three times: R.2 took one measurement at one viewport (190px),
+ * R.1c found it wrong at every width and replaced it with three measured
+ * literals (D-219), and CI's first Linux run found *those* short — the band
+ * wraps to **292.39px** at 1024px under a different font stack where it
+ * measured 256px on macOS, so `--sticky-deal: 272px` under-padded by 20px
+ * and the 2.4.11 failure was live again for anyone whose fonts render
+ * taller. A constant can only ever be right for the configuration it was
+ * measured in; the band knows its own height, so it publishes it.
+ *
+ * `null` means *this is not sticky chrome*: below 900px the band is
+ * `position: static` and the application bar is the only thing above the
+ * content, which is what `--sticky-bar` is for. That replaces a media query
+ * that said the same thing in CSS.
  */
-export function stickyStack(pathname: string): "bar" | "deal" {
-  return pathname.startsWith("/opportunities/") ? "deal" : "bar";
+export function stuckBottom(
+  position: string,
+  top: string,
+  height: number,
+): number | null {
+  if (position !== "sticky") {
+    return null;
+  }
+  // A sticky element's resolved `top` is where it comes to rest, so its
+  // bottom edge while stuck is that plus its height — computable without
+  // scrolling the page to find out. `top: auto` parses as NaN.
+  const offset = Number.parseFloat(top);
+  return (Number.isFinite(offset) ? offset : 0) + height;
 }
 
-export const STICKY_ATTRIBUTE = "data-sticky";
+/** Published on `<html>` for `scroll-padding-top` to read. */
+export const STICKY_CHROME_PROPERTY = "--sticky-chrome";
 
 export const NAV_STORAGE_KEY = "opptrail-nav";
 

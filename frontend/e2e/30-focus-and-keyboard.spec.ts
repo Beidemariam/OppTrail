@@ -118,13 +118,17 @@ test.describe("focus not obscured (2.4.11, AA in WCAG 2.2)", () => {
   test("the scroll padding is never less than the chrome it clears", async ({
     page,
   }) => {
-    // R.1c. `--sticky-deal` was a literal matching the record band's height
-    // when R.2 measured it, and R.1c's one button size made that band
-    // shorter — so the number became an over-estimate. Over-padding is
-    // harmless; **under**-padding is the 2.4.11 failure R.2 fixed, and the
-    // band is taller at narrow widths where its rows wrap. So the invariant
-    // worth holding is the inequality, measured rather than commented, at
-    // every width the responsive suite uses.
+    // The invariant is the inequality: the scroll padding may never be less
+    // than the chrome it has to clear. Over-padding is harmless;
+    // **under**-padding is the 2.4.11 failure.
+    //
+    // It asserts `scroll-padding-top` itself rather than the token behind it.
+    // That distinction is the whole history of this defect: the padding came
+    // from a literal, which was wrong at one viewport (R.2), then at every
+    // width (R.1c, D-219), then on Linux where the band wraps 36px taller
+    // than it does on macOS — and a test that reads the input can only ever
+    // check the value somebody wrote down, while this one checks the value
+    // the browser uses.
     await signIn(page, ALEX);
     await openTimeline(page, NORTHWIND);
 
@@ -146,16 +150,37 @@ test.describe("focus not obscured (2.4.11, AA in WCAG 2.2)", () => {
         window.scrollTo({ top: 800, behavior: "instant" }),
       );
       await settleTransitions(page);
-      const measured = await page.evaluate(() => {
+      // Waited for, not sampled. The band publishes its height through a
+      // `ResizeObserver`, which delivers a frame after the viewport changes,
+      // so reading immediately caught the *previous* width's value -- it
+      // reported 238 at 1024px, which is this band's bottom at 1100. The
+      // lag is a frame in a browser and many frames before anybody tabs, so
+      // what is worth asserting is that it converges.
+      const clears = () => {
         const band = document.querySelector(".record-header");
-        const root = getComputedStyle(document.documentElement);
-        const token = parseFloat(root.getPropertyValue("--sticky-deal"));
+        const padding = Number.parseFloat(
+          getComputedStyle(document.documentElement).scrollPaddingTop,
+        );
         const bottom = band ? band.getBoundingClientRect().bottom : 0;
-        return { token, bottom };
-      });
-      if (measured.token < measured.bottom) {
+        return padding >= bottom;
+      };
+      let settled = true;
+      try {
+        await page.waitForFunction(clears, undefined, { timeout: 2_000 });
+      } catch {
+        settled = false;
+      }
+      if (!settled) {
+        const measured = await page.evaluate(() => {
+          const band = document.querySelector(".record-header");
+          const root = getComputedStyle(document.documentElement);
+          return {
+            padding: Number.parseFloat(root.scrollPaddingTop),
+            bottom: band ? band.getBoundingClientRect().bottom : 0,
+          };
+        });
         tooSmall.push(
-          `${width}px: --sticky-deal ${measured.token} < chrome ${measured.bottom}`,
+          `${width}px: scroll-padding-top ${measured.padding} < chrome ${measured.bottom}`,
         );
       }
     }

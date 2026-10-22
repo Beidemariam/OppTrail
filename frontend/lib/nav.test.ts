@@ -5,7 +5,7 @@ import {
   isNavActive,
   navItems,
   readNavCollapsed,
-  stickyStack,
+  stuckBottom,
   writeNavCollapsed,
 } from "./nav";
 
@@ -47,21 +47,27 @@ describe("which destination a path belongs to", () => {
   });
 });
 
-describe("how much sticky chrome a screen has", () => {
-  it("counts the record band on a deal, which no other screen has", () => {
-    expect(stickyStack("/opportunities/7")).toBe("deal");
+describe("how far down the sticky chrome reaches", () => {
+  it("is where the band rests plus how tall it is", () => {
+    // 56px of application bar above it, and a band that has wrapped to three
+    // rows: 292.39px is the number CI measured on Linux, where the literal
+    // this replaced said 272px (D-219's third iteration).
+    expect(stuckBottom("sticky", "56px", 236.390625)).toBeCloseTo(292.390625);
   });
 
-  it("counts the application bar alone everywhere else", () => {
-    for (const path of ["/", "/tasks", "/reports", "/automations", "/search"]) {
-      expect(stickyStack(path)).toBe("bar");
-    }
+  it("is null when the band is not sticky at all", () => {
+    // Below 900px the band is `position: static` and the application bar is
+    // the only chrome; null is what makes the CSS fall back to it, replacing
+    // a media query that said the same thing.
+    expect(stuckBottom("static", "auto", 236)).toBeNull();
+    expect(stuckBottom("relative", "56px", 236)).toBeNull();
   });
 
-  it("does not count the board as a deal, though it shares the word", () => {
-    // `/opportunities` with nothing after it is not a route this app serves,
-    // but the prefix check has to mean "a deal" rather than "the word".
-    expect(stickyStack("/opportunities")).toBe("bar");
+  it("treats an unresolvable offset as the top of the screen", () => {
+    // `top: auto` on a sticky element parses as NaN, and counting the height
+    // alone is the safe direction: over-padding is harmless, under-padding is
+    // the 2.4.11 failure.
+    expect(stuckBottom("sticky", "auto", 120)).toBe(120);
   });
 });
 

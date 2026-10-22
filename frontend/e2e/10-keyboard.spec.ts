@@ -140,6 +140,14 @@ test("the board's cursor moves without a mouse", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "Filter and order" }),
   ).toBeVisible();
+  // ...and wait for the board to be *gone*, which is the other half of that
+  // race. `/` is bound by whichever screen is open, and during a navigation
+  // both are mounted for a moment -- so the board's handler could still win
+  // and put the cursor in its own keyword box, on a screen about to unmount.
+  // The deal's trigger appearing does not mean the board's has left.
+  await expect(
+    page.getByRole("button", { name: "+ Filter and sort" }),
+  ).toHaveCount(0);
   await page.keyboard.press("/");
   await expect(page.getByLabel("Filter the timeline by keyword")).toBeFocused();
 });

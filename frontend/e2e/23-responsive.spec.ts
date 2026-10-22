@@ -78,10 +78,42 @@ async function audit(page: Page) {
         });
       }
     }
-    return {
-      squashed,
-      overflow: document.body.scrollWidth - window.innerWidth,
-    };
+    // Which elements actually stick out, not just that something does. A
+    // bare "the page scrolls sideways by 2px" sends the next reader hunting
+    // through every screen by hand -- and this failure only reproduces under
+    // a font stack the author may not have, so the report has to carry its
+    // own evidence. Widest first, deepest in the tree preferred: a container
+    // is wide *because* of its content, so the leaf is the culprit.
+    const overflow = document.body.scrollWidth - window.innerWidth;
+    const culprits: string[] = [];
+    if (overflow > 0) {
+      const limit = window.innerWidth;
+      const offenders: { label: string; right: number; depth: number }[] = [];
+      for (const el of document.querySelectorAll<HTMLElement>("body *")) {
+        const box = el.getBoundingClientRect();
+        if (box.width === 0 || box.right <= limit + 0.5) {
+          continue;
+        }
+        let depth = 0;
+        for (let node = el.parentElement; node; node = node.parentElement) {
+          depth += 1;
+        }
+        offenders.push({
+          label:
+            el.tagName.toLowerCase() +
+            (el.className && typeof el.className === "string"
+              ? `.${el.className.trim().split(/\s+/).slice(0, 2).join(".")}`
+              : ""),
+          right: Math.round(box.right),
+          depth,
+        });
+      }
+      offenders.sort((a, b) => b.right - a.right || b.depth - a.depth);
+      for (const o of offenders.slice(0, 4)) {
+        culprits.push(`${o.label} reaches ${o.right} (viewport ${limit})`);
+      }
+    }
+    return { squashed, overflow, culprits };
   });
 }
 
@@ -114,7 +146,10 @@ test("no control is squashed and no page scrolls sideways, at any width", async 
       }
       if (result.overflow > 0) {
         problems.push(
-          `${name} at ${width}px: the page scrolls sideways by ${result.overflow}px`,
+          `${name} at ${width}px: the page scrolls sideways by ${result.overflow}px` +
+            (result.culprits.length > 0
+              ? ` — widest: ${result.culprits.join("; ")}`
+              : ""),
         );
       }
     }
