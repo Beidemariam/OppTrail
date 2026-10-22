@@ -82,36 +82,56 @@ async function audit(page: Page) {
     // bare "the page scrolls sideways by 2px" sends the next reader hunting
     // through every screen by hand -- and this failure only reproduces under
     // a font stack the author may not have, so the report has to carry its
-    // own evidence. Widest first, deepest in the tree preferred: a container
-    // is wide *because* of its content, so the leaf is the culprit.
+    // own evidence.
+    //
+    // **No threshold.** The first version of this only listed elements whose
+    // right edge passed `innerWidth`, and on the one failure it exists for it
+    // printed nothing: 2px of `body.scrollWidth` can come from sub-pixel
+    // rounding or from a box overflowing inside a container, neither of which
+    // crosses that line. So it reports the widest right edges whatever they
+    // are, plus anything scrolling inside itself, and lets the reader judge.
     const overflow = document.body.scrollWidth - window.innerWidth;
     const culprits: string[] = [];
     if (overflow > 0) {
-      const limit = window.innerWidth;
-      const offenders: { label: string; right: number; depth: number }[] = [];
-      for (const el of document.querySelectorAll<HTMLElement>("body *")) {
-        const box = el.getBoundingClientRect();
-        if (box.width === 0 || box.right <= limit + 0.5) {
-          continue;
-        }
+      const depthOf = (el: Element) => {
         let depth = 0;
         for (let node = el.parentElement; node; node = node.parentElement) {
           depth += 1;
         }
-        offenders.push({
-          label:
-            el.tagName.toLowerCase() +
-            (el.className && typeof el.className === "string"
-              ? `.${el.className.trim().split(/\s+/).slice(0, 2).join(".")}`
-              : ""),
-          right: Math.round(box.right),
-          depth,
-        });
+        return depth;
+      };
+      const name = (el: Element) =>
+        el.tagName.toLowerCase() +
+        (typeof el.className === "string" && el.className.trim()
+          ? `.${el.className.trim().split(/\s+/).slice(0, 2).join(".")}`
+          : "");
+      const boxes: { label: string; right: number; depth: number }[] = [];
+      const inner: string[] = [];
+      for (const el of document.querySelectorAll("body *")) {
+        const box = el.getBoundingClientRect();
+        if (box.width > 0) {
+          // Deepest first among equals: a container is wide *because* of its
+          // content, so the leaf is the culprit worth naming.
+          boxes.push({
+            label: name(el),
+            right: Math.round(box.right * 100) / 100,
+            depth: depthOf(el),
+          });
+        }
+        if (el.scrollWidth > el.clientWidth + 1 && el.clientWidth > 0) {
+          inner.push(
+            `${name(el)} scrolls ${el.scrollWidth - el.clientWidth}px inside itself`,
+          );
+        }
       }
-      offenders.sort((a, b) => b.right - a.right || b.depth - a.depth);
-      for (const o of offenders.slice(0, 4)) {
-        culprits.push(`${o.label} reaches ${o.right} (viewport ${limit})`);
+      boxes.sort((a, b) => b.right - a.right || b.depth - a.depth);
+      for (const b of boxes.slice(0, 4)) {
+        culprits.push(`${b.label} right=${b.right}`);
       }
+      culprits.push(
+        `viewport=${window.innerWidth} body.scrollWidth=${document.body.scrollWidth}`,
+      );
+      culprits.push(...inner.slice(0, 4));
     }
     return { squashed, overflow, culprits };
   });
