@@ -45,6 +45,20 @@ jobs:
       # `pyproject.toml` so a local `make check-fast` still leaves no files
       # behind — CI is the only place that wants a coverage file on disk.
       PYTEST_ADDOPTS: --cov-report=xml
+      # `tests/test_performance.py`'s budgets, for hardware this project did
+      # not choose. Measured, `search` costs ~166 ms on a developer machine
+      # and 425–459 ms here: a network-backed disk shared with whoever else
+      # is on the host, about 2.7x. It failed 2 of 3 runs, and since that
+      # suite is inside `make check-fast` it aborted before Playwright ever
+      # started — so the flake was hiding a real e2e failure behind it.
+      #
+      # The absolute 400 ms is still asserted where the hardware is known: a
+      # developer machine, and `scripts/autopilot-gate.sh`'s in-image run,
+      # which is what has to be green before a phase is accepted. Here the
+      # job is order-of-magnitude regressions, and the test prints the scale
+      # beside its measurements so a scaled pass cannot read as an absolute
+      # one. See the constant's own comment for what this gives up.
+      PERF_BUDGET_SCALE: "3"
     steps:
       - uses: actions/checkout@v4
 
