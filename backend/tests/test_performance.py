@@ -56,7 +56,11 @@ ENTRIES = 80_000
 #: gate. Removing that gap means calibrating against a reference workload
 #: rather than scaling, which is more machinery than a 20-user app needs
 #: today; the cutover point is the first regression this lets through.
-BUDGET_SCALE = float(os.environ.get("PERF_BUDGET_SCALE", "1"))
+#: `or "1"` rather than a plain default: an environment that sets this to
+#: the empty string would otherwise fail the whole suite on a ValueError
+#: before a single test ran, which is the shape of defect an empty
+#: `FORECAST_PROBABILITIES=` already has in `.env.example`.
+BUDGET_SCALE = float(os.environ.get("PERF_BUDGET_SCALE") or "1")
 
 #: What a reader waits for, in milliseconds. One number for a page read, and
 #: a wider one for the two reads that are deliberately not paginated — the

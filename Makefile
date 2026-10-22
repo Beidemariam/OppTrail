@@ -85,7 +85,12 @@ docker:
 # suite inside it.
 docker-test:
 	docker build --target backend-test -t opptrail-test .
-	docker run --rm opptrail-test
+	# `-e PERF_BUDGET_SCALE` with no value forwards the variable only when it
+	# is set, which is what CI needs: the suite runs *inside* the container, so
+	# a job-level environment variable does not otherwise reach pytest at all.
+	# Unset locally it stays unset in the container (verified), which is how a
+	# host run keeps asserting the absolute budget.
+	docker run --rm -e PERF_BUDGET_SCALE opptrail-test
 
 # Small, fast demo data covering every shipped feature and permission
 # relationship. Prints the seeded users and what each of them can see.
