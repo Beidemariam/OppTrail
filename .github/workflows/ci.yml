@@ -26,7 +26,16 @@ concurrency:
 jobs:
   checks:
     name: make check
-    runs-on: ubuntu-latest
+    # Pinned, not `ubuntu-latest`. The `ubuntu-latest` label began migrating to
+    # Ubuntu 26.04 on 2026-10-19, and this workflow's first ever run met it:
+    # every stage passed except `make e2e`, which died on
+    # `Playwright does not support chromium on ubuntu26.04-x64` -- the pinned
+    # @playwright/test 1.56.1 has no browser build for that platform. A moving
+    # runner label is a dependency this project does not pin anywhere else
+    # (the SQLite floor, both lockfiles and the image base are all fixed), and
+    # 24.04 is what every pixel assertion, axe audit and timing budget here was
+    # measured against. Raise it deliberately, with the Playwright upgrade.
+    runs-on: ubuntu-24.04
     # The e2e suite builds the frontend and boots the real server; 20 minutes
     # is roughly three times the measured run, so a hang fails rather than
     # burning an hour.
@@ -106,7 +115,8 @@ jobs:
 
   docker:
     name: docker build, in-image backend suite, smoke test
-    runs-on: ubuntu-latest
+    # Pinned for the same reason as the job above.
+    runs-on: ubuntu-24.04
     needs: checks
     timeout-minutes: 20
     steps:
