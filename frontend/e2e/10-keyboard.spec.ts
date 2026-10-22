@@ -149,7 +149,60 @@ test("the board's cursor moves without a mouse", async ({ page }) => {
     page.getByRole("button", { name: "+ Filter and sort" }),
   ).toHaveCount(0);
   await page.keyboard.press("/");
-  await expect(page.getByLabel("Filter the timeline by keyword")).toBeFocused();
+  // **If this fails, say why.** This assertion has an intermittent failure
+  // nobody has reproduced on demand (D-222): roughly one full-suite run in
+  // nine, never once in 8 isolated runs of this file against a fresh server,
+  // and never while instrumented. Two attempted fixes -- waiting for the
+  // board to settle, then for it to unmount -- were both aimed at a
+  // within-file race that the isolated runs rule out, so the cause is state
+  // an earlier spec leaves behind and is still unknown.
+  //
+  // Playwright's own message says only "element(s) not found", which is where
+  // every investigation so far has started and stalled. The state below is
+  // what would have answered it: whether the disclosure opened at all,
+  // whether something already had focus that swallows single keys
+  // (`isTypingTarget`), and what the URL carried in -- `filtersOpen`
+  // initialises from `timelineFiltersApplied`, so filters arriving from an
+  // earlier spec would make `setFiltersOpen(true)` a no-op and the focusing
+  // effect never re-run.
+  try {
+    await expect(
+      page.getByLabel("Filter the timeline by keyword"),
+    ).toBeFocused();
+  } catch (failure) {
+    const state = await page.evaluate(() => {
+      const active = document.activeElement as HTMLElement | null;
+      const typing =
+        active !== null &&
+        (active.isContentEditable ||
+          active.closest('[contenteditable="true"]') !== null ||
+          ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName));
+      return {
+        url: location.pathname + location.search,
+        filterBarOpen: document.querySelector("form.filter-bar") !== null,
+        keywordBoxExists:
+          document.querySelector(
+            'input[aria-label="Filter the timeline by keyword"]',
+          ) !== null,
+        activeElement:
+          active === null
+            ? null
+            : `${active.tagName}#${active.id}.${String(active.className).split(" ")[0]}`,
+        activeSwallowsSingleKeys: typing,
+        filterTriggers: [...document.querySelectorAll("button")]
+          .map((button) => button.textContent?.trim())
+          .filter((label) => label !== undefined && /filter/i.test(label)),
+        boardCardsStillMounted: document.querySelectorAll(
+          "article.opportunity-card",
+        ).length,
+      };
+    });
+    throw new Error(
+      `${(failure as Error).message}\n` +
+        `page state when the chord was dropped (D-222):\n` +
+        `${JSON.stringify(state, null, 2)}`,
+    );
+  }
 });
 
 /** The same chord, meaning the same thing about a different screen (R.1). A
