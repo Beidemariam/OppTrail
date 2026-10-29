@@ -3,9 +3,10 @@
 //
 // `make check` has always run `npm audit`, and `npm audit` exits non-zero on
 // any high advisory — including ones with **no fix published anywhere**, which
-// is the state of the only advisory this tree carries today. The two obvious
-// responses are both wrong: `--audit-level=critical` hides every future high
-// as well, and leaving the gate red teaches everybody to ignore it.
+// was the state of the one advisory this tree carried when R.6 wrote this gate.
+// The two obvious responses are both wrong: `--audit-level=critical` hides
+// every future high as well, and leaving the gate red teaches everybody to
+// ignore it.
 //
 // So this is `DEFERRED_AXE_RULES`'s shape (`frontend/e2e/helpers.ts`) applied
 // to dependency advisories: a named allowlist with a reason and a date per
@@ -23,24 +24,14 @@
 
 import { execFileSync } from "node:child_process";
 
-const ALLOWED = {
-  "GHSA-vfj7-8cjw-p6xm": {
-    package: "braces",
-    reviewed: "2026-10-17",
-    why: [
-      "Stack-exhaustion DoS expanding deeply nested brace patterns.",
-      "No fix exists: the advisory covers <=3.0.3 and 3.0.3 is the newest",
-      "release braces has ever had. npm's suggested 'fix' is a downgrade of",
-      "eslint-config-next to 14.x, which is not one.",
-      "Reached only through eslint-config-next -> @next/eslint-plugin-next ->",
-      "fast-glob -> micromatch -> braces: a devDependency, at lint time, whose",
-      "glob inputs are this repository's own eslint configuration. Nothing in",
-      "the shipped artifact can reach it — `output: \"export\"` emits static",
-      "files and the runtime image copies `frontend/out` without node_modules",
-      "at all.",
-    ].join(" "),
-  },
-};
+// `ALLOWED` is **empty**, and that is the ratchet having tightened rather than
+// a list nobody started. R.6's one entry was GHSA-vfj7-8cjw-p6xm in `braces`,
+// kept because no fix existed anywhere: the advisory covered `<= 3.0.3` and
+// 3.0.3 was the newest release braces had ever had. On 2026-10-29 it stopped
+// appearing in `npm audit` while braces@3.0.3 sat unchanged in the tree — the
+// advisory was withdrawn upstream rather than fixed here. Failure mode 2 is
+// what reported that, which is the whole reason for having it.
+const ALLOWED = {};
 
 const BLOCKING = new Set(["high", "critical"]);
 
@@ -64,9 +55,10 @@ function auditReport() {
 
 /** Every distinct advisory behind the reported packages, by its GHSA id.
  *
- * One advisory surfaces as several vulnerable packages — braces alone is
- * reported five times here, once per link in the chain above it — so the unit
- * this gate reasons about is the advisory, not the package. */
+ * One advisory surfaces as several vulnerable packages — the `braces` entry
+ * this gate was written against was reported five times, once per link in the
+ * chain above it — so the unit this gate reasons about is the advisory, not
+ * the package. */
 function advisories(report) {
   const found = new Map();
   for (const vulnerability of Object.values(report.vulnerabilities ?? {})) {
