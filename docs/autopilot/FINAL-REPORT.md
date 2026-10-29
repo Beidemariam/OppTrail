@@ -4,7 +4,11 @@ Milestone R.9. What shipped, what it costs, what is not reversible, what is
 still open, and what I would do next. Written to be read once, at the gate,
 by the person who has to decide whether this is finished.
 
-Branch `autopilot/phase-R`, nine milestones, nothing pushed to a remote.
+Branch `autopilot/phase-R`, nine milestones plus R.1c. **Accepted and tagged
+`phase-R-accepted` on 2026-10-21**, then merged to `main` and pushed. This
+report was written at R.9, before the two review rounds and before acceptance;
+what those rounds and the maintenance since have changed is corrected in
+place, dated, and attributed to a decision.
 
 ---
 
@@ -23,7 +27,7 @@ would be built). `CHANGELOG.md` is the per-phase summary;
 | 3 | 2026-09-29 | One Markdown composer with three typed triggers, threaded comments, reactions, watchers, SSE live updates, one activity log, editing where content is read |
 | 4 | 2026-10-09 | Tasks with several assignees and their own discussion, attachments, exports carrying them, search landing on the match, the labelled AI context |
 | 6 | 2026-10-13 | Custom fields, six live reports, automations, the AI expansion, the scheduler |
-| R | *awaiting this review* | The layout pass, privacy, accessibility, performance, the container, data safety, CI, seed data, documentation |
+| R | 2026-10-21 | The layout pass, privacy, accessibility, performance, the container, data safety, CI, seed data, documentation |
 
 Phase 5 is email and is the deferred one; the numbering is kept so every
 reference to a phase by number stays true.
@@ -81,11 +85,26 @@ writers, or no local disk.
 
 ## 3. Coverage and the test suites
 
+Measured on 2026-10-29 at `e67b1fb`, which is eight days past the accepted
+commit; the R.9/R.1c figures and what moved them are below the table.
+
 | Suite | Count | Coverage |
 |---|---|---|
-| Backend (`pytest`) | **772** passed, 1 skipped | 97.3% statements |
-| Frontend unit (`vitest`) | **778** passed, 46 files | 96.3% statements, 90.2% branches |
+| Backend (`pytest`), host | **772** passed, 1 skipped | 97% combined |
+| Backend (`pytest`), in-image | **773** passed, **no skips** | 97.58% combined |
+| Frontend unit (`vitest`) | **777** passed, 46 files | 96.23% statements, 90.03% branches |
 | End-to-end (Playwright) | **113** passed, 1 skipped | 30 spec files |
+
+**The in-image row is the one that covers the PDF export**, and it is here
+because the host row structurally cannot: `make docker-test` runs the same
+suite inside the image, where `weasyprint` imports, so the 773rd test is the
+772 plus the one skip. Any change to the PDF path gets checked there.
+
+**The frontend count moved 778 -> 777** and that is a test deliberately
+removed, not one lost: D-219's fix made the sticky padding measure itself
+instead of carrying a literal, so `AppShell.test.tsx`'s "tells the document
+which sticky stack the screen has" had no literal left to assert against
+(commit `41ce749`).
 
 **The e2e row in the version of this report written at R.9 said 112 passed,
 and that was not true** (**D-213**). The suite was red on the committed phase:
@@ -203,11 +222,21 @@ the in-image backend suite and the smoke test are deferred to the host. All
 three were run on the host for Phase R and pass — the smoke test now also
 covers R.4's two probes and the container reaching `healthy`.
 
-One known-and-accepted advisory: **GHSA-vfj7-8cjw-p6xm** (`braces`, high, no
-fix published anywhere). It is allowlisted in `scripts/audit-gate.mjs` with the
-reason — lint-time only, over this repository's own configuration, and absent
-from the shipped artifact entirely — and the gate fails if it ever stops
-appearing, so the entry cannot outlive the problem.
+**No known advisory, and the allowlist is empty** (updated 2026-10-29,
+**D-223**). R.6's one entry was **GHSA-vfj7-8cjw-p6xm** (`braces`, high, no fix
+published anywhere) — allowlisted because it was lint-time only, over this
+repository's own configuration, and absent from the shipped artifact entirely.
+It stopped being reported while `braces@3.0.3` sat unchanged in the tree, so
+the advisory was withdrawn upstream rather than fixed here, and D-207's second
+failure mode — an allowlisted advisory that no longer appears also fails —
+is what reported it. The entry is removed; the mechanism stays, with nothing
+in it.
+
+**Dependency advisories have gone red three times since R.6 locked the
+lockfiles**, every time within days and every time after a gate had passed
+green (D-220, D-223). None was a code defect and all had fixes available. It is
+the one recurring maintenance cost this project has, and §7 item 6 is the
+answer to it.
 
 ---
 
@@ -234,8 +263,12 @@ Two more things the rounds settled:
 - **Backups need a schedule outside the application** — a cron line, chosen at
   the gate. The in-process job had fired **zero** times in six days against
   154 automation ticks, because an interval's first firing is one interval
-  after boot and the machine sleeps. `docs/operations.md` carries the line and
-  the off-the-box copy beside it.
+  after boot and the machine sleeps. Built as a **`launchd` LaunchAgent**
+  instead (**D-221**), raised with the reviewer rather than substituted
+  silently: cron skips a job it sleeps through and keeps no record of having
+  skipped it, which is precisely how the in-process scheduler came to take no
+  backups at all. `docs/operations.md` carries both forms, and the offsite copy
+  is live.
 - **The sign-in screen** opened on *Create account*. It opens on sign-in now,
   with the account link under the form.
 
@@ -261,15 +294,20 @@ Worth keeping, because it is the fourth time running on this project:
 
 ## 7. What I would do next
 
-In the order I would do it, with the reason:
+In the order I would do it, with the reason. **The first two are done**, both
+after acceptance; they are kept rather than deleted so the list stays readable
+against the two review rounds that produced it.
 
-1. **Answer §6's three.** Two are rulings and one is twenty minutes of
-   clicking; everything below is cheaper once they are settled.
-2. **Copy backups off the box.** `docs/operations.md` says plainly that
-   `backups/` is on the same volume as the database, which protects against a
-   bad write and not against losing the disk. A `cron` line and a destination
-   is the whole job, and it is the single largest gap between "this works" and
-   "this is safe".
+1. ~~**Answer §6's three.**~~ **Done** — all three were ruled on across the two
+   rounds, and §6 records each answer.
+2. ~~**Copy backups off the box.**~~ **Done** (**D-221**), as a `launchd`
+   LaunchAgent to iCloud Drive rather than the cron line named at the gate,
+   because cron would have reproduced the very defect it was installed to fix.
+   This was called "the single largest gap between 'this works' and 'this is
+   safe'" and it is closed: the offsite snapshot verifies with
+   `integrity_check ok` and every attachment digest its live rows reference
+   present in the mirror, which is R.5's own requirement (D-205) rather than
+   merely the presence of a file.
 3. **Email (scope item 5, ADR 0009)** if it is still wanted. It is the one
    deferred item, it is the highest-risk thing left — the first untrusted input
    path into a shared record and into the AI's context — and ADR 0009 plus
@@ -282,9 +320,18 @@ In the order I would do it, with the reason:
 5. **Digest batching** (scope item 9's last clause). `notifications.grouped_key`
    exists and is deliberately unpopulated so this is a query change rather than
    a migration — "3 new comments on Acme Expansion, not three emails".
-6. **A dependency bot**, which would make `D-204`'s base-image decision
-   obsolete: with something to refresh a digest, pinning both base images by
-   digest becomes the better answer than pinning by tag.
+6. **A dependency bot** — now the highest-value item on this list rather than
+   the sixth, on evidence this report did not have when it was written.
+   Advisories have taken `make check` red **three times** since R.6 locked the
+   lockfiles (D-220, D-223), each within days, each found by hand, and each
+   after a gate had passed green. It would also make `D-204`'s base-image
+   decision obsolete: with something to refresh a digest, pinning both base
+   images by digest becomes the better answer than pinning by tag. The related
+   half is giving **`pip-audit` the ratchet `npm audit` has** — D-220 named
+   that the right long-term shape and declined it that day because a fix
+   existed; it is a bare wall until somebody builds it, so the first Python
+   advisory with no upgrade available takes the build red with nowhere to
+   record why it is safe in this deployment.
 7. **Two deferred UI judgements**, both small and both yours: a Details card in
    the deal's rail (**D-188**, dropped because the record band already carries
    those fields), and widening the activity log so a non-owner can see that an

@@ -8,7 +8,7 @@ or `docs/adr/`.
 Dates are the acceptance dates. Versions are phases rather than semver: this is
 one deployment, not a published package.
 
-## Phase R — release readiness (in progress)
+## Phase R — release readiness · `phase-R-accepted` · 2026-10-21
 
 Hardening, with no new product surface except the two shapes of privacy the
 human asked for mid-phase.
@@ -21,11 +21,12 @@ human asked for mid-phase.
   of destinations, which is how Reports finally became reachable from
   Automations. Chosen by the human from four drawn options.
 - **R.1b — keeping something to yourself.** A **private entry**, readable by
-  its author alone and not by the deal's owner either, which keeps its place
-  and its number in everybody's timeline and carries nothing else; sealing one
-  afterwards withdraws the notifications it already sent. And **a notebook per
-  person per deal**, outside the deal's history entirely. New entries are
-  private by default.
+  its author alone and not by the deal's owner either; sealing one afterwards
+  withdraws the notifications it already sent. And **a notebook per person per
+  deal**, outside the deal's history entirely. New entries are private by
+  default. R.1b shipped the sealed entry *standing in everybody's timeline*
+  emptied of everything but its number and author; **R.1c reversed that** at
+  the human's request, so the R.1c entry below is what the app does.
 - **R.2 — accessibility.** The audit had been asking axe for WCAG 2.1 since
   Phase F while the stated bar was 2.2; it asks for 2.2 now, six screens that
   had no audit entry are in it, and 2.4.11 turned out to be a real failure —
@@ -46,7 +47,9 @@ human asked for mid-phase.
   `docs/operations.md` is the documented layout.
 - **R.6 — CI.** `make check` in GitHub Actions with coverage and Playwright
   artifacts. `npm audit` is a ratchet now rather than a wall, because the one
-  advisory this tree carries has no fix published anywhere.
+  advisory this tree carried had no fix published anywhere — an entry that
+  the ratchet itself later removed when the advisory was withdrawn upstream
+  (D-223).
 - **R.7 — seed data.** Phase 6 and R.1b had never been seeded; they are now,
   including the private entry the seed's own docstring had claimed for two
   milestones. `make seed-scale` layers the confirmed scale on top of the demo
@@ -54,6 +57,28 @@ human asked for mid-phase.
 - **R.8 — documentation.** This file, `docs/user-guide.md`, `docs/api.md`, the
   ADR index, and `docs/ARCHITECTURE.md`'s data model, authorization, real-time
   and AI sections.
+- **R.1c — the shakedown's corrections, and what reviewing the phase found.**
+  A sealed entry is **absent** from a colleague's timeline rather than standing
+  there emptied — *"better not to mention anything instead of saying it is kept
+  private"* — with the numbering counted per reader so no gap is left where it
+  was; the activity log stopped announcing one to the deal's owner; the 14-day
+  rule lost a fourth copy hiding in the one feature named after it. Defining a
+  custom field and writing an automation rule are an **administrator's** now.
+  `make backup` and `make restore` name the deployment's database, after the
+  documented restore turned out to overwrite a scratch file beside the code and
+  report success. One button size, measured rather than read. A follow-up date
+  that creates the task by default. The sign-in screen opens on sign-in.
+
+### After acceptance
+
+Maintenance on `main`, no new product surface. The backup got a schedule
+outside the application — a `launchd` LaunchAgent, because cron skips a job it
+sleeps through and would have reproduced the defect it was installed to fix
+(D-221). Playwright 1.64 and the races it resampled; the derived sticky
+padding, which was short at every width and 66px short at 1024 (D-219); the
+report bars wrap rather than overflow; the performance budgets scale to the
+hardware. Three rounds of dependency advisories, all with fixes available and
+all taken (D-220, D-223).
 
 ## Phase 6 — the v2 feature set · `phase-6-accepted` · 2026-10-13
 

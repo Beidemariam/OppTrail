@@ -74,3 +74,36 @@ one change to the detail (**D-203**):
 `scripts/docker-smoke.sh` checks the two probes and waits for the container to
 report `healthy`, so the gate now fails if any of this regresses — which is
 the part that was missing the first time.
+
+## Amendment (post-acceptance, 2026-10-21)
+
+Item 2 — "**Backups**: a scheduled job (ADR 0004) runs `VACUUM INTO`" — named
+the wrong scheduler, and the way that was discovered is the point
+(**D-221**). Milestone 6.5 gave the job an in-process APScheduler schedule and
+it had taken **zero** backups in six days, against 154 automation ticks on the
+same scheduler, because an interval's first firing is one interval after boot
+and this machine sleeps. The job is correct; an in-process interval is not a
+backup schedule.
+
+- **The schedule lives outside the application**, as
+  `scripts/scheduled-backup.sh` driven by a `launchd` LaunchAgent
+  (`scripts/com.opptrail.backup.plist`). `launchd`'s
+  `StartCalendarInterval` runs a missed calendar job when the machine wakes,
+  so a 02:30 snapshot still happens when the lid opens at 09:00. **cron would
+  have reproduced the defect it was installed to fix** — it skips a job it
+  sleeps through and keeps no record of having skipped it — which is why the
+  reviewer's choice of a cron line was raised with them rather than
+  substituted silently. `docs/operations.md` carries both forms; the cron one
+  is for a Linux host that stays awake.
+- **The work is a script, not lines in a plist**, so what the scheduler runs
+  is what can be tested by hand. It writes the absolute path to `uv`, which
+  lives in `~/.local/bin` and is not on a scheduled job's `PATH`.
+- **This also closes item 2's offsite half**, which `docs/operations.md`
+  states plainly was never covered: `backups/` sits on the same volume as the
+  database, so it protects against a bad write and not against losing the disk
+  (**D-206**). The copy is `rsync --ignore-existing`, so local pruning to
+  `BACKUP_RETENTION_COUNT` cannot reach through and delete offsite history,
+  and the snapshot is taken before the copy is attempted so a refused copy
+  never costs a backup.
+- The in-process `backup` job is left in place and still recorded in
+  `job_runs`; nothing depends on it firing.

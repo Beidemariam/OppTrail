@@ -6110,6 +6110,12 @@ this phase reaches `AWAITING_REVIEW` and is accepted, the project is finished.
         configuration, and absent from the shipped artifact entirely, because
         `output: "export"` emits static files and the image copies
         `frontend/out` with no `node_modules`.
+        **That entry is gone and the allowlist is empty, as of 2026-10-29**
+        (**D-223**): the advisory stopped being reported while `braces@3.0.3`
+        sat unchanged in the tree, so it was withdrawn upstream rather than
+        fixed here, and the second failure mode below is what reported it —
+        its first real firing, and the half of this design that had never
+        been exercised outside the test that built it.
       - **Two advisories were genuinely fixable and are fixed.** `npm audit
         fix` cleared `sharp` (a librsvg CVE) and `source-map-js`; typecheck,
         lint, the unit suite and the production build were re-run against the
@@ -6319,15 +6325,19 @@ The Phase R review packet doubles as the release sign-off (brief §8).
 
 ## Definition of Done (brief §10) — tracking
 
-- [x] `phase-F-accepted` through `phase-6-accepted` tags exist — **6 of 7**
-      (`F`, `1`, `2`, `3`, `4`, `6`). Seven rather than eight since email moved
-      to v3 (**D-141**); there is no `phase-5-accepted` to earn
-- [ ] **`phase-R-accepted`** — the last one. The reviewer's verdict is
-      **accept** (round two, 2026-10-21: all five remaining checks passed), so
-      what stands between here and the tag is the host-gate receipt:
-      `scripts/autopilot-gate.sh R` on the host, then
-      `scripts/autopilot-accept.sh R`. The receipt is keyed to the branch's
-      exact commit, so it has to be taken after the last one
+- [x] `phase-F-accepted` through `phase-6-accepted` tags exist — **all 7**
+      (`F`, `1`, `2`, `3`, `4`, `6`, `R`). Seven rather than eight since email
+      moved to v3 (**D-141**); there is no `phase-5-accepted` to earn
+- [x] **`phase-R-accepted`** — the last one, tagged at `c8aeff1` on 2026-10-21
+      against the reviewer's **accept** (round two: all five remaining checks
+      passed), with the host-gate receipt for that exact commit in
+      `~/.opptrail-autopilot/gate/`. **Line 1 of this file still reads
+      `AWAITING_REVIEW phase=R`, and that is correct rather than stale**:
+      `scripts/autopilot.sh` treats that status *plus* the tag as the
+      finished state and prints "Phase R accepted — autopilot finished."
+      The brief defines no fifth STATUS value, and inventing one would match
+      no branch in the driver's `case`, which would send it off to start
+      another milestone
 - [x] Coverage floors met; history in `COVERAGE.md`
 - [x] Invariant tests and authorization matrix passing — 105 matrix rows, and
       the matrix gained an `admin_only` expectation in R.1c (D-215)
@@ -6336,23 +6346,42 @@ The Phase R review packet doubles as the release sign-off (brief §8).
       the suite was red on the committed phase, because R.7's seed broke a
       spec written in R.1b (**D-213**). Found by running it at the review
       rather than by trusting the report
-- [ ] Docker image passes smoke test, runs non-root; backup/restore tested —
-      the image half is the host gate above, and it has never run against
-      Phase R. Backup and restore are tested and were *wrong* until R.1c:
-      the documented procedure never reached the deployment (**D-214**)
+- [x] Docker image passes smoke test, runs non-root; backup/restore tested —
+      the host gate ran against Phase R twice, at `c8aeff1` (the accepted
+      commit) and again at `852a438`, each receipt naming `docker-build`,
+      `docker-test`, `pdf-export` and `frontend-served`; non-root is `USER app`
+      in both the `backend-test` and `final` stages (ADR 0011 item 5). The ten
+      commits since that second receipt are covered by CI, which runs the
+      Docker steps the sandbox cannot. Backup and restore are tested and were
+      *wrong* until R.1c: the documented procedure never reached the
+      deployment (**D-214**)
 - [x] CI workflow present and valid
-- [x] No unresolved high/critical dependency vulnerabilities — one npm
-      advisory allowlisted with its reason, and that gate fails if it stops
-      appearing (D-207). **The Python side went red four days after R.6
+- [x] No unresolved high/critical dependency vulnerabilities — none at all
+      now, and the npm allowlist that carried one is empty, because that gate
+      fails if a listed advisory stops appearing (D-207). **The Python side went red four days after R.6
       locked it** (**D-220**): `pip-audit` found 9 advisories against
       `certifi` and `pillow`, both transitive, neither of which existed when
       the lockfile was written. Bumped to `certifi 2026.10.19` and
       `pillow 13.0.0`; audit clean. Worth knowing that `pip-audit` is a bare
       wall where npm has a ratchet — a Python advisory with no upgrade
-      available takes the build red with no way to record why it is safe here
-- [ ] Documentation set and `FINAL-REPORT.md` complete — the set is written
-      (R.8); the report is being trued up for acceptance, since two of its
-      numbers and all three of its open questions have moved since R.9
+      available takes the build red with no way to record why it is safe here.
+      **It went red a third time on 2026-10-29** (**D-223**), a week after
+      D-220's lock and again entirely post-acceptance: 16 Python advisories
+      over three transitive packages and one high npm advisory (`zod`). Every
+      one had a fix, so every one was taken. The same round emptied the npm
+      allowlist: `braces` stopped being reported while `braces@3.0.3` sat
+      unchanged in the tree — the advisory was withdrawn upstream, not fixed
+      here — and D-207's second failure mode is what reported it. Three
+      rounds, three found by hand, each after a gate had passed green
+- [x] Documentation set and `FINAL-REPORT.md` complete — the set is written
+      (R.8) and the report is trued up (2026-10-29): Phase R's row carries its
+      acceptance date rather than "awaiting this review", all three of §6's
+      open questions are answered, the suite counts are re-measured at
+      `e67b1fb` with the one that moved explained, and §7's first two
+      next-steps are marked done. `CHANGELOG.md` gained the R.1c entry it
+      never had and an "After acceptance" section; ADR 0011 gained the
+      amendment its item 2 needed, since it still named the in-process job as
+      the backup schedule that D-221 proved does not fire
 
 - [x] `make check` green on `main` from a clean clone — run from a 45 MB
       clone of the accepted commit with no `.env`, no `node_modules` and no

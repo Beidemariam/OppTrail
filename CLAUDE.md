@@ -2255,12 +2255,27 @@ Three rules the suite has already been bitten by:
 `scripts/audit-gate.mjs` is what `make check` runs: a high or critical
 advisory with no entry in its allowlist fails, **and** an allowlisted advisory
 that no longer appears also fails, so an entry cannot outlive the problem it
-documents — the same bargain `DEFERRED_AXE_RULES` makes. The single entry
-today is GHSA-vfj7-8cjw-p6xm in `braces`, which has no fix anywhere (the
-advisory covers `<= 3.0.3` and that is the newest release there has ever
-been) and is reachable only at lint time, over this repository's own
-configuration: `output: "export"` means no `node_modules` ships. Nothing may
-be added there without the reason it is safe *in this deployment*.
+documents — the same bargain `DEFERRED_AXE_RULES` makes. **The allowlist is
+empty, and that is the ratchet having tightened** (**D-223**): the one entry,
+GHSA-vfj7-8cjw-p6xm in `braces`, was removed when it stopped being reported
+while `braces@3.0.3` sat unchanged in the tree — the advisory was withdrawn
+upstream rather than fixed here, and the second failure mode is what reported
+it. Nothing may be added there without the reason it is safe *in this
+deployment*; "transitive" is not a reason, "cannot be reached by anything that
+ships" is.
+
+**`pip-audit` beside it is a bare wall**, and it has taken `make check` red
+three times since R.6 locked the lockfiles (D-220, D-223) — each within days
+of a lock, each found by hand, each after a gate had passed green. Every
+advisory so far has had a fix, so every one was taken rather than recorded;
+the first one without a fix will take the build red with nowhere to write why
+it is safe here. Giving it the ratchet is the open item (`FINAL-REPORT.md` §7).
+Two things worth knowing when it next fires: most of what it reports is in
+**`pip-audit`'s own dependency tree** (`cachecontrol` -> `filelock`,
+`msgpack`), dev-group and never shipped, while a runtime advisory reaches the
+image through `weasyprint` — so `uv tree --invert --package <name>` is the
+first command, and a runtime bump in the PDF path gets verified with
+`make docker-test` rather than on a host, where that test skips.
 
 `.github/workflows/ci.yml` runs `make check` plus the Docker-only steps the
 sandbox cannot, and uploads coverage from both suites and Playwright's report
