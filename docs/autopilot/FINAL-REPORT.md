@@ -326,12 +326,17 @@ against the two review rounds that produced it.
    lockfiles (D-220, D-223), each within days, each found by hand, and each
    after a gate had passed green. It would also make `D-204`'s base-image
    decision obsolete: with something to refresh a digest, pinning both base
-   images by digest becomes the better answer than pinning by tag. The related
-   half is giving **`pip-audit` the ratchet `npm audit` has** — D-220 named
-   that the right long-term shape and declined it that day because a fix
-   existed; it is a bare wall until somebody builds it, so the first Python
-   advisory with no upgrade available takes the build red with nowhere to
-   record why it is safe in this deployment.
+   images by digest becomes the better answer than pinning by tag. ~~The
+   related half is giving **`pip-audit` the ratchet `npm audit` has**.~~
+   **Done** (**D-224**), `backend/tools/pip_audit_gate.py`: D-220 named it the
+   right long-term shape and declined it twice because a fix existed each time,
+   which is exactly the reasoning that leaves a gate unbuilt until the day it
+   is needed. It blocks on every advisory rather than on severity, because
+   `pip-audit` reports none, and it carries a third failure mode the npm gate
+   cannot — an allowlisted advisory that has gained a fix fails, which is
+   D-220's and D-223's own rule enforced rather than remembered. What remains
+   of this item is the bot itself: a ratchet records a decision, it does not
+   notice an advisory the day it is published.
 7. **Two deferred UI judgements**, both small and both yours: a Details card in
    the deal's rail (**D-188**, dropped because the record band already carries
    those fields), and widening the activity log so a non-owner can see that an

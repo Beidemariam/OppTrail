@@ -2264,14 +2264,33 @@ it. Nothing may be added there without the reason it is safe *in this
 deployment*; "transitive" is not a reason, "cannot be reached by anything that
 ships" is.
 
-**`pip-audit` beside it is a bare wall**, and it has taken `make check` red
-three times since R.6 locked the lockfiles (D-220, D-223) — each within days
-of a lock, each found by hand, each after a gate had passed green. Every
-advisory so far has had a fix, so every one was taken rather than recorded;
-the first one without a fix will take the build red with nowhere to write why
-it is safe here. Giving it the ratchet is the open item (`FINAL-REPORT.md` §7).
-Two things worth knowing when it next fires: most of what it reports is in
-**`pip-audit`'s own dependency tree** (`cachecontrol` -> `filelock`,
+**`pip-audit` has the same ratchet since D-224**, and it is
+`backend/tools/pip_audit_gate.py` rather than a second copy of the npm one,
+because the two tools report different things. It was a bare wall until then,
+and that cost was real rather than hypothetical: advisories took `make check`
+red three times in eight days (D-220, D-223), each within days of a lock, each
+found by hand, each after a gate had passed green. `make check` runs
+`uv run python tools/pip_audit_gate.py` now; bare `pip-audit` is no longer a
+gate anywhere.
+
+Two differences from the npm gate, one forced and one permitted:
+
+- **There is no severity to filter on.** `pip-audit --format json` emits
+  `id`, `aliases`, `fix_versions` and `description` and nothing else, so where
+  `audit-gate.mjs` blocks on high and critical, this one blocks on **every**
+  advisory. The allowlist is more load bearing here, not less.
+- **`fix_versions` says whether a fix exists**, so there is a third failure
+  mode the npm gate cannot express: **an allowlisted advisory that has gained
+  a fix fails.** An entry means "there is nothing to take"; the moment there
+  is, the entry is the wrong answer. That is D-220's and D-223's hand-applied
+  rule mechanised — it is the check that would have caught D-223's `zod` case
+  without anybody noticing it.
+
+`tests/test_pip_audit_gate.py` exercises all three modes, each confirmed to
+fail with its own rule disabled and nothing else failing with it, and its
+`brotli` fixture is **captured** tool output rather than an assumed shape.
+Two things worth knowing when the gate next fires: most of what it reports is
+in **`pip-audit`'s own dependency tree** (`cachecontrol` -> `filelock`,
 `msgpack`), dev-group and never shipped, while a runtime advisory reaches the
 image through `weasyprint` — so `uv tree --invert --package <name>` is the
 first command, and a runtime bump in the PDF path gets verified with

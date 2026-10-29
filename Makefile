@@ -53,7 +53,7 @@ check-fast: frontend-deps
 # Docker socket this sandbox deliberately does not have (sandbox/README.md);
 # that half is named rather than silently skipped, per the split gate.
 check: check-fast
-	cd backend && uv run pip-audit
+	cd backend && uv run python tools/pip_audit_gate.py
 	node scripts/audit-gate.mjs
 	@$(MAKE) e2e
 	@echo

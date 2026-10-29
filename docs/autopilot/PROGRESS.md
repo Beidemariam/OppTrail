@@ -6372,7 +6372,13 @@ The Phase R review packet doubles as the release sign-off (brief §8).
       allowlist: `braces` stopped being reported while `braces@3.0.3` sat
       unchanged in the tree — the advisory was withdrawn upstream, not fixed
       here — and D-207's second failure mode is what reported it. Three
-      rounds, three found by hand, each after a gate had passed green
+      rounds, three found by hand, each after a gate had passed green —
+      **which is what finally built the Python ratchet** (**D-224**):
+      `backend/tools/pip_audit_gate.py` replaces bare `pip-audit` in
+      `make check`, blocks on every advisory because `pip-audit` reports no
+      severity, and adds a third failure mode the npm gate cannot express —
+      an allowlisted advisory that has gained a fix fails, so the rule D-220
+      and D-223 each applied by hand is now enforced
 - [x] Documentation set and `FINAL-REPORT.md` complete — the set is written
       (R.8) and the report is trued up (2026-10-29): Phase R's row carries its
       acceptance date rather than "awaiting this review", all three of §6's
